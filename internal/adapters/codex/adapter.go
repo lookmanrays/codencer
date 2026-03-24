@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
-	"time"
 
 	"agent-bridge/internal/domain"
 )
@@ -84,28 +85,48 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 
 func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
 	slog.Info("Codex Adapter: Collecting artifacts", "attemptID", attemptID)
-	now := time.Now()
 	
-	artifacts := []*domain.Artifact{}
-	_ = artifactRoot // in a real app, os.ReadDir(artifactRoot) and stat the files
+	var artifacts []*domain.Artifact
 	
-	artifacts = append(artifacts, &domain.Artifact{
-		ID:        fmt.Sprintf("art-stdout-%s", attemptID),
-		AttemptID: attemptID,
-		Type:      domain.ArtifactTypeStdout,
-		Path:      fmt.Sprintf("%s/stdout.log", artifactRoot),
-		Size:      1024,
-		CreatedAt: now,
-	})
-	
-	artifacts = append(artifacts, &domain.Artifact{
-		ID:        fmt.Sprintf("art-result-%s", attemptID),
-		AttemptID: attemptID,
-		Type:      domain.ArtifactType("result_json"),
-		Path:      fmt.Sprintf("%s/result.json", artifactRoot),
-		Size:      500,
-		CreatedAt: now,
-	})
+	// Real artifact collection parsing the disk footprint
+	entries, err := os.ReadDir(artifactRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return artifacts, nil // No artifacts produced
+		}
+		return nil, fmt.Errorf("failed to read artifact root %s: %w", artifactRoot, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // Simplified for MVP: only top-level files
+		}
+		
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		path := filepath.Join(artifactRoot, entry.Name())
+		artType := domain.ArtifactType("file")
+		
+		if entry.Name() == "stdout.log" {
+			artType = domain.ArtifactTypeStdout
+		} else if entry.Name() == "result.json" {
+			artType = domain.ArtifactType("result_json")
+		} else if filepath.Ext(entry.Name()) == ".patch" {
+			artType = domain.ArtifactType("diff")
+		}
+
+		artifacts = append(artifacts, &domain.Artifact{
+			ID:        fmt.Sprintf("art-%s-%s", entry.Name(), attemptID),
+			AttemptID: attemptID,
+			Type:      artType,
+			Path:      path,
+			Size:      info.Size(),
+			CreatedAt: info.ModTime(),
+		})
+	}
 	
 	return artifacts, nil
 }

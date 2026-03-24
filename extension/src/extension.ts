@@ -46,47 +46,101 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(refreshCmd, connectCmd, startRunCmd);
 }
 
-class CodencerProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | void>();
-    readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | void> = this._onDidChangeTreeData.event;
+class BaseTreeItem extends vscode.TreeItem {
+    constructor(
+        public readonly label: string,
+        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+        public readonly runId?: string,
+        public readonly contextValueObj?: string,
+        public readonly parentElement?: any,
+        public readonly descriptionInfo?: string
+    ) {
+        super(label, collapsibleState);
+        if (contextValueObj) {
+            this.contextValue = contextValueObj;
+        }
+        if (descriptionInfo) {
+            this.description = descriptionInfo;
+        }
+    }
+}
+
+class CodencerProvider implements vscode.TreeDataProvider<BaseTreeItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<BaseTreeItem | undefined | void> = new vscode.EventEmitter<BaseTreeItem | undefined | void>();
+    readonly onDidChangeTreeData: vscode.Event<BaseTreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
     }
 
-    getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+    getTreeItem(element: BaseTreeItem): vscode.TreeItem {
         return element;
     }
 
-    getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
-        if (element) {
-            return Promise.resolve([]);
+    getChildren(element?: BaseTreeItem): vscode.ProviderResult<BaseTreeItem[]> {
+        if (!element) {
+            return this.getRuns();
+        } else if (element.contextValue === 'run') {
+            return Promise.resolve([
+                new BaseTreeItem("Steps", vscode.TreeItemCollapsibleState.Expanded, element.runId, 'steps-folder'),
+                new BaseTreeItem("Gates", vscode.TreeItemCollapsibleState.Expanded, element.runId, 'gates-folder')
+            ]);
+        } else if (element.contextValue === 'steps-folder' && element.runId) {
+            return this.getSteps(element.runId);
+        } else if (element.contextValue === 'gates-folder' && element.runId) {
+            return this.getGates(element.runId);
         }
 
+        return Promise.resolve([]);
+    }
+
+    private getRuns(): Promise<BaseTreeItem[]> {
         return new Promise((resolve) => {
-            http.get('http://127.0.0.1:8080/api/v1/runs', (res) => {
+            http.get('http://127.0.0.1:8080/api/v1/runs', (res: http.IncomingMessage) => {
                 let data = '';
-                res.on('data', chunk => data += chunk);
+                res.on('data', (chunk: any) => data += chunk);
                 res.on('end', () => {
                     try {
                         const runs = JSON.parse(data);
-                        if (!runs || runs.length === 0) {
-                            resolve([new vscode.TreeItem("No runs found", vscode.TreeItemCollapsibleState.None)]);
-                            return;
-                        }
-                        const items = runs.map((r: any) => {
-                            const item = new vscode.TreeItem(`Run: ${r.ID} [${r.State}]`, vscode.TreeItemCollapsibleState.None);
-                            item.description = `Project: ${r.ProjectID}`;
-                            return item;
-                        });
+                        if (!runs || runs.length === 0) return resolve([new BaseTreeItem("No runs found", vscode.TreeItemCollapsibleState.None)]);
+                        
+                        const items = runs.map((r: any) => new BaseTreeItem(`Run: ${r.ID} [${r.State}]`, vscode.TreeItemCollapsibleState.Collapsed, r.ID, 'run', undefined, `Project: ${r.ProjectID}`));
                         resolve(items);
-                    } catch (e) {
-                         resolve([new vscode.TreeItem("Error parsing runs", vscode.TreeItemCollapsibleState.None)]);
-                    }
+                    } catch (e) { resolve([new BaseTreeItem("Error parsing runs", vscode.TreeItemCollapsibleState.None)]); }
                 });
-            }).on('error', () => {
-                resolve([new vscode.TreeItem("Daemon disconnected", vscode.TreeItemCollapsibleState.None)]);
-            });
+            }).on('error', () => resolve([new BaseTreeItem("Daemon disconnected", vscode.TreeItemCollapsibleState.None)]));
+        });
+    }
+
+    private getSteps(runId: string): Promise<BaseTreeItem[]> {
+        return new Promise((resolve) => {
+            http.get(`http://127.0.0.1:8080/api/v1/runs/${runId}/steps`, (res: http.IncomingMessage) => {
+                let data = '';
+                res.on('data', (chunk: any) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const steps = JSON.parse(data) || [];
+                        if (steps.length === 0) resolve([new BaseTreeItem("No steps", vscode.TreeItemCollapsibleState.None)]);
+                        resolve(steps.map((s: any) => new BaseTreeItem(`Step: ${s.Title} [${s.State}]`, vscode.TreeItemCollapsibleState.None, runId, 'step', undefined, `Goal: ${s.Goal}`)));
+                    } catch (e) { resolve([new BaseTreeItem("Error parsing steps", vscode.TreeItemCollapsibleState.None)]); }
+                });
+            }).on('error', () => resolve([new BaseTreeItem("Network Error", vscode.TreeItemCollapsibleState.None)]));
+        });
+    }
+
+    private getGates(runId: string): Promise<BaseTreeItem[]> {
+        return new Promise((resolve) => {
+            http.get(`http://127.0.0.1:8080/api/v1/runs/${runId}/gates`, (res: http.IncomingMessage) => {
+                let data = '';
+                res.on('data', (chunk: any) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const gates = JSON.parse(data) || [];
+                        if (gates.length === 0) resolve([new BaseTreeItem("No gates", vscode.TreeItemCollapsibleState.None)]);
+                        resolve(gates.map((g: any) => new BaseTreeItem(`Gate: [${g.Status}]`, vscode.TreeItemCollapsibleState.None, runId, 'gate', undefined, g.Description)));
+                    } catch (e) { resolve([new BaseTreeItem("Error parsing gates", vscode.TreeItemCollapsibleState.None)]); }
+                });
+            }).on('error', () => resolve([new BaseTreeItem("Network Error", vscode.TreeItemCollapsibleState.None)]));
         });
     }
 }

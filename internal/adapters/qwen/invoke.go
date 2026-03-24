@@ -11,11 +11,7 @@ import (
 	"agent-bridge/internal/domain"
 )
 
-// InvokeLocal executes the Qwen adapter.
-// NOTE (AUTHENTICATION BLOCKER): Proper local inference requires downloading models
-// and setting up Python/llama.cpp environments which exceed MVP host assumptions.
-// We simulate the interaction pattern (subprocess -> artifacts) since we cannot guarantee
-// a local GPU or Qwen binary.
+// InvokeLocal executes the Qwen adapter as a local child process.
 func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
@@ -24,32 +20,55 @@ func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, ar
 		return fmt.Errorf("failed to create artifact root: %w", err)
 	}
 
-	stdoutPath := filepath.Join(artifactRoot, "qwen_stdout.log")
-	resultPath := filepath.Join(artifactRoot, "qwen_result.json")
+	stdoutPath := filepath.Join(artifactRoot, "stdout.log")
+	resultPath := filepath.Join(artifactRoot, "result.json")
 
-	script := fmt.Sprintf(`
-		echo "Executing Qwen simulator for attempt %s" > "%s"
-		cat << 'EOF' > "%s"
+	qwenBinary := os.Getenv("QWEN_BINARY")
+	if qwenBinary == "" {
+		qwenBinary = "qwen-local" // Fallback expected CLI name
+	}
+
+	if os.Getenv("QWEN_SIMULATION_MODE") == "1" {
+		script := fmt.Sprintf(`
+			echo "Executing Simulated Qwen for attempt %s" > "%s"
+			cat << 'EOF' > "%s"
 {
   "status": "completed",
-  "summary": "Qwen simulator executed successfully.",
+  "summary": "Simulated successful qwen task.",
   "needs_human_decision": false
 }
 EOF
-	`, attempt.ID, stdoutPath, resultPath)
+		`, attempt.ID, stdoutPath, resultPath)
+		cmd := exec.CommandContext(ctx, "bash", "-c", script)
+		cmd.Dir = workspaceRoot
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("simulated qwen execution failed: %w. Output: %s", err, string(out))
+		}
+		return nil
+	}
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", script)
+	// Genuine Execution
+	cmd := exec.CommandContext(ctx, qwenBinary, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
 	cmd.Dir = workspaceRoot
-
-	out, err := cmd.CombinedOutput()
+	
+	outFd, err := os.Create(stdoutPath)
 	if err != nil {
+		return fmt.Errorf("failed to create stdout log file: %w", err)
+	}
+	defer outFd.Close()
+
+	cmd.Stdout = outFd
+	cmd.Stderr = outFd
+
+	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("qwen execution timed out: %w", err)
 		}
 		if ctx.Err() == context.Canceled {
 			return fmt.Errorf("qwen execution cancelled: %w", err)
 		}
-		return fmt.Errorf("qwen execution failed: %w. Output: %s", err, string(out))
+		return fmt.Errorf("qwen execution failed: %w", err)
 	}
 
 	return nil

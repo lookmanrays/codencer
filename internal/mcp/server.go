@@ -54,8 +54,12 @@ func (s *Server) routeTool(ctx context.Context, name string, args map[string]int
 	switch name {
 	case "orchestrator.start_run":
 		return s.ToolStartRun(ctx, args)
+	case "orchestrator.start_step":
+		return s.ToolStartStep(ctx, args)
 	case "orchestrator.get_status":
 		return s.ToolGetStatus(ctx, args)
+	case "orchestrator.get_step_result":
+		return s.ToolGetStepResult(ctx, args)
 	case "orchestrator.approve_gate":
 		return s.ToolApproveGate(ctx, args)
 	case "orchestrator.reject_gate":

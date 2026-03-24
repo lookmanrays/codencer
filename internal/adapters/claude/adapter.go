@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
-	"time"
 
 	"agent-bridge/internal/domain"
 )
@@ -84,28 +85,47 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 
 func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
 	slog.Info("Claude Adapter: Collecting artifacts", "attemptID", attemptID)
-	now := time.Now()
 	
-	artifacts := []*domain.Artifact{}
-	_ = artifactRoot
+	var artifacts []*domain.Artifact
+	
+	entries, err := os.ReadDir(artifactRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return artifacts, nil
+		}
+		return nil, fmt.Errorf("failed to read artifact root %s: %w", artifactRoot, err)
+	}
 
-	artifacts = append(artifacts, &domain.Artifact{
-		ID:        fmt.Sprintf("art-claude-stdout-%s", attemptID),
-		AttemptID: attemptID,
-		Type:      domain.ArtifactTypeStdout,
-		Path:      fmt.Sprintf("%s/claude_stdout.log", artifactRoot),
-		Size:      1024,
-		CreatedAt: now,
-	})
-	
-	artifacts = append(artifacts, &domain.Artifact{
-		ID:        fmt.Sprintf("art-claude-result-%s", attemptID),
-		AttemptID: attemptID,
-		Type:      domain.ArtifactType("result_json"),
-		Path:      fmt.Sprintf("%s/claude_result.json", artifactRoot),
-		Size:      500,
-		CreatedAt: now,
-	})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		path := filepath.Join(artifactRoot, entry.Name())
+		artType := domain.ArtifactType("file")
+		
+		if entry.Name() == "stdout.log" {
+			artType = domain.ArtifactTypeStdout
+		} else if entry.Name() == "result.json" {
+			artType = domain.ArtifactType("result_json")
+		} else if filepath.Ext(entry.Name()) == ".patch" {
+			artType = domain.ArtifactType("diff")
+		}
+
+		artifacts = append(artifacts, &domain.Artifact{
+			ID:        fmt.Sprintf("art-%s-%s", entry.Name(), attemptID),
+			AttemptID: attemptID,
+			Type:      artType,
+			Path:      path,
+			Size:      info.Size(),
+			CreatedAt: info.ModTime(),
+		})
+	}
 	
 	return artifacts, nil
 }

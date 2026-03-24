@@ -23,33 +23,60 @@ func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, ar
 	stdoutPath := filepath.Join(artifactRoot, "stdout.log")
 	resultPath := filepath.Join(artifactRoot, "result.json")
 
-	// Create a real invocation that models an agent execution writing its structured result.
-	// For local testing without a real Codex binary, we run a shell script that outputs what Codex would.
-	// We inject the attempt context safely via string formatting.
-	script := fmt.Sprintf(`
-		echo "Executing Codex for attempt %s" > "%s"
-		# Simulated agent work goes here
-		cat << 'EOF' > "%s"
+	// 1. Get binary from environment or use fallback
+	codexBinary := os.Getenv("CODEX_BINARY")
+	if codexBinary == "" {
+		codexBinary = "codex-agent" // Fallback expected CLI name
+	}
+
+	// 2. We use a shell wrapper to easily redirect the standard output, 
+	// or we can execute directly and attach stdout.
+	// Since Codex might not be installed in all test environments, we allow 
+	// CODEX_SIMULATION_MODE to fallback to the stub for E2E tests if necessary,
+	// but strictly log it.
+	
+	if os.Getenv("CODEX_SIMULATION_MODE") == "1" {
+		// Honest simulation logging
+		script := fmt.Sprintf(`
+			echo "Executing Simulated Codex for attempt %s" > "%s"
+			cat << 'EOF' > "%s"
 {
   "status": "completed",
-  "summary": "Successfully performed the requested task.",
+  "summary": "Simulated successful task.",
   "needs_human_decision": false
 }
 EOF
-	`, attempt.ID, stdoutPath, resultPath)
+		`, attempt.ID, stdoutPath, resultPath)
+		cmd := exec.CommandContext(ctx, "bash", "-c", script)
+		cmd.Dir = workspaceRoot
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("simulated codex execution failed: %w. Output: %s", err, string(out))
+		}
+		return nil
+	}
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", script)
+	// Genuine Execution
+	cmd := exec.CommandContext(ctx, codexBinary, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
 	cmd.Dir = workspaceRoot
-
-	out, err := cmd.CombinedOutput()
+	
+	outFd, err := os.Create(stdoutPath)
 	if err != nil {
+		return fmt.Errorf("failed to create stdout log file: %w", err)
+	}
+	defer outFd.Close()
+
+	cmd.Stdout = outFd
+	cmd.Stderr = outFd
+
+	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("codex execution timed out: %w", err)
 		}
 		if ctx.Err() == context.Canceled {
 			return fmt.Errorf("codex execution cancelled: %w", err)
 		}
-		return fmt.Errorf("codex execution failed: %w. Output: %s", err, string(out))
+		return fmt.Errorf("codex execution failed: %w", err)
 	}
 
 	return nil

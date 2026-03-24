@@ -11,10 +11,7 @@ import (
 	"agent-bridge/internal/domain"
 )
 
-// InvokeLocal executes the Claude adapter.
-// NOTE (AUTHENTICATION BLOCKER): Claude Code requires an active auth session and API keys.
-// For the local-first MVP, we simulate the interaction pattern (subprocess -> artifacts) since
-// we cannot guarantee headless auth. When run for real, this would execute `npx @anthropic-ai/claude-code`.
+// InvokeLocal executes the Claude adapter as a local child process.
 func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
@@ -23,32 +20,57 @@ func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, ar
 		return fmt.Errorf("failed to create artifact root: %w", err)
 	}
 
-	stdoutPath := filepath.Join(artifactRoot, "claude_stdout.log")
-	resultPath := filepath.Join(artifactRoot, "claude_result.json")
+	stdoutPath := filepath.Join(artifactRoot, "stdout.log")
+	resultPath := filepath.Join(artifactRoot, "result.json")
 
-	script := fmt.Sprintf(`
-		echo "Executing Claude Code simulator for attempt %s" > "%s"
-		cat << 'EOF' > "%s"
+	// 1. Get binary from environment or use fallback
+	claudeBinary := os.Getenv("CLAUDE_BINARY")
+	if claudeBinary == "" {
+		claudeBinary = "claude-code" // Fallback expected CLI name
+	}
+
+	if os.Getenv("CLAUDE_SIMULATION_MODE") == "1" {
+		// Honest simulation logging
+		script := fmt.Sprintf(`
+			echo "Executing Simulated Claude for attempt %s" > "%s"
+			cat << 'EOF' > "%s"
 {
   "status": "completed",
-  "summary": "Claude simulator executed successfully without API key.",
+  "summary": "Simulated successful claude task.",
   "needs_human_decision": false
 }
 EOF
-	`, attempt.ID, stdoutPath, resultPath)
+		`, attempt.ID, stdoutPath, resultPath)
+		cmd := exec.CommandContext(ctx, "bash", "-c", script)
+		cmd.Dir = workspaceRoot
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("simulated claude execution failed: %w. Output: %s", err, string(out))
+		}
+		return nil
+	}
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", script)
+	// Genuine Execution
+	cmd := exec.CommandContext(ctx, claudeBinary, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
 	cmd.Dir = workspaceRoot
-
-	out, err := cmd.CombinedOutput()
+	
+	outFd, err := os.Create(stdoutPath)
 	if err != nil {
+		return fmt.Errorf("failed to create stdout log file: %w", err)
+	}
+	defer outFd.Close()
+
+	cmd.Stdout = outFd
+	cmd.Stderr = outFd
+
+	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("claude execution timed out: %w", err)
 		}
 		if ctx.Err() == context.Canceled {
 			return fmt.Errorf("claude execution cancelled: %w", err)
 		}
-		return fmt.Errorf("claude execution failed: %w. Output: %s", err, string(out))
+		return fmt.Errorf("claude execution failed: %w", err)
 	}
 
 	return nil

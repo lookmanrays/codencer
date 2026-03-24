@@ -27,6 +27,8 @@ func main() {
 		fmt.Printf("orchestratorctl version %s\n", app.Version)
 	case "run":
 		handleRunCommand(os.Args[2:])
+	case "step":
+		handleStepCommand(os.Args[2:])
 	case "gate":
 		handleGateCommand(os.Args[2:])
 	default:
@@ -43,6 +45,8 @@ func printUsage() {
 	fmt.Println("  run start      <id> <project_id>")
 	fmt.Println("  run status     <id>")
 	fmt.Println("  run abort      <id>")
+	fmt.Println("  step start     <runID> <stepID> <phaseID> <adapter>")
+	fmt.Println("  step result    <stepID>")
 	fmt.Println("  gate approve   <id>")
 	fmt.Println("  gate reject    <id>")
 }
@@ -144,6 +148,77 @@ func abortRun(id string) {
 	}
 
 	fmt.Printf("Run %s aborted successfully.\n", id)
+}
+
+func handleStepCommand(args []string) {
+	if len(args) < 1 {
+		fmt.Println("Usage: orchestratorctl step <start|result> [args]")
+		os.Exit(1)
+	}
+
+	cmd := args[0]
+	switch cmd {
+	case "start":
+		if len(args) < 5 {
+			fmt.Println("Usage: orchestratorctl step start <runID> <stepID> <phaseID> <adapter>")
+			os.Exit(1)
+		}
+		startStep(args[1], args[2], args[3], args[4])
+	case "result":
+		if len(args) < 2 {
+			fmt.Println("Usage: orchestratorctl step result <stepID>")
+			os.Exit(1)
+		}
+		stepResult(args[1])
+	default:
+		fmt.Printf("Unknown step command: %s\n", cmd)
+		os.Exit(1)
+	}
+}
+
+func startStep(runID, stepID, phaseID, adapter string) {
+	reqBody := map[string]string{
+		"id":       stepID,
+		"phase_id": phaseID,
+		"title":    "CLI Dispatched Step",
+		"goal":     "Execute task from CLI",
+		"adapter":  adapter,
+	}
+	data, _ := json.Marshal(reqBody)
+
+	resp, err := http.Post(orchestratordURL+"/api/v1/runs/"+runID+"/steps", "application/json", bytes.NewReader(data))
+	if err != nil {
+		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Error: %s\n", string(body))
+		os.Exit(1)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("Step dispatched:\n%s\n", string(body))
+}
+
+func stepResult(stepID string) {
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
+	if err != nil {
+		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Error: %s\n", string(body))
+		os.Exit(1)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("Step status:\n%s\n", string(body))
 }
 
 func handleGateCommand(args []string) {

@@ -61,3 +61,28 @@ func (r *GatesRepo) Get(ctx context.Context, id string) (*domain.Gate, error) {
 	gate.Status = domain.GateStatus(status)
 	return &gate, nil
 }
+
+// ListByRun retrieves all gates associated with a specific run.
+func (r *GatesRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Gate, error) {
+	q := `SELECT id, run_id, step_id, description, status, created_at, resolved_at FROM gates WHERE run_id = ? ORDER BY created_at DESC`
+	rows, err := r.db.QueryContext(ctx, q, runID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list gates: %w", err)
+	}
+	defer rows.Close()
+
+	var gates []*domain.Gate
+	for rows.Next() {
+		var gate domain.Gate
+		var status string
+		if err := rows.Scan(&gate.ID, &gate.RunID, &gate.StepID, &gate.Description, &status, &gate.CreatedAt, &gate.ResolvedAt); err != nil {
+			return nil, err
+		}
+		gate.Status = domain.GateStatus(status)
+		gates = append(gates, &gate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return gates, nil
+}

@@ -32,7 +32,7 @@ type Phase struct {
 	ID        string
 	RunID     string
 	Name      string
-	Order     int
+	SeqOrder  int
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	

@@ -10,6 +10,10 @@ import (
 	"os"
 	"time"
 
+	"agent-bridge/internal/adapters/claude"
+	"agent-bridge/internal/adapters/codex"
+	"agent-bridge/internal/adapters/qwen"
+	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
 	_ "github.com/mattn/go-sqlite3"
@@ -81,10 +85,25 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 
 	// 6. Application services integration
 	runsRepo := sqlite.NewRunsRepo(db)
-	runSvc := service.NewRunService(runsRepo)
-	
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
 	gatesRepo := sqlite.NewGatesRepo(db)
+	
+	adapters := map[string]domain.Adapter{
+		"codex":  codex.NewAdapter(),
+		"claude": claude.NewAdapter(),
+		"qwen":   qwen.NewAdapter(),
+	}
+
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, adapters)
+	
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
+
+	recoverySvc := service.NewRecoveryService(runsRepo)
+	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {
+		logger.Warn("Failed to sweep stale runs during bootstrap", "error", err)
+	}
 
 	apiHandler := &APIHandler{
 		RunSvc:  runSvc,
