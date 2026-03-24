@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS gates (
 	FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE,
 	FOREIGN KEY (step_id) REFERENCES steps(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS validations (
+	attempt_id TEXT NOT NULL,
+	name TEXT NOT NULL,
+	passed BOOLEAN NOT NULL,
+	error_msg TEXT,
+	created_at DATETIME NOT NULL,
+	PRIMARY KEY (attempt_id, name),
+	FOREIGN KEY (attempt_id) REFERENCES attempts(id) ON DELETE CASCADE
+);
 `
 
 	_, err := db.Exec(schema)

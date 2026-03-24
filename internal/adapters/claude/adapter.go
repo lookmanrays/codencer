@@ -30,7 +30,7 @@ func (a *Adapter) Capabilities() []string {
 	return []string{"mcp_client", "planning"}
 }
 
-func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt) error {
+func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -38,14 +38,19 @@ func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt) error {
 		return fmt.Errorf("attempt %s is already running", attempt.ID)
 	}
 
-	_, cancel := context.WithCancel(context.Background())
+	execCtx, cancel := context.WithCancel(context.Background())
 	a.processes[attempt.ID] = &cancel
 
 	go func() {
 		defer cancel()
 		slog.Info("Claude Adapter: Starting process", "attemptID", attempt.ID)
 		
-		time.Sleep(2 * time.Second) // Simulate work
+		err := InvokeLocal(execCtx, attempt, workspaceRoot, artifactRoot)
+		if err != nil {
+			slog.Error("Claude Adapter: Process failed", "attemptID", attempt.ID, "error", err)
+		} else {
+			slog.Info("Claude Adapter: Process finished", "attemptID", attempt.ID)
+		}
 
 		a.mu.Lock()
 		delete(a.processes, attempt.ID)
@@ -78,12 +83,39 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 }
 
 func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
-	return nil, nil
+	slog.Info("Claude Adapter: Collecting artifacts", "attemptID", attemptID)
+	now := time.Now()
+	
+	artifacts := []*domain.Artifact{}
+	_ = artifactRoot
+
+	artifacts = append(artifacts, &domain.Artifact{
+		ID:        fmt.Sprintf("art-claude-stdout-%s", attemptID),
+		AttemptID: attemptID,
+		Type:      domain.ArtifactTypeStdout,
+		Path:      fmt.Sprintf("%s/claude_stdout.log", artifactRoot),
+		Size:      1024,
+		CreatedAt: now,
+	})
+	
+	artifacts = append(artifacts, &domain.Artifact{
+		ID:        fmt.Sprintf("art-claude-result-%s", attemptID),
+		AttemptID: attemptID,
+		Type:      domain.ArtifactType("result_json"),
+		Path:      fmt.Sprintf("%s/claude_result.json", artifactRoot),
+		Size:      500,
+		CreatedAt: now,
+	})
+	
+	return artifacts, nil
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
-	return &domain.Result{
-		Status:  domain.StepStateCompleted,
-		Summary: "Claude adapter finished successfully",
-	}, nil
+	var resultPath string
+	for _, art := range artifacts {
+		if art.Type == "result_json" {
+			resultPath = art.Path
+		}
+	}
+	return NormalizeCore(attemptID, resultPath)
 }

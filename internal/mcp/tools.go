@@ -35,7 +35,7 @@ func (s *Server) ToolGetStatus(ctx context.Context, args map[string]interface{})
 		return nil, fmt.Errorf("missing argument: id")
 	}
 
-	run, err := s.runSvc.GetStatus(ctx, id)
+	run, err := s.runSvc.GetRun(ctx, id)
 	if err != nil {
 		return nil, err
 	}

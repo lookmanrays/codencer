@@ -24,17 +24,21 @@ func NewRecoveryService(runsRepo *sqlite.RunsRepo) *RecoveryService {
 func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	slog.Info("Running recovery sweep for stale runs")
 
-	// For MVP, we pretend we pull all runs with state == Running and update them.
-	// Since we don't have a ListRunning query in MVP runs_repo yet, this is a conceptual stub.
-	
-	// Real implementation would look like:
-	// runs, err := s.runsRepo.ListByState(ctx, domain.RunStateRunning)
-	// for _, r := range runs {
-	//    r.State = domain.RunStateFailed
-	//    r.UpdatedAt = time.Now()
-	//    _ = s.runsRepo.UpdateState(ctx, r)
-	//    slog.Info("Marked stale run as failed", "runID", r.ID)
-	// }
+	runs, err := s.runsRepo.ListByState(ctx, domain.RunStateRunning)
+	if err != nil {
+		return fmt.Errorf("failed to list running tasks for recovery sweep: %w", err)
+	}
+
+	for _, r := range runs {
+		// A run stuck in Running state on a daemon boot must be dead. Mark it failed.
+		r.State = domain.RunStateFailed
+		r.UpdatedAt = time.Now().UTC()
+		if updateErr := s.runsRepo.UpdateState(ctx, r); updateErr != nil {
+			slog.Error("Failed to update stale run state", "runID", r.ID, "error", updateErr)
+			continue
+		}
+		slog.Warn("Marked stale run as failed terminal", "runID", r.ID)
+	}
 
 	return nil
 }

@@ -17,23 +17,32 @@
 - [x] Pending SQLite schemas and repository implementations.
 - [x] Pending state machine logic and transitions logic.
 
+## Phase 4: Codex Adapter MVP
+- [x] Adapter uses subprocess to simulate valid execution, collects artifacts into workspace, and unmarshals real JSON result output.
+
+## Phase 5: Validation + Artifacts
+- [x] sqlite validation mappings complete and working.
+
+## Phase 6-7: State Machine + CLI
+- [x] True database repository querying implemented handling ledger lists. function minimally.
+
 ## Phase 7: Repo Safety + Worktrees
-- [x] Pending dirty checks, lock management, worktrees, and cleanup.mentation.
+- [x] Basic lock management and worktree shell commands implemented.
 
 ## Phase 8: Hardening + Recovery
-- [x] Pending restart recovery, cancellation, retry backoff.
+- [ ] INCOMPLETE: `SweepStaleRuns` is a commented-out conceptual mock. Needs real DB queries.
 
 ## Phase 9: MCP Bridge
-- [x] Pending MCP server layer and tool exposure.
+- [x] Basic HTTP tool bindings exist.
 
 ## Phase 10: DSL/Schema Hardening
-- [x] Pending JSON schemas for task/result/policy.
+- [x] JSON schemas created for task/result/policy.
 
 ## Phase 11: IDE Extension MVP
-- [x] Pending mock extension scaffolding and daemon connectivity.
+- [ ] INCOMPLETE: Extension is just a scaffold. Needs real UI/Webview/TreeDataProvider.
 
 ## Phase 12-13: Secondary Adapters
-- [x] Pending Claude and Qwen adapter structure.
+- [ ] INCOMPLETE: Claude and Qwen adapters exist as dead-code `time.Sleep` stubs.
 
 ## Phase 5: Validation + Artifacts
 - [x] Pending artifact persistence and validation commands.

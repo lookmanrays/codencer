@@ -25,6 +25,17 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		runs, err := h.RunSvc.List(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(runs)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -58,7 +69,7 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		run, err := h.RunSvc.GetStatus(r.Context(), id)
+		run, err := h.RunSvc.GetRun(r.Context(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -82,7 +93,7 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if req.Action == "abort" {
-			if err := h.RunSvc.Abort(r.Context(), id); err != nil {
+			if err := h.RunSvc.AbortRun(r.Context(), id); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}

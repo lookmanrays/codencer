@@ -45,13 +45,18 @@ func (s *RunService) StartRun(ctx context.Context, id, projectID string) (*domai
 	return run, nil
 }
 
-// GetStatus returns the current run status.
-func (s *RunService) GetStatus(ctx context.Context, id string) (*domain.Run, error) {
+// GetRun returns the current run status.
+func (s *RunService) GetRun(ctx context.Context, id string) (*domain.Run, error) {
 	return s.repo.Get(ctx, id)
 }
 
+// List returns all runs.
+func (s *RunService) List(ctx context.Context) ([]*domain.Run, error) {
+	return s.repo.List(ctx)
+}
+
 // Abort transitions the run to cancelled if it is not already terminal.
-func (s *RunService) Abort(ctx context.Context, id string) error {
+func (s *RunService) AbortRun(ctx context.Context, id string) error {
 	run, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return err
@@ -61,11 +66,7 @@ func (s *RunService) Abort(ctx context.Context, id string) error {
 	}
 
 	if run.State.IsTerminal() {
-		return fmt.Errorf("run is already terminal")
-	}
-
-	if err := state.CheckRunTransition(run.State, domain.RunStateCancelled); err != nil {
-		return err
+		return fmt.Errorf("run is already terminal in state %s", run.State)
 	}
 
 	run.State = domain.RunStateCancelled

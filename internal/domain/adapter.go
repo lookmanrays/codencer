@@ -10,7 +10,7 @@ type Adapter interface {
 	Capabilities() []string
 	
 	// Start begins adapter execution and returns immediately, allowing polling/cancellation
-	Start(ctx context.Context, attempt *Attempt) error
+	Start(ctx context.Context, attempt *Attempt, workspaceRoot, artifactRoot string) error
 	
 	// Poll checks the status of the execution
 	Poll(ctx context.Context, attemptID string) (bool, error)

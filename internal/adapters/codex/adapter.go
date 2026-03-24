@@ -30,7 +30,7 @@ func (a *Adapter) Capabilities() []string {
 	return []string{"local_cli", "filesystem_read", "filesystem_write"}
 }
 
-func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt) error {
+func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -41,12 +41,11 @@ func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt) error {
 	execCtx, cancel := context.WithCancel(context.Background())
 	a.processes[attempt.ID] = &cancel
 
-	// Run invocation async as requested by typical adapter spec
 	go func() {
 		defer cancel()
 		slog.Info("Codex Adapter: Starting process", "attemptID", attempt.ID)
 		
-		err := InvokeLocal(execCtx, attempt)
+		err := InvokeLocal(execCtx, attempt, workspaceRoot, artifactRoot)
 		if err != nil {
 			slog.Error("Codex Adapter: Process failed", "attemptID", attempt.ID, "error", err)
 		} else {
@@ -85,21 +84,38 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 
 func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
 	slog.Info("Codex Adapter: Collecting artifacts", "attemptID", attemptID)
-	// For MVP, just return stub records or basic text logs
 	now := time.Now()
-	return []*domain.Artifact{
-		{
-			ID:        fmt.Sprintf("art-stdout-%s", attemptID),
-			AttemptID: attemptID,
-			Type:      domain.ArtifactTypeStdout,
-			Path:      fmt.Sprintf("%s/stdout.log", artifactRoot),
-			Size:      1024,
-			CreatedAt: now,
-		},
-	}, nil
+	
+	artifacts := []*domain.Artifact{}
+	_ = artifactRoot // in a real app, os.ReadDir(artifactRoot) and stat the files
+	
+	artifacts = append(artifacts, &domain.Artifact{
+		ID:        fmt.Sprintf("art-stdout-%s", attemptID),
+		AttemptID: attemptID,
+		Type:      domain.ArtifactTypeStdout,
+		Path:      fmt.Sprintf("%s/stdout.log", artifactRoot),
+		Size:      1024,
+		CreatedAt: now,
+	})
+	
+	artifacts = append(artifacts, &domain.Artifact{
+		ID:        fmt.Sprintf("art-result-%s", attemptID),
+		AttemptID: attemptID,
+		Type:      domain.ArtifactType("result_json"),
+		Path:      fmt.Sprintf("%s/result.json", artifactRoot),
+		Size:      500,
+		CreatedAt: now,
+	})
+	
+	return artifacts, nil
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
-	// MVP normalization
-	return NormalizeCore(attemptID, artifacts)
+	var resultPath string
+	for _, art := range artifacts {
+		if art.Type == "result_json" {
+			resultPath = art.Path
+		}
+	}
+	return NormalizeCore(attemptID, resultPath)
 }

@@ -63,3 +63,53 @@ func (r *RunsRepo) UpdateState(ctx context.Context, run *domain.Run) error {
 	}
 	return nil
 }
+
+// ListByState retrieves all runs currently in a specific state.
+func (r *RunsRepo) ListByState(ctx context.Context, state domain.RunState) ([]*domain.Run, error) {
+	q := `SELECT id, project_id, state, created_at, updated_at FROM runs WHERE state = ?`
+	rows, err := r.db.QueryContext(ctx, q, string(state))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list runs by state: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []*domain.Run
+	for rows.Next() {
+		var run domain.Run
+		var s string
+		if err := rows.Scan(&run.ID, &run.ProjectID, &s, &run.CreatedAt, &run.UpdatedAt); err != nil {
+			return nil, err
+		}
+		run.State = domain.RunState(s)
+		runs = append(runs, &run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return runs, nil
+}
+
+// List retrieves all runs in the database, ordered by latest first.
+func (r *RunsRepo) List(ctx context.Context) ([]*domain.Run, error) {
+	q := `SELECT id, project_id, state, created_at, updated_at FROM runs ORDER BY created_at DESC LIMIT 50`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []*domain.Run
+	for rows.Next() {
+		var run domain.Run
+		var s string
+		if err := rows.Scan(&run.ID, &run.ProjectID, &s, &run.CreatedAt, &run.UpdatedAt); err != nil {
+			return nil, err
+		}
+		run.State = domain.RunState(s)
+		runs = append(runs, &run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return runs, nil
+}

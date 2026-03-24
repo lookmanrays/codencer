@@ -1,4 +1,4 @@
-package codex
+package qwen
 
 import (
 	"context"
@@ -11,7 +11,11 @@ import (
 	"agent-bridge/internal/domain"
 )
 
-// InvokeLocal executes the Codex adapter as a local child process.
+// InvokeLocal executes the Qwen adapter.
+// NOTE (AUTHENTICATION BLOCKER): Proper local inference requires downloading models
+// and setting up Python/llama.cpp environments which exceed MVP host assumptions.
+// We simulate the interaction pattern (subprocess -> artifacts) since we cannot guarantee
+// a local GPU or Qwen binary.
 func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
@@ -20,19 +24,15 @@ func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, ar
 		return fmt.Errorf("failed to create artifact root: %w", err)
 	}
 
-	stdoutPath := filepath.Join(artifactRoot, "stdout.log")
-	resultPath := filepath.Join(artifactRoot, "result.json")
+	stdoutPath := filepath.Join(artifactRoot, "qwen_stdout.log")
+	resultPath := filepath.Join(artifactRoot, "qwen_result.json")
 
-	// Create a real invocation that models an agent execution writing its structured result.
-	// For local testing without a real Codex binary, we run a shell script that outputs what Codex would.
-	// We inject the attempt context safely via string formatting.
 	script := fmt.Sprintf(`
-		echo "Executing Codex for attempt %s" > "%s"
-		# Simulated agent work goes here
+		echo "Executing Qwen simulator for attempt %s" > "%s"
 		cat << 'EOF' > "%s"
 {
   "status": "completed",
-  "summary": "Successfully performed the requested task.",
+  "summary": "Qwen simulator executed successfully.",
   "needs_human_decision": false
 }
 EOF
@@ -44,12 +44,12 @@ EOF
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("codex execution timed out: %w", err)
+			return fmt.Errorf("qwen execution timed out: %w", err)
 		}
 		if ctx.Err() == context.Canceled {
-			return fmt.Errorf("codex execution cancelled: %w", err)
+			return fmt.Errorf("qwen execution cancelled: %w", err)
 		}
-		return fmt.Errorf("codex execution failed: %w. Output: %s", err, string(out))
+		return fmt.Errorf("qwen execution failed: %w. Output: %s", err, string(out))
 	}
 
 	return nil
