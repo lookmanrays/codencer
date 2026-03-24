@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskSpec",
+  "type": "object",
+  "required": ["version", "run_id", "phase_id", "step_id", "goal"],
+  "properties": {
+    "version": { "type": "string" },
+    "run_id": { "type": "string" },
+    "phase_id": { "type": "string" },
+    "step_id": { "type": "string" },
+    "goal": { "type": "string" }
+  }
+}

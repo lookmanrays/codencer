@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PolicySpec",
+  "type": "object",
+  "required": ["version", "name"],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "gate_when": {
+      "type": "object",
+      "properties": {
+        "changed_files_over": { "type": "integer" },
+        "dependency_files_changed": { "type": "boolean" },
+        "migrations_detected": { "type": "boolean" },
+        "unresolved_questions_present": { "type": "boolean" }
+      }
+    },
+    "fail_when": {
+      "type": "object",
+      "properties": {
+        "compile_failed": { "type": "boolean" },
+        "tests_failed": { "type": "boolean" },
+        "artifact_persistence_failed": { "type": "boolean" }
+      }
+    }
+  }
+}

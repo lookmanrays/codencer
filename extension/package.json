@@ -1,0 +1,38 @@
+{
+  "name": "codencer-bridge",
+  "displayName": "Codencer Bridge",
+  "description": "Local MVP GUI for Codencer agent orchestration",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codencer.connect",
+        "title": "Codencer: Connect to Daemon"
+      },
+      {
+        "command": "codencer.startRun",
+        "title": "Codencer: Start Run"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "16.x",
+    "typescript": "^5.1.3"
+  }
+}

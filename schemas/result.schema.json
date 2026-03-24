@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResultSpec",
+  "type": "object",
+  "required": ["version", "status", "summary"],
+  "properties": {
+    "version": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "failed", "retryable_failure"]
+    },
+    "summary": { "type": "string" },
+    "needs_human_decision": { "type": "boolean" },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

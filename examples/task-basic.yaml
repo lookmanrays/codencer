@@ -1,0 +1,9 @@
+version: v1
+project_id: example-project
+run_id: run-0001
+phase_id: phase-01
+step_id: step-01
+title: Implement something
+goal: Build the logic for checking
+context:
+  summary: Just do it.
