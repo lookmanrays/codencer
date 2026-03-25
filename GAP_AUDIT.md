@@ -6,7 +6,7 @@ The repository contains a functionally operational MVP implementation of the orc
 However, a rigorous audit reveals the following significant gaps separating the MVP from a "production-ready" local tool:
 
 1. **Orchestration Workflow is Decomposed**: [RESOLVED] `RunService.DispatchStep` has been refactored into modular `initialize`, `runAttemptLoop`, and `finalize` stages.
-2. **Adapter Paths are Hardened**: [IMPROVED] Adapters now handle environment setup errors (like worktree collisions) gracefully, and the dispatch loop handles system failures distinctly from adapter failures.
+2. **Adapter Paths are Hardened**: [RESOLVED] Unified adapter core implemented in `internal/adapters/common`. Mandatory binary checks enforced; simulation is explicitly separated and auditable. Hardcoded artifacts replaced with real filesystem collection for all adapters including Qwen.
 3. **Retrieval Flows are Hardened**: [RESOLVED] Detailed retrieval of `artifacts`, `structured results`, and `validations` is now available across Service, API, MCP, and CLI layers with stable JSON schemas.
 4. **Policy Engine is Defaulted**: Execution policies are instantiated with hardcoded mock thresholds inside the dispatcher loop. There is no true persisted policy binding per step or run from configuration.
 5. **Recovery is Simplistic**: [RESOLVED] Integrated exclusive workspace locking and a deep reconciliation engine that salvages results and cleans up orphans.

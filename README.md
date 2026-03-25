@@ -20,12 +20,12 @@ Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic
 The foundational orchestration shell is fully operational. A persistent SQLite ledger, an initial state-machine loop, workspace isolation via Git Worktrees, basic MCP tool mapping, and a scaffolding IDE extension have all been implemented.
 
 **Phase 2 Production Hardening (Active):**
-While structurally sound, the bridge operates primarily via simulated or thin interactions. Phase 2 aims to break out of "simulated correctness" by:
-1. **Dismantling Monoliths**: Transitioning `DispatchStep` into discrete, fault-tolerant lifecycle coordinators.
-2. **Honest Adapter Contracts**: Executing genuine Codex/Claude/Qwen paths capable of catching process regressions, missing binaries, and enforcing rigid JSON Result contracts.
-3. **Retrieval Completeness**: Exposing standard API, CLI, and MCP retrieval functions to list artifacts and inspect step validation outputs natively, moving beyond simple state checking.
-4. **Strong Policies**: Removing hardcoded env mocks and forcing the Policy Engine to read explicit execution boundaries mapping directly to realistic disk changes (`diff` sizing, missing dependencies).
-5. **Interactive Integrations**: Converting the passive VS Code UI into an active Control Plane capable of resolving Gates and retracing failed workflows reliably.
+While structurally sound, the bridge is transitioning from "simulated correctness" to "native reliability" by:
+1. **Dismantling Monoliths**: [RESOLVED] Transitioned `DispatchStep` into discrete, fault-tolerant lifecycle coordinators.
+2. **Honest Adapter Contracts**: [RESOLVED] Standardized Codex, Claude, and Qwen adapters via a unified execution core (`internal/adapters/common`). Adapters now explicitly detect missing binaries and separate simulation and real execution.
+3. **Retrieval Completeness**: [RESOLVED] Exposing standard API, CLI, and MCP retrieval functions to list artifacts and inspect step validation outputs natively.
+4. **Strong Policies**: Removing hardcoded env mocks and forcing the Policy Engine to read explicit execution boundaries.
+5. **Interactive Integrations**: [RESOLVED] Converted the VS Code UI into an active Control Plane for Gate resolution and workflow retracing.
 
 **Phase 5 Orchestration & MCP Correctness (Complete):**
 The core execution engine has been hardened for production-grade reliability. Key improvements include:
@@ -35,3 +35,4 @@ The core execution engine has been hardened for production-grade reliability. Ke
 4. **Environment Robustness**: Worktree management now handles branch collisions and setup failures with explicit recovery paths.
 
 > **Limitations:** For Phase 2, certain complex agent topologies (like interactive persistent CLI shells or cloud orchestration) are still explicitly unsupported to guarantee local-first safety.
+> **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.

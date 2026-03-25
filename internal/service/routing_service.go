@@ -9,14 +9,15 @@ import (
 	"agent-bridge/internal/storage/sqlite"
 )
 
-// RoutingService manages the smart fallback chaining of adapters based on task profiles and benchmarks.
+// RoutingService manages the order in which adapters are attempted.
 type RoutingService struct {
 	benchmarksRepo *sqlite.BenchmarksRepo
 	adapters       map[string]domain.Adapter
 }
 
-// NOTE: Current routing implementation is a heuristic-based static fallback chain.
-// Benchmarks are logged but not yet actively dynamically evaluated for the primary selection.
+// NOTE: Current routing implementation is a HEURISTIC STATIC FALLBACK CHAIN.
+// While benchmarks are persisted to the database, they are NOT yet used for dynamic 
+// selection or weight-based routing. Performance-based routing is a legacy roadmap item.
 
 func NewRoutingService(benchRepo *sqlite.BenchmarksRepo, adapters map[string]domain.Adapter) *RoutingService {
 	return &RoutingService{

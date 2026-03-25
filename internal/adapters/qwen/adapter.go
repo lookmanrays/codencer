@@ -2,11 +2,10 @@ package qwen
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
+	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
 )
 
@@ -35,7 +34,7 @@ func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceR
 	defer a.mu.Unlock()
 
 	if _, exists := a.processes[attempt.ID]; exists {
-		return fmt.Errorf("attempt %s is already running", attempt.ID)
+		return nil
 	}
 
 	execCtx, cancel := context.WithCancel(context.Background())
@@ -43,13 +42,17 @@ func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceR
 
 	go func() {
 		defer cancel()
-		slog.Info("Qwen Adapter: Starting process", "attemptID", attempt.ID)
-		
-		err := InvokeLocal(execCtx, attempt, workspaceRoot, artifactRoot)
-		if err != nil {
-			slog.Error("Qwen Adapter: Process failed", "attemptID", attempt.ID, "error", err)
-		} else {
-			slog.Info("Qwen Adapter: Process finished", "attemptID", attempt.ID)
+		opts := common.ExecutionOptions{
+			AdapterName:  a.Name(),
+			BinaryName:   "qwen-local",
+			BinaryEnvVar: "QWEN_BINARY",
+			Args:         []string{"run", "--workspace", workspaceRoot, "--output", artifactRoot},
+			Workspace:    workspaceRoot,
+			ArtifactRoot: artifactRoot,
+		}
+
+		if err := common.InvokeLocal(execCtx, attempt, opts); err != nil {
+			slog.Error("Qwen Adapter: Execution failed", "attemptID", attempt.ID, "error", err)
 		}
 
 		a.mu.Lock()
@@ -73,49 +76,18 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 
 	cancelFunc, exists := a.processes[attemptID]
 	if !exists {
-		return fmt.Errorf("attempt %s is not running", attemptID)
+		return nil
 	}
 
-	slog.Info("Qwen Adapter: Cancelling process", "attemptID", attemptID)
 	(*cancelFunc)()
 	delete(a.processes, attemptID)
 	return nil
 }
 
 func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
-	slog.Info("Qwen Adapter: Collecting artifacts", "attemptID", attemptID)
-	now := time.Now()
-	
-	artifacts := []*domain.Artifact{}
-	_ = artifactRoot
-
-	artifacts = append(artifacts, &domain.Artifact{
-		ID:        fmt.Sprintf("art-qwen-stdout-%s", attemptID),
-		AttemptID: attemptID,
-		Type:      domain.ArtifactTypeStdout,
-		Path:      fmt.Sprintf("%s/qwen_stdout.log", artifactRoot),
-		Size:      1024,
-		CreatedAt: now,
-	})
-	
-	artifacts = append(artifacts, &domain.Artifact{
-		ID:        fmt.Sprintf("art-qwen-result-%s", attemptID),
-		AttemptID: attemptID,
-		Type:      domain.ArtifactType("result_json"),
-		Path:      fmt.Sprintf("%s/qwen_result.json", artifactRoot),
-		Size:      500,
-		CreatedAt: now,
-	})
-	
-	return artifacts, nil
+	return common.CollectStandardArtifacts(ctx, attemptID, artifactRoot)
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
-	var resultPath string
-	for _, art := range artifacts {
-		if art.Type == "result_json" {
-			resultPath = art.Path
-		}
-	}
-	return NormalizeCore(attemptID, resultPath)
+	return common.NormalizeStandardResult(attemptID, artifacts)
 }
