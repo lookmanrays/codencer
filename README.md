@@ -66,7 +66,7 @@ make build
 # Run core service and integration tests
 make test
 
-# Start the daemon in Simulation Mode (no external binaries required)
+# Start the daemon in Orchestration Simulation Mode (verifies state machine only)
 make simulate
 
 # In a separate terminal, verify CLI connectivity
@@ -75,7 +75,7 @@ make simulate
 ```
 
 ### 2. Operational Truths
-- **Simulation**: The system provides `ALL_ADAPTERS_SIMULATION_MODE=1` to allow end-to-end verification of the orchestration state-machine without requiring local installs of Codex/Claude/Qwen.
+- **Simulation**: The system provides `ALL_ADAPTERS_SIMULATION_MODE=1` to allow end-to-end verification of the orchestration state-machine without requiring local installs of Codex/Claude/Qwen. **NOTE: Simulation does NOT execute real agent logic; it validates the orchestrator's response to stubbed agent outcomes.**
 - **Adapters**: Real execution requires the respective CLI binaries to be in the `$PATH`.
 - **SQLite Ledger**: All state is local and persistent in `codencer.db` by default.
 - **VS Code Extension**: Can be verified by sideloading the `extension/` directory into VS Code. It provides a read/write control plane for the daemon.

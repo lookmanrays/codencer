@@ -39,7 +39,7 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 | :--- | :--- | :--- |
 | **Build** | PASS | Linux / Go 1.21+ |
 | **Unit Tests** | PASS | Isolated via `t.TempDir` |
-| **E2E Flow** | PASS | Verified via Simulation Mode (Mocked behavior) |
+| **E2E Flow** | PASS | Simulated (Orchestrator-only verification) |
 | **API Endpoints** | PASS | Verified in `api_test.go` |
 | **Extension** | PASS | Verified via manual VS Code sideload (Beta) |
 

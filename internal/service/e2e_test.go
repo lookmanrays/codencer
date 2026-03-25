@@ -14,6 +14,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// TestE2EFlow validates the orchestrator's state machine and lifecycle loop.
+// NOTE: This test uses Simulation Mode and does NOT verify real agent/binary behavior.
 func TestE2EFlow(t *testing.T) {
 	// 1. Setup Environment
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -116,5 +118,5 @@ func TestE2EFlow(t *testing.T) {
 		t.Fatalf("Expected run state Running after approval, got %s", run.State)
 	}
 
-	t.Log("E2E Simulation Passed!")
+	t.Log("Orchestrator Lifecycle Simulation Passed!")
 }
