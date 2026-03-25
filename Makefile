@@ -31,5 +31,5 @@ clean:
 	@rm -f codencer.db
 
 simulate: build
-	@echo "==> Running in simulation mode..."
-	@CODEX_SIMULATION_MODE=1 CLAUDE_SIMULATION_MODE=1 QWEN_SIMULATION_MODE=1 ./bin/orchestratord
+	@echo "==> Running in simulation mode (all adapters stubbed)..."
+	@ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord

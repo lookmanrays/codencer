@@ -16,11 +16,34 @@ However, a rigorous audit reveals the following significant gaps separating the 
 9. **Terminology Inconsistency**: [RESOLVED] Renamed all outcome indicators to `State` (RunState, StepState, Result.State) for uniform operator experience. Building is verified 100% compliant.
 10. **Documentation Stale**: [RESOLVED] README, Progress, and Tasks updated to reflect final project hardening status and explicit limitations.
 
-## Retrospective Summary
-The Codencer Orchestration Bridge has transitioned from a fragmented MVP into a coherent, honest, and operational local-firstcontrol plane. The implementation respects service boundaries, enforces deterministic policies via Gating, and provides a transparent ledger for agent auditability.
+## Final Feature Status Matrix
 
-### Extension Audit [BATCH 4 COMPLETE]
-- [x] **Passive Viewer**: The extension is now a functional operator surface.
-- [x] **Noisy Polling**: Polling is replaced with cleaner manual refresh and stable client logic.
-- [x] **Missing Actions**: Added Approve, Reject, and Retry actions.
-- [x] **Structured Inspection**: Integrated JSON buffers for results and validations.
+| Component | Status | Implementation Type | Notes |
+| :--- | :--- | :--- | :--- |
+| **Orchestration Core** | Complete | Native (SQLite) | Persistent ledger for runs, steps, and attempts. |
+| **Workspace Isolation** | Complete | Native (Git) | Exclusive locking and worktree management. |
+| **Policy Engine** | Complete | Native (Heuristic) | Gating based on migrations, file counts, and failures. |
+| **CLI & MCP** | Complete | Native | Full surface for inspection and control. |
+| **VS Code Extension** | Complete | Native | Functional tree-view and action surface. |
+| **Recovery Engine** | Complete | Native | Decision-based reconciliation for stale runs. |
+| **Benchmarking** | Complete | Native | Simulation-aware performance telemetry. |
+| **Routing** | Complete | Heuristic | Deterministic fallback chain (not ML optimized). |
+| **Codex Adapter** | Functional | CLI Wrapper | Requires local `codex` binary. |
+| **Claude Adapter** | Functional | CLI Wrapper | Requires local `claude-code` binary. |
+| **Qwen Adapter** | Functional | CLI Wrapper | Requires local `qwen` / `aider` binary. |
+| **IDE Chat Adapter** | Partial | Proxy/Stub | Currently serves as an extension-bound proxy. |
+
+## Verification Status
+
+| Check | Result | Environment |
+| :--- | :--- | :--- |
+| **Build** | PASS | Linux / Go 1.21+ |
+| **Unit Tests** | PASS | Isolated via `t.TempDir` |
+| **E2E Flow** | PASS | Verified via Simulation Mode |
+| **API Endpoints** | PASS | Verified in `api_test.go` |
+| **Extension** | PASS | Verified via manual VS Code sideload |
+
+## Known Technical Debt & Limitations
+- **Adaptive Routing**: The system uses a static heuristic chain; dynamic benchmark-driven optimization is deferred.
+- **Process Introspection**: Since adapters are CLI wrappers, we cannot see intra-process state beyond stdout/stderr.
+- **Telemetry Depth**: Benchmark metrics are limited to duration and validation pass-rates.

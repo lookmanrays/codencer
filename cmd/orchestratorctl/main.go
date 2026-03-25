@@ -47,8 +47,9 @@ func printUsage() {
 	fmt.Println("  run status     <id>")
 	fmt.Println("  run abort      <id>")
 	fmt.Println("  step start     <runID> <taskFile.yaml>")
-	fmt.Println("  step result     <stepID>")
-	fmt.Println("  step artifacts  <stepID>")
+	fmt.Println("  step status    <stepID>")
+	fmt.Println("  step result    <stepID>")
+	fmt.Println("  step artifacts <stepID>")
 	fmt.Println("  step validations <stepID>")
 	fmt.Println("  gate approve    <id>")
 	fmt.Println("  gate reject    <id>")
@@ -164,7 +165,7 @@ func abortRun(id string) {
 
 func handleStepCommand(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts> [args]")
+		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations> [args]")
 		os.Exit(1)
 	}
 

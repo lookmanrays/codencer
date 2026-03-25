@@ -53,3 +53,33 @@ Codencer is a local orchestration bridge, not an autonomous agent or a cloud-sca
 4. **Interactive Shells**: Persistent, stateful interactive shells within an adapter attempt are currently explicitly unsupported.
 
 > **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.
+## Reviewer Summary & Verification
+
+### 1. Verification Commands
+The following suite should be run to verify the integrity of the bridge:
+
+```bash
+# Build all components
+make build
+
+# Run core service and integration tests
+make test
+
+# Start the daemon in Simulation Mode (no external binaries required)
+make simulate
+
+# In a separate terminal, verify CLI connectivity
+./bin/orchestratorctl version
+./bin/orchestratorctl run start test-run test-project
+```
+
+### 2. Operational Truths
+- **Simulation**: The system provides `ALL_ADAPTERS_SIMULATION_MODE=1` to allow end-to-end verification of the orchestration state-machine without requiring local installs of Codex/Claude/Qwen.
+- **Adapters**: Real execution requires the respective CLI binaries to be in the `$PATH`.
+- **SQLite Ledger**: All state is local and persistent in `codencer.db` by default.
+- **VS Code Extension**: Can be verified by sideloading the `extension/` directory into VS Code. It provides a read/write control plane for the daemon.
+
+### 3. Key Scenarios for Review
+- **Gating**: Observe how the system pauses execution when a migration is detected in a simulated attempt.
+- **Recovery**: Kill the daemon during a 'running' step and observe how it reconciles the attempt on restart.
+- **Auditability**: Use `orchestratorctl step result <id>` to see the full structured JSON evidence of a task.
