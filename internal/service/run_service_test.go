@@ -93,6 +93,7 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 		artifactsRepo,
 		sqlite.NewValidationsRepo(db),
 		routingSvc,
+		service.NewPolicyRegistry(),
 		"/tmp/artifacts", "/tmp/workspace")
 
 	ctx := context.Background()

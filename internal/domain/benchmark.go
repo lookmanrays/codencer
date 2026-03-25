@@ -9,11 +9,13 @@ type BenchmarkScore struct {
 	ID             string    `json:"id"`
 	Adapter        string    `json:"adapter"`
 	PhaseID        string    `json:"phase_id"` // E.g., which corpus/test this benchmark targeted
+	AttemptID      string    `json:"attempt_id"`
 	DurationMs     int64     `json:"duration_ms"`
 	ValidationsHit int       `json:"validations_hit"` // Total validations passed
 	ValidationsMax int       `json:"validations_max"` // Expected validations
 	CostCents      float64   `json:"cost_cents"`
 	FailureReason  string    `json:"failure_reason,omitempty"`
+	IsSimulation   bool      `json:"is_simulation"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 

@@ -34,5 +34,12 @@ The core execution engine has been hardened for production-grade reliability. Ke
 3. **Structured MCP Payloads**: All tool outputs now return machine-usable JSON, enabling better automated planning.
 4. **Environment Robustness**: Worktree management now handles branch collisions and setup failures with explicit recovery paths.
 
+**Phase 6 Routing & Benchmark Hardening (Complete):**
+Hardened task telemetry and routing behavior for architectural honesty.
+1. **Explicit Routing**: [RESOLVED] Renamed and documented routing as a deterministic heuristic fallback chain to avoid over-claiming adaptive intelligence.
+2. **Truthful Benchmarks**: [RESOLVED] Implemented `is_simulation` tracking in benchmarks to keep stub performance data separate from real execution telemetry.
+3. **Observability**: [RESOLVED] Exposed benchmark history and routing configuration via new REST API (`/api/v1/benchmarks`) and MCP tools.
+4. **Deterministic Fallbacks**: [RESOLVED] Enforced clear, auditable fallback paths when primary adapters are unavailable or fail.
+
 > **Limitations:** For Phase 2, certain complex agent topologies (like interactive persistent CLI shells or cloud orchestration) are still explicitly unsupported to guarantee local-first safety.
 > **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.

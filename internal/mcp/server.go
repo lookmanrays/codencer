@@ -88,6 +88,10 @@ func (s *Server) routeTool(ctx context.Context, name string, args map[string]int
 		return s.ToolApproveGate(ctx, args)
 	case "orchestrator.reject_gate":
 		return s.ToolRejectGate(ctx, args)
+	case "orchestrator.get_benchmarks":
+		return s.ToolGetBenchmarks(ctx, args)
+	case "orchestrator.get_routing_config":
+		return s.ToolGetRoutingConfig(ctx, args)
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}

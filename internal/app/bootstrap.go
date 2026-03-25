@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"agent-bridge/internal/adapters/claude"
@@ -101,11 +102,18 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 		"ide-chat": ide.NewAdapter(),
 	}
 
+	policyReg := service.NewPolicyRegistry()
+	policyDir := filepath.Join(filepath.Dir(cfg.DBPath), "config", "policies")
+	if err := policyReg.LoadFromDir(policyDir); err != nil {
+		logger.Warn("Failed to load policies from config/policies, using defaults", "error", err)
+	}
+
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, 		gatesRepo,
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo,
 		artifactsRepo,
 		validationsRepo,
 		routingSvc,
+		policyReg,
 		cfg.ArtifactRoot,
 		cfg.WorkspaceRoot,
 	)

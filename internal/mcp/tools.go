@@ -273,3 +273,44 @@ func (s *Server) ToolListArtifacts(ctx context.Context, args map[string]interfac
 		"artifacts": artifacts,
 	}, nil
 }
+
+// ToolGetBenchmarks implements orchestrator.get_benchmarks
+func (s *Server) ToolGetBenchmarks(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	adapter, _ := args["adapter"].(string)
+	scores, err := s.runSvc.GetBenchmarks(ctx, adapter)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := fmt.Sprintf("Retrieved %d benchmark scores", len(scores))
+	if adapter != "" {
+		summary += " for adapter " + adapter
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": summary,
+			},
+		},
+		"scores": scores,
+	}, nil
+}
+
+// ToolGetRoutingConfig implements orchestrator.get_routing_config
+func (s *Server) ToolGetRoutingConfig(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	config := s.runSvc.GetRoutingConfig(ctx)
+	
+	summary := fmt.Sprintf("Routing Mode: %s\nFallback Chain: %v", config["mode"], config["chain"])
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": summary,
+			},
+		},
+		"config": config,
+	}, nil
+}

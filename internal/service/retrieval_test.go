@@ -32,7 +32,7 @@ func TestRunService_Retrieval(t *testing.T) {
 	validationsRepo := sqlite.NewValidationsRepo(db)
 	routingSvc := service.NewRoutingService(nil, nil)
 
-	svc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, "/tmp", "/tmp")
+	svc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, service.NewPolicyRegistry(), "/tmp", "/tmp")
 
 	ctx := context.Background()
 	runID := "test-run"

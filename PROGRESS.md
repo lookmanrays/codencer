@@ -65,3 +65,16 @@
 - [x] Actionable Commands: Approve/Reject Gate, Retry Step
 - [x] Structured Inspection: View Results/Validations in JSON buffers
 - [x] Corrected Backend Support for Step Retries
+ 
+## Phase 9: Routing & Benchmark Hardening (Completed)
+- [x] Explicit Heuristic Routing (Deterministic Fallback)
+- [x] Simulation-Aware Benchmark Persistence
+- [x] REST API for Telemetry and Routing Configuration
+- [x] MCP Tools for Tactical Transparency
+- [x] Honest Documentation for Adapter Logic
+
+## Phase 10: Final Hardening (Completed)
+- [x] Configuration-driven Policy Engine (`PolicyRegistry`)
+- [x] Policy-bound Step Evaluation
+- [x] Robust API Integration Test Suite
+- [x] Reconciled 100% of defined project priorities (1-9)

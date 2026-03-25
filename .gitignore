@@ -1,1 +1,5 @@
 codencer.db
+*.test
+*.out
+vendor/
+.vscode/

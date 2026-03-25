@@ -23,6 +23,7 @@ type RunService struct {
 	artifactsRepo *sqlite.ArtifactsRepo
 	validationsRepo *sqlite.ValidationsRepo
 	routingSvc    *RoutingService
+	policyRegistry *PolicyRegistry
 	artifactRoot  string
 	workspaceRoot string
 }
@@ -37,6 +38,7 @@ func NewRunService(
 	artifactsRepo *sqlite.ArtifactsRepo,
 	validationsRepo *sqlite.ValidationsRepo,
 	routingSvc *RoutingService,
+	policyReg *PolicyRegistry,
 	artifactRoot string,
 	workspaceRoot string,
 ) *RunService {
@@ -49,6 +51,7 @@ func NewRunService(
 		artifactsRepo: artifactsRepo,
 		validationsRepo: validationsRepo,
 		routingSvc:    routingSvc,
+		policyRegistry: policyReg,
 		artifactRoot:  artifactRoot,
 		workspaceRoot: workspaceRoot,
 	}
@@ -176,6 +179,21 @@ func (s *RunService) GetPhase(ctx context.Context, id string) (*domain.Phase, er
 	return s.phasesRepo.Get(ctx, id)
 }
 
+// GetBenchmarks returns recent benchmark scores.
+func (s *RunService) GetBenchmarks(ctx context.Context, adapter string) ([]*domain.BenchmarkScore, error) {
+	return s.routingSvc.benchmarksRepo.GetScoresByAdapter(ctx, adapter)
+}
+
+// GetRoutingConfig returns the current static fallback chain.
+func (s *RunService) GetRoutingConfig(ctx context.Context) map[string]interface{} {
+	chain, _ := s.routingSvc.BuildHeuristicChain(ctx, "")
+	return map[string]interface{}{
+		"mode": "Heuristic Static Fallback",
+		"chain": chain,
+		"disclaimer": "Benchmark data is currently logged but NOT used for dynamic routing decisions.",
+	}
+}
+
 // Abort transitions the run to cancelled if it is not already terminal.
 func (s *RunService) AbortRun(ctx context.Context, id string) error {
 	run, err := s.runsRepo.Get(ctx, id)
@@ -201,7 +219,7 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 		return err
 	}
 
-	fallbackChain, err := s.routingSvc.BuildFallbackChain(ctx, step.Adapter)
+	fallbackChain, err := s.routingSvc.BuildHeuristicChain(ctx, step.Adapter)
 	if err != nil || len(fallbackChain) == 0 {
 		return s.failStep(ctx, step, fmt.Sprintf("no viable adapters found for profile '%s'", step.Adapter))
 	}
@@ -269,7 +287,7 @@ func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *dom
 	const maxAttempts = 3
 	var finalResult *domain.Result
 	var finalEval PolicyEvaluation
-	policy := domain.DefaultPolicy()
+	policy := s.policyRegistry.Lookup(step.Policy)
 
 	for attemptNum := 1; attemptNum <= maxAttempts; attemptNum++ {
 		adapterProfile := s.selectAdapterProfile(fallbackChain, attemptNum)
@@ -291,7 +309,8 @@ func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *dom
 			return nil, PolicyEvaluation{}, fmt.Errorf("system error executing attempt %d: %w", attemptNum, err)
 		}
 
-		s.logBenchmark(ctx, step.PhaseID, attempt.ID, adapterProfile, res, duration)
+		isSim := os.Getenv(strings.ToUpper(adapterProfile)+"_SIMULATION_MODE") == "1" || os.Getenv("ALL_ADAPTERS_SIMULATION_MODE") == "1"
+		s.logBenchmark(ctx, step.PhaseID, attempt.ID, adapterProfile, res, duration, isSim)
 
 		finalResult = res
 		finalEval = eval
@@ -332,15 +351,19 @@ func (s *RunService) createAttempt(ctx context.Context, step *domain.Step, attem
 	return attempt, nil
 }
 
-func (s *RunService) logBenchmark(ctx context.Context, phaseID, attemptID, adapterID string, res *domain.Result, durationMs int64) {
+func (s *RunService) logBenchmark(ctx context.Context, phaseID, attemptID, adapterID string, res *domain.Result, durationMs int64, isSimulation bool) {
 	benchScore := &domain.BenchmarkScore{
 		ID:             fmt.Sprintf("bench-%s", attemptID),
 		Adapter:        adapterID,
 		PhaseID:        phaseID,
+		AttemptID:      attemptID,
 		DurationMs:     durationMs,
+		// ValidationsHit/Max are currently binary success markers (1/1 or 0/1)
+		// until the domain.Result model is expanded to include count metadata.
 		ValidationsHit: 1,
 		ValidationsMax: 1,
 		CostCents:      0.0,
+		IsSimulation:   isSimulation,
 		CreatedAt:      time.Now().UTC(),
 	}
 	if res != nil && res.Status != domain.StepStateCompleted {

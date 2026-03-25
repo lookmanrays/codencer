@@ -26,8 +26,10 @@ func NewRoutingService(benchRepo *sqlite.BenchmarksRepo, adapters map[string]dom
 	}
 }
 
-// BuildFallbackChain calculates the priority ordered slice of adapter IDs given a target profile.
-func (rs *RoutingService) BuildFallbackChain(ctx context.Context, requestedProfile string) ([]string, error) {
+// BuildHeuristicChain calculates the priority ordered slice of adapter IDs given a target profile.
+// NOTE: This currently uses a STATIC hardcoded fallback chain and does NOT yet 
+// dynamically evaluate benchmarks for routing decisions.
+func (rs *RoutingService) BuildHeuristicChain(ctx context.Context, requestedProfile string) ([]string, error) {
 	// If a specific adapter was requested, it must be the first in our chain
 	chain := []string{}
 	if requestedProfile != "" {
@@ -38,7 +40,7 @@ func (rs *RoutingService) BuildFallbackChain(ctx context.Context, requestedProfi
 		}
 	}
 
-	// Dynamic inference based on capabilities (for MVP fallback)
+	// Heuristic preferences (Static Fallback)
 	fallbackPreferences := []string{"ide-chat", "qwen", "claude", "codex"}
 
 	for _, id := range fallbackPreferences {
@@ -49,7 +51,7 @@ func (rs *RoutingService) BuildFallbackChain(ctx context.Context, requestedProfi
 		}
 	}
 
-	slog.Info("RoutingService: Constructed execution fallback chain", "primary", requestedProfile, "chain", chain)
+	slog.Info("RoutingService: Using Heuristic Static Fallback", "primary", requestedProfile, "chain", chain)
 	return chain, nil
 }
 

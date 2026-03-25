@@ -25,6 +25,8 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/steps/", h.handleStepByID)
 	mux.HandleFunc("/api/v1/gates/", h.handleGateByID)
 	mux.HandleFunc("/api/v1/compatibility", h.handleCompatibility)
+	mux.HandleFunc("/api/v1/benchmarks", h.handleBenchmarks)
+	mux.HandleFunc("/api/v1/routing", h.handleRouting)
 	
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
@@ -309,4 +311,32 @@ func (h *APIHandler) handleCompatibility(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(matrix)
+}
+
+func (h *APIHandler) handleBenchmarks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	adapter := r.URL.Query().Get("adapter")
+	scores, err := h.RunSvc.GetBenchmarks(r.Context(), adapter)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(scores)
+}
+
+func (h *APIHandler) handleRouting(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	config := h.RunSvc.GetRoutingConfig(r.Context())
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
 }

@@ -53,6 +53,7 @@ func TestE2EFlow(t *testing.T) {
 		artifactsRepo,
 		validationsRepo,
 		routingSvc,
+		service.NewPolicyRegistry(),
 		artifactRoot,
 		workspaceRoot,
 	)

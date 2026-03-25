@@ -98,11 +98,13 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 	id TEXT PRIMARY KEY,
 	adapter TEXT NOT NULL,
 	phase_id TEXT NOT NULL,
+	attempt_id TEXT NOT NULL DEFAULT '',
 	duration_ms INTEGER NOT NULL,
 	validations_hit INTEGER NOT NULL,
 	validations_max INTEGER NOT NULL,
 	cost_cents REAL NOT NULL,
 	failure_reason TEXT,
+	is_simulation BOOLEAN NOT NULL DEFAULT 0,
 	created_at DATETIME NOT NULL
 );
 `
@@ -112,7 +114,7 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	// Ensure columns added in Batch 2 exist for legacy databases
+	// Ensure columns added in Batch 2-6 exist for legacy databases
 	extraMigrations := []string{
 		"ALTER TABLE artifacts ADD COLUMN name TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE artifacts ADD COLUMN updated_at DATETIME NOT NULL DEFAULT '1970-01-01'",
@@ -126,6 +128,8 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE attempts ADD COLUMN warnings TEXT",
 		"ALTER TABLE attempts ADD COLUMN questions TEXT",
 		"ALTER TABLE runs ADD COLUMN recovery_notes TEXT",
+		"ALTER TABLE benchmarks ADD COLUMN attempt_id TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE benchmarks ADD COLUMN is_simulation BOOLEAN NOT NULL DEFAULT 0",
 	}
 
 	for _, m := range extraMigrations {

@@ -1,0 +1,19 @@
+version: v1
+name: default_safe_refactor
+continue_when:
+  all_validations_pass: true
+  max_changed_files: 12
+  no_forbidden_paths_touched: true
+  no_migrations_detected: true
+gate_when:
+  any_validation_fails: true
+  dependency_files_changed: true
+  migrations_detected: true
+  changed_files_over: 12
+  unresolved_questions_present: true
+retry_when:
+  adapter_process_failed: true
+  timeout_once: true
+fail_when:
+  timeout_count_over: 2
+  artifact_persistence_failed: true
