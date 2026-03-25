@@ -40,3 +40,31 @@ func RemoveWorktree(ctx context.Context, baseRepoPath, destPath string) error {
 	}
 	return nil
 }
+
+// CaptureChangedFiles returns a list of files modified strictly within the given worktree.
+func CaptureChangedFiles(ctx context.Context, worktreePath string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	cmd.Dir = worktreePath
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture changed files: %w. output: %s", err, string(out))
+	}
+
+	var changed []string
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) < 3 {
+			continue
+		}
+		// Git porcelain format typically is: " M path/to/file" or "?? path/to/file"
+		filePath := strings.TrimSpace(line[2:])
+		changed = append(changed, filePath)
+	}
+
+	return changed, nil
+}

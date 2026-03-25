@@ -1,38 +1,17 @@
-# RUTHLESS GAP AUDIT (V2)
+# Codencer Gap Audit
 
-## 1. Core Orchestration Engine (Missing)
-The existing `RunService` manages basic Run CRUD (Start, List, Get, Abort). However, a true orchestrator pipeline is entirely absent:
-- No `Step` lifecycle management.
-- No `Attempt` tracking or creation.
-- No central runner/dispatcher that coordinates Adapter Start -> Poll -> Collect Artifacts -> Normalize -> Validation Run -> Policy Eval -> Gate -> Complete/Retry limits.
+## Current Reality
+The repository contains a functionally operational MVP implementation of the orchestration bridge. It successfully integrates a SQLite ledger, a robust state machine, a `DispatchStep` orchestrator loop, CLI endpoints, basic MCP routes, and a skeletal VS Code extension.
 
-## 2. Operator CLI (Partial/Missing)
-`orchestratorctl` currently mimics phase 3 superficially:
-- Has `run start` and `run status`.
-- Missing `step start` and `step result`.
-- Missing robust lifecycle commands `gate approve/reject`.
+However, a rigorous audit reveals the following significant gaps separating the MVP from a "production-ready" local tool:
 
-## 3. MCP Control Plane (Missing)
-`internal/mcp/server.go` and `tools.go` export a few tools but entirely lack the actual comprehensive tool surface:
-- Missing `orchestrator.start_step`, `get_result`, `list_artifacts`, `reject_gate`, `retry_step`, `run_validations`.
-- Missing firm machine-readable error handling according to MCP schema specs.
+1. **Orchestration Workflow is Monolithic**: The `RunService.DispatchStep` handles attempt creation, adapter dispatch, polling, validation, policy evaluation, and gating inline. It lacks clean decoupling and service boundaries for lifecycle stages.
+2. **Adapter Paths are Simulated/Fragile**: The Codex, Claude, and Qwen adapters operate mostly as thin subprocess wrappers. They lack robust error classification, structured result contract validation, or clear degraded-mode behaviors when binaries are misconfigured.
+3. **Retrieval Flows are Incomplete**: While we can `start` runs/steps and view summary statuses, detailed retrieval of `artifacts`, structured `results`, and `validations` is missing across the API, MCP, and CLI layers.
+4. **Policy Engine is Defaulted**: Execution policies are instantiated with hardcoded mock thresholds inside the dispatcher loop. There is no true persisted policy binding per step or run from configuration.
+5. **Recovery is Simplistic**: The `RecoveryService` sweeps and marks stale runs as failed but fails to reconstitute incomplete attempts, paused run states, or cleanup locked Git worktrees intelligently.
+6. **IDE/MCP Control Plane is Thin**: The VS Code extension accurately reads tree states but lacks interactive controls for Gate Management, run refreshes, or rich artifact inspection. The MCP server is missing critical read/write endpoints for results, validations, and step retries.
+7. **Test Suite is Simulation-Bound**: Tests overly rely on `ENV` flags to force mock policies and successful adapter simulation, leaving genuine edge cases and robust integration undocumented.
 
-## 4. Codex Adapter Integration (Fake / Simulated)
-`InvokeLocal` executes a bash script `echo`-ing a fake `result.json`. It does not execute a real Codex CLI, nor does it define the strict configurable execution command path required for local-first deployment.
-- `CollectArtifacts` uses hardcoded struct responses instead of inspecting real disk footprints.
-
-## 5. Secondary Adapters (Simulators)
-Claude and Qwen adapters are placeholder simulators (`time.Sleep` or bash echo analogs).
-- Required: Genuine shared adapter infrastructure to execute external binaries or explicitly handle auth/binary absence with honest error logging and degradation.
-
-## 6. VS Code Extension (Minimal)
-Currently just a TreeDataProvider showing a hardcoded string or basic run lists.
-- Required: Per-run detail UI, gate approval mechanisms, phase status inspection, and actual artifact URI hooks.
-
-## 7. Recovery, Tests, and Validation (Shallow)
-- `e2e_test.sh` proves string insertion, not actual orchestration.
-- `RecoveryService` just fails everything on restart. Resumability of paused runs is missing.
-- Verification tests do not validate policy/gate logic.
-
-## Summary
-The codebase is a **scaffold**. The control plane is not fully wired to a lifecycle engine.
+## Objective
+The goal is to deepen the orchestrator runtime, transition away from mock representations to deterministic execution contracts, and complete the retrieval and recovery flows to establish genuine local-first reliability.

@@ -49,7 +49,12 @@ EOF
 	}
 
 	// Genuine Execution
-	cmd := exec.CommandContext(ctx, qwenBinary, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
+	binaryPath, err := exec.LookPath(qwenBinary)
+	if err != nil {
+		return fmt.Errorf("qwen binary %q not found or not executable. Set QWEN_BINARY to a valid path: %w", qwenBinary, err)
+	}
+
+	cmd := exec.CommandContext(ctx, binaryPath, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
 	cmd.Dir = workspaceRoot
 	
 	outFd, err := os.Create(stdoutPath)
@@ -63,12 +68,13 @@ EOF
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("qwen execution timed out: %w", err)
+			return fmt.Errorf("qwen execution timed out after 30 minutes: %w", err)
 		}
 		if ctx.Err() == context.Canceled {
-			return fmt.Errorf("qwen execution cancelled: %w", err)
+			return fmt.Errorf("qwen execution cancelled by orchestrator: %w", err)
 		}
-		return fmt.Errorf("qwen execution failed: %w", err)
+		// If it failed, the actual error (like non-zero exit code) and context are in stdout/stderr log
+		return fmt.Errorf("qwen process exited with error: %w (see artifacts for details)", err)
 	}
 
 	return nil

@@ -174,6 +174,32 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
+		isArtifacts := len(r.URL.Path) > len("/api/v1/steps/"+id+"/") && r.URL.Path[len("/api/v1/steps/"+id+"/"):] == "artifacts"
+		isResult := len(r.URL.Path) > len("/api/v1/steps/"+id+"/") && r.URL.Path[len("/api/v1/steps/"+id+"/"):] == "result"
+
+		w.Header().Set("Content-Type", "application/json")
+		
+		if isArtifacts {
+			artifacts, err := h.RunSvc.GetArtifactsByStep(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(artifacts)
+			return
+		}
+
+		if isResult {
+			result, err := h.RunSvc.GetResultByStep(r.Context(), id)
+			if err != nil {
+				// E.g. No attempts found, or no result yet
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(result)
+			return
+		}
+
 		step, err := h.RunSvc.GetStep(r.Context(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -183,7 +209,7 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
+		
 		_ = json.NewEncoder(w).Encode(step)
 		return
 	}

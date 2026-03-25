@@ -44,10 +44,40 @@ function activate(context) {
         req.write(reqData);
         req.end();
     });
-    context.subscriptions.push(refreshCmd, connectCmd, startRunCmd);
+    let approveGateCmd = vscode.commands.registerCommand('codencer.approveGate', (item) => {
+        handleGateAction(item, 'approve', provider);
+    });
+    let rejectGateCmd = vscode.commands.registerCommand('codencer.rejectGate', (item) => {
+        handleGateAction(item, 'reject', provider);
+    });
+    let openArtifactCmd = vscode.commands.registerCommand('codencer.openArtifact', (filePath) => {
+        vscode.workspace.openTextDocument(filePath).then(doc => vscode.window.showTextDocument(doc));
+    });
+    context.subscriptions.push(refreshCmd, connectCmd, startRunCmd, approveGateCmd, rejectGateCmd, openArtifactCmd);
+}
+function handleGateAction(item, action, provider) {
+    const gateId = item.parentElement?.ID;
+    if (!gateId)
+        return;
+    const reqData = JSON.stringify({ action });
+    const req = http.request({
+        hostname: '127.0.0.1', port: 8080, path: `/api/v1/gates/${gateId}`, method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(reqData) }
+    }, (res) => {
+        if (res.statusCode === 200) {
+            vscode.window.showInformationMessage(`Gate ${action}d successfully.`);
+            provider.refresh();
+        }
+        else {
+            vscode.window.showErrorMessage(`Failed to ${action} gate: Received status ${res.statusCode}`);
+        }
+    });
+    req.on('error', (e) => vscode.window.showErrorMessage(`Failed: ${e.message}`));
+    req.write(reqData);
+    req.end();
 }
 class BaseTreeItem extends vscode.TreeItem {
-    constructor(label, collapsibleState, runId, contextValueObj, parentElement, descriptionInfo) {
+    constructor(label, collapsibleState, runId, contextValueObj, parentElement, descriptionInfo, command) {
         super(label, collapsibleState);
         this.label = label;
         this.collapsibleState = collapsibleState;
@@ -55,11 +85,15 @@ class BaseTreeItem extends vscode.TreeItem {
         this.contextValueObj = contextValueObj;
         this.parentElement = parentElement;
         this.descriptionInfo = descriptionInfo;
+        this.command = command;
         if (contextValueObj) {
             this.contextValue = contextValueObj;
         }
         if (descriptionInfo) {
             this.description = descriptionInfo;
+        }
+        if (command) {
+            this.command = command;
         }
     }
 }
@@ -89,6 +123,9 @@ class CodencerProvider {
         }
         else if (element.contextValue === 'gates-folder' && element.runId) {
             return this.getGates(element.runId);
+        }
+        else if (element.contextValue === 'step' && element.parentElement?.ID) {
+            return this.getArtifacts(element.parentElement.ID);
         }
         return Promise.resolve([]);
     }
@@ -122,7 +159,7 @@ class CodencerProvider {
                         const steps = JSON.parse(data) || [];
                         if (steps.length === 0)
                             resolve([new BaseTreeItem("No steps", vscode.TreeItemCollapsibleState.None)]);
-                        resolve(steps.map((s) => new BaseTreeItem(`Step: ${s.Title} [${s.State}]`, vscode.TreeItemCollapsibleState.None, runId, 'step', undefined, `Goal: ${s.Goal}`)));
+                        resolve(steps.map((s) => new BaseTreeItem(`Step: ${s.Title} [${s.State}]`, vscode.TreeItemCollapsibleState.Collapsed, runId, 'step', s, `Goal: ${s.Goal}`)));
                     }
                     catch (e) {
                         resolve([new BaseTreeItem("Error parsing steps", vscode.TreeItemCollapsibleState.None)]);
@@ -141,10 +178,36 @@ class CodencerProvider {
                         const gates = JSON.parse(data) || [];
                         if (gates.length === 0)
                             resolve([new BaseTreeItem("No gates", vscode.TreeItemCollapsibleState.None)]);
-                        resolve(gates.map((g) => new BaseTreeItem(`Gate: [${g.Status}]`, vscode.TreeItemCollapsibleState.None, runId, 'gate', undefined, g.Description)));
+                        resolve(gates.map((g) => new BaseTreeItem(`Gate: [${g.Status}]`, vscode.TreeItemCollapsibleState.None, runId, 'gate', g, g.Description)));
                     }
                     catch (e) {
                         resolve([new BaseTreeItem("Error parsing gates", vscode.TreeItemCollapsibleState.None)]);
+                    }
+                });
+            }).on('error', () => resolve([new BaseTreeItem("Network Error", vscode.TreeItemCollapsibleState.None)]));
+        });
+    }
+    getArtifacts(stepId) {
+        return new Promise((resolve) => {
+            http.get(`http://127.0.0.1:8080/api/v1/steps/${stepId}/artifacts`, (res) => {
+                let data = '';
+                res.on('data', (chunk) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const artifacts = JSON.parse(data) || [];
+                        if (artifacts.length === 0)
+                            resolve([new BaseTreeItem("No artifacts", vscode.TreeItemCollapsibleState.None)]);
+                        resolve(artifacts.map((a) => {
+                            const cmd = {
+                                title: "Open Artifact",
+                                command: "codencer.openArtifact",
+                                arguments: [a.Path]
+                            };
+                            return new BaseTreeItem(`${a.Type} (${a.Size}b)`, vscode.TreeItemCollapsibleState.None, undefined, 'artifact', a, a.Path, cmd);
+                        }));
+                    }
+                    catch (e) {
+                        resolve([new BaseTreeItem("Error parsing artifacts", vscode.TreeItemCollapsibleState.None)]);
                     }
                 });
             }).on('error', () => resolve([new BaseTreeItem("Network Error", vscode.TreeItemCollapsibleState.None)]));

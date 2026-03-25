@@ -152,7 +152,7 @@ func abortRun(id string) {
 
 func handleStepCommand(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|result> [args]")
+		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts> [args]")
 		os.Exit(1)
 	}
 
@@ -164,12 +164,24 @@ func handleStepCommand(args []string) {
 			os.Exit(1)
 		}
 		startStep(args[1], args[2], args[3], args[4])
+	case "status":
+		if len(args) < 2 {
+			fmt.Println("Usage: orchestratorctl step status <stepID>")
+			os.Exit(1)
+		}
+		stepStatus(args[1])
 	case "result":
 		if len(args) < 2 {
 			fmt.Println("Usage: orchestratorctl step result <stepID>")
 			os.Exit(1)
 		}
 		stepResult(args[1])
+	case "artifacts":
+		if len(args) < 2 {
+			fmt.Println("Usage: orchestratorctl step artifacts <stepID>")
+			os.Exit(1)
+		}
+		stepArtifacts(args[1])
 	default:
 		fmt.Printf("Unknown step command: %s\n", cmd)
 		os.Exit(1)
@@ -203,7 +215,7 @@ func startStep(runID, stepID, phaseID, adapter string) {
 	fmt.Printf("Step dispatched:\n%s\n", string(body))
 }
 
-func stepResult(stepID string) {
+func stepStatus(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
 	if err != nil {
 		fmt.Printf("Error connecting to orchestratord: %v\n", err)
@@ -219,6 +231,42 @@ func stepResult(stepID string) {
 
 	body, _ := io.ReadAll(resp.Body)
 	fmt.Printf("Step status:\n%s\n", string(body))
+}
+
+func stepResult(stepID string) {
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
+	if err != nil {
+		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Error: %s\n", string(body))
+		os.Exit(1)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("Step result:\n%s\n", string(body))
+}
+
+func stepArtifacts(stepID string) {
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/artifacts")
+	if err != nil {
+		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Error: %s\n", string(body))
+		os.Exit(1)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("Step artifacts:\n%s\n", string(body))
 }
 
 func handleGateCommand(args []string) {

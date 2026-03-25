@@ -89,6 +89,7 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	stepsRepo := sqlite.NewStepsRepo(db)
 	attemptsRepo := sqlite.NewAttemptsRepo(db)
 	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
 	
 	adapters := map[string]domain.Adapter{
 		"codex":  codex.NewAdapter(),
@@ -96,11 +97,11 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 		"qwen":   qwen.NewAdapter(),
 	}
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, adapters)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, adapters)
 	
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
-	recoverySvc := service.NewRecoveryService(runsRepo)
+	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo)
 	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {
 		logger.Warn("Failed to sweep stale runs during bootstrap", "error", err)
 	}

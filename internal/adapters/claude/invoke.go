@@ -51,7 +51,12 @@ EOF
 	}
 
 	// Genuine Execution
-	cmd := exec.CommandContext(ctx, claudeBinary, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
+	binaryPath, err := exec.LookPath(claudeBinary)
+	if err != nil {
+		return fmt.Errorf("claude binary %q not found or not executable. Set CLAUDE_BINARY to a valid path: %w", claudeBinary, err)
+	}
+
+	cmd := exec.CommandContext(ctx, binaryPath, "run", "--workspace", workspaceRoot, "--output", artifactRoot)
 	cmd.Dir = workspaceRoot
 	
 	outFd, err := os.Create(stdoutPath)
@@ -65,12 +70,13 @@ EOF
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("claude execution timed out: %w", err)
+			return fmt.Errorf("claude execution timed out after 30 minutes: %w", err)
 		}
 		if ctx.Err() == context.Canceled {
-			return fmt.Errorf("claude execution cancelled: %w", err)
+			return fmt.Errorf("claude execution cancelled by orchestrator: %w", err)
 		}
-		return fmt.Errorf("claude execution failed: %w", err)
+		// If it failed, the actual error (like non-zero exit code) and context are in stdout/stderr log
+		return fmt.Errorf("claude process exited with error: %w (see artifacts for details)", err)
 	}
 
 	return nil

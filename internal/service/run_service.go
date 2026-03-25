@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -16,12 +17,13 @@ import (
 // RunService orchestrates run capabilities.
 // RunService orchestrates run capabilities.
 type RunService struct {
-	runsRepo     *sqlite.RunsRepo
-	phasesRepo   *sqlite.PhasesRepo
-	stepsRepo    *sqlite.StepsRepo
-	attemptsRepo *sqlite.AttemptsRepo
-	gatesRepo    *sqlite.GatesRepo
-	adapters     map[string]domain.Adapter
+	runsRepo      *sqlite.RunsRepo
+	phasesRepo    *sqlite.PhasesRepo
+	stepsRepo     *sqlite.StepsRepo
+	attemptsRepo  *sqlite.AttemptsRepo
+	gatesRepo     *sqlite.GatesRepo
+	artifactsRepo *sqlite.ArtifactsRepo
+	adapters      map[string]domain.Adapter
 }
 
 // NewRunService creates a new RunService.
@@ -31,15 +33,17 @@ func NewRunService(
 	stepsRepo *sqlite.StepsRepo,
 	attemptsRepo *sqlite.AttemptsRepo,
 	gatesRepo *sqlite.GatesRepo,
+	artifactsRepo *sqlite.ArtifactsRepo,
 	adapters map[string]domain.Adapter,
 ) *RunService {
 	return &RunService{
-		runsRepo:     runsRepo,
-		phasesRepo:   phasesRepo,
-		stepsRepo:    stepsRepo,
-		attemptsRepo: attemptsRepo,
-		gatesRepo:    gatesRepo,
-		adapters:     adapters,
+		runsRepo:      runsRepo,
+		phasesRepo:    phasesRepo,
+		stepsRepo:     stepsRepo,
+		attemptsRepo:  attemptsRepo,
+		gatesRepo:     gatesRepo,
+		artifactsRepo: artifactsRepo,
+		adapters:      adapters,
 	}
 }
 
@@ -102,9 +106,47 @@ func (s *RunService) GetStepsByRun(ctx context.Context, id string) ([]*domain.St
 	return s.stepsRepo.ListByRun(ctx, id)
 }
 
+// GetArtifactsByAttempt returns all artifacts for an attempt.
+func (s *RunService) GetArtifactsByAttempt(ctx context.Context, attemptID string) ([]*domain.Artifact, error) {
+	return s.artifactsRepo.ListByAttempt(ctx, attemptID)
+}
+
 // GetGatesByRun returns all gates for a run.
 func (s *RunService) GetGatesByRun(ctx context.Context, id string) ([]*domain.Gate, error) {
 	return s.gatesRepo.ListByRun(ctx, id)
+}
+
+// GetArtifactsByStep returns all artifacts for all attempts of a step.
+func (s *RunService) GetArtifactsByStep(ctx context.Context, stepID string) ([]*domain.Artifact, error) {
+	attempts, err := s.attemptsRepo.ListByStep(ctx, stepID)
+	if err != nil {
+		return nil, err
+	}
+	var allArtifacts []*domain.Artifact
+	for _, a := range attempts {
+		arts, err := s.artifactsRepo.ListByAttempt(ctx, a.ID)
+		if err == nil {
+			allArtifacts = append(allArtifacts, arts...)
+		}
+	}
+	return allArtifacts, nil
+}
+
+// GetResultByStep returns the result of the latest attempt for a step.
+func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domain.Result, error) {
+	attempts, err := s.attemptsRepo.ListByStep(ctx, stepID)
+	if err != nil {
+		return nil, err
+	}
+	if len(attempts) == 0 {
+		return nil, fmt.Errorf("no attempts found for step %s", stepID)
+	}
+	// ListByStep orders by number ASC. The last one is the latest attempt.
+	latest := attempts[len(attempts)-1]
+	if latest.Result == nil {
+		return nil, fmt.Errorf("latest attempt %s has no result yet", latest.ID)
+	}
+	return latest.Result, nil
 }
 
 // Abort transitions the run to cancelled if it is not already terminal.
@@ -139,9 +181,7 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 
 	adapter, ok := s.adapters[step.Adapter]
 	if !ok {
-		step.State = domain.StepStateFailedTerminal
-		_ = s.stepsRepo.UpdateState(ctx, step)
-		return fmt.Errorf("adapter %s not found", step.Adapter)
+		return s.failStep(ctx, step, fmt.Sprintf("adapter %s not found", step.Adapter))
 	}
 
 	step.State = domain.StepStateRunning
@@ -149,16 +189,10 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 
 	const maxAttempts = 3
 	var finalResult *domain.Result
-	var eval PolicyEvaluation
+	var finalEval PolicyEvaluation
 
-	// 4. Validation & Policy evaluate (Mock Policy)
-	policy := &domain.Policy{}
-	policy.GateWhen.ChangedFilesOver = -1
-	policy.GateWhen.DependencyFilesChanged = true
-	policy.GateWhen.MigrationsDetected = true
-	policy.GateWhen.UnresolvedQuestionsPresent = true
-	policy.FailWhen.ArtifactPersistenceFailed = true
-	policy.RetryWhen.AdapterProcessFailed = true // Allow retry on failure
+	// Load formal execution boundary definitions
+	policy := domain.DefaultPolicy()
 
 	for attemptNum := 1; attemptNum <= maxAttempts; attemptNum++ {
 		attempt := &domain.Attempt{
@@ -174,66 +208,116 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 			return fmt.Errorf("failed to create attempt: %w", err)
 		}
 
-		// 1. Start execution
-		workspaceRoot := "/tmp/codencer/workspace/" + runID
-		
-		// Attempt to create isolated worktree, fallback to standard execution gracefully
-		baseRepo := "."
-		branchName := "codencer-" + runID
-		_ = workspace.CreateWorktree(ctx, baseRepo, workspaceRoot, branchName)
-		defer workspace.RemoveWorktree(context.Background(), baseRepo, workspaceRoot)
-
-		if err := adapter.Start(ctx, attempt, workspaceRoot, artifactRoot); err != nil {
-			attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
-			_ = s.attemptsRepo.UpdateResult(ctx, attempt)
-			goto EvaluatePh
+		res, eval, err := s.executeAttempt(ctx, runID, step, attempt, adapter, artifactRoot, policy)
+		if err != nil {
+			// System failure, not just adapter failure
+			return fmt.Errorf("system error executing attempt: %w", err)
 		}
 
-		// 2. Poll cycle
-		if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo) {
-			goto EvaluatePh
-		}
+		finalResult = res
+		finalEval = eval
 
-		step.State = domain.StepStateCollectingArtifacts
-		s.stepsRepo.UpdateState(ctx, step)
-
-		// 3. Artifact collection and Normalization
-		if artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, artifactRoot); err == nil {
-			if res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts); err == nil {
-				attempt.Result = res
-			} else {
-				attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Normalization failed: " + err.Error()}
-			}
-		} else {
-			attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Artifact collection failed: " + err.Error()}
-		}
-
-	EvaluatePh:
-		attempt.UpdatedAt = time.Now().UTC()
-		s.attemptsRepo.UpdateResult(ctx, attempt)
-		finalResult = attempt.Result
-
-		var changedFiles []string
-		if os.Getenv("FORCE_GATE_FOR_TESTING") == "1" {
-			changedFiles = append(changedFiles, "migrations/fake.sql")
-		}
-
-		eval = Evaluate(policy, attempt.Result, changedFiles)
-
-		// Simple retry condition
 		if eval.ShouldFail {
 			break
 		}
-		if (attempt.Result.Status == domain.StepStateFailedRetryable || attempt.Result.Status == domain.StepStateFailedTerminal) && policy.RetryWhen.AdapterProcessFailed {
-			if attemptNum < maxAttempts {
-				time.Sleep(2 * time.Second)
-				continue
-			}
+		
+		isFailed := res != nil && (res.Status == domain.StepStateFailedRetryable || res.Status == domain.StepStateFailedTerminal)
+		if isFailed && policy.RetryWhen.AdapterProcessFailed && attemptNum < maxAttempts {
+			time.Sleep(2 * time.Second)
+			continue
 		}
 		
 		break
 	}
 
+	return s.finalizeStep(ctx, runID, step, finalResult, finalEval)
+}
+
+func (s *RunService) failStep(ctx context.Context, step *domain.Step, reason string) error {
+	step.State = domain.StepStateFailedTerminal
+	step.UpdatedAt = time.Now().UTC()
+	_ = s.stepsRepo.UpdateState(ctx, step)
+	return fmt.Errorf(reason)
+}
+
+func (s *RunService) executeAttempt(
+	ctx context.Context,
+	runID string,
+	step *domain.Step,
+	attempt *domain.Attempt,
+	adapter domain.Adapter,
+	artifactRoot string,
+	policy *domain.Policy,
+) (*domain.Result, PolicyEvaluation, error) {
+	// 1. Setup Environment
+	workspaceRoot := "/tmp/codencer/workspace/" + runID
+	baseRepo := "."
+	branchName := "codencer-" + runID
+	_ = workspace.CreateWorktree(ctx, baseRepo, workspaceRoot, branchName)
+	defer workspace.RemoveWorktree(context.Background(), baseRepo, workspaceRoot)
+
+	// 2. Start Execution
+	if err := adapter.Start(ctx, attempt, workspaceRoot, artifactRoot); err != nil {
+		attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
+	}
+
+	// 3. Poll
+	if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo) {
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
+	}
+
+	step.State = domain.StepStateCollectingArtifacts
+	s.stepsRepo.UpdateState(ctx, step)
+
+	// 4. Collect & Normalize
+	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, artifactRoot)
+	if err != nil {
+		attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Artifact collection failed: " + err.Error()}
+	} else {
+		for _, art := range artifacts {
+			_ = s.artifactsRepo.Create(ctx, art)
+		}
+		
+		res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts)
+		if err != nil {
+			attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Normalization failed: " + err.Error()}
+		} else {
+			attempt.Result = res
+		}
+	}
+
+	s.updateAttemptResult(ctx, attempt)
+
+	// 5. Evaluate Policy
+	var changedFiles []string
+	if os.Getenv("FORCE_GATE_FOR_TESTING") == "1" {
+		changedFiles = append(changedFiles, "migrations/fake.sql")
+	} else {
+		if files, err := workspace.CaptureChangedFiles(ctx, workspaceRoot); err == nil {
+			changedFiles = files
+		}
+	}
+
+	eval := Evaluate(policy, attempt.Result, changedFiles)
+	return attempt.Result, eval, nil
+}
+
+func (s *RunService) updateAttemptResult(ctx context.Context, attempt *domain.Attempt) {
+	attempt.UpdatedAt = time.Now().UTC()
+	s.attemptsRepo.UpdateResult(ctx, attempt)
+}
+
+func (s *RunService) finalizeStep(
+	ctx context.Context,
+	runID string,
+	step *domain.Step,
+	finalResult *domain.Result,
+	eval PolicyEvaluation,
+) error {
+	fmt.Printf("DEBUG finalizeStep: ShouldGate=%v, ShouldFail=%v, finalResult=%+v\n", eval.ShouldGate, eval.ShouldFail, finalResult)
 	if eval.ShouldGate {
 		step.State = domain.StepStateNeedsApproval
 		gate := &domain.Gate{
@@ -252,7 +336,9 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 				_ = s.runsRepo.UpdateState(ctx, run)
 			}
 		} else {
-			step.State = domain.StepStateFailedTerminal // Fallback if gate fails
+			fmt.Printf("CRITICAL ISOLATED GATE DB ERROR: %v\n", err)
+			slog.Error("Failed to create isolated gate", "error", err)
+			step.State = domain.StepStateFailedTerminal
 		}
 	} else if eval.ShouldFail || (finalResult != nil && finalResult.Status != domain.StepStateCompleted) {
 		step.State = domain.StepStateFailedTerminal
@@ -261,9 +347,7 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 	}
 
 	step.UpdatedAt = time.Now().UTC()
-	s.stepsRepo.UpdateState(ctx, step)
-
-	return nil
+	return s.stepsRepo.UpdateState(ctx, step)
 }
 
 func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, attempt *domain.Attempt, repo *sqlite.AttemptsRepo) bool {

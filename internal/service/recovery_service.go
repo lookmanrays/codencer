@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"agent-bridge/internal/domain"
@@ -12,15 +13,17 @@ import (
 
 // RecoveryService handles failure recovery, stale run sweeps, and resumability.
 type RecoveryService struct {
-	runsRepo *sqlite.RunsRepo
+	runsRepo     *sqlite.RunsRepo
+	stepsRepo    *sqlite.StepsRepo
+	attemptsRepo *sqlite.AttemptsRepo
 }
 
-func NewRecoveryService(runsRepo *sqlite.RunsRepo) *RecoveryService {
-	return &RecoveryService{runsRepo: runsRepo}
+func NewRecoveryService(runsRepo *sqlite.RunsRepo, stepsRepo *sqlite.StepsRepo, attemptsRepo *sqlite.AttemptsRepo) *RecoveryService {
+	return &RecoveryService{runsRepo: runsRepo, stepsRepo: stepsRepo, attemptsRepo: attemptsRepo}
 }
 
 // SweepStaleRuns looks for runs stuck in "running" state across agent daemon restarts,
-// marking them as cancelled or failed based on policy.
+// marking them as paused or failed based on artifact footprint presence.
 func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	slog.Info("Running recovery sweep for stale runs")
 
@@ -30,14 +33,38 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	}
 
 	for _, r := range runs {
-		// A run stuck in Running state on a daemon boot must be dead. Mark it failed.
-		r.State = domain.RunStateFailed
+		// Reconcile leftover lock files.
+		lockPath := fmt.Sprintf("/tmp/codencer/workspace/%s/.codencer.lock", r.ID)
+		_ = os.Remove(lockPath)
+
+		// Check all steps to salvage process output and intelligently resume.
+		steps, _ := s.stepsRepo.ListByRun(ctx, r.ID)
+		for _, step := range steps {
+			if step.State == domain.StepStateRunning {
+				artifactsPath := fmt.Sprintf("/tmp/codencer/artifacts/%s/result.json", step.ID)
+				if _, err := os.Stat(artifactsPath); err == nil {
+					// Artifact exists. The adapter completed writing results, but orchestrator died before finalizing.
+					step.State = domain.StepStateNeedsApproval
+					step.UpdatedAt = time.Now().UTC()
+					_ = s.stepsRepo.UpdateState(ctx, step)
+					slog.Info("Salvaged interrupted step results", "stepID", step.ID)
+				} else {
+					step.State = domain.StepStateFailedRetryable
+					step.UpdatedAt = time.Now().UTC()
+					_ = s.stepsRepo.UpdateState(ctx, step)
+					slog.Warn("Marked interrupted step failed retryable", "stepID", step.ID)
+				}
+			}
+		}
+
+		// Re-attach the run into resumable Paused state rather than terminal Failed.
+		r.State = domain.RunStatePausedForGate
 		r.UpdatedAt = time.Now().UTC()
 		if updateErr := s.runsRepo.UpdateState(ctx, r); updateErr != nil {
 			slog.Error("Failed to update stale run state", "runID", r.ID, "error", updateErr)
 			continue
 		}
-		slog.Warn("Marked stale run as failed terminal", "runID", r.ID)
+		slog.Warn("Reconciled stale run to PausedForGate for resumability", "runID", r.ID)
 	}
 
 	return nil

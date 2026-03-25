@@ -26,3 +26,49 @@ type Policy struct {
 		ArtifactPersistenceFailed bool `json:"artifact_persistence_failed"`
 	} `json:"fail_when"`
 }
+
+// DefaultPolicy provides a robust baseline policy for local execution.
+func DefaultPolicy() *Policy {
+	return &Policy{
+		Version: "v1",
+		Name:    "default_safe_refactor",
+		ContinueWhen: struct {
+			AllValidationsPass      bool `json:"all_validations_pass"`
+			MaxChangedFiles         int  `json:"max_changed_files"`
+			NoForbiddenPathsTouched bool `json:"no_forbidden_paths_touched"`
+			NoMigrationsDetected    bool `json:"no_migrations_detected"`
+		}{
+			AllValidationsPass:      true,
+			MaxChangedFiles:         12,
+			NoForbiddenPathsTouched: true,
+			NoMigrationsDetected:    true,
+		},
+		GateWhen: struct {
+			AnyValidationFails         bool `json:"any_validation_fails"`
+			DependencyFilesChanged     bool `json:"dependency_files_changed"`
+			MigrationsDetected         bool `json:"migrations_detected"`
+			ChangedFilesOver           int  `json:"changed_files_over"`
+			UnresolvedQuestionsPresent bool `json:"unresolved_questions_present"`
+		}{
+			AnyValidationFails:         true,
+			DependencyFilesChanged:     true,
+			MigrationsDetected:         true,
+			ChangedFilesOver:           12,
+			UnresolvedQuestionsPresent: true,
+		},
+		RetryWhen: struct {
+			AdapterProcessFailed bool `json:"adapter_process_failed"`
+			TimeoutOnce          bool `json:"timeout_once"`
+		}{
+			AdapterProcessFailed: true,
+			TimeoutOnce:          true,
+		},
+		FailWhen: struct {
+			TimeoutCountOver          int  `json:"timeout_count_over"`
+			ArtifactPersistenceFailed bool `json:"artifact_persistence_failed"`
+		}{
+			TimeoutCountOver:          2,
+			ArtifactPersistenceFailed: true,
+		},
+	}
+}

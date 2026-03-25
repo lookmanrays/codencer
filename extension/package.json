@@ -22,8 +22,36 @@
       {
         "command": "codencer.startRun",
         "title": "Codencer: Start Run"
+      },
+      {
+        "command": "codencer.approveGate",
+        "title": "Codencer: Approve Gate",
+        "icon": "$(check)"
+      },
+      {
+        "command": "codencer.rejectGate",
+        "title": "Codencer: Reject Gate",
+        "icon": "$(x)"
+      },
+      {
+        "command": "codencer.openArtifact",
+        "title": "Codencer: Open Artifact"
       }
-    ]
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "codencer.approveGate",
+          "when": "viewItem == gate",
+          "group": "inline"
+        },
+        {
+          "command": "codencer.rejectGate",
+          "when": "viewItem == gate",
+          "group": "inline"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

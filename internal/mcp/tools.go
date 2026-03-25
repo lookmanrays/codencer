@@ -135,8 +135,8 @@ func (s *Server) ToolStartStep(ctx context.Context, args map[string]interface{})
 	}, nil
 }
 
-// ToolGetStepResult implements orchestrator.get_step_result
-func (s *Server) ToolGetStepResult(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+// ToolRetryStep implements orchestrator.retry_step
+func (s *Server) ToolRetryStep(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 	stepID, ok := args["step_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing argument: step_id")
@@ -150,11 +150,67 @@ func (s *Server) ToolGetStepResult(ctx context.Context, args map[string]interfac
 		return nil, fmt.Errorf("step not found")
 	}
 
+	// Just route to DispatchStep to execute another attempt lifecycle
+	go func() {
+		// Assuming PhaseID binds to RunID natively
+		// Need RunID for DispatchStep context tracking
+		_ = s.runSvc.DispatchStep(context.Background(), step.PhaseID, step, "/tmp/codencer/artifacts/"+stepID)
+	}()
+
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
 				"type": "text",
-				"text": fmt.Sprintf("Step %s is in state: %s", step.ID, step.State),
+				"text": fmt.Sprintf("Step %s dispatched for retry.", stepID),
+			},
+		},
+	}, nil
+}
+
+// ToolGetStepResult implements orchestrator.get_step_result
+func (s *Server) ToolGetStepResult(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	stepID, ok := args["step_id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing argument: step_id")
+	}
+
+	result, err := s.runSvc.GetResultByStep(ctx, stepID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("Step %s result status: %s\nSummary: %s", stepID, result.Status, result.Summary),
+			},
+		},
+	}, nil
+}
+
+// ToolListArtifacts implements orchestrator.list_artifacts
+func (s *Server) ToolListArtifacts(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	stepID, ok := args["step_id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing argument: step_id")
+	}
+
+	artifacts, err := s.runSvc.GetArtifactsByStep(ctx, stepID)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := fmt.Sprintf("Found %d artifacts for step %s:\n", len(artifacts), stepID)
+	for _, a := range artifacts {
+		summary += fmt.Sprintf("- [%s] %s (%d bytes)\n", a.Type, a.Path, a.Size)
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": summary,
 			},
 		},
 	}, nil
