@@ -20,19 +20,12 @@ func NewValidationsRepo(db *sql.DB) *ValidationsRepo {
 
 // Create inserts a new validation result.
 func (r *ValidationsRepo) Create(ctx context.Context, attemptID string, res *domain.ValidationResult) error {
-	q := `
-		INSERT INTO validations (
-			attempt_id, name, command, state, passed, exit_code, stdout_ref, stderr_ref, error_msg, duration_ms, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	q := `INSERT INTO validations (attempt_id, name, command, state, passed, exit_code, stdout_ref, stderr_ref, error_msg, duration_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	now := time.Now().UTC()
 	if res.UpdatedAt.IsZero() {
 		res.UpdatedAt = now
 	}
-	_, err := r.db.ExecContext(ctx, q,
-		attemptID, res.Name, res.Command, string(res.Status), res.Passed, res.ExitCode,
-		res.StdoutRef, res.StderrRef, res.Error, res.DurationMs, now, res.UpdatedAt,
-	)
+	_, err := r.db.ExecContext(ctx, q, attemptID, res.Name, res.Command, string(res.State), res.Passed, res.ExitCode, res.StdoutRef, res.StderrRef, res.Error, res.DurationMs, now, res.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create validation %s for attempt %s: %w", res.Name, attemptID, err)
 	}
@@ -58,15 +51,15 @@ func (r *ValidationsRepo) ListByStep(ctx context.Context, stepID string) (map[st
 	for rows.Next() {
 		var attemptID string
 		var res domain.ValidationResult
-		var stateStr string
+		var s string // Renamed stateStr to s as per instruction
 		var stdout, stderr, errorMsg sql.NullString
 		if err := rows.Scan(
-			&attemptID, &res.Name, &res.Command, &stateStr, &res.Passed, &res.ExitCode,
+			&attemptID, &res.Name, &res.Command, &s, &res.Passed, &res.ExitCode,
 			&stdout, &stderr, &errorMsg, &res.DurationMs, &res.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
-		res.Status = domain.ValidationStatus(stateStr)
+		res.State = domain.ValidationState(s) // Changed res.Status to res.State and used 's'
 		if stdout.Valid { res.StdoutRef = stdout.String }
 		if stderr.Valid { res.StderrRef = stderr.String }
 		if errorMsg.Valid { res.Error = errorMsg.String }
@@ -91,15 +84,15 @@ func (r *ValidationsRepo) ListByAttempt(ctx context.Context, attemptID string) (
 	var results []*domain.ValidationResult
 	for rows.Next() {
 		var vr domain.ValidationResult
-		var stateStr string
+		var s string // Renamed stateStr to s as per instruction
 		var stdout, stderr, errorMsg sql.NullString
 		if err := rows.Scan(
-			&vr.Name, &vr.Command, &stateStr, &vr.Passed, &vr.ExitCode,
+			&vr.Name, &vr.Command, &s, &vr.Passed, &vr.ExitCode,
 			&stdout, &stderr, &errorMsg, &vr.DurationMs, &vr.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
-		vr.Status = domain.ValidationStatus(stateStr)
+		vr.State = domain.ValidationState(s) // Changed vr.Status to vr.State and used 's'
 		if stdout.Valid { vr.StdoutRef = stdout.String }
 		if stderr.Valid { vr.StderrRef = stderr.String }
 		if errorMsg.Valid { vr.Error = errorMsg.String }

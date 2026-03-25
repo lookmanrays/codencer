@@ -4,13 +4,13 @@ import (
 	"time"
 )
 
-// GateStatus indicates whether a gate is pending, approved, or rejected.
-type GateStatus string
+// GateState indicates whether a gate is pending, approved, or rejected.
+type GateState string
 
 const (
-	GateStatusPending  GateStatus = "pending"
-	GateStatusApproved GateStatus = "approved"
-	GateStatusRejected GateStatus = "rejected"
+	GateStatePending  GateState = "pending"
+	GateStateApproved GateState = "approved"
+	GateStateRejected GateState = "rejected"
 )
 
 // Gate is a policy pause that requires operator decision.
@@ -19,7 +19,7 @@ type Gate struct {
 	RunID       string     `json:"run_id"`
 	StepID      string     `json:"step_id"`
 	Description string     `json:"description"`
-	Status      GateStatus `json:"status"`
+	State       GateState  `json:"state"`
 	CreatedAt   time.Time  `json:"created_at"`
 	ResolvedAt  *time.Time `json:"resolved_at"`
 }

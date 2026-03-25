@@ -13,6 +13,7 @@
     "adapter": { "type": "string" },
     "state": {
       "type": "string",
+      "description": "Step lifecycle state: pending, running, completed, failed_terminal, timeout, cancelled, needs_manual_attention.",
       "enum": [
         "pending",
         "dispatching",
@@ -40,7 +41,10 @@
         "type": "object",
         "properties": {
           "name": { "type": "string" },
-          "status": { "type": "string" },
+          "state": { 
+            "type": "string",
+            "description": "Validation outcome state: not_run, running, passed, failed, errored."
+          },
           "passed": { "type": "boolean" }
         }
       }
@@ -62,7 +66,7 @@
     "raw_output_ref": { "type": "string" },
     "is_simulation": { 
       "type": "boolean",
-      "description": "True if this result was produced in simulation mode (orchestrator validation only)."
+      "description": "True if result is from a stub/dev mode. NOT for performance benchmarking."
     },
     "retryable": { "type": "boolean" },
     "created_at": { "type": "string", "format": "date-time" },

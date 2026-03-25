@@ -111,29 +111,35 @@ fail_when:
   artifact_persistence_failed: true
 ```
 
-## Execution States
+### Execution States
+The `state` property in the result payload follows strict relay semantics:
 
-The `state` field in `ResultSpec` uses a standardized vocabulary to communicate the outcome of an execution attempt:
-
-- **pending**: Execution has not yet started.
-- **running**: The adapter process is currently active.
-- **completed**: The task was finished successfully according to the adapter.
-- **completed_with_warnings**: The task finished, but minor issues (like lint errors) were detected.
-- **failed_retryable**: A transient failure occurred; the planner may attempt a retry.
-- **failed_terminal**: A permanent failure occurred.
-- **timeout**: The execution exceeded the `timeout_seconds` limit.
-- **cancelled**: The execution was explicitly aborted by the planner/user.
-- **needs_manual_attention**: The adapter or policy engine requires human intervention (e.g., a critical safety gate was tripped).
+| State | Who Decides? | Meaning |
+| :--- | :--- | :--- |
+| `pending` | Planner | Waiting for dispatch. |
+| `running` | Bridge | Active execution. |
+| `completed` | Bridge/Policy | Success criteria met. |
+| `completed_with_warnings` | Bridge/Policy | Success with minor issues. |
+| `failed_retryable` | Bridge | Transient failure, retry possible. |
+| `failed_terminal` | Bridge | Non-retryable failure. |
+| `timeout` | Bridge | Limit exceeded. |
+| `needs_approval` | Bridge/Policy | Policy gate hit. |
+| `needs_manual_attention`| Bridge | Intervention reported. |
+| `cancelled` | Planner | Aborted by user. |
 
 ## Simulation Semantics
 
-Simulation mode (`is_simulation: true`) is a first-class citizen in the Codencer ecosystem. It allows planners to:
+Simulation mode provides a high-fidelity environment for testing the bridge's state machine without real adapter execution.
+
+> [!IMPORTANT]
+> Simulation is intended for development and automated testing only. It does not produce valid metrics for adapter benchmarking.
+
+It allows planners to:
 1. Verify the end-to-end orchestration state machine.
 2. Test policy enforcement without executing heavy local binaries.
 3. Validate UI and notification flows.
 
 **IMPORTANT**: Simulation results are produced by stub adapters and do NOT represent real agency. Telemetry from simulated runs is kept separate in the benchmark ledger to ensure historical performance data remains honest.
-```
 
 ## MCP tool surface
 

@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// Attempt represents a single execution try of a Step.
+// Attempt is a single, concrete execution try of a Step through a specific adapter.
+// It captures the raw telemetry and execution results of one pass.
 type Attempt struct {
 	ID        string
 	StepID    string

@@ -15,7 +15,8 @@ const (
 	RunStateCancelled     RunState = "cancelled"
 )
 
-// Run represents an end-to-end execution of a planner's intent.
+// Run is an execution session that acts as a container for related work phases and steps.
+// It tracks the overall lifecycle of a project-level objective as reported by the bridge.
 type Run struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"project_id"`
@@ -28,7 +29,8 @@ type Run struct {
 	Phases []*Phase
 }
 
-// Phase breaks a run into sequential segments of logic.
+// Phase is a logical grouping of steps within a Run. 
+// It provides structure for the planner to organize complex work into sequential segments.
 type Phase struct {
 	ID        string    `json:"id"`
 	RunID     string    `json:"run_id"`

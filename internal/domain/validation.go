@@ -4,23 +4,23 @@ import (
 	"time"
 )
 
-// ValidationStatus represents the lifecycle/outcome of a verification command.
-type ValidationStatus string
+// ValidationState represents the lifecycle/outcome of a verification command.
+type ValidationState string
 
 const (
-	ValidationStatusNotRun  ValidationStatus = "not_run"
-	ValidationStatusRunning ValidationStatus = "running"
-	ValidationStatusPassed  ValidationStatus = "passed"
-	ValidationStatusFailed  ValidationStatus = "failed"
-	ValidationStatusErrored ValidationStatus = "errored"
+	ValidationStateNotRun  ValidationState = "not_run"
+	ValidationStateRunning ValidationState = "running"
+	ValidationStatePassed  ValidationState = "passed"
+	ValidationStateFailed  ValidationState = "failed"
+	ValidationStateErrored ValidationState = "errored"
 )
 
 // ValidationResult represents the outcome of a validation run (e.g. tests or lint).
 type ValidationResult struct {
-	Name       string           `json:"name"`
-	Command    string           `json:"command"`
-	Status     ValidationStatus `json:"status"`
-	Passed     bool             `json:"passed"`
+	Name       string          `json:"name"`
+	Command    string          `json:"command"`
+	State      ValidationState `json:"state"`
+	Passed     bool            `json:"passed"`
 	ExitCode   int              `json:"exit_code"`
 	StdoutRef  string           `json:"stdout_ref,omitempty"`
 	StderrRef  string           `json:"stderr_ref,omitempty"`

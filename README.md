@@ -14,6 +14,31 @@ Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic
 2. **Idempotency**: Runs and attempts are carefully ledgered; interrupted tasks can be resumed or securely analyzed post-crash.
 3. **Traceability**: All outputs (stdout, result.json, diffs) are meticulously persisted per-attempt in the artifact store.
 
+Codencer is a **bridge**, not a brain. The **Planner** (operator or autonomous agent) defines the intent and logic, while Codencer handles the tactical execution, environment isolation, and telemetry reporting.
+
+### State Semantics
+The Bridge reports state; the Planner decides the next action.
+- **pending**: Work is queued in the ledger.
+- **running**: Adapter process is active.
+- **completed**: Task finished successfully.
+- **failed**: Terminal failure requiring a new approach.
+- **timeout**: Process exceeded limits and was killed.
+- **needs_manual_attention**: Bridge reports an unexpected blocking condition; Operator must intervene.
+- **cancelled**: Explicitly aborted by the operator.
+
+### Simulation Semantics
+Simulation mode is a **development-only** feature used to validate orchestrator state transitions and CI/CD pipelines without incurring LLM costs or requiring local model setup. 
+- **Not for Performance**: Simulation results do NOT reflect real adapter performance or accuracy.
+- **Explicitly Labeled**: All simulated results are marked with `is_simulation: true`.
+
+## Core Concepts
+Codencer uses a hierarchical execution model to track work and telemetry:
+
+- **Run**: An execution session that acts as a container for a project-level objective. It houses Phases and Steps.
+- **Phase**: A logical grouping of steps within a Run used to organize complex work into sequential segments.
+- **Step**: A specific, atomic execution unit issued by the planner (e.g., "Fix bug X").
+- **Attempt**: A single, concrete execution try of a Step. One Step may have multiple attempts (e.g., due to retries or adapter fallbacks).
+
 ## The Relay Model
 
 Codencer operates as a **Relay** between two distinct planes:

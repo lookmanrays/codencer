@@ -3,6 +3,8 @@
 ## Current Reality
 The repository contains a functionally operational MVP implementation of the orchestration bridge. It successfully integrates a SQLite ledger, a robust state machine, a `DispatchStep` orchestrator loop, CLI endpoints, basic MCP routes, and a skeletal VS Code extension.
 
+- **Lifecycle Meaning Cleanup**: [RESOLVED] Explicitly defined Run (Session), Step (Planner Unit), and Attempt (Execution Try) in domain code and README. Verified that no bridge-side decision logic is implied.
+
 However, a rigorous audit reveals the following gaps to address for a more feature-complete MVP:
 
 1. **Orchestration Workflow is Decomposed**: [RESOLVED] `RunService.DispatchStep` has been refactored into modular `initialize`, `runAttemptLoop`, and `finalize` stages.
@@ -71,3 +73,24 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 
 - **State Semantics**: [RESOLVED] Standardized on 11 discrete states in `internal/domain/step.go`. Added `timeout` and `needs_manual_attention` to the core vocabulary.
 - **Simulation Semantics**: [RESOLVED] Explicitly separated simulation data in benchmarks. Added machine-readable `is_simulation` flag to all relay results. Documentation now clearly distinguishes simulation from real execution.
+- **Manual-Attention Semantics**: [RESOLVED] Clarified that the bridge *reports* attention needed while the planner *decides* the outcome.
+
+## Execution State Audit (Micro-task)
+
+### Current State Vocabularies
+- **RunState**: `created`, `running`, `paused_for_gate`, `completed`, `failed`, `cancelled`.
+- **StepState**: `pending`, `dispatching`, `running`, `collecting_artifacts`, `validating`, `completed`, `completed_with_warnings`, `needs_approval`, `needs_manual_attention`, `failed_retryable`, `failed_terminal`, `timeout`, `cancelled`.
+- **ValidationState**: `not_run`, `running`, `passed`, `failed`, `errored`.
+- **GateState**: `pending`, `approved`, `rejected`.
+
+### Important Inconsistencies
+- **Attempt State Mismatch**: Attempts currently reuse the 13-state `StepState` enum. This is semantically incorrect as attempts have a narrower lifecycle (start -> outcome) and do not "own" the orchestrator's collection/validation phases.
+- **Human Attention Overlap**: `needs_approval` (gate-specific) and `needs_manual_attention` (general signal) are redundant. A unified "intervention required" model is needed for the relay.
+- **Terminology Drift**: Validations and Gates still use the `Status` suffix, while Runs and Steps have standardized on `State`.
+- **Process Transparency**: States like `dispatching` and `collecting_artifacts` reflect bridge internal mechanics rather than the planner's high-level intent.
+
+### Next Steps (V1.1.3 / V1.2.1)
+- **Refactor Attempt State**: Decouple Attempts from `StepState` and create a dedicated, narrower enum.
+- **Unify Intervention States**: Consolidate `needs_approval` and `needs_manual_attention`.
+- **Harden Timeout**: Fully integrate `StepStateTimeout` into the supervisor process management.
+- **CLI Control Surface**: Implement `orchestratorctl` bridge commands using these hardened semantics.

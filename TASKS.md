@@ -66,3 +66,12 @@
 - [x] Standardize `StepState` vocabulary (timeout, needs_manual_attention).
 - [x] Document explicit simulation semantics and contract representation.
 - [x] Align schemas and examples with clarified state/simulation fields.
+
+## Batch V1.1.2 — State & Terminology Hardening [/]
+- [x] Audit execution state model (Micro-task complete) <!-- id: 40 -->
+- [x] Define and document canonical execution/result state semantics <!-- id: 45 -->
+- [x] Clarify lifecycle meaning of Runs, Steps, and Attempts <!-- id: 46 -->
+- [x] Align manual-attention and simulation semantics with relay model <!-- id: 47 -->
+- [ ] Decouple Attempt states from StepState <!-- id: 41 -->
+- [ ] Standardize `ValidationState` and `GateState` (remove "Status" suffix) <!-- id: 43 -->
+- [ ] Update supervisor to natively trigger `StepStateTimeout` <!-- id: 44 -->

@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS gates (
 	run_id TEXT NOT NULL,
 	step_id TEXT NOT NULL,
 	description TEXT NOT NULL,
-	status TEXT NOT NULL,
+	state TEXT NOT NULL,
 	created_at DATETIME NOT NULL,
 	resolved_at DATETIME,
 	FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE,
@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE attempts ADD COLUMN raw_output_ref TEXT",
 		"ALTER TABLE attempts ADD COLUMN is_simulation BOOLEAN NOT NULL DEFAULT 0",
 		"ALTER TABLE attempts ADD COLUMN retryable BOOLEAN NOT NULL DEFAULT 0",
+		"ALTER TABLE gates ADD COLUMN state TEXT NOT NULL DEFAULT ''",
 	}
 
 	for _, m := range extraMigrations {

@@ -81,8 +81,8 @@ func TestRunService_Retrieval(t *testing.T) {
 	t.Run("Validation Retrieval", func(t *testing.T) {
 		vRes := &domain.ValidationResult{
 			Name:    "lint",
-			Command: "npm run lint",
-			Status:  domain.ValidationStatusPassed,
+			Command: "make lint",
+			State:   domain.ValidationStatePassed,
 			Passed:  true,
 		}
 		_ = validationsRepo.Create(ctx, stepID+"-a1", vRes)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"agent-bridge/internal/domain"
 )
@@ -19,52 +20,53 @@ func NewGatesRepo(db *sql.DB) *GatesRepo {
 
 // Create inserts a new gate record into the database.
 func (r *GatesRepo) Create(ctx context.Context, gate *domain.Gate) error {
-	q := `INSERT INTO gates (id, run_id, step_id, description, status, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.ExecContext(ctx, q, gate.ID, gate.RunID, gate.StepID, gate.Description, string(gate.Status), gate.CreatedAt, gate.ResolvedAt)
+	q := `INSERT INTO gates (id, run_id, step_id, description, state, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, q, gate.ID, gate.RunID, gate.StepID, gate.Description, string(gate.State), gate.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create gate %s: %w", gate.ID, err)
 	}
 	return nil
 }
 
-// UpdateStatus modifies the status and resolved_at fields of a gate.
-func (r *GatesRepo) UpdateStatus(ctx context.Context, gate *domain.Gate) error {
-	q := `UPDATE gates SET status = ?, resolved_at = ? WHERE id = ?`
-	res, err := r.db.ExecContext(ctx, q, string(gate.Status), gate.ResolvedAt, gate.ID)
+// Resolve modifies the status and resolved_at fields of a gate.
+func (r *GatesRepo) Resolve(ctx context.Context, id string, state domain.GateState) error {
+	now := time.Now().UTC()
+	q := `UPDATE gates SET state = ?, resolved_at = ? WHERE id = ?`
+	res, err := r.db.ExecContext(ctx, q, string(state), now, id)
 	if err != nil {
-		return fmt.Errorf("failed to update gate %s: %w", gate.ID, err)
+		return fmt.Errorf("failed to resolve gate %s: %w", id, err)
 	}
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("gate not found: %s", gate.ID)
+		return fmt.Errorf("gate not found: %s", id)
 	}
 	return nil
 }
 
 // Get retrieves a gate by its ID.
 func (r *GatesRepo) Get(ctx context.Context, id string) (*domain.Gate, error) {
-	q := `SELECT id, run_id, step_id, description, status, created_at, resolved_at FROM gates WHERE id = ?`
+	q := `SELECT id, run_id, step_id, description, state, created_at, resolved_at FROM gates WHERE id = ?`
 	row := r.db.QueryRowContext(ctx, q, id)
 	
 	var gate domain.Gate
-	var status string
-	err := row.Scan(&gate.ID, &gate.RunID, &gate.StepID, &gate.Description, &status, &gate.CreatedAt, &gate.ResolvedAt)
+	var s string // Changed from 'status' to 's'
+	err := row.Scan(&gate.ID, &gate.RunID, &gate.StepID, &gate.Description, &s, &gate.CreatedAt, &gate.ResolvedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get gate %s: %w", id, err)
 	}
-	gate.Status = domain.GateStatus(status)
+	gate.State = domain.GateState(s) // Changed from 'gate.Status = domain.GateStatus(status)'
 	return &gate, nil
 }
 
 // ListByRun retrieves all gates associated with a specific run.
 func (r *GatesRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Gate, error) {
-	q := `SELECT id, run_id, step_id, description, status, created_at, resolved_at FROM gates WHERE run_id = ? ORDER BY created_at DESC`
+	q := `SELECT id, run_id, step_id, description, state, created_at, resolved_at FROM gates WHERE run_id = ? ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, q, runID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list gates: %w", err)
@@ -74,11 +76,11 @@ func (r *GatesRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Gate
 	var gates []*domain.Gate
 	for rows.Next() {
 		var gate domain.Gate
-		var status string
-		if err := rows.Scan(&gate.ID, &gate.RunID, &gate.StepID, &gate.Description, &status, &gate.CreatedAt, &gate.ResolvedAt); err != nil {
+		var s string // Changed from 'status' to 's'
+		if err := rows.Scan(&gate.ID, &gate.RunID, &gate.StepID, &gate.Description, &s, &gate.CreatedAt, &gate.ResolvedAt); err != nil {
 			return nil, err
 		}
-		gate.Status = domain.GateStatus(status)
+		gate.State = domain.GateState(s) // Changed from 'gate.Status = domain.GateStatus(status)'
 		gates = append(gates, &gate)
 	}
 	if err := rows.Err(); err != nil {

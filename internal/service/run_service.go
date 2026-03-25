@@ -57,7 +57,8 @@ func NewRunService(
 	}
 }
 
-// StartRun begins a new execution and creates a default phase.
+// StartRun initiates an execution session (Run) as requested by the planner.
+// It creates the necessary sequence containers (Phases) to house upcoming steps.
 func (s *RunService) StartRun(ctx context.Context, id, projectID string) (*domain.Run, error) {
 	now := time.Now().UTC()
 	run := &domain.Run{
@@ -213,7 +214,8 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 	return s.runsRepo.UpdateState(ctx, run)
 }
 
-// DispatchStep manages the core lifecycle of executing a step natively
+// DispatchStep handles the tactical execution of a planner-issued Step.
+// It manages adapter selection, environment setup, and terminal state reporting.
 func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domain.Step) error {
 	if err := s.initializeStep(ctx, step); err != nil {
 		return err
@@ -502,7 +504,7 @@ func (s *RunService) finalizeStep(
 			RunID:       runID,
 			StepID:      step.ID,
 			Description: "Policy enforced gate: " + strings.Join(eval.GateReasons, ", "),
-			Status:      domain.GateStatusPending,
+			State:       domain.GateStatePending,
 			CreatedAt:   time.Now().UTC(),
 		}
 		

@@ -94,3 +94,12 @@
 ## Phase 14: State & Simulation Clarification (Completed)
 - [x] Clarify execution state semantics (timeout, needs_manual_attention)
 - [x] Formalize simulation semantics in output contract and documentation
+
+## Phase 15: State & Terminology Hardening [DONE]
+- [x] Audit execution state model (Micro-task complete)
+- [x] Define and document canonical execution/result state semantics
+- [x] Clarify lifecycle meaning of Runs, Steps, and Attempts
+- [x] Align manual-attention and simulation semantics
+- [x] Terminology uniformity (State vs Status)
+- [-] Refactor Attempt state management (Moved to V1.1.3)
+- [-] Consolidate intervention signaling (Moved to V1.1.3)
