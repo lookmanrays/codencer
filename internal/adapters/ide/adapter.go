@@ -136,7 +136,7 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 	}
 
 	return &domain.Result{
-		Status:             status,
+		State:              status,
 		Summary:            payload.Summary,
 		NeedsHumanDecision: false,
 	}, nil

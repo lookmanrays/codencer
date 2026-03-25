@@ -36,7 +36,7 @@ func TestAPI_Endpoints(t *testing.T) {
 	routingSvc := service.NewRoutingService(benchRepo, nil)
 	policyReg := service.NewPolicyRegistry()
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artsRepo, valsRepo, routingSvc, policyReg, "/tmp", "/tmp")
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artsRepo, valsRepo, routingSvc, policyReg, "/tmp/codencer-artifacts", "/tmp/codencer-workspace")
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	handler := &APIHandler{

@@ -85,8 +85,8 @@ func NormalizeStandardResult(attemptID string, artifacts []*domain.Artifact) (*d
 		return nil, fmt.Errorf("failed to unmarshal result JSON: %w", err)
 	}
 
-	if res.Status == "" {
-		res.Status = domain.StepStateFailedTerminal
+	if res.State == "" {
+		res.State = domain.StepStateFailedTerminal
 		res.Summary = "Invalid result: missing status field"
 	}
 

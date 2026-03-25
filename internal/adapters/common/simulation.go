@@ -29,7 +29,7 @@ func RunSimulation(ctx context.Context, attempt *domain.Attempt, artifactRoot, w
 		echo "Executing Simulated %s for attempt %s" > "%s"
 		cat << 'EOF' > "%s"
 {
-  "status": "completed",
+  "state": "completed",
   "summary": "Simulated successful %s task.",
   "needs_human_decision": false
 }

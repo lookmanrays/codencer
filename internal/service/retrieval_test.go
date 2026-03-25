@@ -32,7 +32,7 @@ func TestRunService_Retrieval(t *testing.T) {
 	validationsRepo := sqlite.NewValidationsRepo(db)
 	routingSvc := service.NewRoutingService(nil, nil)
 
-	svc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, service.NewPolicyRegistry(), "/tmp", "/tmp")
+	svc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, service.NewPolicyRegistry(), t.TempDir(), t.TempDir())
 
 	ctx := context.Background()
 	runID := "test-run"
@@ -45,6 +45,7 @@ func TestRunService_Retrieval(t *testing.T) {
 		PhaseID: "phase-01-" + runID,
 		Title:   "Test Step",
 		Adapter: "mock",
+		State:   domain.StepStateRunning,
 	}
 	_ = stepsRepo.Create(ctx, step)
 
@@ -72,8 +73,8 @@ func TestRunService_Retrieval(t *testing.T) {
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
-		if res.Status != step.State {
-			t.Errorf("expected status %s, got %s", step.State, res.Status)
+		if res.State != domain.StepStateRunning {
+			t.Errorf("Expected State running, got %s", res.State)
 		}
 	})
 

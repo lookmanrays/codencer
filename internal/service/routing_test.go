@@ -57,7 +57,7 @@ func TestRunService_LogBenchmark(t *testing.T) {
 	svc := &RunService{routingSvc: rs}
 
 	attemptID := "test-attempt"
-	res := &domain.Result{Status: domain.StepStateCompleted, Summary: "OK"}
+	res := &domain.Result{State: domain.StepStateCompleted, Summary: "OK"}
 	
 	// Log real benchmark
 	svc.logBenchmark(context.Background(), "p1", attemptID, "codex", res, 100, false)

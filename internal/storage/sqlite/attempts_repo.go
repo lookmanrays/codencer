@@ -31,7 +31,7 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 	var warningsJSON, questionsJSON []byte
 	
 	if attempt.Result != nil {
-		status = string(attempt.Result.Status)
+		status = string(attempt.Result.State)
 		summary = attempt.Result.Summary
 		needsDecision = attempt.Result.NeedsHumanDecision
 		warningsJSON, _ = json.Marshal(attempt.Result.Warnings)
@@ -69,7 +69,7 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 	
 	var attempt domain.Attempt
 	var statusStr string
-	var summary string
+	var resSummary string // Renamed to avoid conflict with `summary` in `Create`
 	var needsDecision bool
 	var warningsStr, questionsStr sql.NullString
 
@@ -79,7 +79,7 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 		&attempt.Number,
 		&attempt.Adapter,
 		&statusStr,
-		&summary,
+		&resSummary,
 		&needsDecision,
 		&warningsStr,
 		&questionsStr,
@@ -95,8 +95,8 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 
 	if statusStr != "" {
 		attempt.Result = &domain.Result{
-			Status:             domain.StepState(statusStr),
-			Summary:            summary,
+			State:              domain.StepState(statusStr),
+			Summary:            resSummary,
 			NeedsHumanDecision: needsDecision,
 		}
 		if warningsStr.Valid && warningsStr.String != "" {
@@ -124,7 +124,7 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 	questionsJSON, _ := json.Marshal(attempt.Result.Questions)
 
 	_, err := r.db.ExecContext(ctx, q,
-		string(attempt.Result.Status),
+		string(attempt.Result.State),
 		attempt.Result.Summary,
 		attempt.Result.NeedsHumanDecision,
 		string(warningsJSON),
@@ -154,13 +154,13 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 	for rows.Next() {
 		var attempt domain.Attempt
 		var statusStr string
-		var summary string
+		var resSummary string // Renamed to avoid conflict with `summary` in `Create`
 		var needsDecision bool
 		var warningsStr, questionsStr sql.NullString
 
 		if err := rows.Scan(
 			&attempt.ID, &attempt.StepID, &attempt.Number, &attempt.Adapter,
-			&statusStr, &summary, &needsDecision, &warningsStr, &questionsStr,
+			&statusStr, &resSummary, &needsDecision, &warningsStr, &questionsStr,
 			&attempt.CreatedAt, &attempt.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -168,8 +168,8 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 
 		if statusStr != "" && statusStr != string(domain.StepStatePending) {
 			attempt.Result = &domain.Result{
-				Status:             domain.StepState(statusStr),
-				Summary:            summary,
+				State:              domain.StepState(statusStr),
+				Summary:            resSummary,
 				NeedsHumanDecision: needsDecision,
 			}
 			if warningsStr.Valid && warningsStr.String != "" {

@@ -19,6 +19,10 @@
 
 ## Priority 4 — Stronger policy model [COMPLETE]
 - [x] Implement policy loading/config usage aligned with docs (via `PolicyRegistry`).
+- [x] Terminology: Rename `Result.Status` to `Result.State` for cross-model consistency.
+- [x] Service: Repair `finalizeStep` to correctly integrate policy evaluation and gating.
+- [x] Testing: Fix test regressions and ensure reliable simulation behavior.
+- [x] Docs: Finalize README and SETUP guides for external review.
 - [x] Persist or explicitly bind execution policy per step/run.
 - [x] Real changed-file detection feeding policy evaluation.
 - [x] Cleaner gate reason generation natively tied to policy rules.
@@ -50,4 +54,8 @@
 - [x] Implement `is_simulation` tracking in benchmarks.
 - [x] Persist selection reasons and fallback paths in attempts.
 - [x] Expose benchmark and routing config via API/CLI.
-- [x] Update README and GAP_AUDIT for routing truthfulness.
+## Priority 10 — Final Consistency & Polish [COMPLETE]
+- [x] Standardize internal state terminology.
+- [x] Audit vocabulary alignment (Completed/Failed).
+- [x] Remove character artifacts and stale comments.
+- [x] Update documentation for retroactive truthfulness.

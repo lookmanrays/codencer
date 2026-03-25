@@ -24,8 +24,8 @@ func NormalizeCore(attemptID string, resultPath string) (*domain.Result, error) 
 		return nil, fmt.Errorf("failed to unmarshal Qwen result JSON: %w", err)
 	}
 
-	if res.Status == "" {
-		res.Status = domain.StepStateFailedTerminal
+	if res.State == "" {
+		res.State = domain.StepStateFailedTerminal
 		res.Summary = "Invalid result: missing status"
 	}
 

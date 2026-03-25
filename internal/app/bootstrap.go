@@ -109,14 +109,7 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo,
-		artifactsRepo,
-		validationsRepo,
-		routingSvc,
-		policyReg,
-		cfg.ArtifactRoot,
-		cfg.WorkspaceRoot,
-	)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, cfg.ArtifactRoot, cfg.WorkspaceRoot)
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot)

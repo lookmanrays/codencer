@@ -19,7 +19,7 @@ func Evaluate(p *domain.Policy, result *domain.Result, changedFiles []string) Po
 	var eval PolicyEvaluation
 
 	// Check failures
-	if p.FailWhen.ArtifactPersistenceFailed && (result.Status == domain.StepStateFailedTerminal) { // Simplification
+	if p.FailWhen.ArtifactPersistenceFailed && result != nil && result.State == domain.StepStateFailedTerminal { // Simplification
 		eval.ShouldFail = true
 		eval.FailReasons = append(eval.FailReasons, "Artifact persistence marked as failed")
 	}

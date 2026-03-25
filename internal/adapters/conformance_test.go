@@ -89,13 +89,16 @@ Collection:
 
 			// Validate payload layout conformance
 			res, err := a.NormalizeResult(ctx, attempt.ID, artifacts)
+			if res.State == "" {
+				t.Error("NormalizeResult returned empty State")
+			}
 			if err != nil {
 				t.Fatalf("NormalizeResult failed for %s: %v", a.Name(), err)
 			}
 
 			// Expected simulated structural layout tests
-			if res.Status != domain.StepStateCompleted {
-				t.Errorf("Expected StepStateCompleted for simulated %s, got %s", a.Name(), res.Status)
+			if res.State != domain.StepStateCompleted {
+				t.Errorf("Expected StepStateCompleted for simulated %s, got %s", a.Name(), res.State)
 			}
 
 			// Conformance tests ensure memory capabilities are populated natively mapped correctly

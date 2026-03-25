@@ -1,5 +1,3 @@
-.PHONY: all build test lint run
-
 all: lint test build
 
 build:
@@ -19,3 +17,19 @@ lint:
 run: build
 	@echo "==> Running orchestratord..."
 	@./bin/orchestratord
+
+setup:
+	@echo "==> Initializing local environment..."
+	@mkdir -p bin
+	@mkdir -p .codencer/artifacts
+	@mkdir -p .codencer/workspace
+
+clean:
+	@echo "==> Cleaning up..."
+	@rm -rf bin
+	@rm -rf .codencer/workspace/*
+	@rm -f codencer.db
+
+simulate: build
+	@echo "==> Running in simulation mode..."
+	@CODEX_SIMULATION_MODE=1 CLAUDE_SIMULATION_MODE=1 QWEN_SIMULATION_MODE=1 ./bin/orchestratord

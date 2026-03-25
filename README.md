@@ -41,5 +41,15 @@ Hardened task telemetry and routing behavior for architectural honesty.
 3. **Observability**: [RESOLVED] Exposed benchmark history and routing configuration via new REST API (`/api/v1/benchmarks`) and MCP tools.
 4. **Deterministic Fallbacks**: [RESOLVED] Enforced clear, auditable fallback paths when primary adapters are unavailable or fail.
 
-> **Limitations:** For Phase 2, certain complex agent topologies (like interactive persistent CLI shells or cloud orchestration) are still explicitly unsupported to guarantee local-first safety.
+**Phase 11 Consistency & Polish (Complete):**
+Final hardening pass of the initial roadmap. All internal terminology has been standardized, build integrity has been verified via internal integration tests, and documentation has been updated for complete technical honesty.
+
+## Known Limitations
+
+Codencer is a local orchestration bridge, not an autonomous agent or a cloud-scale fleet manager. Current limitations include:
+1. **Local-First Only**: Explicitly designed for local developer toolchains; no built-in support for remote multi-tenant execution.
+2. **CLI Wrapper Adapters**: Adapters (Codex, Claude, Qwen) operate as CLI wrappers. They require local binary presence and do not provide deeper process-level introspection beyond what the CLI tool exposes.
+3. **Implicit Benchmarking**: Benchmarking currently relies on heuristic scoring from result summaries and duration; deeper semantic evaluation is part of the long-term roadmap.
+4. **Interactive Shells**: Persistent, stateful interactive shells within an adapter attempt are currently explicitly unsupported.
+
 > **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.

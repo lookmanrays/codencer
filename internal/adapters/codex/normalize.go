@@ -25,8 +25,8 @@ func NormalizeCore(attemptID string, resultPath string) (*domain.Result, error) 
 	}
 
 	// Validate status
-	if res.Status == "" {
-		res.Status = domain.StepStateFailedTerminal
+	if res.State == "" {
+		res.State = domain.StepStateFailedTerminal
 		res.Summary = "Invalid result: missing status"
 	}
 

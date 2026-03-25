@@ -62,7 +62,7 @@ func TestCollectAndNormalize(t *testing.T) {
 	os.MkdirAll(artifactRoot, 0755)
 	
 	// Create dummy result
-	resultData := `{"status": "completed", "summary": "done"}`
+	resultData := `{"state": "completed", "summary": "done"}`
 	os.WriteFile(filepath.Join(artifactRoot, "result.json"), []byte(resultData), 0644)
 	os.WriteFile(filepath.Join(artifactRoot, "stdout.log"), []byte("hello"), 0644)
 
@@ -80,8 +80,8 @@ func TestCollectAndNormalize(t *testing.T) {
 		t.Fatalf("NormalizeStandardResult failed: %v", err)
 	}
 
-	if res.Status != domain.StepStateCompleted {
-		t.Errorf("expected status 'completed', got %v", res.Status)
+	if res.State != domain.StepStateCompleted {
+		t.Errorf("Expected State completed, got %s", res.State)
 	}
 }
 

@@ -53,8 +53,8 @@ func (m *MockAdapter) CollectArtifacts(ctx context.Context, attemptID, artifactR
 func (m *MockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
 	// Provide a successful domain result
 	return &domain.Result{
-		Status:             domain.StepStateNeedsApproval,
-		Summary:            "MockAdapter executed successfully",
+		State:              domain.StepStateCompleted,
+		Summary:            "Test Result",
 		NeedsHumanDecision: true,
 		Questions:          []string{"Mock adapter isolated gate test question"},
 	}, nil
@@ -88,13 +88,15 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
 	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
 		gatesRepo,
 		artifactsRepo,
 		sqlite.NewValidationsRepo(db),
 		routingSvc,
 		service.NewPolicyRegistry(),
-		"/tmp/artifacts", "/tmp/workspace")
+		artifactRoot, workspaceRoot)
 
 	ctx := context.Background()
 

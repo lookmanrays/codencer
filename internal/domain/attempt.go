@@ -17,9 +17,9 @@ type Attempt struct {
 
 // Result summarizes what happened in an Attempt.
 type Result struct {
-	Status              StepState
-	Summary             string
-	NeedsHumanDecision  bool
-	Warnings            []string
-	Questions           []string
+	State               StepState `json:"state"`
+	Summary             string    `json:"summary"`
+	NeedsHumanDecision  bool      `json:"needs_human_decision"`
+	Warnings            []string  `json:"warnings"`
+	Questions           []string  `json:"questions"`
 }
