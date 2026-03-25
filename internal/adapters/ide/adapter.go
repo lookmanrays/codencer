@@ -12,7 +12,8 @@ import (
 	"agent-bridge/internal/domain"
 )
 
-// Adapter implements the orchestrator boundary targeting an IDE chat window (e.g., VS Code + Continue/Copilot).
+// Adapter implements a PROXY-MEDIATED boundary targeting an IDE chat window (e.g., VS Code + Continue/Copilot).
+// It does NOT have native control over the IDE; it communicates via shared file buffers.
 type Adapter struct {
 	capabilities []string
 }
@@ -31,8 +32,8 @@ func (a *Adapter) Capabilities() []string {
 	return a.capabilities
 }
 
-// Start hands off the attempt payload to a structured file buffer that the companion VS Code Extension
-// watches and injects into the active IDE chat window.
+// Start performs a proxy-mediated handoff by writing the attempt payload to a shared file buffer. 
+// A companion VS Code Extension must watch this file to facilitate ingestion into the active IDE chat.
 func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactsRoot string) error {
 	slog.Info("IDE Adapter: Starting chat bridge handoff", "attemptID", attempt.ID)
 
@@ -59,9 +60,9 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 		return false, nil // Assume simulate instantaneous completion
 	}
 
-	// This is a placeholder for actual polling logic:
-	// A real extension would write to <artifactRoot>/result.json when the user accepts the code block.
-	// We will simulate process exit for now.
+	// This is a placeholder for manual/proxy polling logic:
+	// Since we lack native IDE control, we rely on the extension to write back a signal
+	// or the user to manually trigger completion.
 	return false, nil
 }
 

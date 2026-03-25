@@ -9,7 +9,8 @@ import (
 	"agent-bridge/internal/storage/sqlite"
 )
 
-// RoutingService manages the order in which adapters are attempted.
+// RoutingService manages the heuristic order in which adapters are attempted.
+// Note: This is a rule-based fallback system, not an autonomous optimizer.
 type RoutingService struct {
 	benchmarksRepo *sqlite.BenchmarksRepo
 	adapters       map[string]domain.Adapter
