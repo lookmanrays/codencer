@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS validations (
 	PRIMARY KEY (attempt_id, name),
 	FOREIGN KEY (attempt_id) REFERENCES attempts(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS benchmarks (
+	id TEXT PRIMARY KEY,
+	adapter TEXT NOT NULL,
+	phase_id TEXT NOT NULL,
+	duration_ms INTEGER NOT NULL,
+	validations_hit INTEGER NOT NULL,
+	validations_max INTEGER NOT NULL,
+	cost_cents REAL NOT NULL,
+	failure_reason TEXT,
+	created_at DATETIME NOT NULL
+);
 `
 
 	_, err := db.Exec(schema)

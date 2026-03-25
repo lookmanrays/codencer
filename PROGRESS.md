@@ -25,3 +25,10 @@
 - [x] Scaffold Native Claude Code Adapter boundaries mapping anthropic capabilities
 - [x] Scaffold Native Qwen Adapter boundaries mapping local capabilities
 - [x] Deploy Universal Adapter Conformance Tests guaranteeing capability parity
+
+## Phase 4: Benchmarking & IDE Chat Adapters (Completed)
+- [x] Implement Benchmark Metrics & SQLite Scoring Ledger
+- [x] Author `RoutingService` with Smart Fallback Chaining
+- [x] Scaffold Targeted IDE Chat Adapter for Extension-bound Proxies
+- [x] Deploy Compatibility Matrix Diagnostic Endpoints
+- [x] Complete E2E Validation of the Fully Operational Bridge

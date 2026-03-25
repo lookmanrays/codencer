@@ -1,0 +1,14 @@
+id: corpus-fizzbuzz-001
+phase_id: benchmark-phase-01
+title: FizzBuzz Basic Implementation
+goal: Implement a standard FizzBuzz function in Go with test coverage.
+adapter_profile: codex
+context:
+  files:
+    - path: fizzbuzz.go
+      content: |
+        package main
+        // TODO: Implement FizzBuzz
+  instructions: |
+    Implement classic FizzBuzz returning a slice of strings for numbers 1 to N.
+    Create a fizzbuzz_test.go file asserting correctness.

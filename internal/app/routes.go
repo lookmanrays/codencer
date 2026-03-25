@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/mcp"
@@ -22,6 +23,7 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/runs/", h.handleRunByID) // Also intercepts /runs/{id}/steps if matched manually
 	mux.HandleFunc("/api/v1/steps/", h.handleStepByID)
 	mux.HandleFunc("/api/v1/gates/", h.handleGateByID)
+	mux.HandleFunc("/api/v1/compatibility", h.handleCompatibility)
 	
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
@@ -256,4 +258,28 @@ func (h *APIHandler) handleGateByID(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+func (h *APIHandler) handleCompatibility(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Dynamic detection of local IDE environment
+	matrix := map[string]interface{}{
+		"tier": 2, // Defaulting to Tier 2: Control features work via CLI/Daemon
+		"adapters": []map[string]interface{}{
+			{"id": "codex", "status": "active", "tier": 3},
+			{"id": "claude", "status": "active", "tier": 3},
+			{"id": "qwen", "status": "active", "tier": 3},
+			{"id": "ide-chat", "status": "active", "tier": 1},
+		},
+		"environment": map[string]interface{}{
+			"os": os.Getenv("OS"),
+			"vscode_detected": false, // Simplified for MVP
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(matrix)
 }

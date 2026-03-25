@@ -23,7 +23,7 @@ type RunService struct {
 	attemptsRepo  *sqlite.AttemptsRepo
 	gatesRepo     *sqlite.GatesRepo
 	artifactsRepo *sqlite.ArtifactsRepo
-	adapters      map[string]domain.Adapter
+	routingSvc    *RoutingService
 }
 
 // NewRunService creates a new RunService.
@@ -34,7 +34,7 @@ func NewRunService(
 	attemptsRepo *sqlite.AttemptsRepo,
 	gatesRepo *sqlite.GatesRepo,
 	artifactsRepo *sqlite.ArtifactsRepo,
-	adapters map[string]domain.Adapter,
+	routingSvc *RoutingService,
 ) *RunService {
 	return &RunService{
 		runsRepo:      runsRepo,
@@ -43,7 +43,7 @@ func NewRunService(
 		attemptsRepo:  attemptsRepo,
 		gatesRepo:     gatesRepo,
 		artifactsRepo: artifactsRepo,
-		adapters:      adapters,
+		routingSvc:    routingSvc,
 	}
 }
 
@@ -179,9 +179,9 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 		return fmt.Errorf("failed to create step: %w", err)
 	}
 
-	adapter, ok := s.adapters[step.Adapter]
-	if !ok {
-		return s.failStep(ctx, step, fmt.Sprintf("adapter %s not found", step.Adapter))
+	fallbackChain, err := s.routingSvc.BuildFallbackChain(ctx, step.Adapter)
+	if err != nil || len(fallbackChain) == 0 {
+		return s.failStep(ctx, step, fmt.Sprintf("no viable adapters found for profile '%s'", step.Adapter))
 	}
 
 	step.State = domain.StepStateRunning
@@ -195,11 +195,22 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 	policy := domain.DefaultPolicy()
 
 	for attemptNum := 1; attemptNum <= maxAttempts; attemptNum++ {
+		// Select adapter based on fallback chain progression
+		adapterProfile := fallbackChain[0]
+		if attemptNum-1 < len(fallbackChain) {
+			adapterProfile = fallbackChain[attemptNum-1]
+		}
+		
+		adapter, ok := s.routingSvc.GetAdapter(adapterProfile)
+		if !ok {
+			return s.failStep(ctx, step, fmt.Sprintf("adapter %s out of bounds", adapterProfile))
+		}
+
 		attempt := &domain.Attempt{
 			ID:        fmt.Sprintf("%s-a%d", step.ID, attemptNum),
 			StepID:    step.ID,
 			Number:    attemptNum,
-			Adapter:   step.Adapter,
+			Adapter:   adapterProfile,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -208,11 +219,32 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 			return fmt.Errorf("failed to create attempt: %w", err)
 		}
 
+		startTime := time.Now()
 		res, eval, err := s.executeAttempt(ctx, runID, step, attempt, adapter, artifactRoot, policy)
+		duration := time.Since(startTime).Milliseconds()
+
 		if err != nil {
 			// System failure, not just adapter failure
 			return fmt.Errorf("system error executing attempt: %w", err)
 		}
+
+		// Log benchmark hit
+		benchScore := &domain.BenchmarkScore{
+			ID:             fmt.Sprintf("bench-%s", attempt.ID),
+			Adapter:        adapterProfile,
+			PhaseID:        step.PhaseID,
+			DurationMs:     duration,
+			ValidationsHit: 1, // simplified representation
+			ValidationsMax: 1,
+			CostCents:      0.0,
+			CreatedAt:      time.Now().UTC(),
+		}
+		if res != nil && res.Status != domain.StepStateCompleted {
+			benchScore.FailureReason = res.Summary
+			benchScore.ValidationsHit = 0
+		}
+		// Persist scoring metric offline
+		_ = s.routingSvc.benchmarksRepo.Save(context.Background(), benchScore)
 
 		finalResult = res
 		finalEval = eval

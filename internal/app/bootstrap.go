@@ -12,6 +12,7 @@ import (
 
 	"agent-bridge/internal/adapters/claude"
 	"agent-bridge/internal/adapters/codex"
+	"agent-bridge/internal/adapters/ide"
 	"agent-bridge/internal/adapters/qwen"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
@@ -90,14 +91,17 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	attemptsRepo := sqlite.NewAttemptsRepo(db)
 	gatesRepo := sqlite.NewGatesRepo(db)
 	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
 	
 	adapters := map[string]domain.Adapter{
-		"codex":  codex.NewAdapter(),
-		"claude": claude.NewAdapter(),
-		"qwen":   qwen.NewAdapter(),
+		"codex":    codex.NewAdapter(),
+		"claude":   claude.NewAdapter(),
+		"qwen":     qwen.NewAdapter(),
+		"ide-chat": ide.NewAdapter(),
 	}
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, adapters)
+	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc)
 	
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 

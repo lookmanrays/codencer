@@ -79,13 +79,16 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 	attemptsRepo := sqlite.NewAttemptsRepo(db)
 	gatesRepo := sqlite.NewGatesRepo(db)
 	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
 
 	mockAdapter := &MockAdapter{}
 	adapters := map[string]domain.Adapter{
 		"mock-adapter": mockAdapter,
 	}
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, adapters)
+	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc)
 
 	ctx := context.Background()
 

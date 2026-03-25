@@ -33,12 +33,15 @@ func TestE2EFlow(t *testing.T) {
 	gatesRepo := sqlite.NewGatesRepo(db)
 
 	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
 
 	adapters := map[string]domain.Adapter{
 		"codex": codex.NewAdapter(),
 	}
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, adapters)
+	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc)
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	ctx := context.Background()
