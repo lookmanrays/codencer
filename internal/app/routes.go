@@ -179,6 +179,10 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract step ID if path is /api/v1/steps/{id}/anything
+	parts := strings.Split(strings.Trim(id, "/"), "/")
+	stepID := parts[0]
+
 	if r.Method == http.MethodGet {
 		isArtifacts := strings.HasSuffix(r.URL.Path, "/artifacts")
 		isResult := strings.HasSuffix(r.URL.Path, "/result")
@@ -187,7 +191,7 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		
 		if isArtifacts {
-			artifacts, err := h.RunSvc.GetArtifactsByStep(r.Context(), id)
+			artifacts, err := h.RunSvc.GetArtifactsByStep(r.Context(), stepID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -197,9 +201,8 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if isResult {
-			result, err := h.RunSvc.GetResultByStep(r.Context(), id)
+			result, err := h.RunSvc.GetResultByStep(r.Context(), stepID)
 			if err != nil {
-				// E.g. No attempts found, or no result yet
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
@@ -208,7 +211,7 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if isValidations {
-			validations, err := h.RunSvc.GetValidationsByStep(r.Context(), id)
+			validations, err := h.RunSvc.GetValidationsByStep(r.Context(), stepID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -217,7 +220,7 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		step, err := h.RunSvc.GetStep(r.Context(), id)
+		step, err := h.RunSvc.GetStep(r.Context(), stepID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -228,6 +231,15 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		_ = json.NewEncoder(w).Encode(step)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/retry") {
+		if err := h.RunSvc.RetryStep(r.Context(), stepID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 

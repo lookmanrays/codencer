@@ -57,3 +57,11 @@
 - [x] Orphaned Worktree and Lock Cleanup
 - [x] Exposed Recovery Status to API/CLI/MCP
 - [x] Verified with Recovery Integration Tests
+
+## Phase 8: VS Code Control Surface (Completed)
+- [x] Hierarchical Run -> Step -> [Gate, Artifact, Validation] Tree
+- [x] Status-aware Icons and Rich Tooltips
+- [x] Centralized API Client with Error Handling
+- [x] Actionable Commands: Approve/Reject Gate, Retry Step
+- [x] Structured Inspection: View Results/Validations in JSON buffers
+- [x] Corrected Backend Support for Step Retries

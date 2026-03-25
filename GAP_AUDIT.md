@@ -15,3 +15,9 @@ However, a rigorous audit reveals the following significant gaps separating the 
 
 ## Objective
 The goal is to deepen the orchestrator runtime, transition away from mock representations to deterministic execution contracts, and complete the retrieval and recovery flows to establish genuine local-first reliability.
+
+### Extension Audit [BATCH 4 COMPLETE]
+- [x] **Passive Viewer**: The extension is now a functional operator surface.
+- [x] **Noisy Polling**: Polling is replaced with cleaner manual refresh and stable client logic.
+- [x] **Missing Actions**: Added Approve, Reject, and Retry actions.
+- [x] **Structured Inspection**: Integrated JSON buffers for results and validations.

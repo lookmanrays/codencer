@@ -34,6 +34,21 @@
         "icon": "$(x)"
       },
       {
+        "command": "codencer.retryStep",
+        "title": "Codencer: Retry Step",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codencer.inspectResult",
+        "title": "Codencer: Inspect Result",
+        "icon": "$(json)"
+      },
+      {
+        "command": "codencer.inspectValidations",
+        "title": "Codencer: Inspect Validations",
+        "icon": "$(shield)"
+      },
+      {
         "command": "codencer.openArtifact",
         "title": "Codencer: Open Artifact"
       }
@@ -49,6 +64,21 @@
           "command": "codencer.rejectGate",
           "when": "viewItem == gate",
           "group": "inline"
+        },
+        {
+          "command": "codencer.retryStep",
+          "when": "viewItem == step",
+          "group": "inline"
+        },
+        {
+          "command": "codencer.inspectResult",
+          "when": "viewItem == step || viewItem == result",
+          "group": "1_inspection"
+        },
+        {
+          "command": "codencer.inspectValidations",
+          "when": "viewItem == step || viewItem == validations",
+          "group": "1_inspection"
         }
       ]
     }

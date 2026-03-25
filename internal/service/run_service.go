@@ -217,6 +217,34 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 	return s.finalizeStep(ctx, runID, step, finalResult, finalEval)
 }
 
+// RetryStep re-dispatches an existing step.
+func (s *RunService) RetryStep(ctx context.Context, stepID string) error {
+	step, err := s.stepsRepo.Get(ctx, stepID)
+	if err != nil {
+		return err
+	}
+	if step == nil {
+		return fmt.Errorf("step %s not found", stepID)
+	}
+
+	phase, err := s.phasesRepo.Get(ctx, step.PhaseID)
+	if err != nil {
+		return err
+	}
+	if phase == nil {
+		return fmt.Errorf("phase %s for step %s not found", step.PhaseID, stepID)
+	}
+
+	// We dispatch asynchronously because DispatchStep blocks.
+	go func() {
+		if err := s.DispatchStep(context.Background(), phase.RunID, step); err != nil {
+			slog.Error("Failed to retry step", "stepID", stepID, "error", err)
+		}
+	}()
+
+	return nil
+}
+
 func (s *RunService) initializeStep(ctx context.Context, step *domain.Step) error {
 	existing, err := s.stepsRepo.Get(ctx, step.ID)
 	if err == nil && existing != nil {
