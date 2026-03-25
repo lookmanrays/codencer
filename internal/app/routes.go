@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/mcp"
@@ -179,8 +180,9 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		isArtifacts := len(r.URL.Path) > len("/api/v1/steps/"+id+"/") && r.URL.Path[len("/api/v1/steps/"+id+"/"):] == "artifacts"
-		isResult := len(r.URL.Path) > len("/api/v1/steps/"+id+"/") && r.URL.Path[len("/api/v1/steps/"+id+"/"):] == "result"
+		isArtifacts := strings.HasSuffix(r.URL.Path, "/artifacts")
+		isResult := strings.HasSuffix(r.URL.Path, "/result")
+		isValidations := strings.HasSuffix(r.URL.Path, "/validations")
 
 		w.Header().Set("Content-Type", "application/json")
 		
@@ -202,6 +204,16 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			json.NewEncoder(w).Encode(result)
+			return
+		}
+
+		if isValidations {
+			validations, err := h.RunSvc.GetValidationsByStep(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(validations)
 			return
 		}
 

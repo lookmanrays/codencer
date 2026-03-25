@@ -41,3 +41,11 @@
 - [x] Decouple Recovery Paths and Improve State Reconcile
 - [x] Inject Configuration-driven Paths into RunSvc (Self-Review)
 - [x] Implement Step Idempotency for MCP Retries (Self-Review)
+
+## Phase 6: Retrieval & Inspection Hardening (Completed)
+- [x] Modernize `Artifact` and `ValidationResult` Domain Models
+- [x] Hardened SQLite Schema for Detailed Evidence
+- [x] Implement Structured Retrieval in `RunService`
+- [x] Expose REST/MCP Endpoints for Validations
+- [x] Native CLI Commands for Inspection
+- [x] Verified missing-state robustness with unit tests

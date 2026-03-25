@@ -19,10 +19,12 @@ const (
 
 // Artifact is a deterministic file output from a step attempt.
 type Artifact struct {
-	ID        string
-	AttemptID string
-	Type      ArtifactType
-	Path      string
-	Size      int64
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	AttemptID string    `json:"attempt_id"`
+	Type      ArtifactType `json:"type"`
+	Name      string    `json:"name"`
+	Path      string    `json:"path"`
+	Size      int64     `json:"size"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

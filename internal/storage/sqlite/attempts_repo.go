@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"agent-bridge/internal/domain"
@@ -21,17 +22,20 @@ func NewAttemptsRepo(db *sql.DB) *AttemptsRepo {
 // Create inserts a new attempt.
 func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) error {
 	const q = `
-		INSERT INTO attempts (id, step_id, number, adapter, status, summary, needs_human_decision, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO attempts (id, step_id, number, adapter, status, summary, needs_human_decision, warnings, questions, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	var status string
 	var summary string
 	var needsDecision bool
+	var warningsJSON, questionsJSON []byte
 	
 	if attempt.Result != nil {
 		status = string(attempt.Result.Status)
 		summary = attempt.Result.Summary
 		needsDecision = attempt.Result.NeedsHumanDecision
+		warningsJSON, _ = json.Marshal(attempt.Result.Warnings)
+		questionsJSON, _ = json.Marshal(attempt.Result.Questions)
 	} else {
 		status = string(domain.StepStatePending)
 	}
@@ -44,6 +48,8 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 		status,
 		summary,
 		needsDecision,
+		string(warningsJSON),
+		string(questionsJSON),
 		attempt.CreatedAt,
 		attempt.UpdatedAt,
 	)
@@ -56,7 +62,7 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 // Get retrieves an attempt by ID.
 func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, error) {
 	const q = `
-		SELECT id, step_id, number, adapter, status, summary, needs_human_decision, created_at, updated_at
+		SELECT id, step_id, number, adapter, status, summary, needs_human_decision, warnings, questions, created_at, updated_at
 		FROM attempts WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
@@ -65,6 +71,7 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 	var statusStr string
 	var summary string
 	var needsDecision bool
+	var warningsStr, questionsStr sql.NullString
 
 	err := row.Scan(
 		&attempt.ID,
@@ -74,6 +81,8 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 		&statusStr,
 		&summary,
 		&needsDecision,
+		&warningsStr,
+		&questionsStr,
 		&attempt.CreatedAt,
 		&attempt.UpdatedAt,
 	)
@@ -90,8 +99,12 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 			Summary:            summary,
 			NeedsHumanDecision: needsDecision,
 		}
-		// Note: warnings/questions are arrays which we aren't storing explicitly in the basic attempts table yet, 
-		// they might be derived or need extra tables, but for MVP this is adequate.
+		if warningsStr.Valid && warningsStr.String != "" {
+			_ = json.Unmarshal([]byte(warningsStr.String), &attempt.Result.Warnings)
+		}
+		if questionsStr.Valid && questionsStr.String != "" {
+			_ = json.Unmarshal([]byte(questionsStr.String), &attempt.Result.Questions)
+		}
 	}
 
 	return &attempt, nil
@@ -104,13 +117,18 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 	}
 
 	const q = `
-		UPDATE attempts SET status = ?, summary = ?, needs_human_decision = ?, updated_at = ?
+		UPDATE attempts SET status = ?, summary = ?, needs_human_decision = ?, warnings = ?, questions = ?, updated_at = ?
 		WHERE id = ?
 	`
+	warningsJSON, _ := json.Marshal(attempt.Result.Warnings)
+	questionsJSON, _ := json.Marshal(attempt.Result.Questions)
+
 	_, err := r.db.ExecContext(ctx, q,
 		string(attempt.Result.Status),
 		attempt.Result.Summary,
 		attempt.Result.NeedsHumanDecision,
+		string(warningsJSON),
+		string(questionsJSON),
 		attempt.UpdatedAt,
 		attempt.ID,
 	)
@@ -123,7 +141,7 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 // ListByStep returns all attempts for a step.
 func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain.Attempt, error) {
 	const q = `
-		SELECT id, step_id, number, adapter, status, summary, needs_human_decision, created_at, updated_at
+		SELECT id, step_id, number, adapter, status, summary, needs_human_decision, warnings, questions, created_at, updated_at
 		FROM attempts WHERE step_id = ? ORDER BY number ASC
 	`
 	rows, err := r.db.QueryContext(ctx, q, stepID)
@@ -138,10 +156,11 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 		var statusStr string
 		var summary string
 		var needsDecision bool
+		var warningsStr, questionsStr sql.NullString
 
 		if err := rows.Scan(
 			&attempt.ID, &attempt.StepID, &attempt.Number, &attempt.Adapter,
-			&statusStr, &summary, &needsDecision,
+			&statusStr, &summary, &needsDecision, &warningsStr, &questionsStr,
 			&attempt.CreatedAt, &attempt.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -152,6 +171,12 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 				Status:             domain.StepState(statusStr),
 				Summary:            summary,
 				NeedsHumanDecision: needsDecision,
+			}
+			if warningsStr.Valid && warningsStr.String != "" {
+				_ = json.Unmarshal([]byte(warningsStr.String), &attempt.Result.Warnings)
+			}
+			if questionsStr.Valid && questionsStr.String != "" {
+				_ = json.Unmarshal([]byte(questionsStr.String), &attempt.Result.Questions)
 			}
 		}
 		attempts = append(attempts, &attempt)

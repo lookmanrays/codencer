@@ -147,6 +147,30 @@ func (s *Server) ToolStartStep(ctx context.Context, args map[string]interface{})
 	}, nil
 }
 
+// ToolGetValidations implements orchestrator.get_validations tool.
+func (s *Server) ToolGetValidations(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	stepID, ok := args["step_id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing argument: step_id")
+	}
+
+	validations, err := s.runSvc.GetValidationsByStep(ctx, stepID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": fmt.Sprintf("Retrieved validations for step %s.", stepID),
+			},
+		},
+		"step_id":     stepID,
+		"validations": validations,
+	}, nil
+}
+
 // ToolRetryStep implements orchestrator.retry_step
 func (s *Server) ToolRetryStep(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 	stepID, ok := args["step_id"].(string)
@@ -243,5 +267,7 @@ func (s *Server) ToolListArtifacts(ctx context.Context, args map[string]interfac
 				"text": summary,
 			},
 		},
+		"step_id":   stepID,
+		"artifacts": artifacts,
 	}, nil
 }

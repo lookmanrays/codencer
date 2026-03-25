@@ -80,6 +80,8 @@ func (s *Server) routeTool(ctx context.Context, name string, args map[string]int
 		return s.ToolGetStatus(ctx, args)
 	case "orchestrator.get_step_result":
 		return s.ToolGetStepResult(ctx, args)
+	case "orchestrator.get_validations":
+		return s.ToolGetValidations(ctx, args)
 	case "orchestrator.list_artifacts":
 		return s.ToolListArtifacts(ctx, args)
 	case "orchestrator.approve_gate":

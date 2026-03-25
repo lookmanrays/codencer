@@ -47,8 +47,10 @@ func printUsage() {
 	fmt.Println("  run status     <id>")
 	fmt.Println("  run abort      <id>")
 	fmt.Println("  step start     <runID> <taskFile.yaml>")
-	fmt.Println("  step result    <stepID>")
-	fmt.Println("  gate approve   <id>")
+	fmt.Println("  step result     <stepID>")
+	fmt.Println("  step artifacts  <stepID>")
+	fmt.Println("  step validations <stepID>")
+	fmt.Println("  gate approve    <id>")
 	fmt.Println("  gate reject    <id>")
 }
 
@@ -183,6 +185,12 @@ func handleStepCommand(args []string) {
 			os.Exit(1)
 		}
 		stepArtifacts(args[1])
+	case "validations":
+		if len(args) < 2 {
+			fmt.Println("Usage: orchestratorctl step validations <stepID>")
+			os.Exit(1)
+		}
+		stepValidations(args[1])
 	default:
 		fmt.Printf("Unknown step command: %s\n", cmd)
 		os.Exit(1)
@@ -274,6 +282,23 @@ func stepArtifacts(stepID string) {
 
 	body, _ := io.ReadAll(resp.Body)
 	fmt.Printf("Step artifacts:\n%s\n", string(body))
+}
+func stepValidations(stepID string) {
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/validations")
+	if err != nil {
+		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Error: %s\n", string(body))
+		os.Exit(1)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("Step validations:\n%s\n", string(body))
 }
 
 func handleGateCommand(args []string) {

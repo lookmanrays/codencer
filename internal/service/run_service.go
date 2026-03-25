@@ -21,6 +21,7 @@ type RunService struct {
 	attemptsRepo  *sqlite.AttemptsRepo
 	gatesRepo     *sqlite.GatesRepo
 	artifactsRepo *sqlite.ArtifactsRepo
+	validationsRepo *sqlite.ValidationsRepo
 	routingSvc    *RoutingService
 	artifactRoot  string
 	workspaceRoot string
@@ -34,6 +35,7 @@ func NewRunService(
 	attemptsRepo *sqlite.AttemptsRepo,
 	gatesRepo *sqlite.GatesRepo,
 	artifactsRepo *sqlite.ArtifactsRepo,
+	validationsRepo *sqlite.ValidationsRepo,
 	routingSvc *RoutingService,
 	artifactRoot string,
 	workspaceRoot string,
@@ -45,6 +47,7 @@ func NewRunService(
 		attemptsRepo:  attemptsRepo,
 		gatesRepo:     gatesRepo,
 		artifactsRepo: artifactsRepo,
+		validationsRepo: validationsRepo,
 		routingSvc:    routingSvc,
 		artifactRoot:  artifactRoot,
 		workspaceRoot: workspaceRoot,
@@ -122,33 +125,48 @@ func (s *RunService) GetGatesByRun(ctx context.Context, id string) ([]*domain.Ga
 
 // GetArtifactsByStep returns all artifacts for all attempts of a step.
 func (s *RunService) GetArtifactsByStep(ctx context.Context, stepID string) ([]*domain.Artifact, error) {
-	attempts, err := s.attemptsRepo.ListByStep(ctx, stepID)
-	if err != nil {
-		return nil, err
-	}
-	var allArtifacts []*domain.Artifact
-	for _, a := range attempts {
-		arts, err := s.artifactsRepo.ListByAttempt(ctx, a.ID)
-		if err == nil {
-			allArtifacts = append(allArtifacts, arts...)
-		}
-	}
-	return allArtifacts, nil
+	return s.artifactsRepo.ListByStep(ctx, stepID)
+}
+
+// GetValidationsByStep returns all validations for all attempts of a step.
+func (s *RunService) GetValidationsByStep(ctx context.Context, stepID string) (map[string][]*domain.ValidationResult, error) {
+	return s.validationsRepo.ListByStep(ctx, stepID)
+}
+
+// GetValidationsByAttempt returns all validations for a specific attempt.
+func (s *RunService) GetValidationsByAttempt(ctx context.Context, attemptID string) ([]*domain.ValidationResult, error) {
+	return s.validationsRepo.ListByAttempt(ctx, attemptID)
 }
 
 // GetResultByStep returns the result of the latest attempt for a step.
 func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domain.Result, error) {
+	step, err := s.stepsRepo.Get(ctx, stepID)
+	if err != nil {
+		return nil, err
+	}
+	if step == nil {
+		return nil, fmt.Errorf("step %s not found", stepID)
+	}
+
 	attempts, err := s.attemptsRepo.ListByStep(ctx, stepID)
 	if err != nil {
 		return nil, err
 	}
 	if len(attempts) == 0 {
-		return nil, fmt.Errorf("no attempts found for step %s", stepID)
+		// Return a pending result structure if no attempts yet
+		return &domain.Result{
+			Status:  step.State,
+			Summary: "No attempts executed for this step yet.",
+		}, nil
 	}
+
 	// ListByStep orders by number ASC. The last one is the latest attempt.
 	latest := attempts[len(attempts)-1]
 	if latest.Result == nil {
-		return nil, fmt.Errorf("latest attempt %s has no result yet", latest.ID)
+		return &domain.Result{
+			Status:  step.State,
+			Summary: fmt.Sprintf("Latest attempt %s is still in progress or failed before result normalization.", latest.ID),
+		}, nil
 	}
 	return latest.Result, nil
 }

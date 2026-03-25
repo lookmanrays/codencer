@@ -19,17 +19,45 @@ func NewArtifactsRepo(db *sql.DB) *ArtifactsRepo {
 
 // Create inserts a new artifact record into the database.
 func (r *ArtifactsRepo) Create(ctx context.Context, artifact *domain.Artifact) error {
-	q := `INSERT INTO artifacts (id, attempt_id, type, path, size, created_at) VALUES (?, ?, ?, ?, ?, ?)`
-	_, err := r.db.ExecContext(ctx, q, artifact.ID, artifact.AttemptID, string(artifact.Type), artifact.Path, artifact.Size, artifact.CreatedAt)
+	q := `INSERT INTO artifacts (id, attempt_id, type, name, path, size, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, q, artifact.ID, artifact.AttemptID, string(artifact.Type), artifact.Name, artifact.Path, artifact.Size, artifact.CreatedAt, artifact.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create artifact %s: %w", artifact.ID, err)
 	}
 	return nil
 }
 
+// ListByStep retrieves all artifacts for all attempts of a step.
+func (r *ArtifactsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain.Artifact, error) {
+	q := `
+		SELECT a.id, a.attempt_id, a.type, a.name, a.path, a.size, a.created_at, a.updated_at
+		FROM artifacts a
+		INNER JOIN attempts att ON a.attempt_id = att.id
+		WHERE att.step_id = ?
+		ORDER BY a.created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, q, stepID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list artifacts for step %s: %w", stepID, err)
+	}
+	defer rows.Close()
+
+	var artifacts []*domain.Artifact
+	for rows.Next() {
+		var a domain.Artifact
+		var t string
+		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Name, &a.Path, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		a.Type = domain.ArtifactType(t)
+		artifacts = append(artifacts, &a)
+	}
+	return artifacts, rows.Err()
+}
+
 // ListByAttempt retrieves all artifacts associated with a specific attempt.
 func (r *ArtifactsRepo) ListByAttempt(ctx context.Context, attemptID string) ([]*domain.Artifact, error) {
-	q := `SELECT id, attempt_id, type, path, size, created_at FROM artifacts WHERE attempt_id = ?`
+	q := `SELECT id, attempt_id, type, name, path, size, created_at, updated_at FROM artifacts WHERE attempt_id = ?`
 	rows, err := r.db.QueryContext(ctx, q, attemptID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list artifacts for attempt %s: %w", attemptID, err)
@@ -40,7 +68,7 @@ func (r *ArtifactsRepo) ListByAttempt(ctx context.Context, attemptID string) ([]
 	for rows.Next() {
 		var a domain.Artifact
 		var t string
-		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Path, &a.Size, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Name, &a.Path, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		a.Type = domain.ArtifactType(t)

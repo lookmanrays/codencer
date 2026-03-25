@@ -88,7 +88,12 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc, "/tmp/artifacts", "/tmp/workspace")
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
+		gatesRepo,
+		artifactsRepo,
+		sqlite.NewValidationsRepo(db),
+		routingSvc,
+		"/tmp/artifacts", "/tmp/workspace")
 
 	ctx := context.Background()
 

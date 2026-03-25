@@ -92,6 +92,7 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	gatesRepo := sqlite.NewGatesRepo(db)
 	artifactsRepo := sqlite.NewArtifactsRepo(db)
 	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
 	
 	adapters := map[string]domain.Adapter{
 		"codex":    codex.NewAdapter(),
@@ -101,8 +102,13 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc, cfg.ArtifactRoot, cfg.WorkspaceRoot)
-	
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, 		gatesRepo,
+		artifactsRepo,
+		validationsRepo,
+		routingSvc,
+		cfg.ArtifactRoot,
+		cfg.WorkspaceRoot,
+	)
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot)
