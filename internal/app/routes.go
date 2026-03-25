@@ -298,10 +298,10 @@ func (h *APIHandler) handleCompatibility(w http.ResponseWriter, r *http.Request)
 	matrix := map[string]interface{}{
 		"tier": 2, // Defaulting to Tier 2: Control features work via CLI/Daemon
 		"adapters": []map[string]interface{}{
-			{"id": "codex", "status": "active", "tier": 3},
-			{"id": "claude", "status": "active", "tier": 3},
-			{"id": "qwen", "status": "active", "tier": 3},
-			{"id": "ide-chat", "status": "active", "tier": 1},
+			{"id": "codex", "status": "active", "tier": 2},
+			{"id": "claude", "status": "active", "tier": 2},
+			{"id": "qwen", "status": "active", "tier": 2},
+			{"id": "ide-chat", "status": "active", "tier": 3},
 		},
 		"environment": map[string]interface{}{
 			"os": os.Getenv("OS"),
