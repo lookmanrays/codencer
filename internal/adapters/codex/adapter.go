@@ -88,6 +88,6 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifa
 	return common.CollectStandardArtifacts(ctx, attemptID, artifactRoot)
 }
 
-func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
+func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	return common.NormalizeStandardResult(attemptID, artifacts)
 }

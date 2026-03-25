@@ -48,3 +48,26 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Process Introspection**: CLI-wrapped adapters provide limited visibility beyond standard streams.
 - **Simulation Limits**: Simulation Mode stubs all actions; it validates the orchestrator's state-machine but does not test real agent logic.
 - **IDE-Chat**: Proxy-mediated support means the daemon does not have deep native control over IDE-specific chat internals.
+
+## Relay Contract Audit (Micro-task)
+
+### Current contract-related files
+- **Domain (Go)**: `internal/domain/{task,result_spec,run,step,attempt,policy,benchmark}.go`
+- **Schemas (JSON)**: `schemas/{task,result,policy}.schema.json`
+- **Docs**: `docs/05_dsl_and_mcp.md`
+
+### Canonical targets
+- **TaskPayload**: `internal/domain.TaskSpec` (The source of truth for adapter instructions) [HARDENED]
+- **ResultPayload**: `internal/domain.ResultSpec` (The source of truth for agent outcomes) [HARDENED]
+- **State Enum**: `internal/domain.StepState` (Standardized across all layers)
+
+### Conflicts & Gaps (Resolved for Input)
+- **Model Inconsistency**: [RESOLVED] `Result` in `attempt.go` has been deprecated in favor of the comprehensive `ResultSpec`.
+- **Schema Lag**: [RESOLVED] `schemas/task.schema.json` now includes all fields from Go `TaskSpec` including `timeout_seconds` and `is_simulation`.
+- **Property Mismatch**: [RESOLVED] `schemas/result.schema.json` and `ResultSpec` now use standardized `state` and include raw outputs.
+- **Simulation Leakage**: [RESOLVED] `is_simulation` explicitly added to the canonical input `TaskSpec`.
+
+### State & Simulation Hardening (Micro-task)
+
+- **State Semantics**: [RESOLVED] Standardized on 11 discrete states in `internal/domain/step.go`. Added `timeout` and `needs_manual_attention` to the core vocabulary.
+- **Simulation Semantics**: [RESOLVED] Explicitly separated simulation data in benchmarks. Added machine-readable `is_simulation` flag to all relay results. Documentation now clearly distinguishes simulation from real execution.

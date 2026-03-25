@@ -84,3 +84,13 @@
 - [x] Produced Feature Status Matrix in `GAP_AUDIT.md`.
 - [x] Formalized Reviewer Guide in `README.md`.
 - [x] Qualified all project maturity claims with technical honesty.
+
+## Phase 13: Relay Contract Consolidation (Completed)
+- [x] Audit existing task/input/result/state contracts (Micro-task complete)
+- [x] Define canonical planner-facing input contract (TaskSpec)
+- [x] Synchronize ResultSpec JSON schema with Go domain models
+- [x] Create canonical relay-facing result scaffold
+
+## Phase 14: State & Simulation Clarification (Completed)
+- [x] Clarify execution state semantics (timeout, needs_manual_attention)
+- [x] Formalize simulation semantics in output contract and documentation

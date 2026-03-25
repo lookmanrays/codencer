@@ -21,4 +21,6 @@ type TaskSpec struct {
 	StopConditions  []string            `json:"stop_conditions" yaml:"stop_conditions"`
 	PolicyBundle    string              `json:"policy_bundle" yaml:"policy_bundle"`
 	AdapterProfile  string              `json:"adapter_profile" yaml:"adapter_profile"`
+	TimeoutSeconds  int                 `json:"timeout_seconds" yaml:"timeout_seconds"`
+	IsSimulation    bool                `json:"is_simulation" yaml:"is_simulation"`
 }

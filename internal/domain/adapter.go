@@ -22,5 +22,5 @@ type Adapter interface {
 	CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*Artifact, error)
 	
 	// NormalizeResult parses the raw outputs into a normalized domain Result
-	NormalizeResult(ctx context.Context, attemptID string, artifacts []*Artifact) (*Result, error)
+	NormalizeResult(ctx context.Context, attemptID string, artifacts []*Artifact) (*ResultSpec, error)
 }

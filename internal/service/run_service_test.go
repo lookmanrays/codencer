@@ -50,9 +50,9 @@ func (m *MockAdapter) CollectArtifacts(ctx context.Context, attemptID, artifactR
 	return arts, nil
 }
 
-func (m *MockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
+func (m *MockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	// Provide a successful domain result
-	return &domain.Result{
+	return &domain.ResultSpec{
 		State:              domain.StepStateCompleted,
 		Summary:            "Test Result",
 		NeedsHumanDecision: true,

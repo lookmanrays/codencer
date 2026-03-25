@@ -15,7 +15,7 @@ type PolicyEvaluation struct {
 }
 
 // Evaluate step execution artifacts & outcomes against a policy to determine the next action.
-func Evaluate(p *domain.Policy, result *domain.Result, changedFiles []string) PolicyEvaluation {
+func Evaluate(p *domain.Policy, result *domain.ResultSpec, changedFiles []string) PolicyEvaluation {
 	var eval PolicyEvaluation
 
 	// Check failures

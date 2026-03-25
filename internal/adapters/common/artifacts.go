@@ -61,8 +61,8 @@ func CollectStandardArtifacts(ctx context.Context, attemptID string, artifactRoo
 	return artifacts, nil
 }
 
-// NormalizeStandardResult parses a standard result.json into domain.Result.
-func NormalizeStandardResult(attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
+// NormalizeStandardResult parses a standard result.json into domain.ResultSpec.
+func NormalizeStandardResult(attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	var resultPath string
 	for _, art := range artifacts {
 		if art.Type == "result_json" {
@@ -80,7 +80,7 @@ func NormalizeStandardResult(attemptID string, artifacts []*domain.Artifact) (*d
 		return nil, fmt.Errorf("failed to read result JSON at %s: %w", resultPath, err)
 	}
 
-	var res domain.Result
+	var res domain.ResultSpec
 	if err := json.Unmarshal(data, &res); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal result JSON: %w", err)
 	}

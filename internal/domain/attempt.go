@@ -10,16 +10,8 @@ type Attempt struct {
 	StepID    string
 	Number    int
 	Adapter   string
-	Result    *Result
+	Result    *ResultSpec
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-// Result summarizes what happened in an Attempt.
-type Result struct {
-	State               StepState `json:"state"`
-	Summary             string    `json:"summary"`
-	NeedsHumanDecision  bool      `json:"needs_human_decision"`
-	Warnings            []string  `json:"warnings"`
-	Questions           []string  `json:"questions"`
-}

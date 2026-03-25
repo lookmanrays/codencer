@@ -59,3 +59,10 @@
 - [x] Audit vocabulary alignment (Completed/Failed).
 - [x] Remove character artifacts and stale comments.
 - [x] Update documentation for retroactive truthfulness.
+
+- [x] Ensure MCP tools use canonical schema validation logic.
+
+## Phase 14 — State & Simulation Clarification [COMPLETE]
+- [x] Standardize `StepState` vocabulary (timeout, needs_manual_attention).
+- [x] Document explicit simulation semantics and contract representation.
+- [x] Align schemas and examples with clarified state/simulation fields.

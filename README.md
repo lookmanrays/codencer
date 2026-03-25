@@ -14,6 +14,14 @@ Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic
 2. **Idempotency**: Runs and attempts are carefully ledgered; interrupted tasks can be resumed or securely analyzed post-crash.
 3. **Traceability**: All outputs (stdout, result.json, diffs) are meticulously persisted per-attempt in the artifact store.
 
+## The Relay Model
+
+Codencer operates as a **Relay** between two distinct planes:
+- **Planner (Control Plane)**: The entity that decides *what* to do (e.g., an LLM, a human, or a complex MCP client). It submits a `TaskSpec`.
+- **Bridge (Execution Plane)**: Codencer itself. It performs the work using an **Adapter**, enforces **Policies**, and returns a **ResultSpec**.
+
+The Bridge is intentionally "dumb" regarding planning — it does not decide next steps, it only executes and reports.
+
 ## Current State: MVP / Beta
 
 **Phase 1 MVP (Complete):**

@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS attempts (
 	questions TEXT,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
+	files_changed TEXT,
+	raw_output TEXT,
+	raw_output_ref TEXT,
+	is_simulation BOOLEAN NOT NULL DEFAULT 0,
+	retryable BOOLEAN NOT NULL DEFAULT 0,
 	FOREIGN KEY (step_id) REFERENCES steps(id) ON DELETE CASCADE
 );
 
@@ -132,6 +137,11 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE benchmarks ADD COLUMN is_simulation BOOLEAN NOT NULL DEFAULT 0",
 		"ALTER TABLE attempts ADD COLUMN state TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE validations ADD COLUMN state TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE attempts ADD COLUMN files_changed TEXT",
+		"ALTER TABLE attempts ADD COLUMN raw_output TEXT",
+		"ALTER TABLE attempts ADD COLUMN raw_output_ref TEXT",
+		"ALTER TABLE attempts ADD COLUMN is_simulation BOOLEAN NOT NULL DEFAULT 0",
+		"ALTER TABLE attempts ADD COLUMN retryable BOOLEAN NOT NULL DEFAULT 0",
 	}
 
 	for _, m := range extraMigrations {

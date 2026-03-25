@@ -15,8 +15,10 @@ const (
 	StepStateCompleted             StepState = "completed"
 	StepStateCompletedWithWarnings StepState = "completed_with_warnings"
 	StepStateNeedsApproval         StepState = "needs_approval"
+	StepStateNeedsManualAttention  StepState = "needs_manual_attention"
 	StepStateFailedRetryable       StepState = "failed_retryable"
 	StepStateFailedTerminal        StepState = "failed_terminal"
+	StepStateTimeout               StepState = "timeout"
 	StepStateCancelled             StepState = "cancelled"
 )
 
@@ -36,7 +38,7 @@ type Step struct {
 // IsTerminal returns true if the step has reached a final state.
 func (s StepState) IsTerminal() bool {
 	switch s {
-	case StepStateCompleted, StepStateCompletedWithWarnings, StepStateFailedTerminal, StepStateCancelled:
+	case StepStateCompleted, StepStateCompletedWithWarnings, StepStateFailedTerminal, StepStateTimeout, StepStateCancelled:
 		return true
 	default:
 		return false

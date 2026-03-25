@@ -101,7 +101,7 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID, artifactRoot 
 	return artifacts, nil
 }
 
-func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.Result, error) {
+func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	var resultFile string
 	for _, art := range artifacts {
 		if art.Type == "result_json" {
@@ -136,7 +136,7 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 		status = domain.StepStateFailedTerminal
 	}
 
-	return &domain.Result{
+	return &domain.ResultSpec{
 		State:              status,
 		Summary:            payload.Summary,
 		NeedsHumanDecision: false,

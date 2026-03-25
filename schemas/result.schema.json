@@ -1,15 +1,50 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ResultSpec",
+  "description": "Canonical execution result contract for the bridge.",
   "type": "object",
-  "required": ["version", "status", "summary"],
+  "required": ["version", "run_id", "step_id", "state", "summary"],
   "properties": {
-    "version": { "type": "string" },
-    "status": {
+    "version": { "type": "string", "example": "v1" },
+    "run_id": { "type": "string" },
+    "phase_id": { "type": "string" },
+    "step_id": { "type": "string" },
+    "attempt_id": { "type": "string" },
+    "adapter": { "type": "string" },
+    "state": {
       "type": "string",
-      "enum": ["completed", "failed", "retryable_failure"]
+      "enum": [
+        "pending",
+        "dispatching",
+        "running",
+        "collecting_artifacts",
+        "validating",
+        "completed",
+        "completed_with_warnings",
+        "needs_approval",
+        "needs_manual_attention",
+        "failed_retryable",
+        "failed_terminal",
+        "timeout",
+        "cancelled"
+      ]
     },
     "summary": { "type": "string" },
+    "files_changed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "validations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "passed": { "type": "boolean" }
+        }
+      }
+    },
     "needs_human_decision": { "type": "boolean" },
     "warnings": {
       "type": "array",
@@ -18,6 +53,19 @@
     "questions": {
       "type": "array",
       "items": { "type": "string" }
-    }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "raw_output": { "type": "string" },
+    "raw_output_ref": { "type": "string" },
+    "is_simulation": { 
+      "type": "boolean",
+      "description": "True if this result was produced in simulation mode (orchestrator validation only)."
+    },
+    "retryable": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
   }
 }

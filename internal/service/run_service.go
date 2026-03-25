@@ -142,7 +142,7 @@ func (s *RunService) GetValidationsByAttempt(ctx context.Context, attemptID stri
 }
 
 // GetResultByStep returns the result of the latest attempt for a step.
-func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domain.Result, error) {
+func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domain.ResultSpec, error) {
 	step, err := s.stepsRepo.Get(ctx, stepID)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 	}
 	if len(attempts) == 0 {
 		// Return a pending result structure if no attempts yet
-		return &domain.Result{
+		return &domain.ResultSpec{
 			State:   step.State,
 			Summary: "No attempts executed for this step yet.",
 		}, nil
@@ -166,7 +166,7 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 	// ListByStep orders by number ASC. The last one is the latest attempt.
 	latest := attempts[len(attempts)-1]
 	if latest.Result == nil {
-		return &domain.Result{
+		return &domain.ResultSpec{
 			State:   step.State,
 			Summary: fmt.Sprintf("Latest attempt %s is still in progress or failed before result normalization.", latest.ID),
 		}, nil
@@ -286,9 +286,9 @@ func (s *RunService) initializeStep(ctx context.Context, step *domain.Step) erro
 	return nil
 }
 
-func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *domain.Step, fallbackChain []string) (*domain.Result, PolicyEvaluation, error) {
+func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *domain.Step, fallbackChain []string) (*domain.ResultSpec, PolicyEvaluation, error) {
 	const maxAttempts = 3
-	var finalResult *domain.Result
+	var finalResult *domain.ResultSpec
 	var finalEval PolicyEvaluation
 	policy := s.policyRegistry.Lookup(step.Policy)
 
@@ -354,7 +354,7 @@ func (s *RunService) createAttempt(ctx context.Context, step *domain.Step, attem
 	return attempt, nil
 }
 
-func (s *RunService) logBenchmark(ctx context.Context, phaseID, attemptID, adapterID string, res *domain.Result, durationMs int64, isSimulation bool) {
+func (s *RunService) logBenchmark(ctx context.Context, phaseID, attemptID, adapterID string, res *domain.ResultSpec, durationMs int64, isSimulation bool) {
 	benchScore := &domain.BenchmarkScore{
 		ID:             fmt.Sprintf("bench-%s", attemptID),
 		Adapter:        adapterID,
@@ -376,7 +376,7 @@ func (s *RunService) logBenchmark(ctx context.Context, phaseID, attemptID, adapt
 	_ = s.routingSvc.benchmarksRepo.Save(context.Background(), benchScore)
 }
 
-func (s *RunService) shouldRetry(res *domain.Result, policy *domain.Policy, attemptNum, maxAttempts int) bool {
+func (s *RunService) shouldRetry(res *domain.ResultSpec, policy *domain.Policy, attemptNum, maxAttempts int) bool {
 	if res == nil {
 		return false
 	}
@@ -399,7 +399,7 @@ func (s *RunService) executeAttempt(
 	attempt *domain.Attempt,
 	adapter domain.Adapter,
 	policy *domain.Policy,
-) (*domain.Result, PolicyEvaluation, error) {
+) (*domain.ResultSpec, PolicyEvaluation, error) {
 	// 1. Setup Environment
 	workspaceRoot := fmt.Sprintf("%s/%s", s.workspaceRoot, runID)
 	baseRepo := "."
@@ -411,7 +411,7 @@ func (s *RunService) executeAttempt(
 	// Acquire exclusive lock for this run's workspace
 	lock, err := workspace.AcquireLock(s.workspaceRoot, runID)
 	if err != nil {
-		attempt.Result = &domain.Result{State: domain.StepStateFailedRetryable, Summary: "Workspace lock conflict: " + err.Error()}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Workspace lock conflict: " + err.Error()}
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -421,7 +421,7 @@ func (s *RunService) executeAttempt(
 	
 	if err := workspace.CreateWorktree(ctx, baseRepo, workspaceRoot, branchName); err != nil {
 		slog.Error("Failed to create worktree", "runID", runID, "error", err)
-		attempt.Result = &domain.Result{
+		attempt.Result = &domain.ResultSpec{
 				State:   domain.StepStateFailedTerminal,
 				Summary: fmt.Sprintf("Adapter dispatch failed: %v", err),
 		}
@@ -435,7 +435,7 @@ func (s *RunService) executeAttempt(
 
 	// 2. Start Execution
 	if err := adapter.Start(ctx, attempt, workspaceRoot, s.artifactRoot); err != nil {
-		attempt.Result = &domain.Result{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -452,7 +452,7 @@ func (s *RunService) executeAttempt(
 	// 4. Collect & Normalize
 	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, s.artifactRoot)
 	if err != nil {
-		attempt.Result = &domain.Result{State: domain.StepStateFailedRetryable, Summary: "Artifact collection failed: " + err.Error()}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Artifact collection failed: " + err.Error()}
 	} else {
 		for _, art := range artifacts {
 			_ = s.artifactsRepo.Create(ctx, art)
@@ -460,7 +460,7 @@ func (s *RunService) executeAttempt(
 		
 		res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts)
 		if err != nil {
-			attempt.Result = &domain.Result{State: domain.StepStateFailedRetryable, Summary: "Normalization failed: " + err.Error()}
+			attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Normalization failed: " + err.Error()}
 		} else {
 			attempt.Result = res
 		}
@@ -491,7 +491,7 @@ func (s *RunService) finalizeStep(
 	ctx context.Context,
 	runID string,
 	step *domain.Step,
-	finalResult *domain.Result,
+	finalResult *domain.ResultSpec,
 	eval PolicyEvaluation,
 ) error {
 	
@@ -536,7 +536,7 @@ func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, at
 		case <-pollTicker.C:
 			running, err := adapter.Poll(ctx, attempt.ID)
 			if err != nil {
-				attempt.Result = &domain.Result{State: domain.StepStateFailedTerminal, Summary: err.Error()}
+				attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedTerminal, Summary: err.Error()}
 				_ = repo.UpdateResult(ctx, attempt)
 				return false
 			}

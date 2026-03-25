@@ -1,0 +1,39 @@
+{
+  "version": "v1",
+  "project_id": "codencer-internal",
+  "run_id": "run-20240326-001",
+  "phase_id": "phase-relay-hardening",
+  "step_id": "step-define-contract",
+  "title": "Define Canonical Execution Contract",
+  "goal": "Refine the TaskSpec to serve as the primary relay-facing input contract for the bridge.",
+  "context": {
+    "summary": "The bridge needs a clear, standardized input that separates planner intent from execution control."
+  },
+  "constraints": [
+    "Do not introduce breaking changes to the orchestration state machine.",
+    "Ensure the contract is provider-neutral."
+  ],
+  "allowed_paths": [
+    "internal/domain/task.go",
+    "schemas/task.schema.json",
+    "docs/05_dsl_and_mcp.md"
+  ],
+  "forbidden_paths": [
+    "internal/service/*",
+    "internal/adapters/*"
+  ],
+  "validations": [
+    {
+      "name": "domain-tests",
+      "command": "go test ./internal/domain/..."
+    }
+  ],
+  "acceptance": [
+    "TaskSpec has timeout_seconds and is_simulation fields.",
+    "JSON schema matches the Go struct."
+  ],
+  "policy_bundle": "default_safe_refactor",
+  "adapter_profile": "claude",
+  "timeout_seconds": 600,
+  "is_simulation": false
+}

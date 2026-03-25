@@ -10,7 +10,11 @@ The DSL should make each step:
 - policy-aware
 - provider-neutral
 
-## TaskSpec example
+## TaskSpec (Execution Request)
+
+The `TaskSpec` is the canonical contract sent by a **Planner** to the **Bridge**. It defines exactly WHAT needs to be done and the BOUNDARIES of that execution. The Bridge acts as a deterministic relay and executor, ensuring policies are enforced without making planning decisions.
+
+### TaskSpec example
 
 ```yaml
 version: v1
@@ -47,6 +51,8 @@ stop_conditions:
   - State machine must be rewritten.
 policy_bundle: safe_refactor
 adapter_profile: codex-default
+timeout_seconds: 300
+is_simulation: false
 ```
 
 ## ResultSpec example
@@ -60,6 +66,7 @@ adapter_profile: codex-default
   "attempt_id": "attempt-01",
   "adapter": "codex",
   "state": "completed_with_warnings",
+  "is_simulation": false,
   "summary": "Implemented Codex adapter invocation and result normalization.",
   "files_changed": [
     "internal/adapters/codex/adapter.go",
@@ -102,6 +109,30 @@ retry_when:
 fail_when:
   timeout_count_over: 2
   artifact_persistence_failed: true
+```
+
+## Execution States
+
+The `state` field in `ResultSpec` uses a standardized vocabulary to communicate the outcome of an execution attempt:
+
+- **pending**: Execution has not yet started.
+- **running**: The adapter process is currently active.
+- **completed**: The task was finished successfully according to the adapter.
+- **completed_with_warnings**: The task finished, but minor issues (like lint errors) were detected.
+- **failed_retryable**: A transient failure occurred; the planner may attempt a retry.
+- **failed_terminal**: A permanent failure occurred.
+- **timeout**: The execution exceeded the `timeout_seconds` limit.
+- **cancelled**: The execution was explicitly aborted by the planner/user.
+- **needs_manual_attention**: The adapter or policy engine requires human intervention (e.g., a critical safety gate was tripped).
+
+## Simulation Semantics
+
+Simulation mode (`is_simulation: true`) is a first-class citizen in the Codencer ecosystem. It allows planners to:
+1. Verify the end-to-end orchestration state machine.
+2. Test policy enforcement without executing heavy local binaries.
+3. Validate UI and notification flows.
+
+**IMPORTANT**: Simulation results are produced by stub adapters and do NOT represent real agency. Telemetry from simulated runs is kept separate in the benchmark ledger to ensure historical performance data remains honest.
 ```
 
 ## MCP tool surface
