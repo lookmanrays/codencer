@@ -1,4 +1,4 @@
-# Codencer Orchestration Bridge
+# Codencer Orchestration Bridge (MVP)
 
 Codencer is a local-first orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by autonomous agents. It acts as the system of record between the Planner (MCP clients or LLMs) and the underlying Adapters (Codex, Claude, Qwen).
 
@@ -14,12 +14,12 @@ Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic
 2. **Idempotency**: Runs and attempts are carefully ledgered; interrupted tasks can be resumed or securely analyzed post-crash.
 3. **Traceability**: All outputs (stdout, result.json, diffs) are meticulously persisted per-attempt in the artifact store.
 
-## Current State & Maturity (Phase 2)
+## Current State: MVP / Beta
 
 **Phase 1 MVP (Complete):**
 The foundational orchestration shell is fully operational. A persistent SQLite ledger, an initial state-machine loop, workspace isolation via Git Worktrees, basic MCP tool mapping, and a scaffolding IDE extension have all been implemented.
 
-**Phase 2 Production Hardening (Active):**
+**Phase 2 System Hardening (Active):**
 While structurally sound, the bridge is transitioning from "simulated correctness" to "native reliability" by:
 1. **Dismantling Monoliths**: [RESOLVED] Transitioned `DispatchStep` into discrete, fault-tolerant lifecycle coordinators.
 2. **Honest Adapter Contracts**: [RESOLVED] Standardized Codex, Claude, and Qwen adapters via a unified execution core (`internal/adapters/common`). Adapters now explicitly detect missing binaries and separate simulation and real execution.
@@ -28,7 +28,7 @@ While structurally sound, the bridge is transitioning from "simulated correctnes
 5. **Interactive Integrations**: [RESOLVED] Converted the VS Code UI into an active Control Plane for Gate resolution and workflow retracing.
 
 **Phase 5 Orchestration & MCP Correctness (Complete):**
-The core execution engine has been hardened for production-grade reliability. Key improvements include:
+The core execution engine has been refined for improved reliability. Key improvements include:
 1. **Lifecycle Decomposition**: `RunService.DispatchStep` is now a modular coordinator with clear attempt-loop and environment-setup boundaries.
 2. **MCP Identity Correctness**: Resolved critical bugs in Step Retry logic to ensure correct RunID propagation.
 3. **Structured MCP Payloads**: All tool outputs now return machine-usable JSON, enabling better automated planning.
@@ -42,7 +42,7 @@ Hardened task telemetry and routing behavior for architectural honesty.
 4. **Deterministic Fallbacks**: [RESOLVED] Enforced clear, auditable fallback paths when primary adapters are unavailable or fail.
 
 **Phase 11 Consistency & Polish (Complete):**
-Final hardening pass of the initial roadmap. All internal terminology has been standardized, build integrity has been verified via internal integration tests, and documentation has been updated for complete technical honesty.
+Final consistency pass of the initial roadmap. All internal terminology has been standardized and documentation has been updated for technical honesty as a functional MVP.
 
 ## Known Limitations
 
@@ -51,6 +51,7 @@ Codencer is a local orchestration bridge, not an autonomous agent or a cloud-sca
 2. **CLI Wrapper Adapters**: Adapters (Codex, Claude, Qwen) operate as CLI wrappers. They require local binary presence and do not provide deeper process-level introspection beyond what the CLI tool exposes.
 3. **Implicit Benchmarking**: Benchmarking currently relies on heuristic scoring from result summaries and duration; deeper semantic evaluation is part of the long-term roadmap.
 4. **Interactive Shells**: Persistent, stateful interactive shells within an adapter attempt are currently explicitly unsupported.
+5. **Maturity**: This tool is currently in **Beta/MVP** state and should be used as an internal or experimental orchestration sidecar.
 
 > **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.
 ## Reviewer Summary & Verification

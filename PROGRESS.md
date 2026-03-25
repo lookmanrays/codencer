@@ -8,7 +8,7 @@
 - [x] Skeleton VS Code Extension
 - [x] Local Adapter Subprocess wrappers (Codex)
 
-## Phase 2: Runtime Hardening & Production Polish (Completed)
+## Phase 2: Runtime Hardening & MVP Refinement (Completed)
 - [x] Refactor & Strengthen Orchestration Runtime
 - [x] Make Codex Path Honest and Robust
 - [x] Artifact, Result, and Validation Retrieval

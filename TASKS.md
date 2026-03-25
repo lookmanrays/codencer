@@ -22,7 +22,7 @@
 - [x] Terminology: Rename `Result.Status` to `Result.State` for cross-model consistency.
 - [x] Service: Repair `finalizeStep` to correctly integrate policy evaluation and gating.
 - [x] Testing: Fix test regressions and ensure reliable simulation behavior.
-- [x] Docs: Finalize README and SETUP guides for external review.
+- [x] Docs: Finalize README and SETUP guides for MVP hardening review.
 - [x] Persist or explicitly bind execution policy per step/run.
 - [x] Real changed-file detection feeding policy evaluation.
 - [x] Cleaner gate reason generation natively tied to policy rules.

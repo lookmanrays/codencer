@@ -3,7 +3,7 @@
 ## Current Reality
 The repository contains a functionally operational MVP implementation of the orchestration bridge. It successfully integrates a SQLite ledger, a robust state machine, a `DispatchStep` orchestrator loop, CLI endpoints, basic MCP routes, and a skeletal VS Code extension.
 
-However, a rigorous audit reveals the following significant gaps separating the MVP from a "production-ready" local tool:
+However, a rigorous audit reveals the following gaps to address for a more feature-complete MVP:
 
 1. **Orchestration Workflow is Decomposed**: [RESOLVED] `RunService.DispatchStep` has been refactored into modular `initialize`, `runAttemptLoop`, and `finalize` stages.
 2. **Adapter Paths are Hardened**: [RESOLVED] Unified adapter core implemented in `internal/adapters/common`. Mandatory binary checks enforced; simulation is explicitly separated and auditable. Hardcoded artifacts replaced with real filesystem collection for all adapters including Qwen.
@@ -27,11 +27,11 @@ However, a rigorous audit reveals the following significant gaps separating the 
 | **VS Code Extension** | Complete | Native | Functional tree-view and action surface. |
 | **Recovery Engine** | Complete | Native | Decision-based reconciliation for stale runs. |
 | **Benchmarking** | Complete | Native | Simulation-aware performance telemetry. |
-| **Routing** | Complete | Heuristic | Deterministic fallback chain (not ML optimized). |
+| **Routing** | Functional | Heuristic | Deterministic static fallback chain; not yet benchmark-driven. |
 | **Codex Adapter** | Functional | CLI Wrapper | Requires local `codex` binary. |
 | **Claude Adapter** | Functional | CLI Wrapper | Requires local `claude-code` binary. |
 | **Qwen Adapter** | Functional | CLI Wrapper | Requires local `qwen` / `aider` binary. |
-| **IDE Chat Adapter** | Partial | Proxy/Stub | Currently serves as an extension-bound proxy. |
+| **IDE Chat Adapter** | Partial | Proxy-Mediated | Experimental extension-bound file proxy. |
 
 ## Verification Status
 
@@ -39,11 +39,12 @@ However, a rigorous audit reveals the following significant gaps separating the 
 | :--- | :--- | :--- |
 | **Build** | PASS | Linux / Go 1.21+ |
 | **Unit Tests** | PASS | Isolated via `t.TempDir` |
-| **E2E Flow** | PASS | Verified via Simulation Mode |
+| **E2E Flow** | PASS | Verified via Simulation Mode (Mocked behavior) |
 | **API Endpoints** | PASS | Verified in `api_test.go` |
-| **Extension** | PASS | Verified via manual VS Code sideload |
+| **Extension** | PASS | Verified via manual VS Code sideload (Beta) |
 
 ## Known Technical Debt & Limitations
-- **Adaptive Routing**: The system uses a static heuristic chain; dynamic benchmark-driven optimization is deferred.
-- **Process Introspection**: Since adapters are CLI wrappers, we cannot see intra-process state beyond stdout/stderr.
-- **Telemetry Depth**: Benchmark metrics are limited to duration and validation pass-rates.
+- **Adaptive Routing**: Routing is currently based on a static heuristic chain; benchmark-driven optimization is documented but not dynamic.
+- **Process Introspection**: CLI-wrapped adapters provide limited visibility beyond standard streams.
+- **Simulation Limits**: Simulation Mode stubs all actions; it validates the orchestrator's state-machine but does not test real agent logic.
+- **IDE-Chat**: Proxy-mediated support means the daemon does not have deep native control over IDE-specific chat internals.

@@ -58,9 +58,9 @@ Goal:
 - package extension for compatible editors
 - validate compatibility empirically
 
-### Stage 3 — targeted IDE chat adapter
+### Stage 3 — targeted IDE chat adapter (Proxy-Mediated)
 Goal:
-- one supported IDE/agent chat bridge only
+- one supported IDE/agent chat bridge only (targeted file-proxy or buffer-mediated)
 
 Priority order:
 1. command/API integration

@@ -1,6 +1,6 @@
 # Setup Guide
 
-This guide describes how to set up and run the Codencer Orchestration Bridge locally.
+This guide describes how to set up and run the Codencer MVP Orchestration Bridge locally.
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ You can run the daemon directly or via simulation:
 ./bin/orchestratord
 ```
 
-**Simulation Mode (Recommended for testing):**
+**Simulation Mode (Recommended for MVP verification):**
 ```bash
 make simulate
 ```
@@ -62,12 +62,14 @@ Once the daemon is running, use `orchestratorctl` to manage runs:
 
 **Start a Run:**
 ```bash
-./bin/orchestratorctl run start --project "my-proj"
+# orchestratorctl run start <id> <project_id>
+./bin/orchestratorctl run start my-run my-proj
 ```
 
 **Dispatch a Step:**
 ```bash
-./bin/orchestratorctl step dispatch --run-id <run-id> --title "Fix bug" --goal "Modify main.go" --adapter "codex"
+# orchestratorctl step start <runID> <taskFile.yaml>
+./bin/orchestratorctl step start my-run task.yaml
 ```
 
 **Resolve a Gate:**
