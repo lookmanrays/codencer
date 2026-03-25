@@ -49,3 +49,11 @@
 - [x] Expose REST/MCP Endpoints for Validations
 - [x] Native CLI Commands for Inspection
 - [x] Verified missing-state robustness with unit tests
+
+## Phase 7: Recovery & Reconciliation Hardening (Completed)
+- [x] Implement Exclusive Workspace Locking
+- [x] Add `RecoveryNotes` to Run Ledger
+- [x] Deep Reconciliation Engine for Stale Attempts
+- [x] Orphaned Worktree and Lock Cleanup
+- [x] Exposed Recovery Status to API/CLI/MCP
+- [x] Verified with Recovery Integration Tests

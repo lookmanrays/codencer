@@ -83,3 +83,27 @@ func CaptureChangedFiles(ctx context.Context, worktreePath string) ([]string, er
 
 	return changed, nil
 }
+
+// ListWorktrees returns a list of paths for all active linked worktrees.
+func ListWorktrees(ctx context.Context, baseRepoPath string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
+	cmd.Dir = baseRepoPath
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w. output: %s", err, string(out))
+	}
+
+	var worktrees []string
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "worktree ") {
+			path := strings.TrimPrefix(line, "worktree ")
+			worktrees = append(worktrees, strings.TrimSpace(path))
+		}
+	}
+	return worktrees, nil
+}

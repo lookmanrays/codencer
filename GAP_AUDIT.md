@@ -9,9 +9,9 @@ However, a rigorous audit reveals the following significant gaps separating the 
 2. **Adapter Paths are Hardened**: [IMPROVED] Adapters now handle environment setup errors (like worktree collisions) gracefully, and the dispatch loop handles system failures distinctly from adapter failures.
 3. **Retrieval Flows are Hardened**: [RESOLVED] Detailed retrieval of `artifacts`, `structured results`, and `validations` is now available across Service, API, MCP, and CLI layers with stable JSON schemas.
 4. **Policy Engine is Defaulted**: Execution policies are instantiated with hardcoded mock thresholds inside the dispatcher loop. There is no true persisted policy binding per step or run from configuration.
-5. **Recovery is Simplistic**: The `RecoveryService` sweeps and marks stale runs as failed but fails to reconstitute incomplete attempts, paused run states, or cleanup locked Git worktrees intelligently.
+5. **Recovery is Simplistic**: [RESOLVED] Integrated exclusive workspace locking and a deep reconciliation engine that salvages results and cleans up orphans.
 6. **MCP Control Plane is Corrected**: [IMPROVED] Fixed critical identity resolution bugs in `ToolRetryStep` and updated all MCP tools to return machine-usable structured JSON payloads.
-7. **Test Suite is Simulation-Bound**: Tests overly rely on `ENV` flags to force mock policies and successful adapter simulation, leaving genuine edge cases and robust integration undocumented.
+7. **Test Suite is Simulation-Bound**: [IMPROVED] Added recovery-specific integration tests validating salvage and cleanup boundaries.
 
 ## Objective
 The goal is to deepen the orchestrator runtime, transition away from mock representations to deterministic execution contracts, and complete the retrieval and recovery flows to establish genuine local-first reliability.

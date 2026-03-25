@@ -21,7 +21,8 @@ type Run struct {
 	ProjectID string
 	State     RunState
 	CreatedAt time.Time
-	UpdatedAt time.Time
+	UpdatedAt     time.Time
+	RecoveryNotes string
 	
 	// Relationships
 	Phases []*Phase

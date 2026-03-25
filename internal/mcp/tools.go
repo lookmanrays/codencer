@@ -30,6 +30,7 @@ func (s *Server) ToolStartRun(ctx context.Context, args map[string]interface{}) 
 		"run_id":     run.ID,
 		"project_id": run.ProjectID,
 		"state":      run.State,
+		"recovery_notes": run.RecoveryNotes,
 	}, nil
 }
 
@@ -57,6 +58,7 @@ func (s *Server) ToolGetStatus(ctx context.Context, args map[string]interface{})
 		},
 		"run_id": run.ID,
 		"state":  run.State,
+		"recovery_notes": run.RecoveryNotes,
 	}, nil
 }
 

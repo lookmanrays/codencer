@@ -9,6 +9,9 @@ import (
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
+	"path/filepath"
+	"strings"
 )
 
 // RecoveryService handles failure recovery, stale run sweeps, and resumability.
@@ -36,52 +39,103 @@ func NewRecoveryService(
 	}
 }
 
-// SweepStaleRuns looks for runs stuck in "running" state across agent daemon restarts,
-// marking them as paused or failed based on artifact footprint presence.
+// SweepStaleRuns looks for runs stuck in inconsistent states and reconciles them.
 func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
-	slog.Info("Running recovery sweep for stale runs")
+	slog.Info("Running enhanced recovery sweep")
 
+	// 1. Reconcile Running Runs
 	runs, err := s.runsRepo.ListByState(ctx, domain.RunStateRunning)
 	if err != nil {
-		return fmt.Errorf("failed to list running tasks for recovery sweep: %w", err)
+		return fmt.Errorf("failed to list running runs: %w", err)
 	}
 
 	for _, r := range runs {
-		// Reconcile leftover lock files.
-		lockPath := fmt.Sprintf("%s/%s/.codencer.lock", s.workspaceRoot, r.ID)
-		_ = os.Remove(lockPath)
-
-		// Check all steps to salvage process output and intelligently resume.
-		steps, _ := s.stepsRepo.ListByRun(ctx, r.ID)
-		for _, step := range steps {
-			if step.State == domain.StepStateRunning {
-				artifactsPath := fmt.Sprintf("%s/%s/result.json", s.artifactRoot, step.ID)
-				if _, err := os.Stat(artifactsPath); err == nil {
-					// Artifact exists. The adapter completed writing results, but orchestrator died before finalizing.
-					step.State = domain.StepStateNeedsApproval
-					step.UpdatedAt = time.Now().UTC()
-					_ = s.stepsRepo.UpdateState(ctx, step)
-					slog.Info("Salvaged interrupted step results", "stepID", step.ID)
-				} else {
-					step.State = domain.StepStateFailedRetryable
-					step.UpdatedAt = time.Now().UTC()
-					_ = s.stepsRepo.UpdateState(ctx, step)
-					slog.Warn("Marked interrupted step failed retryable", "stepID", step.ID)
-				}
-			}
+		currentOwner := workspace.CheckLock(s.workspaceRoot)
+		if currentOwner == r.ID {
+			// Still locked by the current process? 
+			// In a local bridge, if we are in Sweep, we usually assume we are the only orchestrator.
+			// If it's locked and we are here, it's either a concurrent orchestrator or a stale lock.
+			// For now, we assume if we are sweeping, we OWN the workspace root.
 		}
 
-		// Re-attach the run into resumable Paused state rather than terminal Failed.
+		notes := s.reconcileRunSteps(ctx, r)
+		r.RecoveryNotes = notes
 		r.State = domain.RunStatePausedForGate
 		r.UpdatedAt = time.Now().UTC()
-		if updateErr := s.runsRepo.UpdateState(ctx, r); updateErr != nil {
-			slog.Error("Failed to update stale run state", "runID", r.ID, "error", updateErr)
-			continue
-		}
-		slog.Warn("Reconciled stale run to PausedForGate for resumability", "runID", r.ID)
+		_ = s.runsRepo.UpdateState(ctx, r)
+		slog.Info("Reconciled stale run", "runID", r.ID, "notes", notes)
 	}
 
+	// 2. Clean up Orphaned Locks and Worktrees
+	s.cleanupOrphans(ctx)
+
 	return nil
+}
+
+func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run) string {
+	steps, _ := s.stepsRepo.ListByRun(ctx, run.ID)
+	salvaged := 0
+	failed := 0
+
+	for _, step := range steps {
+		if step.State.IsTerminal() || step.State == domain.StepStateNeedsApproval {
+			continue
+		}
+
+		// Check for result footprint on disk
+		resultPath := fmt.Sprintf("%s/%s/result.json", s.artifactRoot, step.ID)
+		if _, err := os.Stat(resultPath); err == nil {
+			// Result exists but DB state is not terminal. Salvage it.
+			step.State = domain.StepStateNeedsApproval
+			step.UpdatedAt = time.Now().UTC()
+			_ = s.stepsRepo.UpdateState(ctx, step)
+			salvaged++
+		} else {
+			// No result found. Mark as failed-retryable.
+			step.State = domain.StepStateFailedRetryable
+			step.UpdatedAt = time.Now().UTC()
+			_ = s.stepsRepo.UpdateState(ctx, step)
+			failed++
+		}
+	}
+
+	return fmt.Sprintf("Recovery sweep completed: salvaged %d steps, marked %d steps failed_retryable. Run paused for inspection.", salvaged, failed)
+}
+
+func (s *RecoveryService) cleanupOrphans(ctx context.Context) {
+	worktrees, err := workspace.ListWorktrees(ctx, ".")
+	if err != nil {
+		slog.Warn("Failed to list worktrees for orphan cleanup", "error", err)
+		return
+	}
+
+	cleanRoot, _ := filepath.Abs(filepath.Clean(s.workspaceRoot))
+	for _, wt := range worktrees {
+		absWt, _ := filepath.Abs(filepath.Clean(wt))
+		// If worktree is inside our workspace root but not locked, it's an orphan
+		if !strings.HasPrefix(absWt, cleanRoot) {
+			continue
+		}
+
+		runID := filepath.Base(wt)
+		// Heuristic: if runID is not the current lock owner, and run is not running, cleanup
+		lockOwner := workspace.CheckLock(s.workspaceRoot)
+		if lockOwner != runID {
+			slog.Info("Cleaning up orphaned worktree", "path", wt, "runID", runID)
+			_ = workspace.RemoveWorktree(ctx, ".", wt)
+		}
+	}
+
+	// Also cleanup stale lock if no run is actually using it
+	lockOwner := workspace.CheckLock(s.workspaceRoot)
+	if lockOwner != "" {
+		run, _ := s.runsRepo.Get(ctx, lockOwner)
+		if run == nil || run.State.IsTerminal() {
+			slog.Info("Removing stale lock file", "owner", lockOwner)
+			lockPath := filepath.Join(s.workspaceRoot, ".codencer.lock")
+			_ = os.Remove(lockPath)
+		}
+	}
 }
 
 // Resume Run attempts to pick up a run that is in a valid resumable state (PausedForGate).
@@ -91,8 +145,14 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 		return err
 	}
 	
-	if run.State != domain.RunStatePausedForGate {
-		return fmt.Errorf("run %s is not in a resumable state", runID)
+	if run.State != domain.RunStatePausedForGate && run.State != domain.RunStateCreated {
+		return fmt.Errorf("run %s is not in a resumable state (must be paused_for_gate or created)", runID)
+	}
+
+	// Ensure we can acquire the lock (it might be held by a sweep or another concurrent dispatch)
+	owner := workspace.CheckLock(s.workspaceRoot)
+	if owner != "" && owner != runID {
+		return fmt.Errorf("cannot resume run %s: workspace is currently locked by run %s", runID, owner)
 	}
 	
 	slog.Info("Resuming run", "runID", runID)

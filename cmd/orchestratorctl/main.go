@@ -125,7 +125,16 @@ func runStatus(id string) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Run status:\n%s\n", string(body))
+	var run map[string]interface{}
+	_ = json.Unmarshal(body, &run)
+	
+	fmt.Printf("Run status:\n")
+	fmt.Printf("  ID: %v\n", run["id"])
+	fmt.Printf("  State: %v\n", run["state"])
+	if notes, ok := run["recovery_notes"]; ok && notes != "" {
+		fmt.Printf("  Recovery Notes: %v\n", notes)
+	}
+	fmt.Printf("  Created: %v\n", run["created_at"])
 }
 
 func abortRun(id string) {

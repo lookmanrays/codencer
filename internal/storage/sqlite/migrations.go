@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS runs (
 	project_id TEXT NOT NULL,
 	state TEXT NOT NULL,
 	created_at DATETIME NOT NULL,
-	updated_at DATETIME NOT NULL
+	updated_at DATETIME NOT NULL,
+	recovery_notes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS phases (
@@ -124,6 +125,7 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE validations ADD COLUMN updated_at DATETIME NOT NULL DEFAULT '1970-01-01'",
 		"ALTER TABLE attempts ADD COLUMN warnings TEXT",
 		"ALTER TABLE attempts ADD COLUMN questions TEXT",
+		"ALTER TABLE runs ADD COLUMN recovery_notes TEXT",
 	}
 
 	for _, m := range extraMigrations {

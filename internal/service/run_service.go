@@ -350,6 +350,20 @@ func (s *RunService) executeAttempt(
 	workspaceRoot := fmt.Sprintf("%s/%s", s.workspaceRoot, runID)
 	baseRepo := "."
 	branchName := "codencer-" + runID
+
+	// Create workspace dir if not exists (parent of worktree)
+	_ = os.MkdirAll(s.workspaceRoot, 0755)
+
+	// Acquire exclusive lock for this run's workspace
+	lock, err := workspace.AcquireLock(s.workspaceRoot, runID)
+	if err != nil {
+		attempt.Result = &domain.Result{Status: domain.StepStateFailedRetryable, Summary: "Workspace lock conflict: " + err.Error()}
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
+	}
+	defer func() {
+		_ = lock.Release()
+	}()
 	
 	if err := workspace.CreateWorktree(ctx, baseRepo, workspaceRoot, branchName); err != nil {
 		slog.Error("Failed to create worktree", "runID", runID, "error", err)
