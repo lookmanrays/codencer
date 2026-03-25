@@ -20,8 +20,8 @@ func InvokeLocal(ctx context.Context, attempt *domain.Attempt, workspaceRoot, ar
 		return fmt.Errorf("failed to create artifact root: %w", err)
 	}
 
-	stdoutPath := filepath.Join(artifactRoot, "stdout.log")
-	resultPath := filepath.Join(artifactRoot, "result.json")
+	stdoutPath := filepath.Join(artifactRoot, "qwen_stdout.log")
+	resultPath := filepath.Join(artifactRoot, "qwen_result.json")
 
 	qwenBinary := os.Getenv("QWEN_BINARY")
 	if qwenBinary == "" {

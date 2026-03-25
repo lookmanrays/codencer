@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"agent-bridge/internal/app"
+	"agent-bridge/internal/validation"
 )
 
 var (
@@ -45,7 +46,7 @@ func printUsage() {
 	fmt.Println("  run start      <id> <project_id>")
 	fmt.Println("  run status     <id>")
 	fmt.Println("  run abort      <id>")
-	fmt.Println("  step start     <runID> <stepID> <phaseID> <adapter>")
+	fmt.Println("  step start     <runID> <taskFile.yaml>")
 	fmt.Println("  step result    <stepID>")
 	fmt.Println("  gate approve   <id>")
 	fmt.Println("  gate reject    <id>")
@@ -159,11 +160,11 @@ func handleStepCommand(args []string) {
 	cmd := args[0]
 	switch cmd {
 	case "start":
-		if len(args) < 5 {
-			fmt.Println("Usage: orchestratorctl step start <runID> <stepID> <phaseID> <adapter>")
+		if len(args) < 3 {
+			fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml>")
 			os.Exit(1)
 		}
-		startStep(args[1], args[2], args[3], args[4])
+		startStep(args[1], args[2])
 	case "status":
 		if len(args) < 2 {
 			fmt.Println("Usage: orchestratorctl step status <stepID>")
@@ -188,13 +189,19 @@ func handleStepCommand(args []string) {
 	}
 }
 
-func startStep(runID, stepID, phaseID, adapter string) {
-	reqBody := map[string]string{
-		"id":       stepID,
-		"phase_id": phaseID,
-		"title":    "CLI Dispatched Step",
-		"goal":     "Execute task from CLI",
-		"adapter":  adapter,
+func startStep(runID, taskFile string) {
+	spec, err := validation.ParseTaskSpec(taskFile)
+	if err != nil {
+		fmt.Printf("Failed to parse task spec: %v\n", err)
+		os.Exit(1)
+	}
+
+	reqBody := map[string]interface{}{
+		"id":       spec.StepID,
+		"phase_id": spec.PhaseID,
+		"title":    spec.Title,
+		"goal":     spec.Goal,
+		"adapter":  spec.AdapterProfile,
 	}
 	data, _ := json.Marshal(reqBody)
 
@@ -212,7 +219,7 @@ func startStep(runID, stepID, phaseID, adapter string) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Step dispatched:\n%s\n", string(body))
+	fmt.Printf("TaskSpec dispatched successfully:\n%s\n", string(body))
 }
 
 func stepStatus(stepID string) {

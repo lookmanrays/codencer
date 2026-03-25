@@ -1,0 +1,26 @@
+version: v1
+project_id: local-agent-bridge
+run_id: run-0002
+phase_id: phase-04-qwen-adapter
+step_id: step-02
+title: Implement Qwen adapter
+goal: Build a working Qwen adapter
+context:
+  summary: "This is the Qwen provider adapter."
+constraints:
+  - Do not bypass service boundaries
+allowed_paths:
+  - internal/adapters/qwen/**
+forbidden_paths:
+  - internal/adapters/claude/**
+  - internal/adapters/codex/**
+validations:
+  - name: unit-tests
+    command: go test ./internal/adapters/qwen
+acceptance:
+  - Qwen adapter implements common adapter interface.
+  - Logs are captured to artifact storage.
+stop_conditions:
+  - Adapter interface must be redesigned.
+policy_bundle: safe_refactor
+adapter_profile: qwen-default
