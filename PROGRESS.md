@@ -32,3 +32,12 @@
 - [x] Scaffold Targeted IDE Chat Adapter for Extension-bound Proxies
 - [x] Deploy Compatibility Matrix Diagnostic Endpoints
 - [x] Complete E2E Validation of the Fully Operational Bridge
+
+## Phase 5: Orchestration & MCP Correctness (Completed)
+- [x] Decompose `RunService.DispatchStep` Lifecycle
+- [x] Fix `ToolRetryStep` Run Identity Resolution
+- [x] Implement Structured JSON Outputs for MCP Tools
+- [x] Harden Worktree Setup and Collision Handling
+- [x] Decouple Recovery Paths and Improve State Reconcile
+- [x] Inject Configuration-driven Paths into RunSvc (Self-Review)
+- [x] Implement Step Idempotency for MCP Retries (Self-Review)

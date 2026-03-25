@@ -41,7 +41,7 @@ func TestE2EFlow(t *testing.T) {
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc, "/tmp/codencer/artifacts", "/tmp/codencer/workspace")
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	ctx := context.Background()
@@ -66,12 +66,9 @@ func TestE2EFlow(t *testing.T) {
 		Adapter: "codex",
 	}
 
-	artifactRoot := filepath.Join(t.TempDir(), "artifacts")
-
 	// Dispatch is blocking (polls and collects)
 	t.Log("Dispatching step...")
-	err = runSvc.DispatchStep(ctx, runId, step, artifactRoot)
-	if err != nil {
+	if err := runSvc.DispatchStep(ctx, runId, step); err != nil {
 		t.Fatalf("DispatchStep failed: %v", err)
 	}
 

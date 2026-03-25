@@ -14,12 +14,27 @@ func CreateWorktree(ctx context.Context, baseRepoPath, destPath, branchName stri
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// Check if branch exists
+	checkCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", branchName)
+	checkCmd.Dir = baseRepoPath
+	if err := checkCmd.Run(); err == nil {
+		// Branch exists, just add worktree
+		cmd := exec.CommandContext(ctx, "git", "worktree", "add", destPath, branchName)
+		cmd.Dir = baseRepoPath
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to add worktree for existing branch: %w. output: %s", err, string(out))
+		}
+		return nil
+	}
+
+	// Branch does not exist, create it
 	cmd := exec.CommandContext(ctx, "git", "worktree", "add", "-b", branchName, destPath)
 	cmd.Dir = baseRepoPath
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to create worktree: %w. output: %s", err, string(out))
+		return fmt.Errorf("failed to create worktree with new branch: %w. output: %s", err, string(out))
 	}
 	return nil
 }

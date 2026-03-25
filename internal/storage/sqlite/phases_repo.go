@@ -66,3 +66,22 @@ func (r *PhasesRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Pha
 	}
 	return phases, nil
 }
+
+// Get returns a single phase by ID.
+func (r *PhasesRepo) Get(ctx context.Context, id string) (*domain.Phase, error) {
+	const q = `
+		SELECT id, run_id, name, seq_order, created_at, updated_at
+		FROM phases WHERE id = ?
+	`
+	var p domain.Phase
+	err := r.db.QueryRowContext(ctx, q, id).Scan(
+		&p.ID, &p.RunID, &p.Name, &p.SeqOrder, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get phase: %w", err)
+	}
+	return &p, nil
+}

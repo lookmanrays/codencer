@@ -1,9 +1,9 @@
 # Tasks
 
 ## Priority 1 — Refactor and strengthen orchestration runtime
-- [ ] Extract orchestration workflow out of monolithic `DispatchStep()`.
-- [ ] Make run/step/attempt lifecycle transitions explicit.
-- [ ] Ensure attempt start/poll/collect/normalize/validate/policy/gate/finalize is modeled cleanly.
+- [x] Extract orchestration workflow out of monolithic `DispatchStep()`.
+- [x] Make run/step/attempt lifecycle transitions explicit.
+- [x] Ensure attempt start/poll/collect/normalize/validate/policy/gate/finalize is modeled cleanly.
 
 ## Priority 2 — Make the Codex path honest and robust
 - [ ] Implement explicit configurable binary/args contract.
@@ -12,10 +12,10 @@
 - [ ] Handle missing binaries explicitly.
 
 ## Priority 3 — Artifact, result, and validation retrieval
-- [ ] Implement list artifacts flow for steps/attempts/runs.
-- [ ] Retrieve step result in structured form via API.
-- [ ] Expose validation results via API.
-- [ ] Support retrieval through CLI and MCP.
+- [x] Implement list artifacts flow for steps/attempts/runs.
+- [x] Retrieve step result in structured form via API.
+- [x] Expose validation results via API.
+- [x] Support retrieval through CLI and MCP.
 
 ## Priority 4 — Stronger policy model
 - [ ] Implement policy loading/config usage aligned with docs rather than inline mocks.
@@ -24,15 +24,15 @@
 - [ ] Cleaner gate reason generation natively tied to policy rules.
 
 ## Priority 5 — Recovery and resumability
-- [ ] Reconstitute incomplete attempts and paused runs on startup.
-- [ ] Reconcile artifact directory presence vs DB state mismatch.
-- [ ] Implement safe worktree and lock cleanup for interrupted processes.
+- [x] Reconstitute incomplete attempts and paused runs on startup.
+- [x] Reconcile artifact directory presence vs DB state mismatch.
+- [x] Implement safe worktree and lock cleanup for interrupted processes.
 
 ## Priority 6 — MCP/control plane completion
-- [ ] Add structured result retrieval tool to MCP.
-- [ ] Add artifact listing tool to MCP.
-- [ ] Add `retry_step` tool to MCP.
-- [ ] Ensure machine-readable error payloads natively across MCP.
+- [x] Add structured result retrieval tool to MCP.
+- [x] Add artifact listing tool to MCP.
+- [x] Add `retry_step` tool to MCP. [FIXED RunID bug]
+- [x] Ensure machine-readable error payloads natively across MCP. [STRUCTURED JSON]
 
 ## Priority 7 — VS Code extension completion
 - [ ] Show steps and gates with richer status information in the TreeView.

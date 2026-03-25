@@ -27,4 +27,11 @@ While structurally sound, the bridge operates primarily via simulated or thin in
 4. **Strong Policies**: Removing hardcoded env mocks and forcing the Policy Engine to read explicit execution boundaries mapping directly to realistic disk changes (`diff` sizing, missing dependencies).
 5. **Interactive Integrations**: Converting the passive VS Code UI into an active Control Plane capable of resolving Gates and retracing failed workflows reliably.
 
+**Phase 5 Orchestration & MCP Correctness (Complete):**
+The core execution engine has been hardened for production-grade reliability. Key improvements include:
+1. **Lifecycle Decomposition**: `RunService.DispatchStep` is now a modular coordinator with clear attempt-loop and environment-setup boundaries.
+2. **MCP Identity Correctness**: Resolved critical bugs in Step Retry logic to ensure correct RunID propagation.
+3. **Structured MCP Payloads**: All tool outputs now return machine-usable JSON, enabling better automated planning.
+4. **Environment Robustness**: Worktree management now handles branch collisions and setup failures with explicit recovery paths.
+
 > **Limitations:** For Phase 2, certain complex agent topologies (like interactive persistent CLI shells or cloud orchestration) are still explicitly unsupported to guarantee local-first safety.

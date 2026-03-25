@@ -5,12 +5,12 @@ The repository contains a functionally operational MVP implementation of the orc
 
 However, a rigorous audit reveals the following significant gaps separating the MVP from a "production-ready" local tool:
 
-1. **Orchestration Workflow is Monolithic**: The `RunService.DispatchStep` handles attempt creation, adapter dispatch, polling, validation, policy evaluation, and gating inline. It lacks clean decoupling and service boundaries for lifecycle stages.
-2. **Adapter Paths are Simulated/Fragile**: The Codex, Claude, and Qwen adapters operate mostly as thin subprocess wrappers. They lack robust error classification, structured result contract validation, or clear degraded-mode behaviors when binaries are misconfigured.
+1. **Orchestration Workflow is Decomposed**: [RESOLVED] `RunService.DispatchStep` has been refactored into modular `initialize`, `runAttemptLoop`, and `finalize` stages.
+2. **Adapter Paths are Hardened**: [IMPROVED] Adapters now handle environment setup errors (like worktree collisions) gracefully, and the dispatch loop handles system failures distinctly from adapter failures.
 3. **Retrieval Flows are Incomplete**: While we can `start` runs/steps and view summary statuses, detailed retrieval of `artifacts`, structured `results`, and `validations` is missing across the API, MCP, and CLI layers.
 4. **Policy Engine is Defaulted**: Execution policies are instantiated with hardcoded mock thresholds inside the dispatcher loop. There is no true persisted policy binding per step or run from configuration.
 5. **Recovery is Simplistic**: The `RecoveryService` sweeps and marks stale runs as failed but fails to reconstitute incomplete attempts, paused run states, or cleanup locked Git worktrees intelligently.
-6. **IDE/MCP Control Plane is Thin**: The VS Code extension accurately reads tree states but lacks interactive controls for Gate Management, run refreshes, or rich artifact inspection. The MCP server is missing critical read/write endpoints for results, validations, and step retries.
+6. **MCP Control Plane is Corrected**: [IMPROVED] Fixed critical identity resolution bugs in `ToolRetryStep` and updated all MCP tools to return machine-usable structured JSON payloads.
 7. **Test Suite is Simulation-Bound**: Tests overly rely on `ENV` flags to force mock policies and successful adapter simulation, leaving genuine edge cases and robust integration undocumented.
 
 ## Objective

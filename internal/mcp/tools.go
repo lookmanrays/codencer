@@ -27,6 +27,9 @@ func (s *Server) ToolStartRun(ctx context.Context, args map[string]interface{}) 
 				"text": fmt.Sprintf("Run %s created and started successfully.", run.ID),
 			},
 		},
+		"run_id":     run.ID,
+		"project_id": run.ProjectID,
+		"state":      run.State,
 	}, nil
 }
 
@@ -52,6 +55,8 @@ func (s *Server) ToolGetStatus(ctx context.Context, args map[string]interface{})
 				"text": fmt.Sprintf("Run %s is in state: %s", run.ID, run.State),
 			},
 		},
+		"run_id": run.ID,
+		"state":  run.State,
 	}, nil
 }
 
@@ -73,6 +78,8 @@ func (s *Server) ToolApproveGate(ctx context.Context, args map[string]interface{
 				"text": fmt.Sprintf("Gate %s approved.", id),
 			},
 		},
+		"gate_id": id,
+		"status":  "approved",
 	}, nil
 }
 
@@ -94,6 +101,8 @@ func (s *Server) ToolRejectGate(ctx context.Context, args map[string]interface{}
 				"text": fmt.Sprintf("Gate %s rejected.", id),
 			},
 		},
+		"gate_id": id,
+		"status":  "rejected",
 	}, nil
 }
 
@@ -122,9 +131,9 @@ func (s *Server) ToolStartStep(ctx context.Context, args map[string]interface{})
 	}
 
 	go func() {
-		_ = s.runSvc.DispatchStep(context.Background(), runID, step, "/tmp/codencer/artifacts/"+stepID)
+		_ = s.runSvc.DispatchStep(context.Background(), runID, step)
 	}()
-
+    
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
@@ -132,6 +141,9 @@ func (s *Server) ToolStartStep(ctx context.Context, args map[string]interface{})
 				"text": fmt.Sprintf("Step %s dispatched for run %s.", stepID, runID),
 			},
 		},
+		"step_id": step.ID,
+		"run_id":  runID,
+		"state":   domain.StepStateDispatching,
 	}, nil
 }
 
@@ -150,20 +162,35 @@ func (s *Server) ToolRetryStep(ctx context.Context, args map[string]interface{})
 		return nil, fmt.Errorf("step not found")
 	}
 
+	phase, err := s.runSvc.GetPhase(ctx, step.PhaseID)
+	runID := ""
+	if err == nil && phase != nil {
+		runID = phase.RunID
+	}
+	if runID == "" {
+		// Fallback parse attempt if repository lookup is restricted
+		var placeholder string
+		if n, _ := fmt.Sscanf(step.PhaseID, "phase-01-%s", &placeholder); n != 1 {
+			// If naming convention fails, we must rely on explicit run_id if we enhance the tool args later
+			return nil, fmt.Errorf("could not resolve run identity for step %s", stepID)
+		}
+		runID = placeholder
+	}
+
 	// Just route to DispatchStep to execute another attempt lifecycle
 	go func() {
-		// Assuming PhaseID binds to RunID natively
-		// Need RunID for DispatchStep context tracking
-		_ = s.runSvc.DispatchStep(context.Background(), step.PhaseID, step, "/tmp/codencer/artifacts/"+stepID)
+		_ = s.runSvc.DispatchStep(context.Background(), runID, step)
 	}()
 
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
 				"type": "text",
-				"text": fmt.Sprintf("Step %s dispatched for retry.", stepID),
+				"text": fmt.Sprintf("Step %s dispatched for retry under run %s.", stepID, runID),
 			},
 		},
+		"step_id": step.ID,
+		"run_id":  runID,
 	}, nil
 }
 
@@ -186,6 +213,9 @@ func (s *Server) ToolGetStepResult(ctx context.Context, args map[string]interfac
 				"text": fmt.Sprintf("Step %s result status: %s\nSummary: %s", stepID, result.Status, result.Summary),
 			},
 		},
+		"step_id": stepID,
+		"status":  result.Status,
+		"summary": result.Summary,
 	}, nil
 }
 

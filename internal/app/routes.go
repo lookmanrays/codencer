@@ -155,7 +155,10 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			// We dispatch asynchronously because RunService.DispatchStep blocks on adapter.Poll
 			go func() {
 				// In a real robust system, background contexts tied to daemon lifecycle should be used.
-				_ = h.RunSvc.DispatchStep(context.Background(), id, step, "/tmp/codencer/artifacts/"+req.ID)
+				if err := h.RunSvc.DispatchStep(context.Background(), id, step); err != nil {
+					// Log the error or handle it appropriately, as this is a background goroutine
+					// fmt.Fprintf(os.Stderr, "Error dispatching step: %v\n", err)
+				}
 			}()
 
 			w.Header().Set("Content-Type", "application/json")

@@ -13,13 +13,27 @@ import (
 
 // RecoveryService handles failure recovery, stale run sweeps, and resumability.
 type RecoveryService struct {
-	runsRepo     *sqlite.RunsRepo
-	stepsRepo    *sqlite.StepsRepo
-	attemptsRepo *sqlite.AttemptsRepo
+	runsRepo      *sqlite.RunsRepo
+	stepsRepo     *sqlite.StepsRepo
+	attemptsRepo  *sqlite.AttemptsRepo
+	artifactRoot  string
+	workspaceRoot string
 }
 
-func NewRecoveryService(runsRepo *sqlite.RunsRepo, stepsRepo *sqlite.StepsRepo, attemptsRepo *sqlite.AttemptsRepo) *RecoveryService {
-	return &RecoveryService{runsRepo: runsRepo, stepsRepo: stepsRepo, attemptsRepo: attemptsRepo}
+func NewRecoveryService(
+	runsRepo *sqlite.RunsRepo,
+	stepsRepo *sqlite.StepsRepo,
+	attemptsRepo *sqlite.AttemptsRepo,
+	artifactRoot string,
+	workspaceRoot string,
+) *RecoveryService {
+	return &RecoveryService{
+		runsRepo:      runsRepo,
+		stepsRepo:     stepsRepo,
+		attemptsRepo:  attemptsRepo,
+		artifactRoot:  artifactRoot,
+		workspaceRoot: workspaceRoot,
+	}
 }
 
 // SweepStaleRuns looks for runs stuck in "running" state across agent daemon restarts,
@@ -34,14 +48,14 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 
 	for _, r := range runs {
 		// Reconcile leftover lock files.
-		lockPath := fmt.Sprintf("/tmp/codencer/workspace/%s/.codencer.lock", r.ID)
+		lockPath := fmt.Sprintf("%s/%s/.codencer.lock", s.workspaceRoot, r.ID)
 		_ = os.Remove(lockPath)
 
 		// Check all steps to salvage process output and intelligently resume.
 		steps, _ := s.stepsRepo.ListByRun(ctx, r.ID)
 		for _, step := range steps {
 			if step.State == domain.StepStateRunning {
-				artifactsPath := fmt.Sprintf("/tmp/codencer/artifacts/%s/result.json", step.ID)
+				artifactsPath := fmt.Sprintf("%s/%s/result.json", s.artifactRoot, step.ID)
 				if _, err := os.Stat(artifactsPath); err == nil {
 					// Artifact exists. The adapter completed writing results, but orchestrator died before finalizing.
 					step.State = domain.StepStateNeedsApproval

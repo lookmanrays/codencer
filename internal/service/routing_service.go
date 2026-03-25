@@ -15,6 +15,9 @@ type RoutingService struct {
 	adapters       map[string]domain.Adapter
 }
 
+// NOTE: Current routing implementation is a heuristic-based static fallback chain.
+// Benchmarks are logged but not yet actively dynamically evaluated for the primary selection.
+
 func NewRoutingService(benchRepo *sqlite.BenchmarksRepo, adapters map[string]domain.Adapter) *RoutingService {
 	return &RoutingService{
 		benchmarksRepo: benchRepo,

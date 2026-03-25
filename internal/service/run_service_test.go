@@ -88,7 +88,7 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc, "/tmp/artifacts", "/tmp/workspace")
 
 	ctx := context.Background()
 
@@ -105,9 +105,8 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 		Adapter: "mock-adapter",
 	}
 
-	artifactRoot := filepath.Join(t.TempDir(), "artifacts")
 
-	err = runSvc.DispatchStep(ctx, runId, step, artifactRoot)
+	err = runSvc.DispatchStep(ctx, runId, step)
 	if err != nil {
 		t.Fatalf("DispatchStep failed: %v", err)
 	}

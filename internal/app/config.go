@@ -10,9 +10,10 @@ import (
 type Config struct {
 	LogLevel     string `json:"log_level"`
 	DBPath       string `json:"db_path"`
-	ArtifactRoot string `json:"artifact_root"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
+	ArtifactRoot  string `json:"artifact_root"`
+	WorkspaceRoot string `json:"workspace_root"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
 }
 
 // DefaultConfig defines default values for the daemon configuration.
@@ -20,9 +21,10 @@ func DefaultConfig() *Config {
 	return &Config{
 		LogLevel:     "info",
 		DBPath:       "codencer.db",
-		ArtifactRoot: ".artifacts",
-		Host:         "127.0.0.1",
-		Port:         8080,
+		ArtifactRoot:  ".artifacts",
+		WorkspaceRoot: ".workspace",
+		Host:          "127.0.0.1",
+		Port:          8080,
 	} // MVP values
 }
 
@@ -58,6 +60,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ArtifactRoot == "" {
 		return fmt.Errorf("artifact_root configuration is required")
+	}
+	if c.WorkspaceRoot == "" {
+		return fmt.Errorf("workspace_root configuration is required")
 	}
 	return nil
 }

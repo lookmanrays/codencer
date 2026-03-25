@@ -101,11 +101,11 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, routingSvc, cfg.ArtifactRoot, cfg.WorkspaceRoot)
 	
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
-	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo)
+	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot)
 	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {
 		logger.Warn("Failed to sweep stale runs during bootstrap", "error", err)
 	}
