@@ -22,15 +22,15 @@ const (
 
 // Step represents a discrete chunk of work executed by an adapter.
 type Step struct {
-	ID          string
-	PhaseID     string
-	Title       string
-	Goal        string
-	State       StepState
-	Policy      string // ID or name of the policy bundle
-	Adapter     string // ID or profile of the adapter
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          string    `json:"id"`
+	PhaseID     string    `json:"phase_id"`
+	Title       string    `json:"title"`
+	Goal        string    `json:"goal"`
+	State       StepState `json:"state"`
+	Policy      string    `json:"policy"`
+	Adapter     string    `json:"adapter"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // IsTerminal returns true if the step has reached a final state.

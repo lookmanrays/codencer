@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS attempts (
 	step_id TEXT NOT NULL,
 	number INTEGER NOT NULL,
 	adapter TEXT NOT NULL,
-	status TEXT NOT NULL,
+	state TEXT NOT NULL,
 	summary TEXT NOT NULL,
 	needs_human_decision BOOLEAN NOT NULL DEFAULT 0,
 	warnings TEXT,
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS validations (
 	attempt_id TEXT NOT NULL,
 	name TEXT NOT NULL,
 	command TEXT NOT NULL,
-	status TEXT NOT NULL,
+	state TEXT NOT NULL,
 	passed BOOLEAN NOT NULL,
 	exit_code INTEGER NOT NULL,
 	stdout_ref TEXT,
@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE runs ADD COLUMN recovery_notes TEXT",
 		"ALTER TABLE benchmarks ADD COLUMN attempt_id TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE benchmarks ADD COLUMN is_simulation BOOLEAN NOT NULL DEFAULT 0",
+		"ALTER TABLE attempts ADD COLUMN state TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE validations ADD COLUMN state TEXT NOT NULL DEFAULT ''",
 	}
 
 	for _, m := range extraMigrations {

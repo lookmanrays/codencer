@@ -236,7 +236,7 @@ func (s *Server) ToolGetStepResult(ctx context.Context, args map[string]interfac
 		"content": []map[string]interface{}{
 			{
 				"type": "text",
-				"text": fmt.Sprintf("Step %s result status: %s\nSummary: %s", stepID, result.State, result.Summary),
+				"text": fmt.Sprintf("Step %s result state: %s\nSummary: %s", stepID, result.State, result.Summary),
 			},
 		},
 		"step_id": stepID,

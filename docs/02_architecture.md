@@ -38,7 +38,7 @@ Responsibilities:
 - persist state
 - enforce policy
 - collect artifacts
-- expose status
+- expose state
 
 Recommended implementation:
 - Go

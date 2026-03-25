@@ -17,12 +17,12 @@ const (
 
 // Run represents an end-to-end execution of a planner's intent.
 type Run struct {
-	ID        string
-	ProjectID string
-	State     RunState
-	CreatedAt time.Time
-	UpdatedAt     time.Time
-	RecoveryNotes string
+	ID        string    `json:"id"`
+	ProjectID string    `json:"project_id"`
+	State     RunState  `json:"state"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	RecoveryNotes string `json:"recovery_notes"`
 	
 	// Relationships
 	Phases []*Phase
@@ -30,12 +30,12 @@ type Run struct {
 
 // Phase breaks a run into sequential segments of logic.
 type Phase struct {
-	ID        string
-	RunID     string
-	Name      string
-	SeqOrder  int
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        string    `json:"id"`
+	RunID     string    `json:"run_id"`
+	Name      string    `json:"name"`
+	SeqOrder  int       `json:"seq_order"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	
 	// Relationships
 	Steps []*Step

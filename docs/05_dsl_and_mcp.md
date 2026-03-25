@@ -59,15 +59,15 @@ adapter_profile: codex-default
   "step_id": "step-01",
   "attempt_id": "attempt-01",
   "adapter": "codex",
-  "status": "completed_with_warnings",
+  "state": "completed_with_warnings",
   "summary": "Implemented Codex adapter invocation and result normalization.",
   "files_changed": [
     "internal/adapters/codex/adapter.go",
     "internal/adapters/codex/invoke.go"
   ],
   "validations": [
-    {"name": "unit-tests", "status": "passed"},
-    {"name": "lint", "status": "failed"}
+    {"name": "unit-tests", "state": "passed"},
+    {"name": "lint", "state": "failed"}
   ],
   "needs_human_decision": false,
   "warnings": ["Lint failed due to an unused import."],

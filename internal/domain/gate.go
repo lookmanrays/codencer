@@ -15,11 +15,11 @@ const (
 
 // Gate is a policy pause that requires operator decision.
 type Gate struct {
-	ID          string
-	RunID       string
-	StepID      string
-	Description string
-	Status      GateStatus
-	CreatedAt   time.Time
-	ResolvedAt  *time.Time
+	ID          string     `json:"id"`
+	RunID       string     `json:"run_id"`
+	StepID      string     `json:"step_id"`
+	Description string     `json:"description"`
+	Status      GateStatus `json:"status"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ResolvedAt  *time.Time `json:"resolved_at"`
 }

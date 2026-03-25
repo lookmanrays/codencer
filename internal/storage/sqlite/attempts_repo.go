@@ -22,22 +22,22 @@ func NewAttemptsRepo(db *sql.DB) *AttemptsRepo {
 // Create inserts a new attempt.
 func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) error {
 	const q = `
-		INSERT INTO attempts (id, step_id, number, adapter, status, summary, needs_human_decision, warnings, questions, created_at, updated_at)
+		INSERT INTO attempts (id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	var status string
+	var state string
 	var summary string
 	var needsDecision bool
 	var warningsJSON, questionsJSON []byte
 	
 	if attempt.Result != nil {
-		status = string(attempt.Result.State)
+		state = string(attempt.Result.State)
 		summary = attempt.Result.Summary
 		needsDecision = attempt.Result.NeedsHumanDecision
 		warningsJSON, _ = json.Marshal(attempt.Result.Warnings)
 		questionsJSON, _ = json.Marshal(attempt.Result.Questions)
 	} else {
-		status = string(domain.StepStatePending)
+		state = string(domain.StepStatePending)
 	}
 
 	_, err := r.db.ExecContext(ctx, q,
@@ -45,7 +45,7 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 		attempt.StepID,
 		attempt.Number,
 		attempt.Adapter,
-		status,
+		state,
 		summary,
 		needsDecision,
 		string(warningsJSON),
@@ -62,13 +62,13 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 // Get retrieves an attempt by ID.
 func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, error) {
 	const q = `
-		SELECT id, step_id, number, adapter, status, summary, needs_human_decision, warnings, questions, created_at, updated_at
+		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, created_at, updated_at
 		FROM attempts WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
 	
 	var attempt domain.Attempt
-	var statusStr string
+	var stateStr string
 	var resSummary string // Renamed to avoid conflict with `summary` in `Create`
 	var needsDecision bool
 	var warningsStr, questionsStr sql.NullString
@@ -78,7 +78,7 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 		&attempt.StepID,
 		&attempt.Number,
 		&attempt.Adapter,
-		&statusStr,
+		&stateStr,
 		&resSummary,
 		&needsDecision,
 		&warningsStr,
@@ -93,9 +93,9 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 		return nil, fmt.Errorf("failed to get attempt: %w", err)
 	}
 
-	if statusStr != "" {
+	if stateStr != "" {
 		attempt.Result = &domain.Result{
-			State:              domain.StepState(statusStr),
+			State:              domain.StepState(stateStr),
 			Summary:            resSummary,
 			NeedsHumanDecision: needsDecision,
 		}
@@ -117,7 +117,7 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 	}
 
 	const q = `
-		UPDATE attempts SET status = ?, summary = ?, needs_human_decision = ?, warnings = ?, questions = ?, updated_at = ?
+		UPDATE attempts SET state = ?, summary = ?, needs_human_decision = ?, warnings = ?, questions = ?, updated_at = ?
 		WHERE id = ?
 	`
 	warningsJSON, _ := json.Marshal(attempt.Result.Warnings)
@@ -141,7 +141,7 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 // ListByStep returns all attempts for a step.
 func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain.Attempt, error) {
 	const q = `
-		SELECT id, step_id, number, adapter, status, summary, needs_human_decision, warnings, questions, created_at, updated_at
+		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, created_at, updated_at
 		FROM attempts WHERE step_id = ? ORDER BY number ASC
 	`
 	rows, err := r.db.QueryContext(ctx, q, stepID)
@@ -153,22 +153,22 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 	var attempts []*domain.Attempt
 	for rows.Next() {
 		var attempt domain.Attempt
-		var statusStr string
+		var stateStr string
 		var resSummary string // Renamed to avoid conflict with `summary` in `Create`
 		var needsDecision bool
 		var warningsStr, questionsStr sql.NullString
 
 		if err := rows.Scan(
 			&attempt.ID, &attempt.StepID, &attempt.Number, &attempt.Adapter,
-			&statusStr, &resSummary, &needsDecision, &warningsStr, &questionsStr,
+			&stateStr, &resSummary, &needsDecision, &warningsStr, &questionsStr,
 			&attempt.CreatedAt, &attempt.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
 
-		if statusStr != "" && statusStr != string(domain.StepStatePending) {
+		if stateStr != "" && stateStr != string(domain.StepStatePending) {
 			attempt.Result = &domain.Result{
-				State:              domain.StepState(statusStr),
+				State:              domain.StepState(stateStr),
 				Summary:            resSummary,
 				NeedsHumanDecision: needsDecision,
 			}

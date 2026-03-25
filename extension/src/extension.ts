@@ -175,10 +175,10 @@ class CodencerProvider implements vscode.TreeDataProvider<BaseTreeItem> {
             if (!runs || runs.length === 0) return [new BaseTreeItem("No runs found", vscode.TreeItemCollapsibleState.None)];
             
             return runs.map((r: any) => {
-                const item = new BaseTreeItem(`Run: ${r.ID}`, vscode.TreeItemCollapsibleState.Collapsed, r.ID, 'run');
-                item.description = r.State;
-                item.tooltip = `Project: ${r.ProjectID}\nUpdated: ${r.UpdatedAt}`;
-                item.iconPath = this.getRunIcon(r.State);
+                const item = new BaseTreeItem(`Run: ${r.id}`, vscode.TreeItemCollapsibleState.Collapsed, r.id, 'run');
+                item.description = r.state;
+                item.tooltip = `Project: ${r.project_id}\nUpdated: ${r.updated_at}`;
+                item.iconPath = this.getRunIcon(r.state);
                 return item;
             });
         } catch (e) {
@@ -192,10 +192,10 @@ class CodencerProvider implements vscode.TreeDataProvider<BaseTreeItem> {
             if (!steps || steps.length === 0) return [new BaseTreeItem("No steps", vscode.TreeItemCollapsibleState.None)];
             
             return steps.map((s: any) => {
-                const item = new BaseTreeItem(s.Title, vscode.TreeItemCollapsibleState.Collapsed, s.ID, 'step', s);
-                item.description = s.State;
-                item.tooltip = `Goal: ${s.Goal}\nAdapter: ${s.Adapter}`;
-                item.iconPath = this.getStepIcon(s.State);
+                const item = new BaseTreeItem(s.title, vscode.TreeItemCollapsibleState.Collapsed, s.id, 'step', s);
+                item.description = s.state;
+                item.tooltip = `Goal: ${s.goal}\nAdapter: ${s.adapter}`;
+                item.iconPath = this.getStepIcon(s.state);
                 return item;
             });
         } catch (e) { return []; }
@@ -226,9 +226,9 @@ class CodencerProvider implements vscode.TreeDataProvider<BaseTreeItem> {
             const artifacts = await this.client.get(`/api/v1/steps/${stepId}/artifacts`);
             if (artifacts && artifacts.length > 0) {
                 items.push(...artifacts.map((a: any) => {
-                    const artItem = new BaseTreeItem(`${a.Type}: ${a.Name || a.ID}`, vscode.TreeItemCollapsibleState.None, a.ID, 'artifact');
-                    artItem.description = `${a.Size} bytes`;
-                    artItem.command = { title: "Open", command: "codencer.openArtifact", arguments: [a.Path] };
+                    const artItem = new BaseTreeItem(`${a.type}: ${a.name || a.id}`, vscode.TreeItemCollapsibleState.None, a.id, 'artifact');
+                    artItem.description = `${a.size} bytes`;
+                    artItem.command = { title: "Open", command: "codencer.openArtifact", arguments: [a.path] };
                     artItem.iconPath = new vscode.ThemeIcon('file');
                     return artItem;
                 }));
