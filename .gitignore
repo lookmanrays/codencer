@@ -1,8 +1,10 @@
 codencer.db
 *.test
 *.out
+.codencer/
 vendor/
 .vscode/
-.codencer/
-*.log
 bin/
+*.log
+orchestratorctl
+service.test

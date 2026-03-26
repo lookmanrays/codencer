@@ -125,11 +125,16 @@
 - [x] Final alignment for Phase V1.7 / Batch V1.5.2 (Micro-task Complete)
 - [ ] Implement Unified Configuration Engine (Batch V1.5.2/V1.8 Next)
  <!-- id: 126 -->
-- [x] Audit publication readiness and positioning (V1.7.5 Complete)
-- [x] Harden README for public publication (V1.7.6 Complete)
-- [x] Harden local usage & self-host framing (V1.7.7 Complete)
 - [x] Harden maturity & limitations framing (V1.7.8 Complete)
+- [x] Audit self-host/setup ergonomics (V1.7.9 Complete)
+- [x] Harden self-host setup instructions (V1.8.0 Complete)
+- [x] Harden self-host run flows (V1.8.1 Complete)
+- [x] Practical publication-readiness cleanup (V1.8.2 Complete)
 - [ ] Phase 17: Public Packaging (Next)
+    - [ ] Implement `config/local.json` or `.env` loader <!-- id: 162 -->
+    - [ ] Improve `doctor` with agent installation hints <!-- id: 163 -->
+    - [ ] Add `make run-daemon` log tailing helper <!-- id: 164 -->
+    - [ ] Author `CONTRIBUTING.md` <!-- id: 165 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
 
 - [x] Audit example coverage for daily planner-to-bridge usage (Micro-task Complete)

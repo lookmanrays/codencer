@@ -1,187 +1,118 @@
-# Practical Usage Examples
+# Codencer Self-Host Runbook
 
-This guide provides copy-pasteable command sequences and role-based workflows for daily local use.
-
-## Core Roles
-- **Planner (Brain)**: You (or an LLM) decide *what* to do next.
-- **Bridge (Codencer)**: Executes the instruction, polls for completion, and reports evidence.
-- **Coding Agent (Worker)**: The underlying tool (Codex, Claude, etc.) that performs the file edits.
+This guide provides concrete, command-based sequences for operating the bridge locally.
 
 ---
 
-## 0. Daily Local Workflow
+## 🏛 The Self-Host Model
 
-This is the standard inner-loop for using the bridge with a planner.
+Codencer is the **Defensive Relay** in your local toolchain.
 
-### Step 1: Start the Bridge (Daemon)
-The bridge must be running to receive and execute tasks.
-
-```bash
-# Real Mode (Executes actual code changes via Codex/Claude)
-./bin/orchestratord
-
-# OR Simulation Mode (Verifies orchestrator logic without edits)
-# ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord
-```
-
-### Step 2: Submit a Task (Planner Decision)
-The **Planner** issues a declarative `TaskSpec` (YAML) to the bridge.
-
-```bash
-# Start a session (Run) if not already active
-./bin/orchestratorctl run start daily-fix my-project
-
-# Submit the instruction
-./bin/orchestratorctl submit daily-fix examples/tasks/bug_fix.yaml
-```
-
-### Step 3: Monitor & Report (Bridge Execution)
-The **Bridge** handles the tactical execution and provides real-time progress.
-
-```bash
-# Tail the agent's output as it works
-./bin/orchestratorctl step logs step-fix-nil-err
-
-# Wait for the bridge to reach a terminal state
-./bin/orchestratorctl step wait step-fix-nil-err
-```
-
-### Step 4: Final Insight (Planner Review)
-The **Planner** inspects the bridge's report to decide the next action.
-
-```bash
-# Inspect the structured result and validation outcome
-./bin/orchestratorctl step result step-fix-nil-err | jq .
-```
-
-- **If `completed`**: The Planner proceeds to the next high-level goal.
-- **If `failed` or `needs_manual_attention`**: The Planner (or human) reviews logs and submits a corrective follow-up step.
+1. **Planner Decides**: Issues a `TaskSpec` (YAML).
+2. **Bridge Executes**: Manages workspace, polls agent, captures artifacts.
+3. **Agent Performs**: Does the tactical file edits (Codex, Claude, etc.).
 
 ---
 
-## 1. Setup & Environment Health
+## ⚡️ Flow A: The 30-Second Simulation (Verification)
+Use this flow to verify the orchestrator's state machine without requiring LLMs or agent binaries.
 
-Before starting, ensure the binaries are built and your environment is sane.
-
+### 1. Start the Simulated Bridge
 ```bash
-# Build daemon and CLI
-make build
-
-# Verify environment health (checks for .codencer setup and agent binaries)
-./bin/orchestratorctl doctor
+# ALL_ADAPTERS_SIMULATION_MODE=1 stubs all agent execution
+make simulate
 ```
 
----
-
-## 2. Fast Path: Orchestration Simulation
-
-Use this mode to verify the bridge's state machine and your integration logic without requiring real LLM agents.
-
-### Start the Daemon
-```bash
-# Start in simulation mode (stubs all adapters)
-ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord
-```
-
-### Submit and Inspect a Task
+### 2. Submit a Test Task
 In a new terminal:
 ```bash
-# 1. Start a new run
-./bin/orchestratorctl run start my-run-01 my-project
-
-# 2. Submit a simulated task
-# (.codencer/smoke_task.yaml is a good default template)
-./bin/orchestratorctl submit my-run-01 .codencer/smoke_task.yaml
-
-# 3. Wait for terminal state (returns JSON on completion)
-./bin/orchestratorctl step wait my-step-1
-
-# 4. View simulated logs (will be empty in simulation, but verifies the command)
-./bin/orchestratorctl step logs my-step-1
+# Submit the built-in smoke task
+./bin/orchestratorctl submit smoke-run .codencer/smoke_task.yaml
 ```
 
-
----
-
-## 3. Realistic Task Library
-
-A set of realistic, planner-ready `TaskSpec` templates is available in the `examples/tasks/` directory:
-
-- **[bug_fix.yaml](../examples/tasks/bug_fix.yaml)**: Small code fix with build validation.
-- **[docs_only.yaml](../examples/tasks/docs_only.yaml)**: Documentation-only update with strict path constraints.
-- **[config_update.yaml](../examples/tasks/config_update.yaml)**: Internal configuration change.
-- **[simulation_task.yaml](../examples/tasks/simulation_task.yaml)**: Template for verifying orchestrator logic.
-
-Submit these using:
+### 3. Monitor & Wait
 ```bash
-./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml
+# Wait for terminal state (should complete in ~5 seconds)
+./bin/orchestratorctl step wait smoke-step-1
+```
+
+### 4. Inspect the Result
+```bash
+# Verify the 'completed' state and captured metadata
+./bin/orchestratorctl step result smoke-step-1 | jq .
 ```
 
 ---
 
-## 4. Real Work: Codex Execution
+## 🛠 Flow B: The Real Codex Loop (Tactical Fix)
+Use this flow for actual daily coding tasks. Requires `codex-agent` installed.
 
-Use this mode for real daily coding tasks. Requires the `codex-agent` binary.
-
-### Configuration
+### 1. Configuration
 ```bash
-# Set path to your real codex binary if not in $PATH
-export CODEX_BINARY=/path/to/codex-agent
+# Export the path if not in your $PATH
+export CODEX_BINARY=codex-agent
 ```
 
-### Execution Flow
+### 2. Start the Real Bridge
 ```bash
-# 1. Start the real daemon
 ./bin/orchestratord
+```
 
-# 2. Submit a real task
-./bin/orchestratorctl submit run-888 task_fix_bug.yaml
+### 3. Submit a Realistic Fix
+```bash
+./bin/orchestratorctl run start fixer-01 my-project
+./bin/orchestratorctl submit fixer-01 examples/tasks/bug_fix.yaml
+```
 
-# 3. Tail the agent's output in real-time
-./bin/orchestratorctl step logs step-999
+### 4. Tail the Agent (Live)
+```bash
+# Watch the agent's stdout as it works
+./bin/orchestratorctl step logs step-fix-nil-err
+```
 
-# 4. Wait for completion and inspect evidence
-./bin/orchestratorctl step wait step-999
+### 5. Review & Apply
+Once `wait` returns:
+```bash
+# Inspect the diff harvested by the bridge
+ls -R .codencer/artifacts/fixer-01/
+cat .codencer/artifacts/fixer-01/*/unified.diff
 ```
 
 ---
 
-## 4. Inspecting Evidence & Artifacts
+## 🔍 Flow C: Artifact & Ledger Audit
+How to inspect the "System of Record" for an attempt.
 
-The bridge centralizes all evidence in the `.codencer/` directory.
-
-### CLI Inspection
+### 1. List All Runs
 ```bash
-# View structured outcome evidence
-./bin/orchestratorctl step result <stepID> | jq .
+./bin/orchestratorctl run list
+```
 
-# View validation results (tests, linters)
+### 2. Inspect Step Validations
+```bash
+# See which tests passed or failed as seen by the bridge
 ./bin/orchestratorctl step validations <stepID> | jq .
+```
 
-# View all artifact metadata
+### 3. Inspect Captured Artifacts
+Every file modified by an agent is hashed and archived locally.
+```bash
 ./bin/orchestratorctl step artifacts <stepID> | jq .
 ```
 
-### Filesystem Inspection
-```bash
-# Browse the raw workspace (if worktree was used)
-ls -R .codencer/workspace/
+---
 
-# Browse archived artifacts for a specific attempt
-# (Path is printed by 'orchestratorctl wait' upon completion)
-ls -R .codencer/artifacts/<runID>/<attemptID>/
+## 🧹 Flow D: Resetting the Lab
+To completely clear your local environment and start fresh:
+
+```bash
+# WARNING: This deletes the SQLite database and all artifacts in .codencer/
+make nuke
 ```
 
 ---
 
-## 5. Troubleshooting Cheat Sheet
-
-| Question | Command |
-| :--- | :--- |
-| **What is the bridge doing?** | `tail -f .codencer/smoke_daemon.log` (if redirected) or check daemon console. |
-| **What did the agent say?** | `bin/orchestratorctl step logs <stepID>` |
-| **Where are the diffs?** | Look for `unified.diff` in `.codencer/artifacts/<runID>/<attemptID>/`. |
-| **Clean state?** | `make nuke` (Deletes DB and all artifacts - USE WITH CAUTION). |
-
-Looking for more? See the full [Troubleshooting Guide](TROUBLESHOOTING.md).
-
+## 📖 Further Reading
+- [Setup & Self-Hosting Guide](SETUP.md)
+- [Troubleshooting Guide](TROUBLESHOOTING.md)
+- [Architecture Overview](02_architecture.md)

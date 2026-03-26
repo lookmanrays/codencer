@@ -28,22 +28,28 @@ For detailed local setup instructions, see the **[Setup & Self-Hosting Guide](do
 
 ---
 
-## 🚀 Quickstart (Local-First)
-
-Codencer maintains all state in a local `.codencer/` directory. No cloud, no telemetry, no hidden phone-home.
-
-### 1. Simple Startup
-```bash
-# Initialize environment, build binaries, and start the daemon
-make dev
-```
-
-### 2. Verify with Simulation
+### 1. 30-Second Verification (Simulation)
 Test the full orchestration loop without requiring real LLM agents or binary setup:
 ```bash
-# Runs setup -> build -> daemon -> submit (simulation) -> wait -> report
+# Initialize, build, and start the daemon in simulation mode
+make setup build simulate
+
+# (New Tab) Run the automated smoke test
 make smoke
 ```
+
+### 2. Real-World Execution
+Submit a realistic task to a real agent (requires `claude-code` or `codex-agent` in `$PATH`):
+```bash
+# Install an agent
+npm install -g @anthropic-ai/claude-code
+
+# Start a run and submit a task
+./bin/orchestratorctl run start my-run my-project
+./bin/orchestratorctl submit my-run examples/tasks/bug_fix.yaml
+```
+
+For detailed agent installation and configuration, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
 
 ### 3. Real-World Execution
 Submit a realistic task to a real agent (requires `codex-agent` or similar in `$PATH`):
@@ -97,10 +103,11 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 ---
 
 ## 📖 Documentation
-- [Practical Examples](docs/EXAMPLES.md) (Start here for daily use)
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) (When things go wrong)
+- **[Self-Host Runbook (Flows)](docs/EXAMPLES.md)** (Start here for daily use)
+- [Setup & Self-Hosting Guide](docs/SETUP.md)
 - [Architecture Overview](docs/02_architecture.md)
-- [Gap Audit & Roadmap](GAP_AUDIT.md)
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)
 
 ---
 

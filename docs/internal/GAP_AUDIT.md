@@ -70,7 +70,7 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 ### Current contract-related files
 - **Domain (Go)**: `internal/domain/{task,result_spec,run,step,attempt,policy,benchmark}.go`
 - **Schemas (JSON)**: `schemas/{task,result,policy}.schema.json`
-- **Docs**: `docs/05_dsl_and_mcp.md`
+- **Docs**: `../05_dsl_and_mcp.md`
 
 ### Canonical targets
 - **TaskPayload**: `internal/domain.TaskSpec` (The source of truth for adapter instructions) [HARDENED]
@@ -251,4 +251,30 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - [x] Harden README for public publication (V1.7.6 Complete)
 - [x] Harden local usage & self-host framing (V1.7.7 Complete)
 - [x] Harden maturity & limitations framing (V1.7.8 Complete)
+- [x] Audit self-host/setup ergonomics (V1.7.9 Complete)
+- [x] Harden self-host setup instructions (V1.8.0 Complete)
+- [x] Harden self-host run flows (V1.8.1 Complete)
+- [x] Practical publication-readiness cleanup (V1.8.2 Complete)
 - [ ] Implement Phase 17: Public Packaging (Next)
+
+## Self-Host/Setup Audit (V1.7.9)
+
+### 🌿 Current Guidance
+- **Prerequisites**: Explicitly listed (Go, SQLite, Git).
+- **Setup**: `make setup` for directory foundation; `make build` for binaries.
+- **Simulation**: `make simulate` for orchestrator-only verification.
+- **Health**: `make doctor` for binary and path verification.
+- **E2E**: `make smoke` for full loop validation.
+
+### ⚠️ Identified Gaps (Internal/Public)
+1. **Agent Installation**: No helper scripts or direct links for installing tactical agents (Codex, Claude-code).
+2. **Config Mutability**: No pattern for "user-local" config overrides (e.g., `.env` or `config/local.json`) to avoid git-diff noise.
+3. **Log Ergonomics**: No unified "start and tail" daemon management command.
+4. **Error Actionability**: `make doctor` identifies missing binaries but does not provide installation hints.
+5. **First-Run Friction**: The transition from `make setup` to a working `Codex` run requires manual environment variable export or config file editing.
+
+### 🛠 Recommended Next Steps
+- Implement a `config/local.json` or `.env` loader.
+- Improve `orchestratorctl doctor` to provide "Install Hints" for known agents.
+- Add `make run-daemon` with backgrounding and log redirection.
+- Author `CONTRIBUTING.md` with deep-dive setup for developers.

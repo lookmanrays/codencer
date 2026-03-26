@@ -147,12 +147,10 @@
 - [x] Clarify execution modes (Real vs. Simulation) (Batch V1.5.1 Complete) <!-- id: 130 -->
 - [ ] Implement unified config with env overrides (Batch V1.5.2 Next) <!-- id: 126 -->
 - [x] Final alignment for Batch V1.5.1 (Micro-task Complete) <!-- id: 132 -->
-- [x] Audit logs, results, and usability surfaces (V1.7.1 Complete)
-- [x] Implement integrated log inspection and CLI evidence retrieval (V1.7.2 Complete)
-- [x] Create practical local usage examples (Batch V1.7.3 Complete)
-- [x] Audit publication readiness and positioning (V1.7.5 Complete)
-- [x] Harden README for public publication (V1.7.6 Complete)
-- [x] Harden local usage & self-host framing (V1.7.7 Complete)
-- [x] Harden maturity & limitations framing (V1.7.8 Complete)
+- [x] Audit maturity & limitations framing (V1.7.8 Complete)
+- [x] Audit self-host/setup ergonomics (V1.7.9 Complete)
+- [x] Harden self-host setup instructions (V1.8.0 Complete)
+- [x] Harden self-host run flows (V1.8.1 Complete)
+- [x] Practical publication-readiness cleanup (V1.8.2 Complete)
 - [ ] Phase 17: Public Packaging (Next)
 - [ ] Implement Unified Configuration Engine (Batch V1.5.3/V1.8 Next)

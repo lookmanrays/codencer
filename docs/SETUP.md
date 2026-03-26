@@ -2,6 +2,23 @@
 
 This guide describes how to deploy and run the Codencer Orchestration Bridge in your local environment.
 
+## ⚡️ 1-2-3 Quickstart
+
+If you have **Go** and **Git** installed, you can start a simulated run in 30 seconds:
+
+```bash
+# 1. Initialize and build
+make setup build
+
+# 2. Start the daemon in simulation mode
+make simulate
+
+# 3. (New Tab) Verify the loop
+make smoke
+```
+
+---
+
 ## 🏛 Self-Host Inventory
 
 When you run Codencer locally, you are hosting a **three-tier orchestration stack**:
@@ -23,13 +40,20 @@ When you run Codencer locally, you are hosting a **three-tier orchestration stac
 - **SQLite3**: For the local persistent ledger.
 - **Git**: Required for workspace-isolated runs (Git Worktrees).
 
-### 2. Coding Agents (Optional for Simulation)
-To perform real file edits, you need at least one tactical agent installed in your `$PATH`:
-- **Codex**: `codex-agent`
-- **Claude**: `claude-code`
-- **Qwen**: `qwen` / `aider`
+### 2. Tactical Agents (Required for Real Mode)
+To perform real file edits, you need at least one tactical agent installed in your `$PATH`.
 
-*Note: If these are missing, you can still test the orchestrator logic using **Simulation Mode**.*
+#### **Claude (Recommended)**
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+#### **Codex**
+```bash
+npm install -g @lookman/codex-agent
+```
+
+*Note: If these are missing, you can still test the orchestrator logic using **Simulation Mode** (see below).*
 
 ---
 
