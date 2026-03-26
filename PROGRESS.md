@@ -104,11 +104,14 @@
 - [-] Refactor Attempt state management (Moved to V1.1.3)
 - [-] Consolidate intervention signaling (Moved to V1.1.3)
 
-## Phase 16: Planner-Facing CLI Surface [/]
+## Phase 16: Planner-Facing CLI Surface [x]
 - [x] Audit existing CLI and identify gaps (Micro-task complete)
 - [x] Align task submission with canonical contract (Micro-task complete)
 - [x] Standardize machine-readable JSON output (Micro-task complete)
-- [x] Refine CLI for reliable machine-readability (Batch V1.2.1 Complete)
-- [ ] Implement state discovery (run/step listing)
+- [x] Refine CLI for reliable machine-readability (Batch V1.2.1 Complete) <!-- id: 56 -->
+- [x] Audit wait/result retrieval paths (Batch V1.2.2 Micro-task complete) <!-- id: 57 -->
+- [x] Align structured result retrieval CLI (Batch V1.2.2 Micro-task complete) <!-- id: 58 -->
+- [x] Add `wait` support for terminal state monitoring (Batch V1.2.2 Complete) <!-- id: 54 -->
+- [x] Refine CLI wait/result consistency (Batch V1.2.2 Complete) <!-- id: 59 -->
+- [ ] Implement `run list` and `step list` commands <!-- id: 52 -->
 - [ ] Expose Telemetry and Routing CLI groups
-- [ ] Add terminal state polling (wait command)

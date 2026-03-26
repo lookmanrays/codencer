@@ -76,11 +76,14 @@
 - [ ] Standardize `ValidationState` and `GateState` (remove "Status" suffix) <!-- id: 43 -->
 - [ ] Update supervisor to natively trigger `StepStateTimeout` <!-- id: 44 -->
 
-## Phase 16 — Planner-Facing CLI Surface (V1.2.1) [/]
-- [x] Audit existing CLI and identify gaps (Micro-task complete) <!-- id: 50 -->
-- [x] Align task submission with canonical contract (Micro-task complete) <!-- id: 55 -->
-- [x] Implement universal machine-readable JSON output (Micro-task complete) <!-- id: 51 -->
-- [x] Refine CLI for reliable machine-usability (Micro-task complete) <!-- id: 56 -->
+## Phase 16: Planner-Facing CLI Surface (V1.2) [x]
+- [x] Audit existing CLI and identify gaps (V1.2.1 Complete) <!-- id: 50 -->
+- [x] Align task submission with canonical contract (V1.2.1 Complete) <!-- id: 55 -->
+- [x] Implement machine-readable JSON output (V1.2.1 Complete) <!-- id: 51 -->
+- [x] Refine CLI for reliable machine-readability (Batch V1.2.1 Complete) <!-- id: 56 -->
+- [x] Audit wait/result retrieval paths (Batch V1.2.2 Micro-task complete) <!-- id: 57 -->
+- [x] Align structured result retrieval CLI (Batch V1.2.2 Micro-task complete) <!-- id: 58 -->
+- [x] Add `wait` support for terminal state monitoring (Batch V1.2.2 Complete) <!-- id: 54 -->
+- [x] Refine CLI wait/result consistency (Batch V1.2.2 Complete) <!-- id: 59 -->
 - [ ] Implement `run list` and `step list` commands <!-- id: 52 -->
 - [ ] Implement `benchmarks` and `routing` CLI groups <!-- id: 53 -->
-- [ ] Add `wait` support for terminal state monitoring <!-- id: 54 -->

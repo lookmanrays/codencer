@@ -7,8 +7,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"agent-bridge/internal/app"
+	"agent-bridge/internal/domain"
 	"agent-bridge/internal/validation"
 )
 
@@ -52,6 +54,7 @@ func printUsage() {
 	fmt.Println("  step result    <stepID>")
 	fmt.Println("  step artifacts <stepID>")
 	fmt.Println("  step validations <stepID>")
+	fmt.Println("  step wait      <stepID>")
 	fmt.Println("  gate approve    <id>")
 	fmt.Println("  gate reject    <id>")
 }
@@ -97,7 +100,7 @@ func startRun(id, projectID string) {
 
 	resp, err := http.Post(orchestratordURL+"/api/v1/runs", "application/json", bytes.NewReader(data))
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -115,7 +118,7 @@ func startRun(id, projectID string) {
 func runStatus(id string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + id)
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -142,7 +145,7 @@ func abortRun(id string) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -164,7 +167,7 @@ func abortRun(id string) {
 
 func handleStepCommand(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations> [args]")
+		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations|wait> [args]")
 		os.Exit(1)
 	}
 
@@ -182,7 +185,7 @@ func handleStepCommand(args []string) {
 	// Handle 'step <subcommand>' case
 	subArgs := args[1:]
 	if len(subArgs) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations> [args]")
+		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations|wait> [args]")
 		os.Exit(1)
 	}
 	switch subArgs[0] {
@@ -216,6 +219,12 @@ func handleStepCommand(args []string) {
 			os.Exit(1)
 		}
 		stepValidations(args[1])
+	case "wait":
+		if len(args) < 2 {
+			fmt.Println("Usage: orchestratorctl step wait <stepID>")
+			os.Exit(1)
+		}
+		stepWait(args[1])
 	default:
 		fmt.Printf("Unknown step command: %s\n", cmd)
 		os.Exit(1)
@@ -225,7 +234,7 @@ func handleStepCommand(args []string) {
 func startStep(runID, taskFile string) {
 	spec, err := validation.ParseTaskSpec(taskFile)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Printf(`{"error": "parsing task spec: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 
@@ -233,7 +242,7 @@ func startStep(runID, taskFile string) {
 
 	resp, err := http.Post(orchestratordURL+"/api/v1/runs/"+runID+"/steps", "application/json", bytes.NewReader(data))
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -251,7 +260,7 @@ func startStep(runID, taskFile string) {
 func stepStatus(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -269,7 +278,7 @@ func stepStatus(stepID string) {
 func stepResult(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -287,7 +296,7 @@ func stepResult(stepID string) {
 func stepArtifacts(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/artifacts")
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -304,7 +313,7 @@ func stepArtifacts(stepID string) {
 func stepValidations(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/validations")
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -317,6 +326,46 @@ func stepValidations(stepID string) {
 
 	body, _ := io.ReadAll(resp.Body)
 	fmt.Println(string(body))
+}
+
+func stepWait(stepID string) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
+		if err != nil {
+			fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
+			os.Exit(1)
+		}
+
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			fmt.Println(string(body))
+			resp.Body.Close()
+			os.Exit(1)
+		}
+
+		var result struct {
+			State string `json:"state"`
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if err := json.Unmarshal(body, &result); err != nil {
+			fmt.Printf(`{"error": "parsing response: %v"}`+"\n", err)
+			os.Exit(1)
+		}
+
+		// Check for terminal or intervention-required states
+		st := domain.StepState(result.State)
+		if st.IsTerminal() || st == domain.StepStateNeedsApproval || st == domain.StepStateNeedsManualAttention {
+			fmt.Println(string(body))
+			return
+		}
+
+		<-ticker.C
+	}
 }
 
 func handleGateCommand(args []string) {
@@ -333,7 +382,7 @@ func handleGateCommand(args []string) {
 
 	resp, err := http.Post(orchestratordURL+"/api/v1/gates/"+id, "application/json", bytes.NewReader(data))
 	if err != nil {
-		fmt.Printf("Error connecting to orchestratord: %v\n", err)
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()

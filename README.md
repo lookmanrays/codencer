@@ -126,19 +126,25 @@ validations:
     name: "unit-tests"
 ```
 
-### 3. Inspecting Status (Machine-Readable)
-All status and result commands output clean JSON for seamless integration with `jq` or other tools:
+### 3. Inspecting Status & Results (Machine-Readable)
+All status and result commands output clean JSON for seamless integration with `jq`:
 
 ```bash
 # Get run status
 orchestratorctl run status run-01 | jq .state
 
-# Get latest step result
-orchestratorctl step result step-123 | jq .summary
+# Get latest step result (works even if in-progress)
+orchestratorctl step result step-123 | jq '{state: .state, summary: .summary}'
+
+# Wait for a step to reach a terminal state (blocks and returns JSON)
+orchestratorctl step wait step-123 | jq .summary
 ```
 
+> [!TIP]
+> Use `.state` to distinguish between `running`, `completed`, `failed_terminal`, and `needs_manual_attention`.
+
 > [!NOTE]
-> This is the initial planner-facing CLI surface. Automated polling (`wait` command) and comprehensive result retrieval flows are scheduled for Batch V1.2.2.
+> This is a production-oriented planner-facing CLI surface. Automated polling (`wait` command) and structured results are fully operational for local relay flows.
 
 ```bash
 # Start the daemon in Orchestration Simulation Mode (verifies state machine only)

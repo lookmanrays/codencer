@@ -101,16 +101,17 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - `run start/status/abort`
 - `step start/status/result/artifacts/validations`
 - `gate approve/reject`
+- `submit` / `step result` / `step wait` (Planner-Facing Canonical Commands)
 
 ### Identified Gaps
-- **Output Control**: No universal `--json` or `-o json` flag for machine-readable output.
+- **Output Control**: [RESOLVED] All planner-facing commands now return pure JSON for machine readability.
 - **Discovery**: Missing `run list` and `step list <run_id>` for state inspection.
-- **Planner Bridging**: `step start` is file-bound; needs a way to accept direct JSON/YAML strings or stdin for scriptable flow.
+- **Planner Bridging**: [RESOLVED] Task submission aligned with canonical TaskSpec contract.
 - **Telemetry**: Benchmarks and Routing config are unexposed via CLI (API/MCP only).
-- **Control Flow**: No `wait` command for terminal state polling.
+- **Control Flow**: [RESOLVED] Implemented `orchestratorctl step wait` for terminal state polling.
+- **Gap - Terminal Waiting**: [RESOLVED] Implemented `orchestratorctl step wait` with domain-aligned terminal state detection.
+- **Gap - Exit Semantics**: [RESOLVED] All CLI commands now return structured JSON on both success and error for reliable automated parsing.
 
 ### Next Alignment Steps
-1. Add `--json` support to all status and result commands.
-2. Implement `run list` and `step list`.
-3. Align `step start` to support direct input.
-4. Add `benchmarks` and `routing` command groups.
+1. Implement `run list` and `step list` for discovery.
+2. Expose `benchmarks` and `routing` groups.
