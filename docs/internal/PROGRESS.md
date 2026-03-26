@@ -179,3 +179,12 @@
     - [ ] Finalize MIT/Apache License
     - [ ] Implement `doctor` binary version checking
     - [ ] Author `CONTRIBUTING.md`
+
+## Phase V1.D: Local Operator Ergonomics [/]
+- [x] Tighten `submit` -> `wait` -> `result` sequence (V1.D2 Complete)
+- [x] Harden post-execution inspection (V1.D3 Complete)
+- [x] Clarify non-success terminal outcomes (V1.D4/C2 Complete)
+- [x] Final alignment for Phase V1.C2 (Alignment Complete)
+- [ ] Implement `latest` keyword support for session memory
+- [ ] Implement incremental log streaming (`--follow`)
+- [ ] Implement synthesized `step report` (Outcome + Diffs + Validations)

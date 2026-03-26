@@ -37,8 +37,9 @@ In a new terminal:
 ### 3. Monitor & Wait
 ```bash
 # Wait for terminal state (should complete in ~5 seconds in simulation)
-./bin/orchestratorctl step wait <stepID_from_previous_command>
+./bin/orchestratorctl step wait <stepID>
 ```
+Once finished, the bridge will echo the **Summary**, **Logs path**, and **Artifacts directory**.
 
 ### 4. Inspect the Result
 ```bash
@@ -58,17 +59,22 @@ See exactly what the agent saw and did in its terminal session.
 ./bin/orchestratorctl step logs <stepID>
 ```
 
-### 2. Inspect Evidence (Artifacts)
+### 2. Verify Success (The "Proof")
+A successful task should result in:
+1. **`completed` State**: Seen in `./bin/orchestratorctl step result <id>`.
+2. **`passed` Validations**: Seen in `./bin/orchestratorctl step validations <id>`.
+3. **Modified Files**: Seen in the `./bin/orchestratorctl step artifacts <id>` list.
+
+### 3. Inspect Evidence (Artifacts)
 Codencer captures all generated files, diffs, and metadata in the local vault.
 ```bash
 # List all artifacts for a step
 ./bin/orchestratorctl step artifacts <stepID>
-
-# Artifacts are stored on disk at:
-# .codencer/artifacts/<runID>/<stepID>/...
 ```
+Every artifact includes a **SHA-256 hash** for cryptographic integrity.
+Artifacts are stored on disk at: `.codencer/artifacts/<runID>/<stepID>/...`
 
-### 3. Verify Correctness (Validations)
+### 4. Verify Correctness (Validations)
 Check which specific verification commands (tests, linters) passed or failed.
 ```bash
 ./bin/orchestratorctl step validations <stepID>
@@ -108,7 +114,7 @@ export CODEX_BINARY=codex-agent
 
 ### 4. Tail the Agent (Live)
 ```bash
-# Watch the agent's stdout as it works
+# Inspect the agent's current progress (snapshot)
 ./bin/orchestratorctl step logs <stepID>
 ```
 
@@ -153,6 +159,27 @@ make nuke
 ```
 
 ---
+## 🛠 Recovery from Non-Success
+
+The bridge reports what happened; you decide what to do next.
+
+### Example: Recovering from `failed_terminal`
+If a task finishes with `failed_terminal` (e.g. tests failed):
+1. **Audit**: Run `./bin/orchestratorctl step validations <stepID>` to see which specific test failed.
+2. **Diagnose**: Run `./bin/orchestratorctl step logs <stepID>` to see the agent's error messages.
+3. **Decide**: 
+   - If the instructions were unclear: Update your `task.yaml`.
+   - If the agent made a silly mistake: Add a hint to the `goal` or `instructions`.
+4. **Resubmit**: Just run the `submit` command again in the same run.
+   ```bash
+   ./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml --wait
+   ```
+
+### Example: Responding to `timeout`
+If a task times out:
+1. **Check Logs**: See if the agent was actually making progress or just hanging.
+2. **Adjust**: If it was making progress but slow, increase `timeout_seconds` in the task YAML.
+3. **Resubmit**: Run the task again; the bridge will use a fresh worktree.
 
 ## 📖 Further Reading
 - [Setup & Self-Hosting Guide](SETUP.md)

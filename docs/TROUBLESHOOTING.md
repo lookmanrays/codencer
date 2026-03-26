@@ -36,32 +36,27 @@ Always start here to verify your environment:
 ---
 
 ### 3.1 `timeout`
-- **What it means**: The agent exceeded the `timeout_seconds` defined in your `task.yaml`. The bridge killed the process to prevent hanging.
-- **Troubleshoot**: 
-  - Check `./bin/orchestratorctl step logs <id>` to see where it got stuck. 
-  - If the agent was just slow, increase `timeout_seconds` in the task YAML.
-  - If the agent is unresponsive, the bridge may have killed it; check `.codencer/daemon.log`.
+- **Bridge Report**: The agent exceeded the `timeout_seconds` limit.
+- **Audit**: Run `./bin/orchestratorctl step logs <id>` to find the hang.
+- **Operator Decision**: Increase timeout in YAML OR simplify the task if the agent is stuck in a loop.
 
 ### 3.2 `failed_terminal`
-- **What it means**: The task finished, but a critical validation (test/lint) failed OR the agent explicitly reported failure.
-- **Troubleshoot**:
-  - Check `./bin/orchestratorctl step logs <id>` to see where it got stuck. 
-  - Run `./bin/orchestratorctl step validations <id>` to see which specific check failed.
-  - Review the agent's reasoning in `./bin/orchestratorctl step result <id>`.
+- **Bridge Report**: The task finished, but validations (tests/lint) failed.
+- **Audit**: Run `./bin/orchestratorctl step validations <id>` for the failure list.
+- **Operator Decision**: Correct the `task.yaml` instructions OR fix the agent's logic manually in the worktree.
 
-### 3.3 `needs_manual_attention` (Ambiguity/Crash)
-- **What it means**: The bridge cannot determine the outcome (e.g., the agent crashed without a result JSON, or there's a file conflict in the worktree).
-- **Troubleshoot**:
-  - Review `./bin/orchestratorctl step logs <id>` for internal agent errors.
-  - Check `.codencer/daemon.log` for bridge-side errors.
-  - You may need to manually inspect `.codencer/workspace/<runID>/` (if the worktree wasn't cleaned).
+### 3.3 `needs_manual_attention`
+- **Bridge Report**: An unexpected error or crash occurred.
+- **Audit**: Check `.codencer/daemon.log` and `./bin/orchestratorctl step logs <id>`.
+- **Operator Decision**: Resolve the system conflict (lock, disk, etc.) and resubmit.
 
 ### 3.4 `failed_retryable`
-- **What it means**: Transient failure (network timeout, rate limit) that can be cleared by trying again.
-- **Recovery**: 
-  - Review `./bin/orchestratorctl step logs <id>` for internal agent errors.
-  - Double-check your API keys in `.env`.
-  - Wait a few seconds then run `./bin/orchestratorctl submit <runID> <task.yaml> --wait`.
+- **Bridge Report**: Transient error (e.g. 429 Rate Limit).
+- **Operator Decision**: Wait and resubmit: `./bin/orchestratorctl submit <runID> <file> --wait`.
+
+### 3.5 `cancelled`
+- **Bridge Report**: Execution was stopped via `run abort` or CLI interruption.
+- **Operator Decision**: Start a new run or step if the original goal is still required.
 
 ---
 

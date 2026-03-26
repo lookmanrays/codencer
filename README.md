@@ -64,20 +64,31 @@ Submit a task and wait for the bridge to report results:
 # 2. Submit a tactical task and wait for completion
 ./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait
 
-# 3. Inspect the high-fidelity outcome
+# 3. Inspect the final outcome (See hints in 'wait' output for these)
 ./bin/orchestratorctl step result <stepID>
+./bin/orchestratorctl step logs <stepID>
 ./bin/orchestratorctl step artifacts <stepID>
-./bin/orchestratorctl step validations <stepID>
 
 ---
 
 ## 🔍 Interpreting Outcomes
 
-The Bridge reports high-fidelity evidence for every attempt:
+The Bridge reports high-fidelity evidence for every attempt. Note that **the bridge is a relay**, not a decision-maker; once a terminal state is reached, control returns to the operator/planner to decide the next move.
+
 - **`completed`**: Goal met, all tests passed.
-- **`completed_with_warnings`**: Success, but with lint/test warnings.
-- **`failed_terminal`**: Execution halted due to an unrecoverable error.
-- **`needs_approval`**: Policy gate hit; run `./bin/orchestratorctl gate approve <id>`.
+- **`completed_with_warnings`**: Success, but with non-critical issues (lint/tests).
+- **`failed_terminal`**: Goal not met (e.g. tests failed). Review validations.
+- **`timeout`**: Execution exceeded limits. Review logs for hangs.
+- **`cancelled`**: Manually stopped by the operator.
+- **`needs_approval`**: Policy gate hit; awaiting operator intervention.
+- **`needs_manual_attention`**: System ambiguity or crash. Review daemon/agent logs.
+
+### Auditing the Evidence
+Every task execution leaves a permanent audit trail:
+1. **Summary**: Run `./bin/orchestratorctl step result <id>` for the high-level spec.
+2. **Logs**: Run `./bin/orchestratorctl step logs <id>` for the raw agent stdout.
+3. **Artifacts**: Every modified file and diff is stored in `.codencer/artifacts/`. Use `./bin/orchestratorctl step artifacts <id>` to see the exact paths and SHA-256 hashes.
+4. **Validations**: Run `./bin/orchestratorctl step validations <id>` to see specific test/lint results.
 
 For a deeper dive into agent installation and advanced flows, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
 

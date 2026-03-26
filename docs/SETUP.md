@@ -167,6 +167,6 @@ Most production-style interactions use a YAML `TaskSpec`:
 ---
 
 ## 🔍 Verification & Health
-- **Logs**: View live agent output with `./bin/orchestratorctl step logs <id>`.
+- **Logs**: View currently captured agent output with `./bin/orchestratorctl step logs <id>`.
 - **Doctor**: Run `./bin/orchestratorctl doctor` or `make doctor` to verify local binary availability.
 - **Nuke**: Run `make nuke` to completely reset all local state and history.

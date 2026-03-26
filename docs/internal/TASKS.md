@@ -155,3 +155,14 @@
 - [x] Document iterative "Fix-Test-Repeat" and "Simulation-to-Real" workflows (Complete)
 - [x] Add concise planner-driven usage guidance (Complete)
 - [ ] Implement Unified Configuration Engine (Batch V1.5.3/V1.8 Next)
+
+## Batch V1.D: Local Operator Ergonomics [/]
+- [x] Audit daily-use local operator flow (V1.D1 Complete)
+- [x] Tighten `submit` -> `wait` -> `result` sequence (V1.D2 Complete)
+- [x] Harden post-execution inspection (V1.D3 Complete)
+- [x] Clarify non-success terminal outcomes (V1.D4/C2 Complete)
+- [x] Final alignment for Phase V1.C2 (Alignment Complete)
+- [ ] Implement `latest` keyword support for CLI commands (V1.D2)
+- [ ] Implement `step logs --follow` streaming (V1.D3)
+- [ ] Implement synthesized `step report` (Summary + Diffs + Validations) (V1.D4)
+- [ ] Add direct `cat` hints for unified.diff in `step wait` (V1.D5)

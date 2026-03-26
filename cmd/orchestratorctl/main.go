@@ -53,24 +53,30 @@ func main() {
 
 func printUsage() {
 	fmt.Println("Usage: orchestratorctl <command> [args]")
-	fmt.Println("Commands:")
-	fmt.Println("  version        Show version")
-	fmt.Println("  run start      [id] [project_id] (Auto-generated if omitted)")
-	fmt.Println("  run list")
-	fmt.Println("  run state      <runID>")
-	fmt.Println("  run abort      <runID>")
-	fmt.Println("  run wait       <runID> [--interval <d>] [--timeout <d>]")
-	fmt.Println("  step start     <runID> <taskFile.yaml> [--wait]")
-	fmt.Println("  step list      <runID>")
-	fmt.Println("  submit         <runID> <taskFile.yaml> [--wait] (Synonym for step start)")
-	fmt.Println("  step state     <stepID>")
-	fmt.Println("  step result    <stepID>")
-	fmt.Println("  step logs      <stepID>")
-	fmt.Println("  step artifacts <stepID>")
-	fmt.Println("  step validations <stepID>")
-	fmt.Println("  gate approve   <gateID>")
-	fmt.Println("  gate reject    <gateID>")
-	fmt.Println("  doctor         Run environment health checks")
+	fmt.Println("\nRun Management (Sessions):")
+	fmt.Println("  run start      [id] [project]  Initialize a new orchestration run")
+	fmt.Println("  run list                      List all recent runs")
+	fmt.Println("  run state      <runID>         Check run lifecycle state")
+	fmt.Println("  run abort      <runID>         Halt an active run")
+	fmt.Println("  run wait       <runID>         Block until run reaches terminal state")
+	
+	fmt.Println("\nStep Execution (Tasks):")
+	fmt.Println("  submit         <runID> <file>  Submit a TaskSpec (Synonym: step start)")
+	fmt.Println("  step start     <runID> <file>  Submit a TaskSpec for execution")
+	fmt.Println("  step list      <runID>         List all steps in a run")
+	fmt.Println("  step wait      <stepID>        Block until step reaches terminal state")
+	
+	fmt.Println("\nInspection & Audit:")
+	fmt.Println("  step result    <stepID>        Show high-level outcome summary")
+	fmt.Println("  step logs      <stepID>        View integrated agent output (stdout)")
+	fmt.Println("  step artifacts <stepID>        List all captured files and diffs")
+	fmt.Println("  step validations <stepID>      Check test/lint verification outcomes")
+	
+	fmt.Println("\nIntervention & Health:")
+	fmt.Println("  gate approve   <gateID>        Approve a paused policy gate")
+	fmt.Println("  gate reject    <gateID>        Reject a paused policy gate")
+	fmt.Println("  doctor                        Verify local environment health")
+	fmt.Println("  version                       Show version")
 }
 
 func handleRunCommand(args []string) {
@@ -403,7 +409,7 @@ func stepStart(runID, taskFile string, shouldWait bool) {
 
 	// Output raw JSON response for machine readability
 	printJSON(body)
-	fmt.Fprintf(os.Stderr, "\n[HINT] To wait for results: ./bin/orchestratorctl step wait %s\n", step.ID)
+	fmt.Fprintf(os.Stderr, "\n[HINT] To wait for results:\n  ./bin/orchestratorctl step wait %s\n", step.ID)
 }
 
 func listStepsByRun(runID string) {
@@ -476,7 +482,8 @@ func stepResult(stepID string) {
 		fmt.Printf("State:   %s\n", result.State)
 		fmt.Printf("Summary: %s\n", result.Summary)
 		if result.RawOutputRef != "" {
-			fmt.Printf("Logs:    %s\n", result.RawOutputRef)
+			fmt.Printf("Logs:      %s\n", result.RawOutputRef)
+			fmt.Printf("Artifacts: %s\n", filepath.Dir(result.RawOutputRef))
 		}
 		fmt.Println("---------------------------")
 	} else {
@@ -525,6 +532,9 @@ func stepArtifacts(stepID string) {
 	var artifacts []domain.Artifact
 	if err := json.Unmarshal(body, &artifacts); err == nil {
 		fmt.Printf("--- Artifacts for Step: %s ---\n", stepID)
+		if len(artifacts) > 0 {
+			fmt.Printf("Directory: %s\n\n", filepath.Dir(artifacts[0].Path))
+		}
 		if len(artifacts) == 0 {
 			fmt.Println("No artifacts recorded.")
 		}
@@ -625,22 +635,28 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Policy gate hit. To approve:\n")
 					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl gate approve gate-%s\n", stepID)
 				case domain.StepStateFailedTerminal:
-					fmt.Fprintf(os.Stderr, "\n[TROUBLESHOOT] Task failed. Inspect test/lint outcomes:\n")
+					fmt.Fprintf(os.Stderr, "\n[AUDIT] Goal not met (e.g. test failure). Inspect evidence:\n")
 					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step validations %s\n", stepID)
 				case domain.StepStateTimeout:
-					fmt.Fprintf(os.Stderr, "\n[TROUBLESHOOT] Execution exceeded time limit. Check logs for hang:\n")
+					fmt.Fprintf(os.Stderr, "\n[AUDIT] Execution exceeded time limit. Check logs for hang/infinite loop:\n")
 					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step logs %s\n", stepID)
 				case domain.StepStateNeedsManualAttention:
-					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Bridge encountered ambiguity or system error.\n")
-					fmt.Fprintf(os.Stderr, "Review daemon logs (.codencer/daemon.log) and attempt logs:\n")
+					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] System ambiguity or agent crash. Review logs:\n")
 					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step logs %s\n", stepID)
+				case domain.StepStateCancelled:
+					fmt.Fprintf(os.Stderr, "\n[NOTE] Execution was manually stopped by operator.\n")
+				case domain.StepStateFailedRetryable:
+					fmt.Fprintf(os.Stderr, "\n[RECOVERY] Transient failure (e.g. rate limit). You may retry:\n")
+					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl submit <runID> <task.yaml> --wait\n")
 				}
 				fmt.Fprintln(os.Stderr)
 
 				// Hint at artifact directory if possible
 				if result.RawOutputRef != "" {
-					fmt.Fprintf(os.Stderr, "Logs: %s\n", result.RawOutputRef)
+					fmt.Fprintf(os.Stderr, "Summary:   %s\n", result.Summary)
+					fmt.Fprintf(os.Stderr, "Logs:      %s\n", result.RawOutputRef)
 					fmt.Fprintf(os.Stderr, "Artifacts: %s\n", filepath.Dir(result.RawOutputRef))
+					fmt.Fprintf(os.Stderr, "\n[HINT] To see full result details:\n  ./bin/orchestratorctl step result %s\n", stepID)
 				}
 				
 				printJSON(body)
