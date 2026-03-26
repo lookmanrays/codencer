@@ -3,3 +3,5 @@ codencer.db
 *.out
 vendor/
 .vscode/
+.codencer/
+*.log

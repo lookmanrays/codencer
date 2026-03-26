@@ -70,34 +70,37 @@ func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Path[len("/api/v1/runs/"):]
+	fullPath := strings.TrimPrefix(r.URL.Path, "/api/v1/runs/")
+	parts := strings.Split(strings.Trim(fullPath, "/"), "/")
+	id := parts[0]
 	if id == "" {
 		http.Error(w, "ID required", http.StatusBadRequest)
 		return
 	}
 
-	if r.Method == http.MethodGet {
-		isSteps := len(r.URL.Path) > len("/api/v1/runs/"+id+"/") && r.URL.Path[len("/api/v1/runs/"+id+"/"):] == "steps"
-		isGates := len(r.URL.Path) > len("/api/v1/runs/"+id+"/") && r.URL.Path[len("/api/v1/runs/"+id+"/"):] == "gates"
-
+	switch r.Method {
+	case http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
-		if isSteps {
-			steps, err := h.RunSvc.GetStepsByRun(r.Context(), id)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+		if len(parts) > 1 {
+			sub := parts[1]
+			if sub == "steps" {
+				steps, err := h.RunSvc.GetStepsByRun(r.Context(), id)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(steps)
 				return
 			}
-			json.NewEncoder(w).Encode(steps)
-			return
-		}
-		if isGates {
-			gates, err := h.RunSvc.GetGatesByRun(r.Context(), id)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if sub == "gates" {
+				gates, err := h.RunSvc.GetGatesByRun(r.Context(), id)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(gates)
 				return
 			}
-			json.NewEncoder(w).Encode(gates)
-			return
 		}
 
 		run, err := h.RunSvc.GetRun(r.Context(), id)
@@ -110,10 +113,39 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(run)
-		return
-	}
 
-	if r.Method == http.MethodPatch { // Used for Abort conceptually
+	case http.MethodPost:
+		if len(parts) > 1 && parts[1] == "steps" {
+			var spec domain.TaskSpec
+			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			step := &domain.Step{
+				ID:             spec.StepID,
+				PhaseID:        spec.PhaseID,
+				Title:          spec.Title,
+				Goal:           spec.Goal,
+				Adapter:        spec.AdapterProfile,
+				Policy:         spec.PolicyBundle,
+				TimeoutSeconds: spec.TimeoutSeconds,
+			}
+
+			go func() {
+				if err := h.RunSvc.DispatchStep(context.Background(), id, step); err != nil {
+					// Log omitted
+				}
+			}()
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(step)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+
+	case http.MethodPatch:
 		var req struct {
 			Action string `json:"action"` // "abort"
 		}
@@ -130,43 +162,11 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	if r.Method == http.MethodPost {
-		// Used to dispatch steps: /api/v1/runs/{id}/steps
-		if len(r.URL.Path) > len("/api/v1/runs/"+id+"/") && r.URL.Path[len("/api/v1/runs/"+id+"/"):] == "steps" {
-			var spec domain.TaskSpec
-			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			step := &domain.Step{
-				ID:      spec.StepID,
-				PhaseID: spec.PhaseID,
-				Title:   spec.Title,
-				Goal:    spec.Goal,
-				Adapter:        spec.AdapterProfile,
-				Policy:         spec.PolicyBundle,
-				TimeoutSeconds: spec.TimeoutSeconds,
-			}
-
-			// We dispatch asynchronously because RunService.DispatchStep blocks on adapter.Poll
-			go func() {
-				// In a real robust system, background contexts tied to daemon lifecycle should be used.
-				if err := h.RunSvc.DispatchStep(context.Background(), id, step); err != nil {
-					// Log message omitted for brevity as per existing code style
-				}
-			}()
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusAccepted)
-			_ = json.NewEncoder(w).Encode(step)
-			return
-		}
-	}
-
-	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
 func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {

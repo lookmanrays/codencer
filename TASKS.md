@@ -113,11 +113,13 @@
 - [x] Clarify manual-attention and retry reporting (V1.4.7 Complete) <!-- id: 119 -->
 - [x] Align terminal outcome semantics in CLI/Result output (V1.4.8 Complete) <!-- id: 120 -->
 - [x] Final alignment for Batch V1.4.2 (V1.4.9 Complete) <!-- id: 121 -->
+## Phase 15: Local Usability & Onboarding [x]
 - [x] Audit local dev/config workflow (V1.5.5 Complete) <!-- id: 125 -->
-- [ ] Implement unified config with env overrides <!-- id: 126 -->
-- [x] Align default paths and improve local startup (V1.6.1 Complete) <!-- id: 127 -->
-- [x] Clarify execution modes and config expectations (V1.6.2 Complete) <!-- id: 130 -->
-- [x] Improve quickstart and verification flow (V1.6.3 Complete) <!-- id: 131 -->
+- [x] Align default paths and improve local startup (Batch V1.5.1 Complete) <!-- id: 127 -->
+- [x] Clarify execution modes and config expectations (Batch V1.5.1 Complete) <!-- id: 130 -->
+- [x] Improve quickstart and verification flow (Batch V1.5.1 Complete) <!-- id: 131 -->
+- [x] Final alignment for Batch V1.5.1 (Micro-task Complete) <!-- id: 132 -->
+- [ ] Implement unified config with env overrides (Batch V1.5.2 Next) <!-- id: 126 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
 - [ ] Consolidate intervention states (NeedsApproval/NeedsManualAttention) <!-- id: 117 -->
 - [ ] Expose Telemetry and Routing CLI groups

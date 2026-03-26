@@ -48,6 +48,9 @@ In a separate terminal:
 
 ### 3. Verification & Cleanup
 ```bash
+# Run unit and integration tests
+make test
+
 # Verify binary availability and paths
 make doctor
 
@@ -152,41 +155,22 @@ Codencer is a local orchestration bridge, not an autonomous agent or a cloud-sca
 > - Binary: Expected name is `codex-agent`.
 > - Custom Path: Set `CODEX_BINARY=/path/to/binary`.
 > - Simulation: Set `CODEX_SIMULATION_MODE=1` to bypass binary checks and use stubs for orchestrator validation.
-## Reviewer Summary & Verification
+### 4. Discovery and Observability
+- **List all runs**: `bin/orchestratorctl run list`
+- **List steps in a run**: `bin/orchestratorctl step list <runID>`
+- **Inspect step details**: `bin/orchestratorctl step status <stepID>`
 
-### 1. Verification Commands
-The following suite should be run to verify the integrity of the bridge:
-
-```bash
-# Build all components
-make build
-
-# Run core service and integration tests
-make test
-```
-
-### 2. Submitting a Task
-To submit a canonical task for execution:
+All status and result commands output clean JSON for seamless integration with `jq`:
 
 ```bash
-# 1. Start a run (session container)
-orchestratorctl run start run-01 my-project
+# Get run status
+orchestratorctl run status run-01 | jq .state
 
-# 2. Submit a task (via YAML file)
-orchestratorctl submit run-01 task.yaml
+# Get latest step result (works even if in-progress)
+orchestratorctl step result step-123 | jq '{state: .state, summary: .summary}'
 ```
 
-### Local Execution Flow
-1. **Start a Run**: `orchestratorctl run start my-session my-project`
-2. **Submit a Task**: `orchestratorctl submit my-session task.yaml`
-3. **Wait for Terminal State**: `orchestratorctl run wait my-session --interval 1s --timeout 5m`
-
-### Discovery and Observability
-- **List all runs**: `orchestratorctl run list`
-- **List steps in a run**: `orchestratorctl step list <runID>`
-- **Inspect step details**: `orchestratorctl step status <stepID>`
-
-The `wait` command will block until the run or step reaches a terminal state (`completed`, `failed`) or requires intervention (`needs_approval`). Progress indicators (.) and status messages are sent to `stderr`, while the final terminal result is printed to `stdout` as a machine-usable JSON object. You can control the polling frequency with `--interval` and enforce client-side safety with `--timeout`.
+## Core Concepts
 
 Example `task.yaml`:
 ```yaml

@@ -104,8 +104,13 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 
 	policyReg := service.NewPolicyRegistry()
 	policyDir := filepath.Join(filepath.Dir(cfg.DBPath), "config", "policies")
+	if _, err := os.Stat(policyDir); os.IsNotExist(err) {
+		// Fallback to project root config/policies for local development
+		policyDir = filepath.Join("config", "policies")
+	}
+
 	if err := policyReg.LoadFromDir(policyDir); err != nil {
-		logger.Warn("Failed to load policies from config/policies, using defaults", "error", err)
+		logger.Warn("Failed to load policies, using internal defaults", "dir", policyDir, "error", err)
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)

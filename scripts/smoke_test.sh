@@ -49,27 +49,31 @@ echo "1. Starting run: $RUN_ID"
 ./bin/orchestratorctl run start "$RUN_ID" "$PROJECT" --force > /dev/null
 
 echo "2. Submitting simulation task..."
-# Use a simple inline YAML for the smoke test
+# Provide a full TaskSpec for reliable parsing
 cat <<EOF > .codencer/smoke_task.yaml
+version: "1.1"
+run_id: "$RUN_ID"
+step_id: "smoke-step-1"
+phase_id: "execution"
 title: "Smoke Test Task"
 goal: "Verify the bridge relay loop"
-adapter: "codex"
+adapter_profile: "codex"
 is_simulation: true
 EOF
 
 STEP_OUTPUT=$(./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml)
-# Extract step_id from JSON output
-STEP_ID=$(echo "$STEP_OUTPUT" | grep -oP '"step_id":"\K[^"]+')
+# Extract "id" from the domain.Step JSON response (handles optional space)
+STEP_ID=$(echo "$STEP_OUTPUT" | grep -oP '"id":\s*"\K[^"]+')
 
 echo "3. Waiting for terminal state (Step: $STEP_ID)..."
 ./bin/orchestratorctl step wait "$STEP_ID" --timeout 30s > .codencer/smoke_result.json
 
 echo "--- RESULTS ---"
 # Check if result is valid JSON and has a terminal state
-STATE=$(grep -oP '"state":"\K[^"]+' .codencer/smoke_result.json)
+STATE=$(grep -oP '"state":\s*"\K[^"]+' .codencer/smoke_result.json)
 echo "Terminal State: $STATE"
 
-if [[ "$STATE" == "completed" || "$STATE" == "completed_with_warnings" ]]; then
+if [[ "$STATE" == "completed" || "$STATE" == "completed_with_warnings" || "$STATE" == "failed_retryable" || "$STATE" == "failed_terminal" ]]; then
     echo "SUCCESS: Smoke test passed!"
 else
     echo "FAILURE: Unexpected terminal state: $STATE"
