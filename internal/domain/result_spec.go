@@ -12,6 +12,7 @@ type ResultSpec struct {
 	StepID             string            `json:"step_id"`
 	AttemptID          string            `json:"attempt_id"`
 	Adapter            string            `json:"adapter"`
+	RequestedAdapter   string            `json:"requested_adapter"`
 	State              StepState         `json:"state"`
 	Summary            string            `json:"summary"`
 	FilesChanged       []string          `json:"files_changed"`

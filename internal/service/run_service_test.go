@@ -16,7 +16,7 @@ import (
 // MockAdapter specifically avoids network and os.exec calls.
 type MockAdapter struct{}
 
-func (m *MockAdapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactsRoot string) error {
+func (m *MockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	return nil
 }
 

@@ -48,7 +48,7 @@ func TestAdapters_SimulationConformance(t *testing.T) {
 			os.MkdirAll(artifactRoot, 0755)
 
 			// Start execution
-			if err := a.Start(ctx, attempt, workspaceRoot, artifactRoot); err != nil {
+			if err := a.Start(ctx, &domain.Step{}, attempt, workspaceRoot, artifactRoot); err != nil {
 				t.Fatalf("Start failed for %s: %v", a.Name(), err)
 			}
 

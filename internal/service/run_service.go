@@ -436,7 +436,7 @@ func (s *RunService) executeAttempt(
 	}()
 
 	// 2. Start Execution
-	if err := adapter.Start(ctx, attempt, workspaceRoot, s.artifactRoot); err != nil {
+	if err := adapter.Start(ctx, step, attempt, workspaceRoot, s.artifactRoot); err != nil {
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
@@ -451,23 +451,29 @@ func (s *RunService) executeAttempt(
 	step.State = domain.StepStateCollectingArtifacts
 	s.stepsRepo.UpdateState(ctx, step)
 
-	// 4. Collect & Normalize
+	// 4. Collect & Finalize
 	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, s.artifactRoot)
 	if err != nil {
-		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Artifact collection failed: " + err.Error()}
-	} else {
-		for _, art := range artifacts {
-			_ = s.artifactsRepo.Create(ctx, art)
-		}
-		
-		res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts)
-		if err != nil {
-			attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Normalization failed: " + err.Error()}
-		} else {
-			attempt.Result = res
-		}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedTerminal, Summary: "Failed to collect artifacts: " + err.Error()}
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
 	}
 
+	// Persist artifacts
+	for _, art := range artifacts {
+		_ = s.artifactsRepo.Create(ctx, art)
+	}
+
+	res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts)
+	if err != nil {
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedTerminal, Summary: "Normalization failed: " + err.Error()}
+	} else {
+		attempt.Result = res
+	}
+
+	// Enrich with step-level requested context
+	attempt.Result.RequestedAdapter = step.Adapter
+	
 	s.updateAttemptResult(ctx, attempt)
 
 	// 5. Evaluate Policy

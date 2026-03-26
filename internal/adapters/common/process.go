@@ -24,7 +24,7 @@ type ExecutionOptions struct {
 }
 
 // InvokeLocal manages the lifecycle of a local adapter process.
-func InvokeLocal(ctx context.Context, attempt *domain.Attempt, opts ExecutionOptions) error {
+func InvokeLocal(ctx context.Context, step *domain.Step, attempt *domain.Attempt, opts ExecutionOptions) error {
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Minute
 	}
@@ -39,7 +39,7 @@ func InvokeLocal(ctx context.Context, attempt *domain.Attempt, opts ExecutionOpt
 
 	// 1. Check for Simulation Mode
 	if IsSimulationEnabled(opts.AdapterName) {
-		return RunSimulation(ctx, attempt, opts.ArtifactRoot, opts.Workspace)
+		return RunSimulation(ctx, step, attempt, opts.ArtifactRoot, opts.Workspace)
 	}
 
 	// 2. Resolve Binary

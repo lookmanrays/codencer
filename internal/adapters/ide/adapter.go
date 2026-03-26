@@ -34,7 +34,7 @@ func (a *Adapter) Capabilities() []string {
 
 // Start performs a proxy-mediated handoff by writing the attempt payload to a shared file buffer. 
 // A companion VS Code Extension must watch this file to facilitate ingestion into the active IDE chat.
-func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactsRoot string) error {
+func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	slog.Info("IDE Adapter: Starting chat bridge handoff", "attemptID", attempt.ID)
 
 	promptFile := filepath.Join(workspaceRoot, ".codencer", "chat_prompt.txt")

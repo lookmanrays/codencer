@@ -92,6 +92,8 @@
 - [x] Create canonical relay-facing result scaffold
 
 ## Phase 14: State & Simulation Clarification (Completed)
+- **Opaque Streams**: `stdout.log` is captured but not yet streamed to the planner for real-time progress.
+- **Reporting Detail**: [RESOLVED] Results now include `RequestedAdapter` and explicit `IsSimulation` flags for full transparency.
 - [x] Clarify execution state semantics (timeout, needs_manual_attention)
 - [x] Formalize simulation semantics in output contract and documentation
 
@@ -113,5 +115,11 @@
 - [x] Align structured result retrieval CLI (Batch V1.2.2 Micro-task complete) <!-- id: 58 -->
 - [x] Add `wait` support for terminal state monitoring (Batch V1.2.2 Complete) <!-- id: 54 -->
 - [x] Refine CLI wait/result consistency (Batch V1.2.2 Complete) <!-- id: 59 -->
-- [ ] Implement `run list` and `step list` commands <!-- id: 52 -->
+- [x] Audit Codex adapter and identify hardening requirements (V1.3.1 Complete)
+- [x] Validate adapter binary availability in `Start()` (V1.3.1 Complete)
+- [x] Pass canonical task metadata to adapter command invocation (V1.3.1 Complete)
+- [x] Implement Codex-specific result normalization (V1.3.1 Complete) <!-- id: 64 -->
+- [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
+- [x] Finalize Batch V1.3.1 alignment (V1.3.1) <!-- id: 66 -->
+- [ ] Implement run/step discovery commands (V1.3.1) <!-- id: 52 -->
 - [ ] Expose Telemetry and Routing CLI groups

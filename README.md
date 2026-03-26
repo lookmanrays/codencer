@@ -65,7 +65,10 @@ The core execution engine has been refined for improved reliability. Key improve
 1. **Lifecycle Decomposition**: `RunService.DispatchStep` is now a modular coordinator with clear attempt-loop and environment-setup boundaries.
 2. **MCP Identity Correctness**: Resolved critical bugs in Step Retry logic to ensure correct RunID propagation.
 3. **Structured MCP Payloads**: All tool outputs now return machine-usable JSON, enabling better automated planning.
-4. **Environment Robustness**: Worktree management now handles branch collisions and setup failures with explicit recovery paths.
+4. **Environment Robustness**: Worktree- [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
+- [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
+- [x] Finalize Batch V1.3.1 alignment and documentation (V1.3.1 Complete) <!-- id: 66 -->
+- [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
 
 **Phase 6 Routing & Benchmark Hardening (Complete):**
 Hardened task telemetry and routing behavior for architectural honesty.
@@ -87,6 +90,11 @@ Codencer is a local orchestration bridge, not an autonomous agent or a cloud-sca
 5. **Maturity**: This tool is currently in **Beta/MVP** state and should be used as an internal or experimental orchestration sidecar.
 
 > **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.
+>
+> **Codex Configuration**:
+> - Binary: Expected name is `codex-agent`.
+> - Custom Path: Set `CODEX_BINARY=/path/to/binary`.
+> - Simulation: Set `CODEX_SIMULATION_MODE=1` to bypass binary checks and use stubs for orchestrator validation.
 ## Reviewer Summary & Verification
 
 ### 1. Verification Commands
@@ -137,7 +145,7 @@ orchestratorctl run status run-01 | jq .state
 orchestratorctl step result step-123 | jq '{state: .state, summary: .summary}'
 
 # Wait for a step to reach a terminal state (blocks and returns JSON)
-orchestratorctl step wait step-123 | jq .summary
+orchestratorctl step wait step-123 | jq '{state: .state, adapter: .adapter, requested: .requested_adapter, summary: .summary}'
 ```
 
 > [!TIP]

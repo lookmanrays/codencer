@@ -21,7 +21,7 @@ func TestInvokeLocal_BinaryNotFound(t *testing.T) {
 		ArtifactRoot: filepath.Join(tmpDir, "artifacts"),
 	}
 
-	err := InvokeLocal(context.Background(), attempt, opts)
+	err := InvokeLocal(context.Background(), &domain.Step{}, attempt, opts)
 	if err == nil {
 		t.Fatal("expected error for nonexistent binary, got nil")
 	}
@@ -45,7 +45,7 @@ func TestInvokeLocal_Simulation(t *testing.T) {
 		ArtifactRoot: artifactRoot,
 	}
 
-	err := InvokeLocal(context.Background(), attempt, opts)
+	err := InvokeLocal(context.Background(), &domain.Step{}, attempt, opts)
 	if err != nil {
 		t.Fatalf("InvokeLocal simulation failed: %v", err)
 	}

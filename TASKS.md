@@ -85,5 +85,13 @@
 - [x] Align structured result retrieval CLI (Batch V1.2.2 Micro-task complete) <!-- id: 58 -->
 - [x] Add `wait` support for terminal state monitoring (Batch V1.2.2 Complete) <!-- id: 54 -->
 - [x] Refine CLI wait/result consistency (Batch V1.2.2 Complete) <!-- id: 59 -->
-- [ ] Implement `run list` and `step list` commands <!-- id: 52 -->
-- [ ] Implement `benchmarks` and `routing` CLI groups <!-- id: 53 -->
+- [ ] Implement state discovery (run/step listing)
+- [ ] Expose Telemetry and Routing CLI groups <!-- id: 53 -->
+
+## Phase 17 — Codex Adapter Hardening (V1.3) [/]
+- [x] Audit Codex adapter and identify hardening requirements (V1.3.1 Complete) <!-- id: 61 -->
+- [x] Validate adapter binary availability in `Start()` (V1.3.1 Complete) <!-- id: 62 -->
+- [x] Pass canonical task metadata to adapter command invocation (V1.3.1 Complete) <!-- id: 63 -->
+- [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
+- [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
+- [ ] Implement state discovery (run/step listing) <!-- id: 52 -->

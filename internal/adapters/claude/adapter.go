@@ -29,7 +29,7 @@ func (a *Adapter) Capabilities() []string {
 	return []string{"mcp_client", "planning"}
 }
 
-func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -51,7 +51,7 @@ func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceR
 			ArtifactRoot: artifactRoot,
 		}
 
-		if err := common.InvokeLocal(execCtx, attempt, opts); err != nil {
+		if err := common.InvokeLocal(execCtx, step, attempt, opts); err != nil {
 			slog.Error("Claude Adapter: Execution failed", "attemptID", attempt.ID, "error", err)
 		}
 

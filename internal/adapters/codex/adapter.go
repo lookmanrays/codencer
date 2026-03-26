@@ -2,7 +2,10 @@ package codex
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
 	"sync"
 
 	"agent-bridge/internal/adapters/common"
@@ -29,12 +32,23 @@ func (a *Adapter) Capabilities() []string {
 	return []string{"local_cli", "filesystem_read", "filesystem_write"}
 }
 
-func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if _, exists := a.processes[attempt.ID]; exists {
 		return nil // Already running or just idempotent
+	}
+
+	// Fail fast if binary is missing and not in simulation mode
+	if !common.IsSimulationEnabled(a.Name()) {
+		binary := os.Getenv("CODEX_BINARY")
+		if binary == "" {
+			binary = "codex-agent"
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			return fmt.Errorf("codex binary %q not found. Please install it or set CODEX_BINARY to a valid path, or enable simulation with CODEX_SIMULATION_MODE=1", binary)
+		}
 	}
 
 	execCtx, cancel := context.WithCancel(context.Background())
@@ -46,12 +60,12 @@ func (a *Adapter) Start(ctx context.Context, attempt *domain.Attempt, workspaceR
 			AdapterName:  a.Name(),
 			BinaryName:   "codex-agent",
 			BinaryEnvVar: "CODEX_BINARY",
-			Args:         []string{"run", "--workspace", workspaceRoot, "--output", artifactRoot},
+			Args:         []string{"run", "--workspace", workspaceRoot, "--output", artifactRoot, "--title", step.Title, "--goal", step.Goal},
 			Workspace:    workspaceRoot,
 			ArtifactRoot: artifactRoot,
 		}
 
-		if err := common.InvokeLocal(execCtx, attempt, opts); err != nil {
+		if err := common.InvokeLocal(execCtx, step, attempt, opts); err != nil {
 			slog.Error("Codex Adapter: Execution failed", "attemptID", attempt.ID, "error", err)
 		}
 
@@ -89,5 +103,15 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifa
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
-	return common.NormalizeStandardResult(attemptID, artifacts)
+	var resultPath string
+	for _, art := range artifacts {
+		if art.Type == "result_json" {
+			resultPath = art.Path
+			break
+		}
+	}
+
+	// NormalizeCore now handles metadata enrichment
+	isSimulation := common.IsSimulationEnabled(a.Name())
+	return NormalizeCore(attemptID, resultPath, a.Name(), isSimulation)
 }

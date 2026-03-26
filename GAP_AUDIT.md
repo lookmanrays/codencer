@@ -22,6 +22,10 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 
 | Component | Status | Implementation Type | Notes |
 | :--- | :--- | :--- | :--- |
+- [x] Implement Codex-specific result normalization (V1.3.1 Complete) <!-- id: 64 -->
+- [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
+- [x] Finalize Batch V1.3.1 alignment (V1.3.1 Complete) <!-- id: 66 -->
+- [ ] Implement run/step discovery commands (V1.3.1) <!-- id: 52 -->
 | **Orchestration Core** | Complete | Native (SQLite) | Persistent ledger for runs, steps, and attempts. |
 | **Workspace Isolation** | Complete | Native (Git) | Exclusive locking and worktree management. |
 | **Policy Engine** | Complete | Native (Heuristic) | Gating based on migrations, file counts, and failures. |
@@ -112,6 +116,21 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Gap - Terminal Waiting**: [RESOLVED] Implemented `orchestratorctl step wait` with domain-aligned terminal state detection.
 - **Gap - Exit Semantics**: [RESOLVED] All CLI commands now return structured JSON on both success and error for reliable automated parsing.
 
-### Next Alignment Steps
-1. Implement `run list` and `step list` for discovery.
-2. Expose `benchmarks` and `routing` groups.
+## Codex Adapter Hardening Audit (V1.3.1)
+
+### Current Capabilities
+- **Binary Execution**: Standard `os/exec` wrapper with environment variable overrides (`CODEX_BINARY`).
+- **Simulation**: Independent stubbing path that verifies orchestrator transitions without real LLM use.
+- **Artifacts**: Automatic collection of `stdout.log`, `result.json`, and diffs.
+
+### Identified Weaknesses
+- **Task Propagation**: [RESOLVED] The bridge now passes `Goal` and `Title` to the agent CLI.
+- **Delayed Validation**: [RESOLVED] `Start` now fails fast if the agent binary is missing.
+- **Weak Normalization**: [RESOLVED] Implemented Codex-specific normalization with robust error handling.
+- **Opaque Streams**: `stdout.log` is captured but not yet streamed to the planner for real-time progress.
+
+### Next Hardening Steps
+1. **Early Binary Validation**: [DONE] Fail `Start()` fast if the adapter binary is missing.
+2. **TaskSpec Delivery**: [DONE] Pass `Goal` and `Title` to the adapter CLI as arguments.
+3. **Outcome Normalization**: [DONE] Refine `NormalizeResult` to handle edge cases and provide "Bridge Interface Error" context.
+4. **Reporting Alignment**: [DONE] Ensure `RequestedAdapter` and `Adapter` are clearly distinguished in results.

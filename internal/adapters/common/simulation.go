@@ -21,7 +21,7 @@ func IsSimulationEnabled(adapterName string) bool {
 // RunSimulation writes stub files to the artifact root to simulate the orchestrator's
 // interaction with an adapter. This is used for ORCHESTRATOR LIFECYCLE VERIFICATION ONLY
 // and does not execute any real agent logic.
-func RunSimulation(ctx context.Context, attempt *domain.Attempt, artifactRoot, workspaceRoot string) error {
+func RunSimulation(ctx context.Context, step *domain.Step, attempt *domain.Attempt, artifactRoot, workspaceRoot string) error {
 	slog.Info("Simulation Mode: Executing stub for attempt", "attemptID", attempt.ID)
 	
 	stdoutPath := filepath.Join(artifactRoot, "stdout.log")
