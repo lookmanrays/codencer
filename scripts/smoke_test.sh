@@ -13,24 +13,29 @@ echo "Mode: $([ "$ALL_ADAPTERS_SIMULATION_MODE" == "1" ] && echo "Simulation" ||
 make setup build > /dev/null
 
 # 2. Start Daemon
-echo "Starting daemon on port $SMOKE_PORT..."
-# Ensure we use a clean temp DB if needed, but for smoke test we just use the default .codencer/
-# (Actually, let's use the default to verify the dev flow)
-# We override the port via a future config override or just by letting it be for now.
-# Since we don't have ENV override for PORT yet, we'll just use the default 8080 or assume it's free.
-./bin/orchestratord > .codencer/smoke_daemon.log 2>&1 &
-DAEMON_PID=$!
+echo "Checking for daemon on port $SMOKE_PORT..."
+if curl -s http://127.0.0.1:$SMOKE_PORT/health | grep -q "ok"; then
+    echo "Daemon already running on $SMOKE_PORT. Using existing daemon."
+    DAEMON_ALREADY_RUNNING=1
+else
+    echo "Starting daemon on port $SMOKE_PORT..."
+    PORT=$SMOKE_PORT ./bin/orchestratord > .codencer/smoke_daemon.log 2>&1 &
+    DAEMON_PID=$!
+    DAEMON_ALREADY_RUNNING=0
+fi
 
 function cleanup {
-    echo "Stopping daemon (PID: $DAEMON_PID)..."
-    kill $DAEMON_PID || true
+    if [ "$DAEMON_ALREADY_RUNNING" == "0" ]; then
+        echo "Stopping daemon (PID: $DAEMON_PID)..."
+        kill $DAEMON_PID || true
+    fi
 }
 trap cleanup EXIT
 
 # Wait for health check
 echo "Waiting for daemon to be ready..."
 for i in {1..10}; do
-    if curl -s http://127.0.0.1:8080/health | grep -q "ok"; then
+    if curl -s http://127.0.0.1:$SMOKE_PORT/health | grep -q "ok"; then
         echo "Daemon ready."
         break
     fi
@@ -46,7 +51,7 @@ RUN_ID="smoke-run-$(date +%s)"
 PROJECT="smoke-project"
 
 echo "1. Starting run: $RUN_ID"
-./bin/orchestratorctl run start "$RUN_ID" "$PROJECT" --force > /dev/null
+./bin/orchestratorctl run start "$RUN_ID" "$PROJECT" > /dev/null
 
 echo "2. Submitting simulation task..."
 # Provide a full TaskSpec for reliable parsing
@@ -62,8 +67,8 @@ is_simulation: true
 EOF
 
 STEP_OUTPUT=$(./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml)
-# Extract "id" from the domain.Step JSON response (handles optional space)
-STEP_ID=$(echo "$STEP_OUTPUT" | grep -oP '"id":\s*"\K[^"]+')
+# Robustly extract "id" using basic grep and tr
+STEP_ID=$(echo "$STEP_OUTPUT" | grep '"id":' | cut -d'"' -f4)
 
 echo "3. Waiting for terminal state (Step: $STEP_ID)..."
 ./bin/orchestratorctl step wait "$STEP_ID" --timeout 30s > .codencer/smoke_result.json

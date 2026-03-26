@@ -130,6 +130,11 @@
 - [x] Harden self-host setup instructions (V1.8.0 Complete)
 - [x] Harden self-host run flows (V1.8.1 Complete)
 - [x] Practical publication-readiness cleanup (V1.8.2 Complete)
+- [x] Audit repo for setup/start correctness (V1.8.3 Complete)
+- [x] Fix command mismatches & align onboarding (V1.8.4 Complete)
+- [x] Clarify config & execution modes (V1.8.5 Complete)
+- [x] Consolidate one primary quickstart path (V1.8.6 Complete)
+- [x] Final alignment for Phase V1.F1 (V1.8.7 Complete)
 - [ ] Phase 17: Public Packaging (Next)
     - [ ] Implement `config/local.json` or `.env` loader <!-- id: 162 -->
     - [ ] Improve `doctor` with agent installation hints <!-- id: 163 -->

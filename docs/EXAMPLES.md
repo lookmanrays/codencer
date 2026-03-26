@@ -19,21 +19,25 @@ Use this flow to verify the orchestrator's state machine without requiring LLMs 
 
 ### 1. Start the Simulated Bridge
 ```bash
-# ALL_ADAPTERS_SIMULATION_MODE=1 stubs all agent execution
+# Start in background (recommended)
+make start-sim
+
+# OR start in foreground
 make simulate
 ```
 
 ### 2. Submit a Test Task
 In a new terminal:
 ```bash
-# Submit the built-in smoke task
-./bin/orchestratorctl submit smoke-run .codencer/smoke_task.yaml
+# Submit a realistic task found in the examples directory
+./bin/orchestratorctl run start verify-run verify-proj
+./bin/orchestratorctl submit verify-run examples/tasks/bug_fix.yaml
 ```
 
 ### 3. Monitor & Wait
 ```bash
-# Wait for terminal state (should complete in ~5 seconds)
-./bin/orchestratorctl step wait smoke-step-1
+# Wait for terminal state (should complete in ~5 seconds in simulation)
+./bin/orchestratorctl step wait <stepID_from_previous_command>
 ```
 
 ### 4. Inspect the Result
@@ -67,7 +71,7 @@ export CODEX_BINARY=codex-agent
 ### 4. Tail the Agent (Live)
 ```bash
 # Watch the agent's stdout as it works
-./bin/orchestratorctl step logs step-fix-nil-err
+./bin/orchestratorctl step logs <stepID>
 ```
 
 ### 5. Review & Apply

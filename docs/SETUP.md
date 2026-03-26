@@ -2,20 +2,52 @@
 
 This guide describes how to deploy and run the Codencer Orchestration Bridge in your local environment.
 
-## ⚡️ 1-2-3 Quickstart
+## ⚡️ Primary Quickstart
 
-If you have **Go** and **Git** installed, you can start a simulated run in 30 seconds:
+If you have **Go** and **Git** installed, you can start a verified local run in 60 seconds.
 
+### 1. Build & Initial Setup
 ```bash
-# 1. Initialize and build
 make setup build
-
-# 2. Start the daemon in simulation mode
-make simulate
-
-# 3. (New Tab) Verify the loop
-make smoke
+cp .env.example .env
 ```
+
+### 2. Execution Choice
+- **Simulation**: `make start-sim` (Verified orchestrator loop, zero external calls).
+- **Real Mode**: `make start` (Requires tactical agents, e.g. `codex-agent`).
+
+### 3. Verification Sequence
+```bash
+# Run the automated smoke test
+make smoke
+
+# OR manual verification
+./bin/orchestratorctl run start verify-run verify-proj
+./bin/orchestratorctl submit verify-run examples/tasks/bug_fix.yaml
+./bin/orchestratorctl step wait <stepID>
+```
+
+*For a detailed breakdown of each step, see the sections below.*
+
+---
+
+## 🎭 Choosing Your Mode
+
+Codencer allows you to verify the **Orchestrator** (the bridge logic) separately from the **Agents** (the LLM workers).
+
+### 1. Simulation Mode (Default for Local Dev)
+- **Goal**: Verify that the ledger, state machine, and CLI are working.
+- **Requirements**: None.
+- **Config**: Set `ALL_ADAPTERS_SIMULATION_MODE=1` in your `.env`.
+- **Command**: `make simulate` or `make start-sim`.
+- **Benefit**: Zero cost, zero external dependencies, 100% deterministic.
+
+### 2. Real Mode (Production use)
+- **Goal**: Perform actual file edits using LLM agents.
+- **Requirements**: Tactical agent binaries (e.g. `codex-agent`) installed in your `$PATH`.
+- **Config**: Set `ALL_ADAPTERS_SIMULATION_MODE=0` and ensure `CODEX_BINARY` points to your binary.
+- **Command**: `./bin/orchestratord` or `make start`.
+- **Benefit**: Real-world utility.
 
 ---
 
@@ -105,11 +137,11 @@ Codencer is **Local-First but Agent-Aware**:
 
 ### 1. Start the Daemon
 ```bash
-# Normal Mode
+# Normal Mode (Foreground)
 ./bin/orchestratord
 
-# Or using the simulation helper
-make simulate
+# Or using the background simulation helper
+make start-sim
 ```
 
 ### 2. Verify with the CLI

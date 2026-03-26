@@ -277,4 +277,32 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - Implement a `config/local.json` or `.env` loader.
 - Improve `orchestratorctl doctor` to provide "Install Hints" for known agents.
 - Add `make run-daemon` with backgrounding and log redirection.
-- Author `CONTRIBUTING.md` with deep-dive setup for developers.
+- [x] Audit repo for setup/start correctness (V1.8.3 Complete)
+- [x] Fix concrete command mismatches (V1.8.4 Complete)
+- [x] Clarify config & execution modes (V1.8.5 Complete)
+- [x] Consolidate one primary quickstart path (V1.8.6 Complete)
+- [x] Final alignment for Phase V1.F1 (V1.8.7 Complete)
+
+## Setup & First-Run Audit (Phase V1.F1 Complete)
+
+### 🌿 Actual Current Flow (Hardened Happy Path)
+1. **Prerequisites**: Go 1.21+, SQLite3, Git.
+2. **Setup**: `make setup build`.
+3. **Configure**: `cp .env.example .env`.
+4. **Run**: `make start-sim` (Simulation) OR `make start` (Real Mode).
+5. **Verify**: `./bin/orchestratorctl submit <runID> <file>` and wait for result.
+
+### ⚠️ Resolved Technical & Documentation Gaps
+1. **Config Engine**: [RESOLVED] `internal/app/config.go` now honors environment variable overrides (`PORT`, `DB_PATH`, etc.).
+2. **Tooling Robustness**: [RESOLVED] `smoke_test.sh` now detects active ports and parses JSON results more reliably.
+3. **Command Consistency**: [RESOLVED] Removed stale `--force` flags and standardized `./bin/` paths across all docs.
+4. **Onboarding Unity**: [RESOLVED] Merged disparate quickstarts into a single authoritative flow in `README.md`.
+
+### 🛠 Ready for Phase V1.F2 (Maturity & Packaging)
+1. **Install Doctor**: Enhance `orchestratorctl doctor` to check for `sqlite3` and `git` versions explicitly.
+2. **State Discovery**: Implement `run list` and `step list` CLI functionality.
+3. **Governance**: Finalize `LICENSE` and `CONTRIBUTING.md`.
+
+### 🛠 Remaining for Phase 17
+1. **Install Doctor**: Enhance `orchestratorctl doctor` to check for `sqlite3` and `git` versions explicitly.
+2. **Config Engine**: Implement `.env` or `config/local.json` loader.

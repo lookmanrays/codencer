@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // Config represents the application configuration.
@@ -48,6 +49,25 @@ func LoadConfig(path string) (*Config, error) {
 
 	if err := json.Unmarshal(data, config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config JSON: %w", err)
+	}
+
+	// 3. Environment Variable Overrides
+	if env := os.Getenv("PORT"); env != "" {
+		if p, err := strconv.Atoi(env); err == nil {
+			config.Port = p
+		}
+	}
+	if env := os.Getenv("DB_PATH"); env != "" {
+		config.DBPath = env
+	}
+	if env := os.Getenv("ARTIFACT_ROOT"); env != "" {
+		config.ArtifactRoot = env
+	}
+	if env := os.Getenv("WORKSPACE_ROOT"); env != "" {
+		config.WorkspaceRoot = env
+	}
+	if env := os.Getenv("LOG_LEVEL"); env != "" {
+		config.LogLevel = env
 	}
 
 	return config, nil

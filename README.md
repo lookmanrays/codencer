@@ -28,44 +28,49 @@ For detailed local setup instructions, see the **[Setup & Self-Hosting Guide](do
 
 ---
 
-### 1. 30-Second Verification (Simulation)
-Test the full orchestration loop without requiring real LLM agents or binary setup:
-```bash
-# Initialize, build, and start the daemon in simulation mode
-make setup build simulate
+---
 
-# (New Tab) Run the automated smoke test
-make smoke
+## ⚡️ Quickstart: 1-2-3 Local Setup
+
+Get up and running locally in less than a minute.
+
+### 1. Build & Configure
+```bash
+# Initialize and build binaries
+make setup build
+
+# Copy example environment configuration
+cp .env.example .env
 ```
 
-### 2. Real-World Execution
-Submit a realistic task to a real agent (requires `claude-code` or `codex-agent` in `$PATH`):
+### 2. Start the Daemon
+Choose your execution tier in `.env` (Simulation is enabled by default in `.env.example`):
 ```bash
-# Install an agent
-npm install -g @anthropic-ai/claude-code
+# Start in Simulation Mode (Background)
+make start-sim
 
-# Start a run and submit a task
-./bin/orchestratorctl run start my-run my-project
-./bin/orchestratorctl submit my-run examples/tasks/bug_fix.yaml
+# OR Start in Real Mode (Requires agent binaries like codex-agent)
+# Edit .env: ALL_ADAPTERS_SIMULATION_MODE=0
+make start
 ```
 
-For detailed agent installation and configuration, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
-
-### 3. Real-World Execution
-Submit a realistic task to a real agent (requires `codex-agent` or similar in `$PATH`):
+### 3. Run Your First Task
+Submit a task and wait for the bridge to report results:
 ```bash
-# Start a new run
-./bin/orchestratorctl run start my-fix-run my-project
+# 1. Start a new run
+./bin/orchestratorctl run start my-first-run my-project
 
-# Submit an instruction (YAML TaskSpec)
-./bin/orchestratorctl submit my-fix-run examples/tasks/bug_fix.yaml
+# 2. Submit a tactical task (extract Step ID from the output)
+./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml
 
-# Monitor progress (live tail)
-./bin/orchestratorctl step logs <stepID>
-
-# Wait for terminal results
+# 3. Wait for terminal result (Step ID from previous command)
 ./bin/orchestratorctl step wait <stepID>
+
+# 4. Inspect artifacts and logs
+ls -R .codencer/artifacts/my-first-run
 ```
+
+For a deeper dive into agent installation and advanced flows, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
 
 ---
 
@@ -97,7 +102,7 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 
 ## 🧪 Simulation vs. Real Execution
 
-1. **Simulation Mode** (`make simulate`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
+1. **Simulation Mode** (`make start-sim` or `make simulate`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
 2. **Real Mode**: Tests the full end-to-end loop. Requires real agent binaries (`claude-code`, etc.) and incurs real LLM costs.
 
 ---

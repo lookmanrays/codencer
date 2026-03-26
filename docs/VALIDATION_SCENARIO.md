@@ -62,9 +62,9 @@ constraints:
 2. **Manual Submission**:
    Alternatively, you can run the steps manually:
    ```bash
-   orchestratorctl run start validation-run-01 validation-project --force
-   orchestratorctl submit validation-run-01 docs/validation_task.yaml
-   orchestratorctl step wait bump-version-01
+   ./bin/orchestratorctl run start validation-run-01 validation-project
+   ./bin/orchestratorctl submit validation-run-01 docs/validation_task.yaml
+   ./bin/orchestratorctl step wait bump-version-01
    ```
 3. **Verify Result**:
    The `orchestratorctl` tool now **pretty-prints JSON by default**. Inspect the terminal outcome of the `wait` command:
@@ -85,7 +85,7 @@ constraints:
 4. **Verify Evidence Metadata**:
    To see the hardened **SHA-256 hashes** and **MIME types**, check the artifacts specifically:
    ```bash
-   orchestratorctl step artifacts bump-version-01
+   ./bin/orchestratorctl step artifacts bump-version-01
    ```
    
    Example formatted `artifacts` output:

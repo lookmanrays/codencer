@@ -1,3 +1,6 @@
+-include .env
+export
+
 all: lint test build
 
 build:
@@ -21,6 +24,20 @@ run: build
 dev: setup build
 	@echo "==> Starting local dev daemon..."
 	@./bin/orchestratord
+
+start: build setup
+	@echo "==> Starting orchestratord in background..."
+	@nohup ./bin/orchestratord > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid
+	@echo "Daemon started (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"
+
+stop:
+	@echo "==> Stopping orchestratord..."
+	@kill $$(cat .codencer/daemon.pid) && rm .codencer/daemon.pid || echo "No daemon running."
+
+start-sim: build setup
+	@echo "==> Starting orchestratord in SIMULATION MODE (background)..."
+	@nohup ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid
+	@echo "Simulated daemon started (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"
 
 setup:
 	@echo "==> Initializing local environment (.codencer/)..."
@@ -51,6 +68,6 @@ smoke: build
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."
-	@./bin/orchestratorctl run start validation-run-01 validation-project --force || true
+	@./bin/orchestratorctl run start validation-run-01 validation-project || true
 	@./bin/orchestratorctl submit validation-run-01 docs/validation_task.yaml
 	@./bin/orchestratorctl step wait bump-version-01
