@@ -225,6 +225,7 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - Convenience targets (`make dev`, `make doctor`, `make nuke`) implemented.
 - README Quickstart provides clear daily-use instructions.
 - [RESOLVED] Execution modes (Real vs. Simulation) clearly documented with `.env.example`.
+- [RESOLVED] Automated smoke test (`make smoke`) implemented for rapid local relay verification.
 
 ## Readiness for Phase V1.5 (State Discovery)
 - Canonical terminal outcomes are explicit and documented.
