@@ -125,9 +125,12 @@
 - [x] Final alignment for Phase V1.7 / Batch V1.5.2 (Micro-task Complete)
 - [ ] Implement Unified Configuration Engine (Batch V1.5.2/V1.8 Next)
  <!-- id: 126 -->
+- [x] Audit publication readiness and positioning (V1.7.5 Complete)
+- [x] Harden README for public publication (V1.7.6 Complete)
+- [x] Harden local usage & self-host framing (V1.7.7 Complete)
+- [x] Harden maturity & limitations framing (V1.7.8 Complete)
+- [ ] Phase 17: Public Packaging (Next)
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
-- [ ] Consolidate intervention states (NeedsApproval/NeedsManualAttention) <!-- id: 117 -->
-- [ ] Expose Telemetry and Routing CLI groups
 
 - [x] Audit example coverage for daily planner-to-bridge usage (Micro-task Complete)
 - [x] Create realistic YAML payload library (Complete)

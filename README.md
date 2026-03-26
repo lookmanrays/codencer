@@ -1,31 +1,36 @@
-# Codencer Orchestration Bridge (MVP)
+# Codencer Orchestration Bridge (MVP/Beta)
 
-Codencer is a local-first orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by autonomous agents. It acts as the system of record between the Planner (MCP clients or LLMs) and the underlying Adapters (Codex, Claude, Qwen).
+**Defensive, Local-First Relay for Autonomous Coding Agents.**
 
-## Core Documentation
-- [Architecture](docs/02_architecture.md)
-- [DSL & MCP](docs/05_dsl_and_mcp.md)
-- [Practical Examples](docs/EXAMPLES.md) (Start here for daily use)
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) (When things go wrong)
-- [Recovery Engine](GAP_AUDIT.md#5-recovery-is-simplistic)
+Codencer is a persistent orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by external agents. It acts as the **system of record** between a high-level **Planner** (you or an LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). It is **100% self-hostable** and designed for local-first developer toolchains.
 
-## Core Architecture
-- **Orchestratord (Daemon)**: The persistent state engine using a local SQLite ledger to safely track Runs, Phases, Steps, and Attempts.
-- **Adapters**: Abstractions over vendor agents (e.g. Codex) standardizing initialization, polling, capability discovery, and artifact collection.
-- **Policy Engine**: Ensures execution safety by intercepting workflows based on heuristic thresholds (e.g., changed files, validation failures) and pausing execution until a human operator responds via a **Gate**.
-- **CLI & MCP**: Primary control surfaces. `orchestratorctl` enables terminal-centric operations, while the MCP server provides integration hooks for planning agents.
+---
 
-## Why Codencer?
-Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic framework:
-1. **Safety**: Agents run in configurable bounds (optional git worktrees, strict diff capturing).
-2. **Idempotency**: Runs and attempts are carefully ledgered; interrupted tasks can be resumed or securely analyzed post-crash.
-3. **Traceability**: All outputs (stdout, result.json, diffs) are meticulously persisted with **SHA-256 hashes** and **MIME detection** per-attempt in the audit-proof artifact store.
+## 🏛 The Relay Model
 
-Codencer is a **bridge**, not a brain. The **Planner** (operator or autonomous agent) defines the intent and logic, while Codencer handles the tactical execution, environment isolation, and high-fidelity evidence reporting.
+Codencer is a **bridge, not a brain**. It does not decide the high-level strategy; it executes tactical instructions and reports high-fidelity evidence.
 
-## Local-First Quickstart
+```text
+[ Planner (Brain) ] <---------- (ResultSpec) ---------+
+       |                                              |
+   (TaskSpec)                                   [ Bridge (Codencer) ]
+       |                                              |
+       +-------------------> [ Agent (Worker) ] <-----+
+                              (File Edits)
+```
 
-The bridge maintains all local state in a hidden `.codencer/` directory in the project root.
+### Core Roles
+- **Planner**: You, a Chat UI, or an autonomous agent. Decides **what** to do.
+- **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
+- **Coding Agent**: The underlying tool performing the actual work (e.g., `codex-agent`, `claude-code`).
+
+For detailed local setup instructions, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
+
+---
+
+## 🚀 Quickstart (Local-First)
+
+Codencer maintains all state in a local `.codencer/` directory. No cloud, no telemetry, no hidden phone-home.
 
 ### 1. Simple Startup
 ```bash
@@ -33,209 +38,71 @@ The bridge maintains all local state in a hidden `.codencer/` directory in the p
 make dev
 ```
 
-### 2. Automated Smoke Test (Verification)
-Verify the full relay loop (including ledgering and wait/polling) in simulation mode:
+### 2. Verify with Simulation
+Test the full orchestration loop without requiring real LLM agents or binary setup:
 ```bash
-# Runs setup -> build -> daemon -> run -> submit -> wait -> result
+# Runs setup -> build -> daemon -> submit (simulation) -> wait -> report
 make smoke
 ```
 
-### 3. Basic Workflow
-In a separate terminal:
+### 3. Real-World Execution
+Submit a realistic task to a real agent (requires `codex-agent` or similar in `$PATH`):
 ```bash
-# 1. Start a new run
-./bin/orchestratorctl run start my-dev-run my-project --force
+# Start a new run
+./bin/orchestratorctl run start my-fix-run my-project
 
-# 2. Submit a task (using a YAML payload)
-./bin/orchestratorctl submit my-dev-run my-task.yaml
+# Submit an instruction (YAML TaskSpec)
+./bin/orchestratorctl submit my-fix-run examples/tasks/bug_fix.yaml
 
-# 3. Wait for the result
-./bin/orchestratorctl step wait <step-id>
+# Monitor progress (live tail)
+./bin/orchestratorctl step logs <stepID>
+
+# Wait for terminal results
+./bin/orchestratorctl step wait <stepID>
 ```
-
-### 3. Verification & Cleanup
-```bash
-# Run unit and integration tests
-make test
-
-# Verify binary availability and paths
-make doctor
-
-# Reset intermediate build files (keeps history)
-make clean
-
-# Nuke everything (deletes database and history)
-make nuke
-```
-
-## Execution Modes (Real vs. Simulation)
-
-Codencer supports two primary execution modes to balance high-fidelity work with rapid bridge development.
-
-### 1. Real Mode (Production / Local Use)
-- **Requirements**: Requires the `codex-agent` (or equivalent) binary in your `PATH` or configured via `CODEX_BINARY`.
-- **Behavior**: Executes the actual agent logic, writes real files, and produces real artifacts.
-- **Usage**: Standard daily use for solving coding tasks.
-
-The Codencer orchestration bridge acts as a powerful local relay between high-level planners (human or machine) and tactical coding agents.
-
-### Core Roles
-- **Planner (Brain)**: You (or an LLM) decide **what** to do next and how to handle results.
-- **Bridge (Codencer)**: Receives instructions, manages workspace isolation, enforces timeouts, and reports evidence.
-- **Coding Agent (Worker)**: The tactical tool (Codex, Claude-code, Aider) performing the actual file edits.
-
-### Daily Local Workflow
-The bridge is designed for an iterative "Plan-Execute-Review" loop:
-1. **Start the Bridge**: `bin/orchestratord`
-2. **Submit Instruction**: `bin/orchestratorctl submit <runID> <task.yaml>`
-3. **Monitor Progress**: `bin/orchestratorctl step logs <stepID>`
-4. **Review Report**: `bin/orchestratorctl step result <stepID>`
-
-See the full **[Daily Local Workflow Guide](docs/EXAMPLES.md#0-daily-local-workflow)** for concrete command examples, including simulation and real-world scenarios.
 
 ---
 
-## 2. Planner-Driven Workflow
+## 🛡 Why Codencer?
 
-The bridge is a **reactive relay**. It does not decide the high-level strategy; it executes tactical instructions provided by an external **Planner** (you or an LLM).
+Autonomous agents are non-deterministic. Codencer provides the guardrails:
 
-### The Feedback Loop
-```text
-[ Planner ] ---------------------> [ Bridge ] -------------------> [ Agent ]
-  (Decides)      (TaskSpec)         (Relay)       (Subprocess)      (Executes)
-      ^                                |                                |
-      |          (ResultSpec)          |         (Artifacts)            |
-      +--------------------------------+ <------------------------------+
-```
-
-### Typical Loop Example
-1. **Planner**: Prepares a `TaskSpec` (YAML) based on the current codebase state.
-2. **Bridge**: Receives the task, sets up a git worktree, and dispatches the **Coding Agent**.
-3. **Agent**: Performs the work and exits.
-4. **Bridge**: Harvests logs/diffs, runs validations, and returns a `ResultSpec`.
-5. **Planner**: Analyzes the `ResultSpec`. If tests failed, it prepares a follow-up task.
-
-For realistic task templates, see the **[Task Library](examples/tasks/)**.
+1. **Workspace Safety**: Agents run in isolated Git Worktrees. Diffs are captured and validated before any commit.
+2. **Audit-Proof Ledger**: Every attempt is recorded in a local SQLite database with SHA-256 hashes of all artifacts.
+3. **Idempotency**: Interrupted tasks can be resumed or securely analyzed post-crash.
+4. **Validation-First**: Tasks only "complete" when your defined validation commands (tests, linters) pass.
 
 ---
 
-## 3. Quickstart (Simulation Mode)
-Use this mode to verify the bridge's state machine and your integration logic without requiring real LLM agents.
+## 📊 Maturity & Capability Matrix
 
-### 1. Activation
-- **Activation**: Enable via `CODEX_SIMULATION_MODE=1` or `ALL_ADAPTERS_SIMULATION_MODE=1`.
-- **Behavior**: Stubs the actual subprocess execution. The bridge still performs all ledgering, state transitions, and artifact harvesting (using stubbed outcomes).
-- **Usage**: Use this to test the orchestrator's state machine, policy engine, and CLI/API without waiting for real LLM runs or requiring agent binaries.
-- **Fail-Fast**: If an agent binary is missing and simulation is NOT enabled, the bridge will fail immediately at `Start()` with an informative error.
+Codencer is currently in an **MVP/Beta** state. Use the following matrix to understand current support:
 
-### State Semantics
-The Bridge reports state; the Planner decides the next action.
-- **pending**: Work is queued in the ledger.
-- **running**: Adapter process is active.
-- **completed**: Execution reached a successful terminal state as reported by the adapter.
-- **failed**: Execution reached an unsuccessful terminal state (failed_terminal or failed_retryable).
-- **timeout**: Execution exceeded defined limits (e.g., `timeout_seconds`) and was killed by the bridge.
-- **cancelled**: Execution was explicitly stopped by the planner or operator.
-- **needs_manual_attention**: The bridge reports a blocking or review-needed condition that it cannot resolve autonomously.
+| Feature Area | Status | Description |
+| :--- | :--- | :--- |
+| **Orchestration Core** | ✅ **Ready** | Persistent SQLite ledger, state machine, and Git Worktrees. |
+| **CLI & MCP Layer** | ✅ **Ready** | Structured JSON outputs, log tailing, and health checks. |
+| **Codex Adapter** | ✅ **Ready** | High-fidelity relay for the `codex-agent` binary. |
+| **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
+| **Simulation Mode** | ✅ **Ready** | Robust stubs for orchestrator validation without LLM use. |
+| **IDE Chat Bridge** | 🧪 **Experimental**| Proxy-mediated file access via VS Code extension. |
+| **Adaptive Routing** | 🧪 **Experimental**| Static fallback chain; benchmark-aware logic is a blueprint. |
+| **Cloud / Multi-User** | 📅 **Future** | Not implemented. Codencer is strictly local-first today. |
 
-### Simulation Semantics
-Simulation mode is a **development-only** feature used to validate orchestrator state transitions and CI/CD pipelines without incurring LLM costs or requiring local model setup. 
-- **Not for Performance**: Simulation results do NOT reflect real adapter performance or accuracy.
-- **Explicitly Labeled**: All simulated results are marked with `is_simulation: true`.
+## 🧪 Simulation vs. Real Execution
 
-## Core Concepts
-Codencer uses a hierarchical execution model to track work and telemetry:
+1. **Simulation Mode** (`make simulate`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
+2. **Real Mode**: Tests the full end-to-end loop. Requires real agent binaries (`claude-code`, etc.) and incurs real LLM costs.
 
-- **Run**: An execution session that acts as a container for a project-level objective. It houses Phases and Steps.
-- **Phase**: A logical grouping of steps within a Run used to organize complex work into sequential segments.
-- **Step**: A specific, atomic execution unit issued by the planner (e.g., "Fix bug X").
-- **Attempt**: A single, concrete execution try of a Step. One Step may have multiple attempts (e.g., due to retries or adapter fallbacks).
+---
 
-## The Relay Model
+## 📖 Documentation
+- [Practical Examples](docs/EXAMPLES.md) (Start here for daily use)
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) (When things go wrong)
+- [Architecture Overview](docs/02_architecture.md)
+- [Gap Audit & Roadmap](GAP_AUDIT.md)
 
-Codencer operates as a **Relay** between two distinct planes:
-- **Planner (Control Plane)**: The entity that decides *what* to do (e.g., an LLM, a human, or a complex MCP client). It submits a `TaskSpec`.
-- **Bridge (Execution Plane)**: Codencer itself. It performs the work using an **Adapter**, enforces **Policies**, and returns a **ResultSpec**.
+---
 
-The Bridge is intentionally "dumb" regarding planning — it does not decide next steps, it only executes and reports.
-
-## Current State: MVP / Beta
-
-**Phase 1 MVP (Complete):**
-The foundational orchestration shell is fully operational. A persistent SQLite ledger, an initial state-machine loop, workspace isolation via Git Worktrees, basic MCP tool mapping, and a scaffolding IDE extension have all been implemented.
-
-**Phase 2 System Hardening (Active):**
-While structurally sound, the bridge is transitioning from "simulated correctness" to "native reliability" by:
-1. **Dismantling Monoliths**: [RESOLVED] Transitioned `DispatchStep` into discrete, fault-tolerant lifecycle coordinators.
-2. **Honest Adapter Contracts**: [RESOLVED] Standardized Codex, Claude, and Qwen adapters via a unified execution core (`internal/adapters/common`). Adapters now explicitly detect missing binaries and separate simulation and real execution.
-3. **Retrieval Completeness**: [RESOLVED] Exposing standard API, CLI, and MCP retrieval functions to list artifacts and inspect step validation outputs natively.
-4. **Strong Policies**: Removing hardcoded env mocks and forcing the Policy Engine to read explicit execution boundaries.
-5. **Interactive Integrations**: [RESOLVED] Converted the VS Code UI into an active Control Plane for Gate resolution and workflow retracing.
-
-**Phase 5 Orchestration & MCP Correctness (Complete):**
-The core execution engine has been refined for improved reliability. Key improvements include:
-1. **Lifecycle Decomposition**: `RunService.DispatchStep` is now a modular coordinator with clear attempt-loop and environment-setup boundaries.
-2. **MCP Identity Correctness**: Resolved critical bugs in Step Retry logic to ensure correct RunID propagation.
-3. **Structured MCP Payloads**: All tool outputs now return machine-usable JSON, enabling better automated planning.
-4. **Environment Robustness**: Worktree- [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
-- [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
-- [x] Finalize Batch V1.3.1 alignment and documentation (V1.3.1 Complete) <!-- id: 66 -->
-- [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
-
-**Phase 6 Routing & Benchmark Hardening (Complete):**
-Hardened task telemetry and routing behavior for architectural honesty.
-1. **Explicit Routing**: [RESOLVED] Renamed and documented routing as a deterministic heuristic fallback chain to avoid over-claiming adaptive intelligence.
-2. **Truthful Benchmarks**: [RESOLVED] Implemented `is_simulation` tracking in benchmarks to keep stub performance data separate from real execution telemetry.
-3. **Observability**: [RESOLVED] Exposed benchmark history and routing configuration via new REST API (`/api/v1/benchmarks`) and MCP tools.
-4. **Deterministic Fallbacks**: [RESOLVED] Enforced clear, auditable fallback paths when primary adapters are unavailable or fail.
-
-**Phase 11 Consistency & Polish (Complete):**
-Final consistency pass of the initial roadmap. All internal terminology has been standardized and documentation has been updated for technical honesty as a functional MVP.
-
-## Known Limitations
-
-Codencer is a local orchestration bridge, not an autonomous agent or a cloud-scale fleet manager. Current limitations include:
-1. **Local-First Only**: Explicitly designed for local developer toolchains; no built-in support for remote multi-tenant execution.
-2. **CLI Wrapper Adapters**: Adapters (Codex, Claude, Qwen) operate as CLI wrappers. They require local binary presence and do not provide deeper process-level introspection beyond what the CLI tool exposes.
-3. **Implicit Benchmarking**: Benchmarking currently relies on heuristic scoring from result summaries and duration; deeper semantic evaluation is part of the long-term roadmap.
-4. **Interactive Shells**: Persistent, stateful interactive shells within an adapter attempt are currently explicitly unsupported.
-5. **Maturity**: This tool is currently in **Beta/MVP** state and should be used as an internal or experimental orchestration sidecar.
-
-> **Note on Adapters:** Codex, Claude, and Qwen are currently integrated as CLI wrappers. They require local binary installation (e.g. `claude-code`) unless the corresponding `*_SIMULATION_MODE=1` environment variable is set for testing/evaluation.
->
-> **Codex Configuration**:
-> - Binary: Expected name is `codex-agent`.
-> - Custom Path: Set `CODEX_BINARY=/path/to/binary`.
-> - Simulation: Set `CODEX_SIMULATION_MODE=1` to bypass binary checks and use stubs for orchestrator validation.
-## Troubleshooting & Observability
-
-### 1. Where are my logs?
-- **Daemon Logs**: By default, `orchestratord` logs to `stdout` in JSON format.
-- **Agent Logs**: Each step attempt captures raw agent output in `stdout.log`. Use `bin/orchestratorctl step logs <stepID>` to view it immediately.
-- **Real-time Progress**: The `step wait <id>` command provides progress indicators and hints at the log/artifact paths upon completion.
-
-### 2. Where are my results?
-- **Structured Evidence**: Found in `.codencer/artifacts/<runID>/<attemptID>/`. 
-- **Validation Results**: Run `bin/orchestratorctl step validations <stepID>` to see granular pass/fail data.
-
-### 3. Cheat Sheet
-```bash
-# Verify environment health
-make doctor
-
-# View what the agent is doing (live or post-mortem)
-bin/orchestratorctl step logs <stepID>
-
-# List all artifacts for a run
-ls -R .codencer/artifacts/<runID>/
-
-# Inspect terminal outcome evidence
-bin/orchestratorctl step result <stepID> | jq .
-```
-
-## Maturity & Operational Truths
-- **Beta/MVP**: This tool is an experimental orchestration sidecar.
-- **Simulation**: Use `ALL_ADAPTERS_SIMULATION_MODE=1` (or `make simulate`) to verify the orchestration state-machine without requiring local agent installs. **NOTE: Simulation validates the bridge, not the agent logic.**
-- **SQLite Ledger**: All state is local and persistent in `.codencer/codencer.db`.
-- **VS Code Extension**: Provides a graphical tree-view and control plane for the same daemon.
-- **Validation**: See [docs/VALIDATION_SCENARIO.md](docs/VALIDATION_SCENARIO.md) for a repeatable Codex-first smoke test.
+## ⚖ License
+*Licence pending (intended MIT/Apache 2.0). See [GAP_AUDIT.md](GAP_AUDIT.md) for publication status.*

@@ -246,4 +246,9 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Realistic YAML Payload Library**: [RESOLVED] Created templates for `bug_fix.yaml`, `docs_only.yaml`, and `simulation_task.yaml` in `examples/tasks/`.
 - **Daily Local Workflow Guide**: [RESOLVED] Authoritative 4-step guide added to `docs/EXAMPLES.md`.
 - **Planner-Driven Guidance**: [RESOLVED] Explicit role definitions and feedback loop visualized in `README.md`.
-- **Self-Review**: [RESOLVED] Completed strict self-review of discovery hardening and alignment.
+- [x] Self-Review: [RESOLVED] Completed strict self-review of discovery hardening and alignment.
+- [x] Audit publication readiness and positioning (V1.7.5 Complete)
+- [x] Harden README for public publication (V1.7.6 Complete)
+- [x] Harden local usage & self-host framing (V1.7.7 Complete)
+- [x] Harden maturity & limitations framing (V1.7.8 Complete)
+- [ ] Implement Phase 17: Public Packaging (Next)
