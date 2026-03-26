@@ -119,6 +119,18 @@ orchestratorctl run start run-01 my-project
 orchestratorctl submit run-01 task.yaml
 ```
 
+### Local Execution Flow
+1. **Start a Run**: `orchestratorctl run start my-session my-project`
+2. **Submit a Task**: `orchestratorctl submit my-session task.yaml`
+3. **Wait for Terminal State**: `orchestratorctl run wait my-session --interval 1s --timeout 5m`
+
+### Discovery and Observability
+- **List all runs**: `orchestratorctl run list`
+- **List steps in a run**: `orchestratorctl step list <runID>`
+- **Inspect step details**: `orchestratorctl step status <stepID>`
+
+The `wait` command will block until the run or step reaches a terminal state (`completed`, `failed`) or requires intervention (`needs_approval`). Progress indicators (.) and status messages are sent to `stderr`, while the final terminal result is printed to `stdout` as a machine-usable JSON object. You can control the polling frequency with `--interval` and enforce client-side safety with `--timeout`.
+
 Example `task.yaml`:
 ```yaml
 version: "1.1"

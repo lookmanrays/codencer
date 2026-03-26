@@ -162,3 +162,25 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **MIME/Type Refinement**: [RESOLVED] Use `http.DetectContentType` for robust artifact typing.
 - **Persistence Hardening**: [RESOLVED] Updated SQLite schema and repository to persist `Version` and `Artifacts` metadata.
 - **Validation**: [RESOLVED] Added non-simulated integration tests for the "version bump" smoke test.
+
+### 2. Waiting & Polling Audit (V1.4.1)
+
+#### Current Capabilities
+- **Server Polling**: `RunService` polls adapters every 2s using `adapter.Poll`.
+- **Termination Detection**: `StepState.IsTerminal()` correctly identifies final states (`completed`, `failed_terminal`, `timeout`, `cancelled`).
+- **CLI Utility**: `orchestratorctl step wait` implements a basic polling loop for terminal or intervention (`needs_approval`) states.
+- **Relay Contract**: `TaskSpec` includes `timeout_seconds` for planner-defined limits.
+
+#### Identified Gaps
+- **Server-Side Timeout Enforcement**: `RunService` ignores `TaskSpec.TimeoutSeconds`; it does not yet enforce execution limits natively.
+- **Client-Side Robustness**: `orchestratorctl step wait` has no `--timeout` flag and provides no progress feedback (e.g., "Still running...").
+- **State Transition Mismatch**: If an adapter hangs, the bridge remains in `running` forever.
+- **Wait loop identity**: No way to `wait` for an entire Run or Phase, only individual Steps.
+- **Machine-Use Consistency**: Polling intervals are hardcoded (2s) and not configurable for higher-frequency local testing.
+
+#### Key Hardening Outcomes
+- **Timeout Enforcement**: [RESOLVED] Updated `RunService` to enforce `TaskSpec.TimeoutSeconds` natively and transition to `StepStateTimeout`.
+- **CLI Progress Feedback**: [RESOLVED] Added periodic progress indicators (.) to wait loops, redirected to `stderr`.
+- **CLI Timeout Flag**: [RESOLVED] Implemented `--timeout` in `orchestratorctl` for client-side safety.
+- **Interval Exposure**: [RESOLVED] Exposed configurable polling frequency via `--interval` flag.
+- **Relay Alignment**: [RESOLVED] Ensured `stdout` remains a clean JSON stream for machine-usable terminal results.

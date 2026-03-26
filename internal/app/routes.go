@@ -146,8 +146,9 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 				PhaseID: spec.PhaseID,
 				Title:   spec.Title,
 				Goal:    spec.Goal,
-				Adapter: spec.AdapterProfile,
-				Policy:  spec.PolicyBundle,
+				Adapter:        spec.AdapterProfile,
+				Policy:         spec.PolicyBundle,
+				TimeoutSeconds: spec.TimeoutSeconds,
 			}
 
 			// We dispatch asynchronously because RunService.DispatchStep blocks on adapter.Poll

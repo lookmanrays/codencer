@@ -443,7 +443,7 @@ func (s *RunService) executeAttempt(
 	}
 
 	// 3. Poll
-	if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo) {
+	if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo, step) {
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -533,13 +533,31 @@ func (s *RunService) finalizeStep(
 	step.UpdatedAt = time.Now().UTC()
 	return s.stepsRepo.UpdateState(ctx, step)
 }
-func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, attempt *domain.Attempt, repo *sqlite.AttemptsRepo) bool {
-	pollTicker := time.NewTicker(2 * time.Second)
+func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, attempt *domain.Attempt, repo *sqlite.AttemptsRepo, step *domain.Step) bool {
+	interval := 2 * time.Second
+	pollTicker := time.NewTicker(interval)
 	defer pollTicker.Stop()
+
+	var timeoutChan <-chan time.Time
+	if step != nil && step.TimeoutSeconds > 0 {
+		timer := time.NewTimer(time.Duration(step.TimeoutSeconds) * time.Second)
+		defer timer.Stop()
+		timeoutChan = timer.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			_ = adapter.Cancel(context.Background(), attempt.ID)
+			return false
+		case <-timeoutChan:
+			slog.Warn("Attempt timed out", "attemptID", attempt.ID, "timeoutSeconds", step.TimeoutSeconds)
+			_ = adapter.Cancel(context.Background(), attempt.ID)
+			attempt.Result = &domain.ResultSpec{
+				State:   domain.StepStateTimeout,
+				Summary: fmt.Sprintf("Execution timed out after %d seconds", step.TimeoutSeconds),
+			}
+			_ = repo.UpdateResult(ctx, attempt)
 			return false
 		case <-pollTicker.C:
 			running, err := adapter.Poll(ctx, attempt.ID)

@@ -128,5 +128,9 @@
 - [x] Improve observable success/failure evidence (V1.3.2 Complete) <!-- id: 74 -->
 - [x] Add/strengthen validation coverage (V1.3.2 Complete) <!-- id: 75 -->
 - [x] Final alignment for validation scenario (Batch V1.3.3 Complete) <!-- id: 76 -->
-- [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
+- [x] Audit execute-and-wait loop behavior (Phase V1.4.1 Complete) <!-- id: 80 -->
+- [x] Implement native timeout enforcement in RunService <!-- id: 81 -->
+- [x] Add/align practical timeout and polling controls (V1.4.3 Complete) <!-- id: 82 -->
+- [x] Align wait flow output with relay contract (V1.4.4 Complete) <!-- id: 110 -->
+- [x] Implement state discovery (run/step listing) (Batch V1.5.1 Complete) <!-- id: 52 -->
 - [ ] Expose Telemetry and Routing CLI groups

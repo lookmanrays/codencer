@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS steps (
 	state TEXT NOT NULL,
 	policy TEXT NOT NULL,
 	adapter TEXT NOT NULL,
+	timeout_seconds INTEGER NOT NULL DEFAULT 0,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (phase_id) REFERENCES phases(id) ON DELETE CASCADE
@@ -151,6 +152,7 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE artifacts ADD COLUMN mime_type TEXT",
 		"ALTER TABLE attempts ADD COLUMN version TEXT",
 		"ALTER TABLE attempts ADD COLUMN artifacts TEXT",
+		"ALTER TABLE steps ADD COLUMN timeout_seconds INTEGER NOT NULL DEFAULT 0",
 	}
 
 	for _, m := range extraMigrations {

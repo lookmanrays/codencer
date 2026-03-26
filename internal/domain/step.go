@@ -38,21 +38,22 @@ const (
 // Step is a specific, atomic execution unit issued by the planner.
 // The bridge executes steps by dispatching them to adapters and reporting the outcome.
 type Step struct {
-	ID          string    `json:"id"`
-	PhaseID     string    `json:"phase_id"`
-	Title       string    `json:"title"`
-	Goal        string    `json:"goal"`
-	State       StepState `json:"state"`
-	Policy      string    `json:"policy"`
-	Adapter     string    `json:"adapter"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	PhaseID        string    `json:"phase_id"`
+	Title          string    `json:"title"`
+	Goal           string    `json:"goal"`
+	State          StepState `json:"state"`
+	Policy         string    `json:"policy"`
+	Adapter        string    `json:"adapter"`
+	TimeoutSeconds int       `json:"timeout_seconds"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // IsTerminal returns true if the step has reached a final state.
 func (s StepState) IsTerminal() bool {
 	switch s {
-	case StepStateCompleted, StepStateCompletedWithWarnings, StepStateFailedTerminal, StepStateTimeout, StepStateCancelled:
+	case StepStateCompleted, StepStateCompletedWithWarnings, StepStateFailedTerminal, StepStateFailedRetryable, StepStateTimeout, StepStateCancelled:
 		return true
 	default:
 		return false
