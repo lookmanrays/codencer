@@ -173,3 +173,4 @@ make simulate
 - **Gating**: Observe how the system pauses execution when a migration is detected in a simulated attempt.
 - **Recovery**: Kill the daemon during a 'running' step and observe how it reconciles the attempt on restart.
 - **Auditability**: Use `orchestratorctl step result <id>` to see the full structured JSON evidence of a task.
+- **Validation**: See [docs/VALIDATION_SCENARIO.md](docs/VALIDATION_SCENARIO.md) for a repeatable smoke test of the Codex-first execution flow.

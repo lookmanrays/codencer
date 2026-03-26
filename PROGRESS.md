@@ -122,6 +122,11 @@
 - [x] Align Codex adapter reporting with relay contracts (V1.3.1) <!-- id: 65 -->
 - [x] Audit Codex artifact harvesting flow (V1.3.2 Complete) <!-- id: 67 -->
 - [x] Harden Codex artifact discovery and metadata capture (V1.3.2 Complete) <!-- id: 68 -->
-- [x] Align Codex harvested outputs with canonical contracts (V1.3.2 Complete) <!-- id: 70 -->
+- [x] Align Codex harvested outputs with canonical contracts (Batch V1.3.2 Complete) <!-- id: 70 -->
+- [x] Define and document local validation scenario (V1.3.2 Complete) <!-- id: 72 -->
+- [x] Add/align practical local validation path (V1.3.2 Complete) <!-- id: 73 -->
+- [x] Improve observable success/failure evidence (V1.3.2 Complete) <!-- id: 74 -->
+- [x] Add/strengthen validation coverage (V1.3.2 Complete) <!-- id: 75 -->
+- [x] Final alignment for validation scenario (Batch V1.3.3 Complete) <!-- id: 76 -->
 - [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
 - [ ] Expose Telemetry and Routing CLI groups

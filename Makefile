@@ -33,3 +33,9 @@ clean:
 simulate: build
 	@echo "==> Running in ORCHESTRATOR SIMULATION MODE (no external binaries used)..."
 	@ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord
+
+validate: build
+	@echo "==> Running Codex validation scenario (Internal Version Bump)..."
+	@./bin/orchestratorctl run start validation-run-01 validation-project --force || true
+	@./bin/orchestratorctl submit validation-run-01 docs/validation_task.yaml
+	@./bin/orchestratorctl step wait bump-version-01

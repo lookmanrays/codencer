@@ -25,7 +25,11 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
 - [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
 - [x] Harden Codex result file harvesting and artifact linking (V1.3.1 Complete) <!-- id: 68 -->
-- [x] Harden Codex artifact discovery and metadata capture (V1.3.1 Complete) <!-- id: 69 -->
+- [x] Harden Codex artifact discovery- [x] Final alignment for Batch V1.3.2 (Complete) <!-- id: 71 -->
+- [x] Define and document local validation scenario (V1.3.2 Complete) <!-- id: 72 -->
+- [x] Add/align practical local validation path (V1.3.2 Complete) <!-- id: 73 -->
+- [x] Improve observable success/failure evidence (V1.3.2 Complete) <!-- id: 74 -->
+- [x] Add/strengthen validation coverage (V1.3.2 Complete) <!-- id: 75 -->
 - [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
 | **Orchestration Core** | Complete | Native (SQLite) | Persistent ledger for runs, steps, and attempts. |
 | **Workspace Isolation** | Complete | Native (Git) | Exclusive locking and worktree management. |
@@ -139,6 +143,11 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 6. **Artifact Discovery Hardening**: [DONE] Implemented SHA-256 hashing and content-based MIME detection.
 7. **Canonical Alignment**: [DONE] aligned `ResultSpec` with `v1` schema, including explicit artifact mapping.
 8. **Final Alignment (V1.3.2)**: [DONE] Verified metadata integrity, fixed string literal inconsistencies, and updated docs to reflect high-fidelity harvesting.
+9. **Validation Scenario**: [DONE] Documented safe, realistic v0.1.0 version-bump smoke test.
+10. **Validation Path**: [DONE] Added `make validate` and `docs/validation_task.yaml` for repeatable execution.
+11. **Evidence Visibility**: [DONE] Implemented JSON pretty-printing in `orchestratorctl` and enhanced terminal status reporting.
+12. **Validation Coverage**: [DONE] Implemented `internal/service/validation_scenario_test.go` to automate "version bump" evidence flow verification.
+13. **Persistence Fix**: [DONE] Updated `AttemptsRepo` to correctly store/retrieve `Version` and `Artifacts` metadata.
 ### 1. Codex Harvesting Audit (V1.3.1)
 
 #### Current Flow
@@ -147,14 +156,9 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 3. **Capture**: Metadata (size, mod-time) is captured and persisted to SQLite via `ArtifactsRepo.Create`.
 4. **Resilience**: Missing or malformed `result.json` files trigger a "Bridge Interface Error" reported as a terminal failure.
 
-#### Key Weaknesses
-- **Validation**: No checksum/hash verification for harvested files.
-- **MIME Detection**: Relies solely on filename extensions; no content-based type detection.
-- **Reference Gaps**: `ResultSpec.RawOutputRef` is not automatically linked to `stdout.log`.
-- **Semantic Mismatch**: The list of "changed files" in the result is not checked against the presence of corresponding diff/patch artifacts.
-
-#### Next Hardening Steps
-1. **Artifact Hashing**: Implement SHA-256 hashing during discovery for data integrity.
-2. **Raw Output Linking**: Systematically populate `RawOutputRef` in the `ResultSpec` from `stdout.log`.
-3. **MIME/Type Refinement**: Use `http.DetectContentType` or similar for more robust artifact typing.
-4. **Discovery Recursion**: (If needed) Harden discovery to handle nested artifact directories.
+#### Key Hardening Outcomes
+- **Artifact Hashing**: [RESOLVED] Implemented SHA-256 hashing during discovery for data integrity.
+- **Raw Output Linking**: [RESOLVED] Systematically populate `RawOutputRef` in the `ResultSpec` from `stdout.log`.
+- **MIME/Type Refinement**: [RESOLVED] Use `http.DetectContentType` for robust artifact typing.
+- **Persistence Hardening**: [RESOLVED] Updated SQLite schema and repository to persist `Version` and `Artifacts` metadata.
+- **Validation**: [RESOLVED] Added non-simulated integration tests for the "version bump" smoke test.

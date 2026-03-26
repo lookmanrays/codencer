@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS attempts (
 	raw_output_ref TEXT,
 	is_simulation BOOLEAN NOT NULL DEFAULT 0,
 	retryable BOOLEAN NOT NULL DEFAULT 0,
+	version TEXT,
+	artifacts TEXT,
 	FOREIGN KEY (step_id) REFERENCES steps(id) ON DELETE CASCADE
 );
 
@@ -147,6 +149,8 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE gates ADD COLUMN state TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE artifacts ADD COLUMN hash TEXT",
 		"ALTER TABLE artifacts ADD COLUMN mime_type TEXT",
+		"ALTER TABLE attempts ADD COLUMN version TEXT",
+		"ALTER TABLE attempts ADD COLUMN artifacts TEXT",
 	}
 
 	for _, m := range extraMigrations {

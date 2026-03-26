@@ -1,0 +1,10 @@
+version: "1.1"
+run_id: "validation-run-01"
+step_id: "bump-version-01"
+phase_id: "execution"
+title: "Internal Version Bump"
+goal: "Update internal/app/version.go to set Version = \"v0.1.0-alpha\""
+adapter_profile: "codex"
+constraints:
+  - "Do not change the package name"
+  - "Only update the Version variable"

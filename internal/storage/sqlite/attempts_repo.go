@@ -22,8 +22,8 @@ func NewAttemptsRepo(db *sql.DB) *AttemptsRepo {
 // Create inserts a new attempt.
 func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) error {
 	const q = `
-		INSERT INTO attempts (id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO attempts (id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, version, artifacts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	var state string
 	var summary string
@@ -31,6 +31,8 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 	var warningsJSON, questionsJSON, filesJSON []byte
 	var rawOutput, rawOutputRef string
 	var isSim, retryable bool
+	var version string
+	var artifactsJSON []byte
 	
 	if attempt.Result != nil {
 		state = string(attempt.Result.State)
@@ -43,6 +45,8 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 		rawOutputRef = attempt.Result.RawOutputRef
 		isSim = attempt.Result.IsSimulation
 		retryable = attempt.Result.Retryable
+		version = attempt.Result.Version
+		artifactsJSON, _ = json.Marshal(attempt.Result.Artifacts)
 	} else {
 		state = string(domain.StepStatePending)
 	}
@@ -62,6 +66,8 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 		rawOutputRef,
 		isSim,
 		retryable,
+		version,
+		string(artifactsJSON),
 		attempt.CreatedAt,
 		attempt.UpdatedAt,
 	)
@@ -74,7 +80,7 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 // Get retrieves an attempt by ID.
 func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, error) {
 	const q = `
-		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, created_at, updated_at
+		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, version, artifacts, created_at, updated_at
 		FROM attempts WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
@@ -83,7 +89,7 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 	var stateStr string
 	var resSummary string
 	var needsDecision bool
-	var warningsStr, questionsStr, filesStr, rawOutput, rawOutputRef sql.NullString
+	var warningsStr, questionsStr, filesStr, rawOutput, rawOutputRef, versionStr, artifactsStr sql.NullString
 	var isSim, retryable bool
 
 	err := row.Scan(
@@ -101,6 +107,8 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 		&rawOutputRef,
 		&isSim,
 		&retryable,
+		&versionStr,
+		&artifactsStr,
 		&attempt.CreatedAt,
 		&attempt.UpdatedAt,
 	)
@@ -120,6 +128,10 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 			RawOutputRef:       rawOutputRef.String,
 			IsSimulation:       isSim,
 			Retryable:          retryable,
+			Version:            versionStr.String,
+		}
+		if artifactsStr.Valid && artifactsStr.String != "" {
+			_ = json.Unmarshal([]byte(artifactsStr.String), &attempt.Result.Artifacts)
 		}
 		if warningsStr.Valid && warningsStr.String != "" {
 			_ = json.Unmarshal([]byte(warningsStr.String), &attempt.Result.Warnings)
@@ -142,12 +154,13 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 	}
 
 	const q = `
-		UPDATE attempts SET state = ?, summary = ?, needs_human_decision = ?, warnings = ?, questions = ?, files_changed = ?, raw_output = ?, raw_output_ref = ?, is_simulation = ?, retryable = ?, updated_at = ?
+		UPDATE attempts SET state = ?, summary = ?, needs_human_decision = ?, warnings = ?, questions = ?, files_changed = ?, raw_output = ?, raw_output_ref = ?, is_simulation = ?, retryable = ?, version = ?, artifacts = ?, updated_at = ?
 		WHERE id = ?
 	`
 	warningsJSON, _ := json.Marshal(attempt.Result.Warnings)
 	questionsJSON, _ := json.Marshal(attempt.Result.Questions)
 	filesJSON, _ := json.Marshal(attempt.Result.FilesChanged)
+	artifactsJSON, _ := json.Marshal(attempt.Result.Artifacts)
 
 	_, err := r.db.ExecContext(ctx, q,
 		string(attempt.Result.State),
@@ -160,6 +173,8 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 		attempt.Result.RawOutputRef,
 		attempt.Result.IsSimulation,
 		attempt.Result.Retryable,
+		attempt.Result.Version,
+		string(artifactsJSON),
 		attempt.UpdatedAt,
 		attempt.ID,
 	)
@@ -172,7 +187,7 @@ func (r *AttemptsRepo) UpdateResult(ctx context.Context, attempt *domain.Attempt
 // ListByStep returns all attempts for a step.
 func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain.Attempt, error) {
 	const q = `
-		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, created_at, updated_at
+		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, version, artifacts, created_at, updated_at
 		FROM attempts WHERE step_id = ? ORDER BY number ASC
 	`
 	rows, err := r.db.QueryContext(ctx, q, stepID)
@@ -187,13 +202,14 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 		var stateStr string
 		var resSummary string
 		var needsDecision bool
-		var warningsStr, questionsStr, filesStr, rawOutput, rawOutputRef sql.NullString
+		var warningsStr, questionsStr, filesStr, rawOutput, rawOutputRef, versionStr, artifactsStr sql.NullString
 		var isSim, retryable bool
 
 		if err := rows.Scan(
 			&attempt.ID, &attempt.StepID, &attempt.Number, &attempt.Adapter,
 			&stateStr, &resSummary, &needsDecision, &warningsStr, &questionsStr,
 			&filesStr, &rawOutput, &rawOutputRef, &isSim, &retryable,
+			&versionStr, &artifactsStr,
 			&attempt.CreatedAt, &attempt.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -208,6 +224,10 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 				RawOutputRef:       rawOutputRef.String,
 				IsSimulation:       isSim,
 				Retryable:          retryable,
+				Version:            versionStr.String,
+			}
+			if artifactsStr.Valid && artifactsStr.String != "" {
+				_ = json.Unmarshal([]byte(artifactsStr.String), &attempt.Result.Artifacts)
 			}
 			if warningsStr.Valid && warningsStr.String != "" {
 				_ = json.Unmarshal([]byte(warningsStr.String), &attempt.Result.Warnings)

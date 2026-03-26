@@ -107,12 +107,12 @@ func startRun(id, projectID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(body))
+	printJSON(body)
 }
 
 func runStatus(id string) {
@@ -125,13 +125,13 @@ func runStatus(id string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
 	// Output raw JSON response for machine readability
-	fmt.Println(string(body))
+	printJSON(body)
 }
 
 func abortRun(id string) {
@@ -152,7 +152,7 @@ func abortRun(id string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
@@ -162,7 +162,7 @@ func abortRun(id string) {
 		"status": "success",
 	}
 	out, _ := json.Marshal(respBody)
-	fmt.Println(string(out))
+	printJSON(out)
 }
 
 func handleStepCommand(args []string) {
@@ -249,12 +249,12 @@ func startStep(runID, taskFile string) {
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	// Output raw JSON response for machine readability
-	fmt.Println(string(body))
+	printJSON(body)
 }
 
 func stepStatus(stepID string) {
@@ -267,12 +267,12 @@ func stepStatus(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(body))
+	printJSON(body)
 }
 
 func stepResult(stepID string) {
@@ -285,12 +285,12 @@ func stepResult(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(body))
+	printJSON(body)
 }
 
 func stepArtifacts(stepID string) {
@@ -303,12 +303,12 @@ func stepArtifacts(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(body))
+	printJSON(body)
 }
 func stepValidations(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/validations")
@@ -320,12 +320,12 @@ func stepValidations(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Println(string(body))
+	printJSON(body)
 }
 
 func stepWait(stepID string) {
@@ -360,7 +360,8 @@ func stepWait(stepID string) {
 		// Check for terminal or intervention-required states
 		st := domain.StepState(result.State)
 		if st.IsTerminal() || st == domain.StepStateNeedsApproval || st == domain.StepStateNeedsManualAttention {
-			fmt.Println(string(body))
+			fmt.Printf("\nStep %s reached state: %s\n", stepID, st)
+			printJSON(body)
 			return
 		}
 
@@ -389,7 +390,7 @@ func handleGateCommand(args []string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Println(string(body))
+		printJSON(body)
 		os.Exit(1)
 	}
 
@@ -399,5 +400,14 @@ func handleGateCommand(args []string) {
 		"status": "success",
 	}
 	out, _ := json.Marshal(respBody)
-	fmt.Println(string(out))
+	printJSON(out)
+}
+
+func printJSON(body []byte) {
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, body, "", "  "); err == nil {
+		fmt.Println(pretty.String())
+	} else {
+		fmt.Println(string(body))
+	}
 }
