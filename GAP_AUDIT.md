@@ -22,10 +22,11 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 
 | Component | Status | Implementation Type | Notes |
 | :--- | :--- | :--- | :--- |
-- [x] Implement Codex-specific result normalization (V1.3.1 Complete) <!-- id: 64 -->
+- [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
 - [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
-- [x] Finalize Batch V1.3.1 alignment (V1.3.1 Complete) <!-- id: 66 -->
-- [ ] Implement run/step discovery commands (V1.3.1) <!-- id: 52 -->
+- [x] Harden Codex result file harvesting and artifact linking (V1.3.1 Complete) <!-- id: 68 -->
+- [x] Harden Codex artifact discovery and metadata capture (V1.3.1 Complete) <!-- id: 69 -->
+- [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
 | **Orchestration Core** | Complete | Native (SQLite) | Persistent ledger for runs, steps, and attempts. |
 | **Workspace Isolation** | Complete | Native (Git) | Exclusive locking and worktree management. |
 | **Policy Engine** | Complete | Native (Heuristic) | Gating based on migrations, file counts, and failures. |
@@ -134,3 +135,26 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 2. **TaskSpec Delivery**: [DONE] Pass `Goal` and `Title` to the adapter CLI as arguments.
 3. **Outcome Normalization**: [DONE] Refine `NormalizeResult` to handle edge cases and provide "Bridge Interface Error" context.
 4. **Reporting Alignment**: [DONE] Ensure `RequestedAdapter` and `Adapter` are clearly distinguished in results.
+5. **Harvesting Hardening**: [DONE] Linked `stdout.log` to `RawOutputRef` and added explicit file verification.
+6. **Artifact Discovery Hardening**: [DONE] Implemented SHA-256 hashing and content-based MIME detection.
+7. **Canonical Alignment**: [DONE] aligned `ResultSpec` with `v1` schema, including explicit artifact mapping.
+8. **Final Alignment (V1.3.2)**: [DONE] Verified metadata integrity, fixed string literal inconsistencies, and updated docs to reflect high-fidelity harvesting.
+### 1. Codex Harvesting Audit (V1.3.1)
+
+#### Current Flow
+1. **Discovery**: `CollectStandardArtifacts` uses `os.ReadDir` on the attempt's unique artifact directory.
+2. **Classification**: Filenames like `stdout.log` and `result.json` are mapped to standard `domain.ArtifactType` values.
+3. **Capture**: Metadata (size, mod-time) is captured and persisted to SQLite via `ArtifactsRepo.Create`.
+4. **Resilience**: Missing or malformed `result.json` files trigger a "Bridge Interface Error" reported as a terminal failure.
+
+#### Key Weaknesses
+- **Validation**: No checksum/hash verification for harvested files.
+- **MIME Detection**: Relies solely on filename extensions; no content-based type detection.
+- **Reference Gaps**: `ResultSpec.RawOutputRef` is not automatically linked to `stdout.log`.
+- **Semantic Mismatch**: The list of "changed files" in the result is not checked against the presence of corresponding diff/patch artifacts.
+
+#### Next Hardening Steps
+1. **Artifact Hashing**: Implement SHA-256 hashing during discovery for data integrity.
+2. **Raw Output Linking**: Systematically populate `RawOutputRef` in the `ResultSpec` from `stdout.log`.
+3. **MIME/Type Refinement**: Use `http.DetectContentType` or similar for more robust artifact typing.
+4. **Discovery Recursion**: (If needed) Harden discovery to handle nested artifact directories.

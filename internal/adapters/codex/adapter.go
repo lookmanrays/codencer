@@ -103,15 +103,7 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifa
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
-	var resultPath string
-	for _, art := range artifacts {
-		if art.Type == "result_json" {
-			resultPath = art.Path
-			break
-		}
-	}
-
-	// NormalizeCore now handles metadata enrichment
+	// NormalizeCore now handles metadata enrichment and artifact linking
 	isSimulation := common.IsSimulationEnabled(a.Name())
-	return NormalizeCore(attemptID, resultPath, a.Name(), isSimulation)
+	return NormalizeCore(attemptID, artifacts, a.Name(), isSimulation)
 }

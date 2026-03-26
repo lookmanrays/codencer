@@ -19,8 +19,8 @@ func NewArtifactsRepo(db *sql.DB) *ArtifactsRepo {
 
 // Create inserts a new artifact record into the database.
 func (r *ArtifactsRepo) Create(ctx context.Context, artifact *domain.Artifact) error {
-	q := `INSERT INTO artifacts (id, attempt_id, type, name, path, size, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.ExecContext(ctx, q, artifact.ID, artifact.AttemptID, string(artifact.Type), artifact.Name, artifact.Path, artifact.Size, artifact.CreatedAt, artifact.UpdatedAt)
+	q := `INSERT INTO artifacts (id, attempt_id, type, name, path, size, hash, mime_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, q, artifact.ID, artifact.AttemptID, string(artifact.Type), artifact.Name, artifact.Path, artifact.Size, artifact.Hash, artifact.MimeType, artifact.CreatedAt, artifact.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create artifact %s: %w", artifact.ID, err)
 	}
@@ -30,7 +30,7 @@ func (r *ArtifactsRepo) Create(ctx context.Context, artifact *domain.Artifact) e
 // ListByStep retrieves all artifacts for all attempts of a step.
 func (r *ArtifactsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain.Artifact, error) {
 	q := `
-		SELECT a.id, a.attempt_id, a.type, a.name, a.path, a.size, a.created_at, a.updated_at
+		SELECT a.id, a.attempt_id, a.type, a.name, a.path, a.size, a.hash, a.mime_type, a.created_at, a.updated_at
 		FROM artifacts a
 		INNER JOIN attempts att ON a.attempt_id = att.id
 		WHERE att.step_id = ?
@@ -46,7 +46,7 @@ func (r *ArtifactsRepo) ListByStep(ctx context.Context, stepID string) ([]*domai
 	for rows.Next() {
 		var a domain.Artifact
 		var t string
-		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Name, &a.Path, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Name, &a.Path, &a.Size, &a.Hash, &a.MimeType, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		a.Type = domain.ArtifactType(t)
@@ -57,7 +57,7 @@ func (r *ArtifactsRepo) ListByStep(ctx context.Context, stepID string) ([]*domai
 
 // ListByAttempt retrieves all artifacts associated with a specific attempt.
 func (r *ArtifactsRepo) ListByAttempt(ctx context.Context, attemptID string) ([]*domain.Artifact, error) {
-	q := `SELECT id, attempt_id, type, name, path, size, created_at, updated_at FROM artifacts WHERE attempt_id = ?`
+	q := `SELECT id, attempt_id, type, name, path, size, hash, mime_type, created_at, updated_at FROM artifacts WHERE attempt_id = ?`
 	rows, err := r.db.QueryContext(ctx, q, attemptID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list artifacts for attempt %s: %w", attemptID, err)
@@ -68,7 +68,7 @@ func (r *ArtifactsRepo) ListByAttempt(ctx context.Context, attemptID string) ([]
 	for rows.Next() {
 		var a domain.Artifact
 		var t string
-		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Name, &a.Path, &a.Size, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.AttemptID, &t, &a.Name, &a.Path, &a.Size, &a.Hash, &a.MimeType, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		a.Type = domain.ArtifactType(t)

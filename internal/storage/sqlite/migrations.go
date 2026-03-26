@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS artifacts (
 	name TEXT NOT NULL,
 	path TEXT NOT NULL,
 	size INTEGER NOT NULL,
+	hash TEXT,
+	mime_type TEXT,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (attempt_id) REFERENCES attempts(id) ON DELETE CASCADE
@@ -143,6 +145,8 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE attempts ADD COLUMN is_simulation BOOLEAN NOT NULL DEFAULT 0",
 		"ALTER TABLE attempts ADD COLUMN retryable BOOLEAN NOT NULL DEFAULT 0",
 		"ALTER TABLE gates ADD COLUMN state TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE artifacts ADD COLUMN hash TEXT",
+		"ALTER TABLE artifacts ADD COLUMN mime_type TEXT",
 	}
 
 	for _, m := range extraMigrations {

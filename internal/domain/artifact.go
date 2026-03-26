@@ -25,6 +25,8 @@ type Artifact struct {
 	Name      string    `json:"name"`
 	Path      string    `json:"path"`
 	Size      int64     `json:"size"`
+	Hash      string    `json:"hash,omitempty"`
+	MimeType  string    `json:"mime_type,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

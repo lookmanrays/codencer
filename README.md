@@ -12,9 +12,9 @@ Codencer is a local-first orchestration daemon designed to securely manage, exec
 Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic framework:
 1. **Safety**: Agents run in configurable bounds (optional git worktrees, strict diff capturing).
 2. **Idempotency**: Runs and attempts are carefully ledgered; interrupted tasks can be resumed or securely analyzed post-crash.
-3. **Traceability**: All outputs (stdout, result.json, diffs) are meticulously persisted per-attempt in the artifact store.
+3. **Traceability**: All outputs (stdout, result.json, diffs) are meticulously persisted with **SHA-256 hashes** and **MIME detection** per-attempt in the audit-proof artifact store.
 
-Codencer is a **bridge**, not a brain. The **Planner** (operator or autonomous agent) defines the intent and logic, while Codencer handles the tactical execution, environment isolation, and telemetry reporting.
+Codencer is a **bridge**, not a brain. The **Planner** (operator or autonomous agent) defines the intent and logic, while Codencer handles the tactical execution, environment isolation, and high-fidelity evidence reporting.
 
 ### State Semantics
 The Bridge reports state; the Planner decides the next action.

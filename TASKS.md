@@ -88,10 +88,13 @@
 - [ ] Implement state discovery (run/step listing)
 - [ ] Expose Telemetry and Routing CLI groups <!-- id: 53 -->
 
-## Phase 17 — Codex Adapter Hardening (V1.3) [/]
 - [x] Audit Codex adapter and identify hardening requirements (V1.3.1 Complete) <!-- id: 61 -->
 - [x] Validate adapter binary availability in `Start()` (V1.3.1 Complete) <!-- id: 62 -->
 - [x] Pass canonical task metadata to adapter command invocation (V1.3.1 Complete) <!-- id: 63 -->
 - [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
 - [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
+- [x] Audit Codex artifact harvesting flow (V1.3.1 Complete) <!-- id: 67 -->
+- [x] Harden Codex artifact discovery and metadata capture (V1.3.1 Complete) <!-- id: 68 -->
+- [x] Align Codex harvested outputs with canonical contracts (Batch V1.3.2 Complete) <!-- id: 70 -->
+- [x] Finalize Batch V1.3.2 alignment (Complete) <!-- id: 71 -->
 - [ ] Implement state discovery (run/step listing) <!-- id: 52 -->

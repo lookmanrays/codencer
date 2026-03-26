@@ -119,7 +119,9 @@
 - [x] Validate adapter binary availability in `Start()` (V1.3.1 Complete)
 - [x] Pass canonical task metadata to adapter command invocation (V1.3.1 Complete)
 - [x] Implement Codex-specific result normalization (V1.3.1 Complete) <!-- id: 64 -->
-- [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
-- [x] Finalize Batch V1.3.1 alignment (V1.3.1) <!-- id: 66 -->
-- [ ] Implement run/step discovery commands (V1.3.1) <!-- id: 52 -->
+- [x] Align Codex adapter reporting with relay contracts (V1.3.1) <!-- id: 65 -->
+- [x] Audit Codex artifact harvesting flow (V1.3.2 Complete) <!-- id: 67 -->
+- [x] Harden Codex artifact discovery and metadata capture (V1.3.2 Complete) <!-- id: 68 -->
+- [x] Align Codex harvested outputs with canonical contracts (V1.3.2 Complete) <!-- id: 70 -->
+- [ ] Implement state discovery (run/step listing) <!-- id: 52 -->
 - [ ] Expose Telemetry and Routing CLI groups

@@ -2,10 +2,15 @@ package common
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"agent-bridge/internal/domain"
 )
@@ -33,39 +38,76 @@ func CollectStandardArtifacts(ctx context.Context, attemptID string, artifactRoo
 		}
 
 		path := filepath.Join(artifactRoot, entry.Name())
-		artType := domain.ArtifactType("file")
 		
+		// 1. Calculate Hash and Detect MIME Type
+		hash, mimeType, err := calculateMetadata(path)
+		if err != nil {
+			// Log and skip if file is unreadable (could be a transient issue or incomplete write)
+			continue
+		}
+
+		// 2. Classify Type
+		artType := domain.ArtifactType("file")
 		switch entry.Name() {
 		case "stdout.log":
 			artType = domain.ArtifactTypeStdout
 		case "result.json":
-			artType = domain.ArtifactType("result_json")
+			artType = domain.ArtifactTypeResultJSON
 		case "stderr.log":
-			artType = domain.ArtifactType("stderr")
+			artType = domain.ArtifactTypeStderr
 		default:
 			if filepath.Ext(entry.Name()) == ".patch" || filepath.Ext(entry.Name()) == ".diff" {
-				artType = domain.ArtifactType("diff")
+				artType = domain.ArtifactTypeDiff
 			}
 		}
 
 		artifacts = append(artifacts, &domain.Artifact{
-			ID:        fmt.Sprintf("art-%s-%s", entry.Name(), attemptID),
+			ID:        fmt.Sprintf("art-%s-%s", hash[:12], entry.Name()),
 			AttemptID: attemptID,
 			Type:      artType,
+			Name:      entry.Name(),
 			Path:      path,
 			Size:      info.Size(),
+			Hash:      hash,
+			MimeType:  mimeType,
 			CreatedAt: info.ModTime(),
+			UpdatedAt: time.Now().UTC(),
 		})
 	}
 	
 	return artifacts, nil
 }
 
+func calculateMetadata(path string) (string, string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", "", err
+	}
+	defer file.Close()
+
+	// 1. Detect MIME Type (sample first 512 bytes)
+	sample := make([]byte, 512)
+	n, _ := file.Read(sample)
+	mimeType := http.DetectContentType(sample[:n])
+
+	// 2. Calculate SHA-256
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", "", err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, file); err != nil {
+		return "", "", err
+	}
+	hash := hex.EncodeToString(h.Sum(nil))
+
+	return hash, mimeType, nil
+}
+
 // NormalizeStandardResult parses a standard result.json into domain.ResultSpec.
 func NormalizeStandardResult(attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	var resultPath string
 	for _, art := range artifacts {
-		if art.Type == "result_json" {
+		if art.Type == domain.ArtifactTypeResultJSON {
 			resultPath = art.Path
 			break
 		}
