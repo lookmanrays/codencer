@@ -10,6 +10,8 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/mcp"
 	"agent-bridge/internal/service"
+	"time"
+	"fmt"
 )
 
 // APIHandler holds dependencies for exposing REST routes.
@@ -56,6 +58,13 @@ func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	if req.ID == "" {
+		req.ID = fmt.Sprintf("run-%d", time.Now().Unix())
+	}
+	if req.ProjectID == "" {
+		req.ProjectID = "default-project"
 	}
 
 	run, err := h.RunSvc.StartRun(r.Context(), req.ID, req.ProjectID)
@@ -120,6 +129,13 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
+			}
+
+			if spec.StepID == "" {
+				spec.StepID = fmt.Sprintf("step-%d", time.Now().Unix())
+			}
+			if spec.PhaseID == "" {
+				spec.PhaseID = "phase-execution"
 			}
 
 			step := &domain.Step{

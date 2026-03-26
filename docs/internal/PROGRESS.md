@@ -157,5 +157,13 @@
 - [x] Clarify config & execution modes (V1.8.5 Complete)
 - [x] Consolidate one primary quickstart path (V1.8.6 Complete)
 - [x] Final alignment for Phase V1.F1 (V1.8.7 Complete)
-- [ ] Phase 17: Public Packaging (Next)
-- [ ] Implement Unified Configuration Engine (Batch V1.5.3/V1.8 Next)
+- [x] Phase V1.F2: Operational Maturity (V1.F2 Complete)
+    - [x] Audit end-to-end workflow & identify friction (V1.F2.1)
+    - [x] Implement `submit --wait` and ID auto-generation (V1.F2.2)
+    - [x] Improve output inspection: results, artifacts, validations (V1.F2.3)
+    - [x] Tighten failure/timeout/cancel recovery paths (V1.F2.4)
+    - [x] Human-readable data rendering for all CLI lists (V1.F2.5)
+- [ ] Phase V1.F3: Packaging & Governance (Next)
+    - [ ] Finalize MIT/Apache License
+    - [ ] Implement `doctor` binary version checking
+    - [ ] Author `CONTRIBUTING.md`

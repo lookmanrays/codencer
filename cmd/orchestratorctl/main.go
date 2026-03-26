@@ -49,48 +49,50 @@ func printUsage() {
 	fmt.Println("Usage: orchestratorctl <command> [args]")
 	fmt.Println("Commands:")
 	fmt.Println("  version        Show version")
-	fmt.Println("  run start      <id> <project_id>")
+	fmt.Println("  run start      [id] [project_id] (Auto-generated if omitted)")
 	fmt.Println("  run list")
-	fmt.Println("  run status     <id>")
-	fmt.Println("  run abort      <id>")
-	fmt.Println("  run wait       <id> [--interval <d>] [--timeout <d>]")
-	fmt.Println("  step wait      <id> [--interval <d>] [--timeout <d>]")
-	fmt.Println("  step start     <runID> <taskFile.yaml>")
+	fmt.Println("  run state      <runID>")
+	fmt.Println("  run abort      <runID>")
+	fmt.Println("  run wait       <runID> [--interval <d>] [--timeout <d>]")
+	fmt.Println("  step start     <runID> <taskFile.yaml> [--wait]")
 	fmt.Println("  step list      <runID>")
-	fmt.Println("  submit        <runID> <taskFile.yaml> (Synonym for step start)")
-	fmt.Println("  step status    <stepID>")
+	fmt.Println("  submit         <runID> <taskFile.yaml> [--wait] (Synonym for step start)")
+	fmt.Println("  step state     <stepID>")
 	fmt.Println("  step result    <stepID>")
 	fmt.Println("  step logs      <stepID>")
 	fmt.Println("  step artifacts <stepID>")
 	fmt.Println("  step validations <stepID>")
-	fmt.Println("  step wait      <stepID>")
-	fmt.Println("  gate approve    <id>")
-	fmt.Println("  gate reject    <id>")
+	fmt.Println("  gate approve   <gateID>")
+	fmt.Println("  gate reject    <gateID>")
 	fmt.Println("  doctor         Run environment health checks")
 }
 
 func handleRunCommand(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: orchestratorctl run <start|status|abort> [args]")
+		fmt.Println("Usage: orchestratorctl run <start|list|state|abort|wait> [args]")
 		os.Exit(1)
 	}
 
 	cmd := args[0]
 	switch cmd {
 	case "start":
-		if len(args) < 3 {
-			fmt.Println("Usage: orchestratorctl run start <id> <project_id>")
-			os.Exit(1)
+		id := ""
+		projectID := ""
+		if len(args) > 1 {
+			id = args[1]
 		}
-		startRun(args[1], args[2])
+		if len(args) > 2 {
+			projectID = args[2]
+		}
+		startRun(id, projectID)
 	case "list":
 		listRuns()
-	case "status":
+	case "status", "state":
 		if len(args) < 2 {
-			fmt.Println("Usage: orchestratorctl run status <id>")
+			fmt.Println("Usage: orchestratorctl run state <runID>")
 			os.Exit(1)
 		}
-		runStatus(args[1])
+		runState(args[1])
 	case "abort":
 		if len(args) < 2 {
 			fmt.Println("Usage: orchestratorctl run abort <id>")
@@ -134,7 +136,7 @@ func startRun(id, projectID string) {
 	printJSON(body)
 }
 
-func runStatus(id string) {
+func runState(id string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + id)
 	if err != nil {
 		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
@@ -199,7 +201,16 @@ func listRuns() {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	var runs []domain.Run
+	if err := json.Unmarshal(body, &runs); err == nil {
+		fmt.Printf("%-24s %-20s %-15s %-20s\n", "RUN ID", "PROJECT", "STATE", "CREATED")
+		fmt.Println("--------------------------------------------------------------------------------")
+		for _, r := range runs {
+			fmt.Printf("%-24s %-20s %-15s %-20s\n", r.ID, r.ProjectID, r.State, r.CreatedAt.Format("2006-01-02 15:04"))
+		}
+	} else {
+		printJSON(body)
+	}
 }
 
 func runWait(runID string, interval, timeout time.Duration) {
@@ -261,7 +272,7 @@ func runWait(runID string, interval, timeout time.Duration) {
 
 func handleStepCommand(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations|wait> [args]")
+		fmt.Println("Usage: orchestratorctl step <start|list|state|result|artifacts|validations|wait> [args]")
 		os.Exit(1)
 	}
 
@@ -294,19 +305,23 @@ func handleStepCommand(args []string) {
 			}
 			os.Exit(1)
 		}
-		stepStart(subArgs[1], subArgs[2])
+		shouldWait := false
+		if len(subArgs) > 3 && subArgs[3] == "--wait" {
+			shouldWait = true
+		}
+		stepStart(subArgs[1], subArgs[2], shouldWait)
 	case "list":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step list <runID>")
 			os.Exit(1)
 		}
 		listStepsByRun(subArgs[1])
-	case "status":
+	case "status", "state":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step status <stepID>")
+			fmt.Println("Usage: orchestratorctl step state <stepID>")
 			os.Exit(1)
 		}
-		stepStatus(subArgs[1])
+		stepState(subArgs[1])
 	case "result":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step result <stepID>")
@@ -344,7 +359,7 @@ func handleStepCommand(args []string) {
 	}
 }
 
-func stepStart(runID, taskFile string) {
+func stepStart(runID, taskFile string, shouldWait bool) {
 	spec, err := validation.ParseTaskSpec(taskFile)
 	if err != nil {
 		fmt.Printf(`{"error": "parsing task spec: %v"}`+"\n", err)
@@ -366,8 +381,23 @@ func stepStart(runID, taskFile string) {
 		os.Exit(1)
 	}
 
+	var step domain.Step
+	if err := json.Unmarshal(body, &step); err != nil {
+		printJSON(body)
+		return
+	}
+
+	if shouldWait {
+		// Output the initial step body so the user has the ID if the wait fails
+		printJSON(body)
+		fmt.Fprintf(os.Stderr, "==> Auto-waiting for Step %s...\n", step.ID)
+		stepWait(step.ID, 2*time.Second, 0)
+		return
+	}
+
 	// Output raw JSON response for machine readability
 	printJSON(body)
+	fmt.Fprintf(os.Stderr, "\n[HINT] To wait for results: ./bin/orchestratorctl step wait %s\n", step.ID)
 }
 
 func listStepsByRun(runID string) {
@@ -385,10 +415,23 @@ func listStepsByRun(runID string) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	var steps []domain.Step
+	if err := json.Unmarshal(body, &steps); err == nil {
+		fmt.Printf("%-24s %-20s %-10s %-20s\n", "STEP ID", "TITLE", "STATE", "UPDATED")
+		fmt.Println("--------------------------------------------------------------------------------")
+		for _, s := range steps {
+			title := s.Title
+			if len(title) > 18 {
+				title = title[:15] + "..."
+			}
+			fmt.Printf("%-24s %-20s %-10s %-20s\n", s.ID, title, s.State, s.UpdatedAt.Format("2006-01-02 15:04"))
+		}
+	} else {
+		printJSON(body)
+	}
 }
 
-func stepStatus(stepID string) {
+func stepState(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
 	if err != nil {
 		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
@@ -421,7 +464,18 @@ func stepResult(stepID string) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	var result domain.ResultSpec
+	if err := json.Unmarshal(body, &result); err == nil {
+		fmt.Printf("--- Step Result: %s ---\n", stepID)
+		fmt.Printf("State:   %s\n", result.State)
+		fmt.Printf("Summary: %s\n", result.Summary)
+		if result.RawOutputRef != "" {
+			fmt.Printf("Logs:    %s\n", result.RawOutputRef)
+		}
+		fmt.Println("---------------------------")
+	} else {
+		printJSON(body)
+	}
 }
 
 func stepLogs(stepID string) {
@@ -462,7 +516,19 @@ func stepArtifacts(stepID string) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	var artifacts []domain.Artifact
+	if err := json.Unmarshal(body, &artifacts); err == nil {
+		fmt.Printf("--- Artifacts for Step: %s ---\n", stepID)
+		if len(artifacts) == 0 {
+			fmt.Println("No artifacts recorded.")
+		}
+		for _, a := range artifacts {
+			fmt.Printf("- [%s] %s (%s)\n", a.Type, a.Path, a.MimeType)
+		}
+		fmt.Println("-------------------------------")
+	} else {
+		printJSON(body)
+	}
 }
 func stepValidations(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/validations")
@@ -479,7 +545,30 @@ func stepValidations(stepID string) {
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	var results map[string][]*domain.ValidationResult
+	if err := json.Unmarshal(body, &results); err == nil {
+		fmt.Printf("--- Validation Summary for Step: %s ---\n", stepID)
+		if len(results) == 0 {
+			fmt.Println("No validations recorded.")
+		}
+		for attempt, resList := range results {
+			fmt.Printf("\nAttempt %s:\n", attempt)
+			for _, v := range resList {
+				status := "[PASS]"
+				if !v.Passed {
+					status = "[FAIL]"
+				}
+				msg := v.State
+				if v.Error != "" {
+					msg = domain.ValidationState(v.Error)
+				}
+				fmt.Printf("  %s %s: %s\n", status, v.Name, msg)
+			}
+		}
+		fmt.Println("\n---------------------------------------")
+	} else {
+		printJSON(body)
+	}
 }
 
 func stepWait(stepID string, interval, timeout time.Duration) {
@@ -525,6 +614,23 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 			if result.State.IsTerminal() || result.State == domain.StepStateNeedsApproval || result.State == domain.StepStateNeedsManualAttention {
 				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Step %s: %s\n", stepID, result.State)
 				
+				switch result.State {
+				case domain.StepStateNeedsApproval:
+					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Policy gate hit. To approve:\n")
+					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl gate approve gate-%s\n", stepID)
+				case domain.StepStateFailedTerminal:
+					fmt.Fprintf(os.Stderr, "\n[TROUBLESHOOT] Task failed. Inspect test/lint outcomes:\n")
+					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step validations %s\n", stepID)
+				case domain.StepStateTimeout:
+					fmt.Fprintf(os.Stderr, "\n[TROUBLESHOOT] Execution exceeded time limit. Check logs for hang:\n")
+					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step logs %s\n", stepID)
+				case domain.StepStateNeedsManualAttention:
+					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Bridge encountered ambiguity or system error.\n")
+					fmt.Fprintf(os.Stderr, "Review daemon logs (.codencer/daemon.log) and attempt logs:\n")
+					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step logs %s\n", stepID)
+				}
+				fmt.Fprintln(os.Stderr)
+
 				// Hint at artifact directory if possible
 				if result.RawOutputRef != "" {
 					fmt.Fprintf(os.Stderr, "Logs: %s\n", result.RawOutputRef)
@@ -598,6 +704,7 @@ func handleGateCommand(args []string) {
 	}
 	out, _ := json.Marshal(respBody)
 	printJSON(out)
+	fmt.Fprintf(os.Stderr, "==> Gate %s: %sed successfully.\n", id, cmd)
 }
 
 func runDoctor() {

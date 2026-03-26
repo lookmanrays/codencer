@@ -57,18 +57,23 @@ make start
 ### 3. Run Your First Task
 Submit a task and wait for the bridge to report results:
 ```bash
-# 1. Start a new run
-./bin/orchestratorctl run start my-first-run my-project
+# 2. Submit a tactical task (Automatic wait)
+./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait
 
-# 2. Submit a tactical task (extract Step ID from the output)
-./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml
+# 3. Inspect the outcome
+./bin/orchestratorctl step result <stepID>
+./bin/orchestratorctl step artifacts <stepID>
+./bin/orchestratorctl step validations <stepID>
 
-# 3. Wait for terminal result (Step ID from previous command)
-./bin/orchestratorctl step wait <stepID>
+---
 
-# 4. Inspect artifacts and logs
-ls -R .codencer/artifacts/my-first-run
-```
+## 🔍 Interpreting Outcomes
+
+The Bridge reports high-fidelity evidence for every attempt:
+- **`completed`**: Goal met, all tests passed.
+- **`completed_with_warnings`**: Success, but with lint/test warnings.
+- **`failed_terminal`**: Execution halted due to an unrecoverable error.
+- **`needs_approval`**: Policy gate hit; run `orchestratorctl gate approve <id>`.
 
 For a deeper dive into agent installation and advanced flows, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
 
@@ -111,7 +116,7 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 - **[Self-Host Runbook (Flows)](docs/EXAMPLES.md)** (Start here for daily use)
 - [Setup & Self-Hosting Guide](docs/SETUP.md)
 - [Architecture Overview](docs/02_architecture.md)
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- **[Troubleshooting & Recovery](docs/TROUBLESHOOTING.md)** (What to do when things fail)
 - [Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)
 
 ---

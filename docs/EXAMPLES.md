@@ -43,7 +43,45 @@ In a new terminal:
 ### 4. Inspect the Result
 ```bash
 # Verify the 'completed' state and captured metadata
-./bin/orchestratorctl step result smoke-step-1 | jq .
+./bin/orchestratorctl step result s-bugfix-01
+```
+
+---
+
+## 🔍 Audit & Troubleshooting Flow
+
+If a task fails or yields unexpected results, follow this audit trail:
+
+### 1. View Execution Logs
+See exactly what the agent saw and did in its terminal session.
+```bash
+./bin/orchestratorctl step logs <stepID>
+```
+
+### 2. Inspect Evidence (Artifacts)
+Codencer captures all generated files, diffs, and metadata in the local vault.
+```bash
+# List all artifacts for a step
+./bin/orchestratorctl step artifacts <stepID>
+
+# Artifacts are stored on disk at:
+# .codencer/artifacts/<runID>/<stepID>/...
+```
+
+### 3. Verify Correctness (Validations)
+Check which specific verification commands (tests, linters) passed or failed.
+```bash
+./bin/orchestratorctl step validations <stepID>
+```
+
+### 4. Policy Gates (Intervention)
+If the bridge pauses for a gate, identify the reason and approve:
+```bash
+# Check gate state and reason
+./bin/orchestratorctl run state <runID>
+
+# Approve the sensitive action
+./bin/orchestratorctl gate approve gate-<stepID>
 ```
 
 ---

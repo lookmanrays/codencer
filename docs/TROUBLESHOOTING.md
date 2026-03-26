@@ -35,21 +35,30 @@ Always start here to verify your environment:
 
 ---
 
-## 3. Interpreting Terminal Outcomes
-
 ### 3.1 `timeout`
 - **What it means**: The agent exceeded the `timeout_seconds` defined in your `task.yaml`. The bridge killed the process to prevent hanging.
-- **Action**: Check `orchestratorctl step logs <id>` to see where it got stuck. Increase `timeout_seconds` if the task is simply large.
+- **Troubleshoot**: 
+  - Check `orchestratorctl step logs <id>` to see where it got stuck. 
+  - If the agent was just slow, increase `timeout_seconds` in the task YAML.
+  - If the agent is unresponsive, the bridge may have killed it; check `.codencer/daemon.log`.
 
-### 3.2 `needs_manual_attention` (Bridge Interface Error)
-- **What it means**: The agent finished its process, but the bridge could not find a valid `result.json` or mandatory artifacts. This often happens if the agent crashed internally or produced malformed output.
-- **Action**: 
-  - Inspect raw logs: `orchestratorctl step logs <id>`.
-  - Check the attempt directory: `ls -R .codencer/artifacts/<runID>/<attemptID>/`.
+### 3.2 `failed_terminal`
+- **What it means**: The task finished, but a critical validation (test/lint) failed OR the agent explicitly reported failure.
+- **Troubleshoot**:
+  - Run `orchestratorctl step validations <id>` to see which specific check failed.
+  - Review the agent's reasoning in `orchestratorctl step result <id>`.
 
-### 3.3 `failed_retryable`
-- **What it means**: A transient failure (e.g. rate limit, temporary disk error) occurred that the bridge identifies as recoverable.
-- **Action**: Run `orchestratorctl step retry <stepID>` to attempt the task again.
+### 3.3 `needs_manual_attention` (Ambiguity/Crash)
+- **What it means**: The bridge cannot determine the outcome (e.g., the agent crashed without a result JSON, or there's a file conflict in the worktree).
+- **Troubleshoot**:
+  - Review `orchestratorctl step logs <id>` for internal agent errors.
+  - Check `.codencer/daemon.log` for bridge-side errors.
+  - You may need to manually inspect `.codencer/workspace/<runID>/` (if the worktree wasn't cleaned).
+
+### 3.4 `failed_retryable`
+- **What it means**: Transient failure (network timeout, rate limit) that can be cleared by trying again.
+- **Recovery**: 
+  - Wait a few seconds then run `orchestratorctl step start <runID> <task.yaml> --wait`.
 
 ---
 

@@ -135,11 +135,13 @@
 - [x] Clarify config & execution modes (V1.8.5 Complete)
 - [x] Consolidate one primary quickstart path (V1.8.6 Complete)
 - [x] Final alignment for Phase V1.F1 (V1.8.7 Complete)
-- [ ] Phase 17: Public Packaging (Next)
-    - [ ] Implement `config/local.json` or `.env` loader <!-- id: 162 -->
-    - [ ] Improve `doctor` with agent installation hints <!-- id: 163 -->
-    - [ ] Add `make run-daemon` log tailing helper <!-- id: 164 -->
-    - [ ] Author `CONTRIBUTING.md` <!-- id: 165 -->
+- [/] Phase V1.F2: Operational Maturity (Active)
+    - [x] Audit end-to-end workflow & identify friction (V1.F2.1 Complete) <!-- id: 162 -->
+    - [x] Implement `submit --wait` and ID auto-generation (V1.F2.2 Complete) <!-- id: 163 -->
+    - [x] Implement Gate ID auto-hinting in `wait` (V1.F2.2 Complete) <!-- id: 164 -->
+    - [x] Improve output inspection rendering (V1.F2.3 Complete) <!-- id: 165 -->
+    - [x] Tighten failure/timeout/cancel recovery paths (V1.F2.4 Complete) <!-- id: 166 -->
+    - [ ] Implement `run list` and `step list` data rendering <!-- id: 167 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
 
 - [x] Audit example coverage for daily planner-to-bridge usage (Micro-task Complete)

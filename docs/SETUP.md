@@ -22,9 +22,14 @@ cp .env.example .env
 make smoke
 
 # OR manual verification
-./bin/orchestratorctl run start verify-run verify-proj
-./bin/orchestratorctl submit verify-run examples/tasks/bug_fix.yaml
-./bin/orchestratorctl step wait <stepID>
+# 1. Start a new run (Optional: ID auto-generation)
+./bin/orchestratorctl run start
+
+# 2. Submit a tactical task with automatic wait
+./bin/orchestratorctl submit examples/tasks/bug_fix.yaml --wait
+
+# 3. Inspect the human-readable result
+./bin/orchestratorctl step result <stepID>
 ```
 
 *For a detailed breakdown of each step, see the sections below.*
@@ -149,14 +154,14 @@ make start-sim
 # Check if the daemon is responsive
 ./bin/orchestratorctl doctor
 
-# Start a simple run
-./bin/orchestratorctl run start my-run my-project
+# Start a simple run (ID will be auto-generated if omitted)
+./bin/orchestratorctl run start
 ```
 
 ### 3. Submit a Task
 Most production-style interactions use a YAML `TaskSpec`:
 ```bash
-./bin/orchestratorctl submit my-run examples/tasks/bug_fix.yaml
+./bin/orchestratorctl submit examples/tasks/bug_fix.yaml --wait
 ```
 
 ---

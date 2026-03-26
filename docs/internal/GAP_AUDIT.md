@@ -250,7 +250,8 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - [x] Audit publication readiness and positioning (V1.7.5 Complete)
 - [x] Harden README for public publication (V1.7.6 Complete)
 - [x] Harden local usage & self-host framing (V1.7.7 Complete)
-- [x] Harden maturity & limitations framing (V1.7.8 Complete)
+- [x] Standardized all terminology (`State`, `lowercase_properties`). (V1.2 Complete)
+- [x] Align CLI command names with Domain states (`run state`, `step state`). (V1.F2 Review Complete)
 - [x] Audit self-host/setup ergonomics (V1.7.9 Complete)
 - [x] Harden self-host setup instructions (V1.8.0 Complete)
 - [x] Harden self-host run flows (V1.8.1 Complete)
@@ -297,6 +298,53 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 2. **Tooling Robustness**: [RESOLVED] `smoke_test.sh` now detects active ports and parses JSON results more reliably.
 3. **Command Consistency**: [RESOLVED] Removed stale `--force` flags and standardized `./bin/` paths across all docs.
 4. **Onboarding Unity**: [RESOLVED] Merged disparate quickstarts into a single authoritative flow in `README.md`.
+
+- [x] Audit end-to-end workflow (V1.F2.1 Complete)
+- [x] Implement `submit --wait` convenience (V1.F2.2 Complete)
+- [x] Implement Gate ID auto-hinting (V1.F2.2 Complete)
+- [x] Support ID auto-generation (V1.F2.2 Complete)
+- [x] Improve output inspection: results, artifacts, validations (V1.F2.3 Complete)
+- [x] Improve failure/timeout/cancel experience (V1.F2.4 Complete)
+- [x] Terminology alignment: `status` -> `state` (V1.F2 Review Complete)
+- [x] Human-readable CLI rendering for all lists (V1.F2.5 Complete)
+
+**Phase V1.F2 Result**: The repository is now operationally mature for local use.
+- **Workflow**: `run start` -> `submit --wait` -> `step result`.
+- **Auditability**: Human-readable logs, artifacts, and validations.
+- **Recovery**: Actionable failure hints and troubleshooting docs.
+
+## Output Inspection & Interpretation (V1.F2.3)
+
+### 📈 Terminal Outcome Meanings
+- **`completed`**: Goal met, all validations passed with zero errors.
+- **`completed_with_warnings`**: Goal met and validations passed, but auxiliary checks (e.g. lint) reported non-blocking issues.
+- **`failed_terminal`**: Execution halted due to a critical error (e.g. test failure) that the bridge could not automatically resolve.
+- **`failed_retryable`**: Temporary infrastructure failure (e.g. network timeout) that may resolve on retry.
+- **`needs_approval`**: Sensitive action hit a policy gate; requires manual `./bin/orchestratorctl gate approve`.
+- **`needs_manual_attention`**: The agent is "lost" or stuck; requires human intervention in the workspace.
+
+### 🔍 Where to Look
+1. **Result Summary**: Use `./bin/orchestratorctl step result <id>` for a high-level outcome.
+2. **Artifact Vault**: Every file touched is recorded in `.codencer/artifacts/<runID>/`.
+3. **Execution Logs**: Run `./bin/orchestratorctl step logs <id>` to see exactly what the agent saw.
+4. **Validation Proofs**: Run `./bin/orchestratorctl step validations <id>` to see which tests passed/failed.
+
+## End-to-End Workflow Audit (V1.F2.1)
+
+### 🌿 Actual First-User Journey
+1. **Initialize**: `make setup build`.
+2. **Configure**: `cp .env.example .env`.
+3. **Start Run**: `./bin/orchestratorctl run start r-01 p-01`. (Friction: Manual ID invented).
+4. **Submit**: `./bin/orchestratorctl submit r-01 task.yaml`. (Friction: Step ID must be extracted from JSON stdout).
+5. **Wait**: `./bin/orchestratorctl step wait s-01`. (Friction: Manual copy-paste of Step ID).
+6. **Intervene**: If `paused_for_gate` seen, run `run status r-01` to find Gate ID. (Friction: High).
+7. **Inspect**: `./bin/orchestratorctl step artifacts s-01`. (Friction: Pure JSON output).
+
+### ⚠️ Identified Operational Friction
+1. **The ID Burden**: Users must manually invent and track Run/Step/Gate IDs.
+2. **Copy-Paste Tax**: Task submission returns a JSON blob; following up with a `wait` requires a manual string copy.
+3. **Gate Obscurity**: When the bridge pauses for human intervention, it does not provide the `gate approve` command or ID directly.
+4. **Result Density**: `step result` and `artifacts` are high-fidelity but low-readability (raw JSON vs pretty-printed summary).
 
 ### 🛠 Ready for Phase V1.F2 (Maturity & Packaging)
 1. **Install Doctor**: Enhance `orchestratorctl doctor` to check for `sqlite3` and `git` versions explicitly.
