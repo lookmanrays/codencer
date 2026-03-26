@@ -49,6 +49,10 @@ simulate: build
 	@echo "==> Running in ALL-ADAPTERS SIMULATION MODE..."
 	@ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord
 
+smoke: build
+	@echo "==> Running automated smoke test..."
+	@./scripts/smoke_test.sh
+
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."
 	@./bin/orchestratorctl run start validation-run-01 validation-project --force || true

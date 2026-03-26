@@ -26,7 +26,14 @@ The bridge maintains all local state in a hidden `.codencer/` directory in the p
 make dev
 ```
 
-### 2. Basic Workflow
+### 2. Automated Smoke Test (Verification)
+Verify the full relay loop (including ledgering and wait/polling) in simulation mode:
+```bash
+# Runs setup -> build -> daemon -> run -> submit -> wait -> result
+make smoke
+```
+
+### 3. Basic Workflow
 In a separate terminal:
 ```bash
 # 1. Start a new run
