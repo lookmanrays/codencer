@@ -324,6 +324,30 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Auditability**: Human-readable logs, artifacts, and validations.
 - **Recovery**: Actionable failure hints and troubleshooting docs.
 
+
+### 6. Phase/Task Submission Protocol (Friction Point)
+**Audit Result**: There is a structural inconsistency between how the daemon initializes a Run and how the CLI/API submits a Task.
+
+#### Behavioral Mismatch
+1.  **Run Initialization (`StartRun`)**: Automatically creates a single phase with a dynamic ID: `phase-01-<runID>`.
+2.  **Task Submission (`POST /steps`)**: The API handler defaults the `phase_id` to `phase-execution-<runID>` if missing.
+3.  **Example YAMLs**: Currently use various custom strings (e.g., `phase-bugfix`, `phase-verify-orchestrator`).
+
+#### Technical Impact
+Steps submitted with non-matching `phase_id` values create "orphan steps" in the database. While initial execution works, any operation requiring phase lookup (e.g., `orchestratorctl retry <stepID>` or benchmark logging) will fail with a `phase not found` error.
+
+#### Recommended V1 Correction
+- **Implementation**: [RESOLVED] Updated `RunService` to automatically create a "Just-In-Time" phase if the submitted `phase_id` does not exist for the current Run. Standardized the default phase ID to `phase-execution-<runID>` across both `StartRun` and the API.
+- **Documentation**: Standardized documentation to treat `phase-execution` as the primary target.
+- **Ergonomics**: [RESOLVED] JIT creation eliminates "orphan step" failures during retries/benchmarks.
+
+- [x] Fix phase/task model inconsistency (V1.F3.6 Complete)
+- [x] Align examples and smoke flow with V1 runtime (V1.F3.7 Complete)
+- [x] Harden Quickstart & Setup command parity (V1.F3.8 Complete)
+- [x] Final alignment for Phase V1.C1 (V1.C1 Complete)
+
+---
+
 ## V1 Publication Audit (Phase V1.F3)
 
 ### 🚨 Critical Publication Blockers (Must Fix)

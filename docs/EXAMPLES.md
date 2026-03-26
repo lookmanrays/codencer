@@ -43,7 +43,7 @@ In a new terminal:
 ### 4. Inspect the Result
 ```bash
 # Verify the 'completed' state and captured metadata
-./bin/orchestratorctl step result s-bugfix-01
+./bin/orchestratorctl step result <stepID>
 ```
 
 ---

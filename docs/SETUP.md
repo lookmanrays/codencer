@@ -26,7 +26,7 @@ make smoke
 ./bin/orchestratorctl run start
 
 # 2. Submit a tactical task with automatic wait
-./bin/orchestratorctl submit examples/tasks/bug_fix.yaml --wait
+./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml --wait
 
 # 3. Inspect the human-readable result
 ./bin/orchestratorctl step result <stepID>
@@ -161,7 +161,7 @@ make start-sim
 ### 3. Submit a Task
 Most production-style interactions use a YAML `TaskSpec`:
 ```bash
-./bin/orchestratorctl submit examples/tasks/bug_fix.yaml --wait
+./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml --wait
 ```
 
 ---

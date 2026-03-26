@@ -1,7 +1,5 @@
-version: "v1"
 project_id: "codencer-internal"
 run_id: "run-config-01"
-phase_id: "phase-infra"
 step_id: "step-update-ports"
 title: "Update Internal Port Configuration"
 goal: "Change the default daemon port from 8080 to 9090 in the default configuration file."

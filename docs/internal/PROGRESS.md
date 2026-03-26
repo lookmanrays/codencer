@@ -166,7 +166,16 @@
     - [x] Improve output inspection: results, artifacts, validations (V1.F2.3)
     - [x] Tighten failure/timeout/cancel recovery paths (V1.F2.4)
     - [x] Human-readable data rendering for all CLI lists (V1.F2.5)
-- [ ] Phase V1.F3: Packaging & Governance (Next)
+- [/] Phase V1.F3: Packaging & Governance (Active)
+    - [x] Audit publication blockers and trust gaps (V1.F3.1 Complete)
+    - [x] Harden public-facing trust signals (V1.F3.2 Complete)
+    - [x] Resolve/Standardize publication essentials (V1.F3.3 Complete)
+    - [x] Clarify public vs internal doc hierarchy (V1.F3.4 Complete)
+    - [x] Audit phase/task model inconsistency (V1.F3.5 Complete)
+    - [x] Implement JIT phase alignment (V1.F3.6 Complete)
+    - [x] Align examples and smoke flow with V1 runtime (V1.F3.7 Complete)
+    - [x] Harden Quickstart & Setup command parity (V1.F3.8 Complete)
+    - [x] Final alignment for Phase V1.C1 (V1.C1 Complete)
     - [ ] Finalize MIT/Apache License
     - [ ] Implement `doctor` binary version checking
     - [ ] Author `CONTRIBUTING.md`

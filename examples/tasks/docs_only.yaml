@@ -1,7 +1,5 @@
-version: "v1"
 project_id: "codencer-internal"
 run_id: "run-docs-01"
-phase_id: "phase-polish"
 step_id: "step-update-readme"
 title: "Update Project README"
 goal: "Clarify the simulation mode toggle and link the new troubleshooting guide in README.md."

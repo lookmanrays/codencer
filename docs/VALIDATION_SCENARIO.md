@@ -25,7 +25,7 @@ Update the internal application version string in `internal/app/version.go`.
 version: "1.1"
 run_id: "validation-run-01"
 step_id: "bump-version-01"
-phase_id: "execution"
+# [OPTIONAL] phase_id: "phase-execution-$RUN_ID"
 title: "Internal Version Bump"
 goal: "Update internal/app/version.go to set Version = \"v0.1.0-alpha\""
 adapter_profile: "codex"

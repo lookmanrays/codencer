@@ -1,7 +1,5 @@
-version: "v1"
 project_id: "codencer-internal"
 run_id: "run-sim-01"
-phase_id: "phase-verify-orchestrator"
 step_id: "step-simulated-workflow"
 title: "Simulated Deployment Workflow"
 goal: "Verify the orchestrator's state transitions for a multi-step deployment scenario."

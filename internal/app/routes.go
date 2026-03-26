@@ -135,7 +135,7 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 				spec.StepID = fmt.Sprintf("step-%d", time.Now().Unix())
 			}
 			if spec.PhaseID == "" {
-				spec.PhaseID = "phase-execution"
+				spec.PhaseID = fmt.Sprintf("phase-execution-%s", id)
 			}
 
 			step := &domain.Step{

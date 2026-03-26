@@ -107,7 +107,7 @@ Deterministic structure like:
   runs/
     run-0001/
       manifest.json
-      phase-01/
+      phase-execution/
         step-01/
           attempt-01/
             input.json

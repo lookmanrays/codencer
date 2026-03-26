@@ -4,7 +4,7 @@ set -e
 
 # Default to simulation mode unless overridden
 export ALL_ADAPTERS_SIMULATION_MODE=${ALL_ADAPTERS_SIMULATION_MODE:-1}
-export SMOKE_PORT=${SMOKE_PORT:-8085}
+export PORT=${PORT:-8085}
 
 echo "--- Codencer Smoke Test ---"
 echo "Mode: $([ "$ALL_ADAPTERS_SIMULATION_MODE" == "1" ] && echo "Simulation" || echo "Real")"
@@ -13,13 +13,13 @@ echo "Mode: $([ "$ALL_ADAPTERS_SIMULATION_MODE" == "1" ] && echo "Simulation" ||
 make setup build > /dev/null
 
 # 2. Start Daemon
-echo "Checking for daemon on port $SMOKE_PORT..."
-if curl -s http://127.0.0.1:$SMOKE_PORT/health | grep -q "ok"; then
-    echo "Daemon already running on $SMOKE_PORT. Using existing daemon."
+echo "Checking for daemon on port $PORT..."
+if curl -s http://127.0.0.1:$PORT/health | grep -q "ok"; then
+    echo "Daemon already running on $PORT. Using existing daemon."
     DAEMON_ALREADY_RUNNING=1
 else
-    echo "Starting daemon on port $SMOKE_PORT..."
-    PORT=$SMOKE_PORT ./bin/orchestratord > .codencer/smoke_daemon.log 2>&1 &
+    echo "Starting daemon on port $PORT..."
+    ./bin/orchestratord > .codencer/smoke_daemon.log 2>&1 &
     DAEMON_PID=$!
     DAEMON_ALREADY_RUNNING=0
 fi
@@ -35,7 +35,7 @@ trap cleanup EXIT
 # Wait for health check
 echo "Waiting for daemon to be ready..."
 for i in {1..10}; do
-    if curl -s http://127.0.0.1:$SMOKE_PORT/health | grep -q "ok"; then
+    if curl -s http://127.0.0.1:$PORT/health | grep -q "ok"; then
         echo "Daemon ready."
         break
     fi
@@ -59,7 +59,7 @@ cat <<EOF > .codencer/smoke_task.yaml
 version: "1.1"
 run_id: "$RUN_ID"
 step_id: "smoke-step-1"
-phase_id: "execution"
+# [AUTO-GENERATED] phase_id: "phase-execution-$RUN_ID"
 title: "Smoke Test Task"
 goal: "Verify the bridge relay loop"
 adapter_profile: "codex"

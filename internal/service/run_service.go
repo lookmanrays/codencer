@@ -75,7 +75,7 @@ func (s *RunService) StartRun(ctx context.Context, id, projectID string) (*domai
 
 	// Create default phase
 	phase := &domain.Phase{
-		ID:        fmt.Sprintf("phase-01-%s", id),
+		ID:        fmt.Sprintf("phase-execution-%s", id),
 		RunID:     id,
 		Name:      "Execution",
 		SeqOrder:  1,
@@ -217,7 +217,7 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 // DispatchStep handles the tactical execution of a planner-issued Step.
 // It manages adapter selection, environment setup, and terminal state reporting.
 func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domain.Step) error {
-	if err := s.initializeStep(ctx, step); err != nil {
+	if err := s.initializeStep(ctx, runID, step); err != nil {
 		return err
 	}
 
@@ -268,7 +268,12 @@ func (s *RunService) RetryStep(ctx context.Context, stepID string) error {
 	return nil
 }
 
-func (s *RunService) initializeStep(ctx context.Context, step *domain.Step) error {
+func (s *RunService) initializeStep(ctx context.Context, runID string, step *domain.Step) error {
+	// Ensure the phase exists before creating the step to prevent orphan references
+	if err := s.ensurePhaseExists(ctx, runID, step.PhaseID); err != nil {
+		return fmt.Errorf("failed to ensure phase consistency: %w", err)
+	}
+
 	existing, err := s.stepsRepo.Get(ctx, step.ID)
 	if err == nil && existing != nil {
 		// Step already exists, just reset state for a new attempt cycle
@@ -286,6 +291,25 @@ func (s *RunService) initializeStep(ctx context.Context, step *domain.Step) erro
 		return fmt.Errorf("failed to create step in store: %w", err)
 	}
 	return nil
+}
+
+func (s *RunService) ensurePhaseExists(ctx context.Context, runID, phaseID string) error {
+	existing, err := s.phasesRepo.Get(ctx, phaseID)
+	if err == nil && existing != nil {
+		return nil
+	}
+
+	// Phase doesn't exist, auto-create it under this run
+	now := time.Now().UTC()
+	phase := &domain.Phase{
+		ID:        phaseID,
+		RunID:     runID,
+		Name:      "Submitted Phase",
+		SeqOrder:  99, // Tactical phases default to high sequence
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	return s.phasesRepo.Create(ctx, phase)
 }
 
 func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *domain.Step, fallbackChain []string) (*domain.ResultSpec, PolicyEvaluation, error) {

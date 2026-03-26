@@ -34,21 +34,17 @@ func DefaultConfig() *Config {
 func LoadConfig(path string) (*Config, error) {
 	config := DefaultConfig()
 
-	if path == "" {
-		return config, nil
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// fallback without error if optional
-			return config, nil
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("failed to read config file: %w", err)
+			}
+		} else {
+			if err := json.Unmarshal(data, config); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal config JSON: %w", err)
+			}
 		}
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	if err := json.Unmarshal(data, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config JSON: %w", err)
 	}
 
 	// 3. Environment Variable Overrides

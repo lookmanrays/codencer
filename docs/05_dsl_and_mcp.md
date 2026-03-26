@@ -24,7 +24,7 @@ The `TaskSpec` is the canonical contract sent by a **Planner** to the **Bridge**
 version: v1
 project_id: local-agent-bridge
 run_id: run-0001
-phase_id: phase-04-codex-adapter
+phase_id: phase-execution-run-123  # Optional, auto-generated if omitted
 step_id: step-01
 title: Implement Codex adapter invocation and artifact capture
 goal: Build the first working Codex adapter that can execute a step, capture logs, and return a normalized result.
@@ -65,7 +65,7 @@ is_simulation: false
 {
   "version": "v1",
   "run_id": "run-0001",
-  "phase_id": "phase-04-codex-adapter",
+  "phase_id": "phase-04-codex-adapter", // Run-scoped ID manually specified
   "step_id": "step-01",
   "attempt_id": "attempt-01",
   "adapter": "codex",

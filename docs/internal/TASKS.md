@@ -143,6 +143,8 @@
     - [x] Improve public-facing trust and clarity (V1.F3.2 Complete) <!-- id: 231 -->
     - [x] Resolve/Standardize publication essentials (V1.F3.3 Complete) <!-- id: 169 -->
     - [x] Reduce confusion between public and internal docs (V1.F3.4 Complete) <!-- id: 234 -->
+    - [x] Audit phase/task model inconsistency (V1.F3.5 Complete) <!-- id: 237 -->
+    - [ ] Implement JIT phase creation for orphan-step protection <!-- id: 238 -->
     - [ ] Author CONTRIBUTING.md (Governance) <!-- id: 170 -->
     - [ ] Enhance `doctor` with binary version checking (Trust) <!-- id: 171 -->
     - [ ] Final alignment for V1 publication (Review) <!-- id: 173 -->

@@ -1,7 +1,5 @@
-version: "v1"
 project_id: "codencer-internal"
 run_id: "run-fix-01"
-phase_id: "phase-bugfix"
 step_id: "step-fix-nil-err"
 title: "Fix Nil Pointer dereference in CLI"
 goal: "Fix a potential nil pointer dereference when the daemon is unreachable during 'orchestratorctl status'."

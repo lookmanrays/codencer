@@ -58,10 +58,13 @@ make start
 ### 3. Run Your First Task
 Submit a task and wait for the bridge to report results:
 ```bash
-# 2. Submit a tactical task (Automatic wait)
+# 1. Start a new orchestration run (System of Record)
+./bin/orchestratorctl run start my-first-run
+
+# 2. Submit a tactical task and wait for completion
 ./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait
 
-# 3. Inspect the outcome
+# 3. Inspect the high-fidelity outcome
 ./bin/orchestratorctl step result <stepID>
 ./bin/orchestratorctl step artifacts <stepID>
 ./bin/orchestratorctl step validations <stepID>
