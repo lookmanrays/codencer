@@ -1,4 +1,7 @@
-# Codencer Gap Audit
+# Codencer# Gap Audit & Readiness
+> [!NOTE]
+> This is an **internal tracking document** for the Codencer project development.
+> For the public user guide, see the [README.md](../../README.md).
 
 ## Current Reality
 The repository contains a functionally operational MVP implementation of the orchestration bridge. It successfully integrates a SQLite ledger, a robust state machine, a `DispatchStep` orchestrator loop, CLI endpoints, basic MCP routes, and a skeletal VS Code extension.
@@ -307,8 +310,32 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - [x] Improve failure/timeout/cancel experience (V1.F2.4 Complete)
 - [x] Terminology alignment: `status` -> `state` (V1.F2 Review Complete)
 - [x] Human-readable CLI rendering for all lists (V1.F2.5 Complete)
+- [x] Phase V1.F3: Packaging & Governance (V1.F3 Complete)
+    - [x] Audit publication blockers and trust gaps (V1.F3.1 Complete)
+    - [x] Harden public-facing trust signals (V1.F3.2 Complete)
+    - [x] Resolve/Standardize publication essentials (V1.F3.3 Complete)
+    - [x] Clarify public vs internal doc hierarchy (V1.F3.4 Complete)
+    - [!] Resolution of missing LICENSE (CRITICAL RELEASE BLOCKER)
+    - [ ] Creation of CONTRIBUTING.md (Next)
+    - [ ] Doctor version-checking for agent binaries (Next)
 
 **Phase V1.F2 Result**: The repository is now operationally mature for local use.
+- **Workflow**: `run start` -> `submit --wait` -> `step result`.
+- **Auditability**: Human-readable logs, artifacts, and validations.
+- **Recovery**: Actionable failure hints and troubleshooting docs.
+
+## V1 Publication Audit (Phase V1.F3)
+
+### 🚨 Critical Publication Blockers (Must Fix)
+1. **Missing LICENSE**: Repository has no formal legal license file.
+2. **Setup Reproducibility**: Verify `make setup build` works on a clean clone without artifacts/db.
+3. **Internal Documentation Noise**: Ensure `docs/internal/` is excluded from the primary user path or clearly labeled as dev-only.
+
+### 🛡 Trust & Readability Gaps (Should Fix)
+1. **`CONTRIBUTING.md`**: Essential for self-hosting communities and early adopters.
+2. **Binary Version Audit**: The `doctor` command detects binaries but cannot distinguish between incompatible versions (e.g. `claude-code` v0.5 vs v1.0).
+3. **Stale Usage Patterns**: Scattered mentions of `status` may remain in internal dev notes despite CLI `state` alignment.
+4. **Build Noise**: Root directory contains `codencer.db` and `bin/` which should be strictly ignored/centralized.
 - **Workflow**: `run start` -> `submit --wait` -> `step result`.
 - **Auditability**: Human-readable logs, artifacts, and validations.
 - **Recovery**: Actionable failure hints and troubleshooting docs.

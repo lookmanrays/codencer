@@ -1,4 +1,7 @@
-# Progress
+# Implementation Progress
+> [!NOTE]
+> This is an **internal tracking document** for the Codencer project development.
+> For the public user guide, see the [README.md](../../README.md).
 
 ## Phase 1: MVP Foundation (Completed)
 - [x] Daemon bootstrap & SQLite Ledger

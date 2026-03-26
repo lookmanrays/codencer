@@ -1,10 +1,21 @@
-codencer.db
+# Build artifacts
+bin/
+orchestratorctl
 *.test
 *.out
-.codencer/
-vendor/
-.vscode/
-bin/
-*.log
-orchestratorctl
 service.test
+
+# Local data & logs
+.codencer/
+codencer.db
+*.log
+
+# Environment & Secrets
+.env
+.env.local
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

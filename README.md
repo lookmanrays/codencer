@@ -1,8 +1,9 @@
-# Codencer Orchestration Bridge (MVP/Beta)
+**Defensive, Local-First Relay for Tactical Coding Agents.**
 
-**Defensive, Local-First Relay for Autonomous Coding Agents.**
+Codencer is a persistent orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by external agents. It acts as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). It is designed for **local-first, self-hosted developer toolchains.**
 
-Codencer is a persistent orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by external agents. It acts as the **system of record** between a high-level **Planner** (you or an LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). It is **100% self-hostable** and designed for local-first developer toolchains.
+> [!IMPORTANT]
+> **Project Status: Beta/MVP**. Codencer is technically functional for local dev use, but the API and protocols are subject to change. The primary, most-hardened execution path is via the **Codex** adapter.
 
 ---
 
@@ -20,9 +21,9 @@ Codencer is a **bridge, not a brain**. It does not decide the high-level strateg
 ```
 
 ### Core Roles
-- **Planner**: You, a Chat UI, or an autonomous agent. Decides **what** to do.
+- **Planner**: You, a Chat UI, or an agentic planner. Decides **what** to do.
 - **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
-- **Coding Agent**: The underlying tool performing the actual work (e.g., `codex-agent`, `claude-code`).
+- **Coding Agent**: The underlying tactical tool performing the actual work (e.g., `codex-agent`, `claude-code`).
 
 For detailed local setup instructions, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
 
@@ -73,7 +74,7 @@ The Bridge reports high-fidelity evidence for every attempt:
 - **`completed`**: Goal met, all tests passed.
 - **`completed_with_warnings`**: Success, but with lint/test warnings.
 - **`failed_terminal`**: Execution halted due to an unrecoverable error.
-- **`needs_approval`**: Policy gate hit; run `orchestratorctl gate approve <id>`.
+- **`needs_approval`**: Policy gate hit; run `./bin/orchestratorctl gate approve <id>`.
 
 For a deeper dive into agent installation and advanced flows, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
 
@@ -81,7 +82,7 @@ For a deeper dive into agent installation and advanced flows, see the **[Setup &
 
 ## 🛡 Why Codencer?
 
-Autonomous agents are non-deterministic. Codencer provides the guardrails:
+Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 
 1. **Workspace Safety**: Agents run in isolated Git Worktrees. Diffs are captured and validated before any commit.
 2. **Audit-Proof Ledger**: Every attempt is recorded in a local SQLite database with SHA-256 hashes of all artifacts.
@@ -101,25 +102,38 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 | **Codex Adapter** | ✅ **Ready** | High-fidelity relay for the `codex-agent` binary. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
 | **Simulation Mode** | ✅ **Ready** | Robust stubs for orchestrator validation without LLM use. |
-| **IDE Chat Bridge** | 🧪 **Experimental**| Proxy-mediated file access via VS Code extension. |
-| **Adaptive Routing** | 🧪 **Experimental**| Static fallback chain; benchmark-aware logic is a blueprint. |
-| **Cloud / Multi-User** | 📅 **Future** | Not implemented. Codencer is strictly local-first today. |
+| **IDE Chat Bridge** | 🧪 **Prototype** | Proxy-mediated file access via VS Code extension. |
+| **Adaptive Routing** | 🧪 **Blueprint** | Static fallback chain; benchmark-aware logic is a blueprint. |
+| **Cloud / Multi-User** | 📅 **Out of Scope**| Not planned. Codencer is strictly local-first. |
 
 ## 🧪 Simulation vs. Real Execution
 
-1. **Simulation Mode** (`make start-sim` or `make simulate`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
-2. **Real Mode**: Tests the full end-to-end loop. Requires real agent binaries (`claude-code`, etc.) and incurs real LLM costs.
+1. **Simulation Mode** (`make start-sim`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
+2. **Real Mode**: Tests the full end-to-end loop with real agents. **Codex-agent** is the primary supported path; others are in early beta.
 
 ---
 
 ## 📖 Documentation
-- **[Self-Host Runbook (Flows)](docs/EXAMPLES.md)** (Start here for daily use)
-- [Setup & Self-Hosting Guide](docs/SETUP.md)
-- [Architecture Overview](docs/02_architecture.md)
-- **[Troubleshooting & Recovery](docs/TROUBLESHOOTING.md)** (What to do when things fail)
-- [Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)
+
+### ⚡️ Getting Started
+- **[Self-Host Runbook (Flows)](docs/EXAMPLES.md)** — Start here for daily use.
+- **[Setup & Self-Hosting Guide](docs/SETUP.md)** — Installation and configuration.
+- **[Troubleshooting & Recovery](docs/TROUBLESHOOTING.md)** — What to do when things fail.
+
+### 🏛 Architecture & Design
+- **[Product Scope](docs/01_product_scope.md)** — Vision and mission.
+- **[Architecture Overview](docs/02_architecture.md)** — How the bridge works.
+- **[Detailed Roadmap](docs/03_roadmap.md)** — Long-term visionary phases.
+
+### 🛠 Phase Tracking (Internal)
+- **[Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)** — Current V1 release blockers.
+- **[Development Progress](docs/internal/PROGRESS.md)** — Technical implementation timeline.
+- **[Task Backlog](docs/internal/TASKS.md)** — Current micro-task status.
 
 ---
 
 ## ⚖ License
-*Licence pending (intended MIT/Apache 2.0). See [GAP_AUDIT.md](GAP_AUDIT.md) for publication status.*
+
+> [!CAUTION]
+> **PUBLICATION BLOCKER**: This repository currently has **no formal license**.
+> A legal license (e.g., MIT or Apache 2.0) must be selected and committed to a `LICENSE` file before the first public v1.0.0 release.

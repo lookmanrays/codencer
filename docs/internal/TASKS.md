@@ -1,4 +1,7 @@
-# Tasks
+# Technical Task Backlog
+> [!NOTE]
+> This is an **internal tracking document** for the Codencer project development.
+> For the public user guide, see the [README.md](../../README.md).
 
 ## Priority 1 — Refactor and strengthen orchestration runtime [COMPLETE]
 - [x] Extract orchestration workflow out of monolithic `DispatchStep()`.
@@ -135,13 +138,14 @@
 - [x] Clarify config & execution modes (V1.8.5 Complete)
 - [x] Consolidate one primary quickstart path (V1.8.6 Complete)
 - [x] Final alignment for Phase V1.F1 (V1.8.7 Complete)
-- [/] Phase V1.F2: Operational Maturity (Active)
-    - [x] Audit end-to-end workflow & identify friction (V1.F2.1 Complete) <!-- id: 162 -->
-    - [x] Implement `submit --wait` and ID auto-generation (V1.F2.2 Complete) <!-- id: 163 -->
-    - [x] Implement Gate ID auto-hinting in `wait` (V1.F2.2 Complete) <!-- id: 164 -->
-    - [x] Improve output inspection rendering (V1.F2.3 Complete) <!-- id: 165 -->
-    - [x] Tighten failure/timeout/cancel recovery paths (V1.F2.4 Complete) <!-- id: 166 -->
-    - [ ] Implement `run list` and `step list` data rendering <!-- id: 167 -->
+- [/] Phase V1.F3: Packaging & Governance (Active)
+    - [x] Audit publication blockers and trust gaps (V1.F3.1 Complete) <!-- id: 168 -->
+    - [x] Improve public-facing trust and clarity (V1.F3.2 Complete) <!-- id: 231 -->
+    - [x] Resolve/Standardize publication essentials (V1.F3.3 Complete) <!-- id: 169 -->
+    - [x] Reduce confusion between public and internal docs (V1.F3.4 Complete) <!-- id: 234 -->
+    - [ ] Author CONTRIBUTING.md (Governance) <!-- id: 170 -->
+    - [ ] Enhance `doctor` with binary version checking (Trust) <!-- id: 171 -->
+    - [ ] Final alignment for V1 publication (Review) <!-- id: 173 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
 
 - [x] Audit example coverage for daily planner-to-bridge usage (Micro-task Complete)

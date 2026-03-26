@@ -67,7 +67,7 @@ constraints:
    ./bin/orchestratorctl step wait bump-version-01
    ```
 3. **Verify Result**:
-   The `orchestratorctl` tool now **pretty-prints JSON by default**. Inspect the terminal outcome of the `wait` command:
+   The `./bin/orchestratorctl` tool now **pretty-prints JSON by default**. Inspect the terminal outcome of the `wait` command:
    
    Example `step wait` output:
    ```json

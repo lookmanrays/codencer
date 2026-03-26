@@ -1,3 +1,7 @@
+> [!NOTE]
+> This is a **design specification** and may not fully reflect the current implementation.
+> For the latest implementation status, see the [Gap Audit](internal/GAP_AUDIT.md).
+
 # Product Scope
 
 ## Problem
@@ -15,11 +19,7 @@ That human becomes:
 - result classifier
 - gatekeeper
 
-## Product
-
-A **local orchestration bridge for coding agents**.
-
-It accepts a structured implementation plan, dispatches each step to a selected coding agent, waits for completion, captures artifacts, normalizes output into a structured result, and decides whether to continue, retry, or stop for approval.
+It accepts a structured implementation plan, dispatches each step to a selected coding agent, waits for completion, captures artifacts, normalizes output into a structured result, and evaluates whether to continue, retry, or stop for approval based on policy.
 
 ## Primary use case
 

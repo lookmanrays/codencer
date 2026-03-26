@@ -15,7 +15,7 @@ Always start here to verify your environment:
 ## 2. Common Failure Modes
 
 ### 2.1 "Connection Refused" (CLI cannot reach Daemon)
-**Symptoms**: `orchestratorctl` returns `error connecting to orchestratord`.
+**Symptoms**: `./bin/orchestratorctl` returns `error connecting to orchestratord`.
 - **Cause**: The `orchestratord` process is not running or is on a different port.
 - **Fix**: 
   - Ensure the daemon is started: `./bin/orchestratord`.
@@ -29,7 +29,7 @@ Always start here to verify your environment:
   - Or ensure the binary is in your global `$PATH`.
 
 ### 2.3 Why are my logs empty? (Simulation Confusion)
-**Symptoms**: `orchestratorctl step logs <id>` shows `No logs available`.
+**Symptoms**: `./bin/orchestratorctl step logs <id>` shows `No logs available`.
 - **Cause**: You are running in **Simulation Mode** (`ALL_ADAPTERS_SIMULATION_MODE=1`).
 - **Fix**: Simulation mode stubs agent execution; it does not produce real `stdout.log` or `unified.diff` files. Switch to real mode by unsetting the variable and ensuring agent binaries are installed.
 
@@ -38,27 +38,30 @@ Always start here to verify your environment:
 ### 3.1 `timeout`
 - **What it means**: The agent exceeded the `timeout_seconds` defined in your `task.yaml`. The bridge killed the process to prevent hanging.
 - **Troubleshoot**: 
-  - Check `orchestratorctl step logs <id>` to see where it got stuck. 
+  - Check `./bin/orchestratorctl step logs <id>` to see where it got stuck. 
   - If the agent was just slow, increase `timeout_seconds` in the task YAML.
   - If the agent is unresponsive, the bridge may have killed it; check `.codencer/daemon.log`.
 
 ### 3.2 `failed_terminal`
 - **What it means**: The task finished, but a critical validation (test/lint) failed OR the agent explicitly reported failure.
 - **Troubleshoot**:
-  - Run `orchestratorctl step validations <id>` to see which specific check failed.
-  - Review the agent's reasoning in `orchestratorctl step result <id>`.
+  - Check `./bin/orchestratorctl step logs <id>` to see where it got stuck. 
+  - Run `./bin/orchestratorctl step validations <id>` to see which specific check failed.
+  - Review the agent's reasoning in `./bin/orchestratorctl step result <id>`.
 
 ### 3.3 `needs_manual_attention` (Ambiguity/Crash)
 - **What it means**: The bridge cannot determine the outcome (e.g., the agent crashed without a result JSON, or there's a file conflict in the worktree).
 - **Troubleshoot**:
-  - Review `orchestratorctl step logs <id>` for internal agent errors.
+  - Review `./bin/orchestratorctl step logs <id>` for internal agent errors.
   - Check `.codencer/daemon.log` for bridge-side errors.
   - You may need to manually inspect `.codencer/workspace/<runID>/` (if the worktree wasn't cleaned).
 
 ### 3.4 `failed_retryable`
 - **What it means**: Transient failure (network timeout, rate limit) that can be cleared by trying again.
 - **Recovery**: 
-  - Wait a few seconds then run `orchestratorctl step start <runID> <task.yaml> --wait`.
+  - Review `./bin/orchestratorctl step logs <id>` for internal agent errors.
+  - Double-check your API keys in `.env`.
+  - Wait a few seconds then run `./bin/orchestratorctl submit <runID> <task.yaml> --wait`.
 
 ---
 

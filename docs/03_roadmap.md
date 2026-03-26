@@ -1,3 +1,7 @@
+> [!NOTE]
+> This is a **design specification** and may not fully reflect the current implementation.
+> For the latest implementation status, see the [Gap Audit](internal/GAP_AUDIT.md).
+
 # Detailed Roadmap
 
 ## Phase 0 — Spec lock
