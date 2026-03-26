@@ -210,7 +210,7 @@ func runWait(runID string, interval, timeout time.Duration) {
 		select {
 		case <-deadline:
 			fmt.Fprintf(os.Stderr, "\n")
-			fmt.Printf(`{"error": "client-side timeout reached after %v"}`+"\n", timeout)
+			fmt.Printf(`{"error": "client_side_timeout", "message": "wait exceeded CLI limit of %v"}`+"\n", timeout)
 			os.Exit(1)
 		default:
 			resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + runID)
@@ -236,7 +236,7 @@ func runWait(runID string, interval, timeout time.Duration) {
 			}
 
 			if run.State.IsTerminal() || run.State == domain.RunStatePausedForGate {
-				fmt.Fprintf(os.Stderr, "\nRun %s reached state: %s\n", runID, run.State)
+				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Run %s: %s\n", runID, run.State)
 				printJSON(body)
 				return
 			}
@@ -449,7 +449,7 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 		select {
 		case <-deadline:
 			fmt.Fprintf(os.Stderr, "\n")
-			fmt.Printf(`{"error": "client-side timeout reached after %v"}`+"\n", timeout)
+			fmt.Printf(`{"error": "client_side_timeout", "message": "wait exceeded CLI limit of %v"}`+"\n", timeout)
 			os.Exit(1)
 		default:
 			resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
@@ -477,7 +477,7 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 			// Check for terminal or intervention-required states
 			st := domain.StepState(result.State)
 			if st.IsTerminal() || st == domain.StepStateNeedsApproval || st == domain.StepStateNeedsManualAttention {
-				fmt.Fprintf(os.Stderr, "\nStep %s reached state: %s\n", stepID, st)
+				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Step %s: %s\n", stepID, st)
 				printJSON(body)
 				return
 			}

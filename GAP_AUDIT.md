@@ -184,3 +184,25 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **CLI Timeout Flag**: [RESOLVED] Implemented `--timeout` in `orchestratorctl` for client-side safety.
 - **Interval Exposure**: [RESOLVED] Exposed configurable polling frequency via `--interval` flag.
 - **Relay Alignment**: [RESOLVED] Ensured `stdout` remains a clean JSON stream for machine-usable terminal results.
+
+## Terminal Outcome Semantics Audit (V1.4.5)
+
+### Current Terminal Outcomes
+- **Completed**: Successful execution as reported by the adapter.
+- **Completed with Warnings**: Success, but with non-terminal issues (lint, non-breaking test failures).
+- **Failed Terminal**: Hard failure requiring planner intervention or a new approach.
+- **Failed Retryable**: Process failure that the bridge suggests can be retried (e.g. transient error).
+- **Timeout**: Supervisor killed the process after exceeding `timeout_seconds`.
+- **Cancelled**: Explicit terminal state triggered by user/planner abort.
+- **Needs Manual Attention**: Generic bridge-side block requiring human eyes (relay stalled).
+- **Needs Approval**: Specific policy gate block (Run is `paused_for_gate`).
+
+### Key Hardening Outcomes
+- **Aligned CLI Output**: [RESOLVED] Refined `orchestratorctl` run/step wait loops to use canonical terminal states in `stderr` and maintain clean JSON on `stdout`.
+- **Relay Model Enforcement**: [RESOLVED] Removed language implying autonomous bridge-side decisions; outcomes are now strictly reported properties.
+- **State Machine Coherence**: [RESOLVED] Hardened `internal/state/machine.go` to support transitions to `timeout` and `needs_manual_attention`.
+
+## Readiness for Phase V1.5 (State Discovery)
+- Canonical terminal outcomes are explicit and documented.
+- `orchestratorctl` provides consistent, machine-usable terminal evidence.
+- Bridge/Planner boundary is strictly factual (Bridge reports, Planner decides).

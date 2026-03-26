@@ -17,21 +17,21 @@ const (
 	StepStateCollectingArtifacts   StepState = "collecting_artifacts"
 	// StepStateValidating: Bridge is running configured verification commands.
 	StepStateValidating            StepState = "validating"
-	// StepStateCompleted: Task finished successfully according to adapter/policy.
+	// StepStateCompleted: Task finished successfully as reported by the adapter. Resulting evidence is available for the planner.
 	StepStateCompleted             StepState = "completed"
 	// StepStateCompletedWithWarnings: Success, but with non-critical lint/test issues.
 	StepStateCompletedWithWarnings StepState = "completed_with_warnings"
 	// StepStateNeedsApproval: Bridge reports a policy gate hit; Planner must approve/reject to proceed.
 	StepStateNeedsApproval         StepState = "needs_approval"
-	// StepStateNeedsManualAttention: Bridge reports an unexpected blocking condition; Operator must intervene.
+	// StepStateNeedsManualAttention: Bridge reports a blocking condition (e.g. unknown error) that it cannot resolve; control is returned to the planner.
 	StepStateNeedsManualAttention  StepState = "needs_manual_attention"
-	// StepStateFailedRetryable: Process failed with a potentially transient error.
+	// StepStateFailedRetryable: Bridge reports an unsuccessful outcome but identifies it as potentially recoverable via retry.
 	StepStateFailedRetryable       StepState = "failed_retryable"
-	// StepStateFailedTerminal: Process failed and requires a new plan or fix.
+	// StepStateFailedTerminal: Execution reached an unsuccessful terminal state; requires a new plan or fix by the planner.
 	StepStateFailedTerminal        StepState = "failed_terminal"
-	// StepStateTimeout: Process was killed by the supervisor after exceeding limit.
+	// StepStateTimeout: Execution exceeded defined limits and was killed by the bridge supervisor.
 	StepStateTimeout               StepState = "timeout"
-	// StepStateCancelled: Execution was aborted by the planner/operator.
+	// StepStateCancelled: Execution was explicitly stopped by the planner/operator.
 	StepStateCancelled             StepState = "cancelled"
 )
 

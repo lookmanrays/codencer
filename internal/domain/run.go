@@ -10,9 +10,9 @@ const (
 	RunStateCreated       RunState = "created"
 	RunStateRunning       RunState = "running"
 	RunStatePausedForGate RunState = "paused_for_gate"
-	RunStateCompleted     RunState = "completed"
-	RunStateFailed        RunState = "failed"
-	RunStateCancelled     RunState = "cancelled"
+	RunStateCompleted     RunState = "completed" // Run finished successfully
+	RunStateFailed        RunState = "failed"    // Run reached an unsuccessful terminal state
+	RunStateCancelled     RunState = "cancelled" // Run was explicitly stopped
 )
 
 // Run is an execution session that acts as a container for related work phases and steps.

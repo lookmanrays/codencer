@@ -20,11 +20,11 @@ Codencer is a **bridge**, not a brain. The **Planner** (operator or autonomous a
 The Bridge reports state; the Planner decides the next action.
 - **pending**: Work is queued in the ledger.
 - **running**: Adapter process is active.
-- **completed**: Task finished successfully.
-- **failed**: Terminal failure requiring a new approach.
-- **timeout**: Process exceeded limits and was killed.
-- **needs_manual_attention**: Bridge reports an unexpected blocking condition; Operator must intervene.
-- **cancelled**: Explicitly aborted by the operator.
+- **completed**: Execution reached a successful terminal state as reported by the adapter.
+- **failed**: Execution reached an unsuccessful terminal state (failed_terminal or failed_retryable).
+- **timeout**: Execution exceeded defined limits (e.g., `timeout_seconds`) and was killed by the bridge.
+- **cancelled**: Execution was explicitly stopped by the planner or operator.
+- **needs_manual_attention**: The bridge reports a blocking or review-needed condition that it cannot resolve autonomously.
 
 ### Simulation Semantics
 Simulation mode is a **development-only** feature used to validate orchestrator state transitions and CI/CD pipelines without incurring LLM costs or requiring local model setup. 

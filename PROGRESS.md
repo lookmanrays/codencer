@@ -133,4 +133,9 @@
 - [x] Add/align practical timeout and polling controls (V1.4.3 Complete) <!-- id: 82 -->
 - [x] Align wait flow output with relay contract (V1.4.4 Complete) <!-- id: 110 -->
 - [x] Implement state discovery (run/step listing) (Batch V1.5.1 Complete) <!-- id: 52 -->
+- [x] Audit terminal outcome semantics (V1.4.5 Complete) <!-- id: 115 -->
+- [x] Clarify canonical terminal outcome meanings (V1.4.6 Complete) <!-- id: 118 -->
+- [x] Clarify manual-attention and retry reporting (V1.4.7 Complete) <!-- id: 119 -->
+- [x] Align terminal outcome semantics in CLI/Result output (V1.4.8 Complete) <!-- id: 120 -->
+- [x] Final alignment for Batch V1.4.2 (V1.4.9 Complete) <!-- id: 121 -->
 - [ ] Expose Telemetry and Routing CLI groups

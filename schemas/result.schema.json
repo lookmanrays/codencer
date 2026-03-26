@@ -13,7 +13,7 @@
     "adapter": { "type": "string" },
     "state": {
       "type": "string",
-      "description": "Step lifecycle state: pending, running, completed, failed_terminal, timeout, cancelled, needs_manual_attention.",
+      "description": "Terminal outcomes reported to the planner: completed (success), failed_terminal (failure), timeout (limit exceeded), cancelled (aborted), needs_manual_attention (blocked/review).",
       "enum": [
         "pending",
         "dispatching",
@@ -68,7 +68,10 @@
       "type": "boolean",
       "description": "True if result is from a stub/dev mode. NOT for performance benchmarking."
     },
-    "retryable": { "type": "boolean" },
+    "retryable": { 
+      "type": "boolean",
+      "description": "Reported property indicating if the bridge identifies the outcome as potentially recoverable via retry."
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   }

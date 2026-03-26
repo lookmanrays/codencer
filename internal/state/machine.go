@@ -25,18 +25,20 @@ var ValidRunTransitions = map[domain.RunState][]domain.RunState{
 // ValidStepTransitions defines the allowed target states from a given Step state.
 var ValidStepTransitions = map[domain.StepState][]domain.StepState{
 	domain.StepStatePending:             {domain.StepStateDispatching, domain.StepStateCancelled},
-	domain.StepStateDispatching:         {domain.StepStateRunning, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled},
-	domain.StepStateRunning:             {domain.StepStateCollectingArtifacts, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled},
-	domain.StepStateCollectingArtifacts: {domain.StepStateValidating, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled},
-	domain.StepStateValidating:          {domain.StepStateCompleted, domain.StepStateCompletedWithWarnings, domain.StepStateNeedsApproval, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled},
+	domain.StepStateDispatching:         {domain.StepStateRunning, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled, domain.StepStateTimeout},
+	domain.StepStateRunning:             {domain.StepStateCollectingArtifacts, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled, domain.StepStateTimeout, domain.StepStateNeedsManualAttention},
+	domain.StepStateCollectingArtifacts: {domain.StepStateValidating, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled, domain.StepStateTimeout, domain.StepStateNeedsManualAttention},
+	domain.StepStateValidating:          {domain.StepStateCompleted, domain.StepStateCompletedWithWarnings, domain.StepStateNeedsApproval, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled, domain.StepStateTimeout, domain.StepStateNeedsManualAttention},
 	domain.StepStateNeedsApproval:       {domain.StepStateCompleted, domain.StepStateCompletedWithWarnings, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateCancelled},
 	domain.StepStateFailedRetryable:     {domain.StepStateDispatching, domain.StepStateCancelled},
 	
-	// Terminal states
+	// Terminal/Sink states
 	domain.StepStateCompleted:             {},
 	domain.StepStateCompletedWithWarnings: {},
 	domain.StepStateFailedTerminal:        {},
+	domain.StepStateTimeout:               {},
 	domain.StepStateCancelled:             {},
+	domain.StepStateNeedsManualAttention:  {},
 }
 
 // CheckRunTransition evaluates if a run can move from 'current' to 'next'.
