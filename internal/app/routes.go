@@ -135,32 +135,26 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		// Used to dispatch steps: /api/v1/runs/{id}/steps
 		if len(r.URL.Path) > len("/api/v1/runs/"+id+"/") && r.URL.Path[len("/api/v1/runs/"+id+"/"):] == "steps" {
-			var req struct {
-				ID      string `json:"id"`
-				PhaseID string `json:"phase_id"`
-				Title   string `json:"title"`
-				Goal    string `json:"goal"`
-				Adapter string `json:"adapter"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			var spec domain.TaskSpec
+			if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 
 			step := &domain.Step{
-				ID:      req.ID,
-				PhaseID: req.PhaseID,
-				Title:   req.Title,
-				Goal:    req.Goal,
-				Adapter: req.Adapter,
+				ID:      spec.StepID,
+				PhaseID: spec.PhaseID,
+				Title:   spec.Title,
+				Goal:    spec.Goal,
+				Adapter: spec.AdapterProfile,
+				Policy:  spec.PolicyBundle,
 			}
 
 			// We dispatch asynchronously because RunService.DispatchStep blocks on adapter.Poll
 			go func() {
 				// In a real robust system, background contexts tied to daemon lifecycle should be used.
 				if err := h.RunSvc.DispatchStep(context.Background(), id, step); err != nil {
-					// Log the error or handle it appropriately, as this is a background goroutine
-					// fmt.Fprintf(os.Stderr, "Error dispatching step: %v\n", err)
+					// Log message omitted for brevity as per existing code style
 				}
 			}()
 

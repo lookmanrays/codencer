@@ -103,3 +103,12 @@
 - [x] Terminology uniformity (State vs Status)
 - [-] Refactor Attempt state management (Moved to V1.1.3)
 - [-] Consolidate intervention signaling (Moved to V1.1.3)
+
+## Phase 16: Planner-Facing CLI Surface [/]
+- [x] Audit existing CLI and identify gaps (Micro-task complete)
+- [x] Align task submission with canonical contract (Micro-task complete)
+- [x] Standardize machine-readable JSON output (Micro-task complete)
+- [x] Refine CLI for reliable machine-readability (Batch V1.2.1 Complete)
+- [ ] Implement state discovery (run/step listing)
+- [ ] Expose Telemetry and Routing CLI groups
+- [ ] Add terminal state polling (wait command)

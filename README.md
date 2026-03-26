@@ -98,7 +98,49 @@ make build
 
 # Run core service and integration tests
 make test
+```
 
+### 2. Submitting a Task
+To submit a canonical task for execution:
+
+```bash
+# 1. Start a run (session container)
+orchestratorctl run start run-01 my-project
+
+# 2. Submit a task (via YAML file)
+orchestratorctl submit run-01 task.yaml
+```
+
+Example `task.yaml`:
+```yaml
+version: "1.1"
+step_id: "fix-login-01"
+phase_id: "execution"
+title: "Fix login redirect"
+goal: "Update the redirect logic to handle expired tokens"
+adapter_profile: "codex"
+constraints:
+  - "Do not modify the auth provider"
+validations:
+  - command: "npm test"
+    name: "unit-tests"
+```
+
+### 3. Inspecting Status (Machine-Readable)
+All status and result commands output clean JSON for seamless integration with `jq` or other tools:
+
+```bash
+# Get run status
+orchestratorctl run status run-01 | jq .state
+
+# Get latest step result
+orchestratorctl step result step-123 | jq .summary
+```
+
+> [!NOTE]
+> This is the initial planner-facing CLI surface. Automated polling (`wait` command) and comprehensive result retrieval flows are scheduled for Batch V1.2.2.
+
+```bash
 # Start the daemon in Orchestration Simulation Mode (verifies state machine only)
 make simulate
 

@@ -28,8 +28,8 @@ func main() {
 		fmt.Printf("orchestratorctl version %s\n", app.Version)
 	case "run":
 		handleRunCommand(os.Args[2:])
-	case "step":
-		handleStepCommand(os.Args[2:])
+	case "step", "submit":
+		handleStepCommand(os.Args[1:])
 	case "gate":
 		handleGateCommand(os.Args[2:])
 	default:
@@ -47,6 +47,7 @@ func printUsage() {
 	fmt.Println("  run status     <id>")
 	fmt.Println("  run abort      <id>")
 	fmt.Println("  step start     <runID> <taskFile.yaml>")
+	fmt.Println("  submit        <runID> <taskFile.yaml> (Synonym for step start)")
 	fmt.Println("  step status    <stepID>")
 	fmt.Println("  step result    <stepID>")
 	fmt.Println("  step artifacts <stepID>")
@@ -103,12 +104,12 @@ func startRun(id, projectID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Run started:\n%s\n", string(body))
+	fmt.Println(string(body))
 }
 
 func runStatus(id string) {
@@ -121,21 +122,13 @@ func runStatus(id string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	var run map[string]interface{}
-	_ = json.Unmarshal(body, &run)
-	
-	fmt.Printf("Run status:\n")
-	fmt.Printf("  ID: %v\n", run["id"])
-	fmt.Printf("  State: %v\n", run["state"])
-	if notes, ok := run["recovery_notes"]; ok && notes != "" {
-		fmt.Printf("  Recovery Notes: %v\n", notes)
-	}
-	fmt.Printf("  Created: %v\n", run["created_at"])
+	// Output raw JSON response for machine readability
+	fmt.Println(string(body))
 }
 
 func abortRun(id string) {
@@ -156,11 +149,17 @@ func abortRun(id string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
-	fmt.Printf("Run %s aborted successfully.\n", id)
+	respBody := map[string]string{
+		"id":     id,
+		"action": "abort",
+		"status": "success",
+	}
+	out, _ := json.Marshal(respBody)
+	fmt.Println(string(out))
 }
 
 func handleStepCommand(args []string) {
@@ -170,13 +169,29 @@ func handleStepCommand(args []string) {
 	}
 
 	cmd := args[0]
-	switch cmd {
-	case "start":
+	// Handle 'submit <runID> <file>' case
+	if cmd == "submit" {
 		if len(args) < 3 {
-			fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml>")
+			fmt.Println("Usage: orchestratorctl submit <runID> <taskFile.yaml>")
 			os.Exit(1)
 		}
 		startStep(args[1], args[2])
+		return
+	}
+
+	// Handle 'step <subcommand>' case
+	subArgs := args[1:]
+	if len(subArgs) < 1 {
+		fmt.Println("Usage: orchestratorctl step <start|status|result|artifacts|validations> [args]")
+		os.Exit(1)
+	}
+	switch subArgs[0] {
+	case "start":
+		if len(subArgs) < 3 {
+			fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml>")
+			os.Exit(1)
+		}
+		startStep(subArgs[1], subArgs[2])
 	case "status":
 		if len(args) < 2 {
 			fmt.Println("Usage: orchestratorctl step status <stepID>")
@@ -210,18 +225,11 @@ func handleStepCommand(args []string) {
 func startStep(runID, taskFile string) {
 	spec, err := validation.ParseTaskSpec(taskFile)
 	if err != nil {
-		fmt.Printf("Failed to parse task spec: %v\n", err)
+		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 
-	reqBody := map[string]interface{}{
-		"id":       spec.StepID,
-		"phase_id": spec.PhaseID,
-		"title":    spec.Title,
-		"goal":     spec.Goal,
-		"adapter":  spec.AdapterProfile,
-	}
-	data, _ := json.Marshal(reqBody)
+	data, _ := json.Marshal(spec)
 
 	resp, err := http.Post(orchestratordURL+"/api/v1/runs/"+runID+"/steps", "application/json", bytes.NewReader(data))
 	if err != nil {
@@ -230,14 +238,14 @@ func startStep(runID, taskFile string) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("TaskSpec dispatched successfully:\n%s\n", string(body))
+	// Output raw JSON response for machine readability
+	fmt.Println(string(body))
 }
 
 func stepStatus(stepID string) {
@@ -250,12 +258,12 @@ func stepStatus(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Step status:\n%s\n", string(body))
+	fmt.Println(string(body))
 }
 
 func stepResult(stepID string) {
@@ -268,12 +276,12 @@ func stepResult(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Step result:\n%s\n", string(body))
+	fmt.Println(string(body))
 }
 
 func stepArtifacts(stepID string) {
@@ -286,12 +294,12 @@ func stepArtifacts(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Step artifacts:\n%s\n", string(body))
+	fmt.Println(string(body))
 }
 func stepValidations(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/validations")
@@ -303,12 +311,12 @@ func stepValidations(stepID string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Step validations:\n%s\n", string(body))
+	fmt.Println(string(body))
 }
 
 func handleGateCommand(args []string) {
@@ -332,9 +340,15 @@ func handleGateCommand(args []string) {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Error handling gate: %s\n", string(body))
+		fmt.Println(string(body))
 		os.Exit(1)
 	}
 
-	fmt.Printf("Gate %s %s successfully.\n", id, cmd)
+	respBody := map[string]string{
+		"id":     id,
+		"action": cmd,
+		"status": "success",
+	}
+	out, _ := json.Marshal(respBody)
+	fmt.Println(string(out))
 }

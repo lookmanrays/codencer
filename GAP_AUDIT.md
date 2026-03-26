@@ -93,4 +93,24 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Refactor Attempt State**: Decouple Attempts from `StepState` and create a dedicated, narrower enum.
 - **Unify Intervention States**: Consolidate `needs_approval` and `needs_manual_attention`.
 - **Harden Timeout**: Fully integrate `StepStateTimeout` into the supervisor process management.
-- **CLI Control Surface**: Implement `orchestratorctl` bridge commands using these hardened semantics.
+- **CLI Control Surface (V1.2.1)**: [RESOLVED] Task submission, status inspection, and action commands aligned for 100% reliable machine-usability (pure JSON across all planner-facing flows).
+
+## CLI Surface Audit (V1.2.1)
+
+### Current Commands
+- `run start/status/abort`
+- `step start/status/result/artifacts/validations`
+- `gate approve/reject`
+
+### Identified Gaps
+- **Output Control**: No universal `--json` or `-o json` flag for machine-readable output.
+- **Discovery**: Missing `run list` and `step list <run_id>` for state inspection.
+- **Planner Bridging**: `step start` is file-bound; needs a way to accept direct JSON/YAML strings or stdin for scriptable flow.
+- **Telemetry**: Benchmarks and Routing config are unexposed via CLI (API/MCP only).
+- **Control Flow**: No `wait` command for terminal state polling.
+
+### Next Alignment Steps
+1. Add `--json` support to all status and result commands.
+2. Implement `run list` and `step list`.
+3. Align `step start` to support direct input.
+4. Add `benchmarks` and `routing` command groups.

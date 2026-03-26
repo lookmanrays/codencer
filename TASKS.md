@@ -75,3 +75,12 @@
 - [ ] Decouple Attempt states from StepState <!-- id: 41 -->
 - [ ] Standardize `ValidationState` and `GateState` (remove "Status" suffix) <!-- id: 43 -->
 - [ ] Update supervisor to natively trigger `StepStateTimeout` <!-- id: 44 -->
+
+## Phase 16 — Planner-Facing CLI Surface (V1.2.1) [/]
+- [x] Audit existing CLI and identify gaps (Micro-task complete) <!-- id: 50 -->
+- [x] Align task submission with canonical contract (Micro-task complete) <!-- id: 55 -->
+- [x] Implement universal machine-readable JSON output (Micro-task complete) <!-- id: 51 -->
+- [x] Refine CLI for reliable machine-usability (Micro-task complete) <!-- id: 56 -->
+- [ ] Implement `run list` and `step list` commands <!-- id: 52 -->
+- [ ] Implement `benchmarks` and `routing` CLI groups <!-- id: 53 -->
+- [ ] Add `wait` support for terminal state monitoring <!-- id: 54 -->
