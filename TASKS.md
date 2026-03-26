@@ -118,8 +118,21 @@
 - [x] Align default paths and improve local startup (Batch V1.5.1 Complete) <!-- id: 127 -->
 - [x] Clarify execution modes and config expectations (Batch V1.5.1 Complete) <!-- id: 130 -->
 - [x] Improve quickstart and verification flow (Batch V1.5.1 Complete) <!-- id: 131 -->
-- [x] Final alignment for Batch V1.5.1 (Micro-task Complete) <!-- id: 132 -->
-- [ ] Implement unified config with env overrides (Batch V1.5.2 Next) <!-- id: 126 -->
+- [x] Audit logs, results, and usability surfaces (V1.7.1 Complete)
+- [x] Implement integrated log inspection and CLI evidence retrieval (V1.7.2 Complete)
+- [x] Create practical local usage examples (V1.7.3 Complete)
+- [x] Create practical local troubleshooting guidance (V1.7.4 Complete)
+- [x] Final alignment for Phase V1.7 / Batch V1.5.2 (Micro-task Complete)
+- [ ] Implement Unified Configuration Engine (Batch V1.5.2/V1.8 Next)
+ <!-- id: 126 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
 - [ ] Consolidate intervention states (NeedsApproval/NeedsManualAttention) <!-- id: 117 -->
 - [ ] Expose Telemetry and Routing CLI groups
+
+## Phase V1.7: Logs, Results, and Usability Audit [x]
+- [x] Audit daemon logs and CLI surfaces (Micro-task complete)
+- [x] Identify major daily-use friction points (Micro-task complete)
+- [x] Update GAP_AUDIT and TASKS with usability priorities (Micro-task complete)
+- [ ] Implement `orchestratorctl step logs <id>` for integrated output streaming
+- [ ] Add optional daemon log persistence to `.codencer/daemon.log`
+- [ ] Implement human-friendly result summary in CLI (non-JSON mode)

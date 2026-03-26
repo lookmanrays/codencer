@@ -2,6 +2,13 @@
 
 Codencer is a local-first orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by autonomous agents. It acts as the system of record between the Planner (MCP clients or LLMs) and the underlying Adapters (Codex, Claude, Qwen).
 
+## Core Documentation
+- [Architecture](docs/02_architecture.md)
+- [DSL & MCP](docs/05_dsl_and_mcp.md)
+- [Practical Examples](docs/EXAMPLES.md) (Start here for daily use)
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) (When things go wrong)
+- [Recovery Engine](GAP_AUDIT.md#5-recovery-is-simplistic)
+
 ## Core Architecture
 - **Orchestratord (Daemon)**: The persistent state engine using a local SQLite ledger to safely track Runs, Phases, Steps, and Attempts.
 - **Adapters**: Abstractions over vendor agents (e.g. Codex) standardizing initialization, polling, capability discovery, and artifact collection.
@@ -155,75 +162,35 @@ Codencer is a local orchestration bridge, not an autonomous agent or a cloud-sca
 > - Binary: Expected name is `codex-agent`.
 > - Custom Path: Set `CODEX_BINARY=/path/to/binary`.
 > - Simulation: Set `CODEX_SIMULATION_MODE=1` to bypass binary checks and use stubs for orchestrator validation.
-### 4. Discovery and Observability
-- **List all runs**: `bin/orchestratorctl run list`
-- **List steps in a run**: `bin/orchestratorctl step list <runID>`
-- **Inspect step details**: `bin/orchestratorctl step status <stepID>`
+## Troubleshooting & Observability
 
-All status and result commands output clean JSON for seamless integration with `jq`:
+### 1. Where are my logs?
+- **Daemon Logs**: By default, `orchestratord` logs to `stdout` in JSON format.
+- **Agent Logs**: Each step attempt captures raw agent output in `stdout.log`. Use `bin/orchestratorctl step logs <stepID>` to view it immediately.
+- **Real-time Progress**: The `step wait <id>` command provides progress indicators and hints at the log/artifact paths upon completion.
 
+### 2. Where are my results?
+- **Structured Evidence**: Found in `.codencer/artifacts/<runID>/<attemptID>/`. 
+- **Validation Results**: Run `bin/orchestratorctl step validations <stepID>` to see granular pass/fail data.
+
+### 3. Cheat Sheet
 ```bash
-# Get run status
-orchestratorctl run status run-01 | jq .state
+# Verify environment health
+make doctor
 
-# Get latest step result (works even if in-progress)
-orchestratorctl step result step-123 | jq '{state: .state, summary: .summary}'
+# View what the agent is doing (live or post-mortem)
+bin/orchestratorctl step logs <stepID>
+
+# List all artifacts for a run
+ls -R .codencer/artifacts/<runID>/
+
+# Inspect terminal outcome evidence
+bin/orchestratorctl step result <stepID> | jq .
 ```
 
-## Core Concepts
-
-Example `task.yaml`:
-```yaml
-version: "1.1"
-step_id: "fix-login-01"
-phase_id: "execution"
-title: "Fix login redirect"
-goal: "Update the redirect logic to handle expired tokens"
-adapter_profile: "codex"
-constraints:
-  - "Do not modify the auth provider"
-validations:
-  - command: "npm test"
-    name: "unit-tests"
-```
-
-### 3. Inspecting Status & Results (Machine-Readable)
-All status and result commands output clean JSON for seamless integration with `jq`:
-
-```bash
-# Get run status
-orchestratorctl run status run-01 | jq .state
-
-# Get latest step result (works even if in-progress)
-orchestratorctl step result step-123 | jq '{state: .state, summary: .summary}'
-
-# Wait for a step to reach a terminal state (blocks and returns JSON)
-orchestratorctl step wait step-123 | jq '{state: .state, adapter: .adapter, requested: .requested_adapter, summary: .summary}'
-```
-
-> [!TIP]
-> Use `.state` to distinguish between `running`, `completed`, `failed_terminal`, and `needs_manual_attention`.
-
-> [!NOTE]
-> This is a production-oriented planner-facing CLI surface. Automated polling (`wait` command) and structured results are fully operational for local relay flows.
-
-```bash
-# Start the daemon in Orchestration Simulation Mode (verifies state machine only)
-make simulate
-
-# In a separate terminal, verify CLI connectivity
-./bin/orchestratorctl version
-./bin/orchestratorctl run start test-run test-project
-```
-
-### 2. Operational Truths
-- **Simulation**: The system provides `ALL_ADAPTERS_SIMULATION_MODE=1` to allow end-to-end verification of the orchestration state-machine without requiring local installs of Codex/Claude/Qwen. **NOTE: Simulation does NOT execute real agent logic; it validates the orchestrator's response to stubbed agent outcomes.**
-- **Adapters**: Real execution requires the respective CLI binaries to be in the `$PATH`.
-- **SQLite Ledger**: All state is local and persistent in `codencer.db` by default.
-- **VS Code Extension**: Can be verified by sideloading the `extension/` directory into VS Code. It provides a read/write control plane for the daemon.
-
-### 3. Key Scenarios for Review
-- **Gating**: Observe how the system pauses execution when a migration is detected in a simulated attempt.
-- **Recovery**: Kill the daemon during a 'running' step and observe how it reconciles the attempt on restart.
-- **Auditability**: Use `orchestratorctl step result <id>` to see the full structured JSON evidence of a task.
-- **Validation**: See [docs/VALIDATION_SCENARIO.md](docs/VALIDATION_SCENARIO.md) for a repeatable smoke test of the Codex-first execution flow.
+## Maturity & Operational Truths
+- **Beta/MVP**: This tool is an experimental orchestration sidecar.
+- **Simulation**: Use `ALL_ADAPTERS_SIMULATION_MODE=1` (or `make simulate`) to verify the orchestration state-machine without requiring local agent installs. **NOTE: Simulation validates the bridge, not the agent logic.**
+- **SQLite Ledger**: All state is local and persistent in `.codencer/codencer.db`.
+- **VS Code Extension**: Provides a graphical tree-view and control plane for the same daemon.
+- **Validation**: See [docs/VALIDATION_SCENARIO.md](docs/VALIDATION_SCENARIO.md) for a repeatable Codex-first smoke test.

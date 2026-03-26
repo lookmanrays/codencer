@@ -22,6 +22,7 @@
 - [x] Formalize DSL Schemas for TaskSpec and ResultSpec
 - [x] Implement Validation Parsers for Explicit Payload Ingestion
 - [x] Plumb YAML Task Payload consumption directly into `orchestratorctl` CLI
+- [x] Plumb YAML Task Payload consumption directly into `orchestratorctl` CLI
 - [x] Scaffold Native Claude Code Adapter boundaries mapping anthropic capabilities
 - [x] Scaffold Native Qwen Adapter boundaries mapping local capabilities
 - [x] Deploy Universal Adapter Conformance Tests guaranteeing capability parity
@@ -41,6 +42,9 @@
 - [x] Decouple Recovery Paths and Improve State Reconcile
 - [x] Inject Configuration-driven Paths into RunSvc (Self-Review)
 - [x] Implement Step Idempotency for MCP Retries (Self-Review)
+- [x] Phase V1.7: Improve log and result discoverability (V1.7 Complete)
+- [x] Strict Self-Review of Batch V1.5.2 Usability Hardening (Complete)
+- [ ] Phase V1.8: Unified Configuration Engine (Next)
 
 ## Phase 6: Retrieval & Inspection Hardening (Completed)
 - [x] Modernize `Artifact` and `ValidationResult` Domain Models
@@ -141,6 +145,9 @@
 - [x] Audit local dev/config workflow (V1.5.5 Complete) <!-- id: 125 -->
 - [x] Align default paths and improve local startup (Batch V1.5.1 Complete) <!-- id: 127 -->
 - [x] Clarify execution modes (Real vs. Simulation) (Batch V1.5.1 Complete) <!-- id: 130 -->
-- [x] Improve quickstart and verification flow (Batch V1.5.1 Complete) <!-- id: 131 -->
+- [ ] Implement unified config with env overrides (Batch V1.5.2 Next) <!-- id: 126 -->
 - [x] Final alignment for Batch V1.5.1 (Micro-task Complete) <!-- id: 132 -->
-- [ ] Implement unified config with env overrides (Batch V1.5.2 Next)
+- [x] Audit logs, results, and usability surfaces (V1.7.1 Complete)
+- [x] Implement integrated log inspection and CLI evidence retrieval (V1.7.2 Complete)
+- [x] Create practical local usage examples (V1.7.3 Complete)
+- [ ] Implement Unified Configuration Engine (Batch V1.5.2 Next)

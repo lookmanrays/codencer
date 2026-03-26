@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"agent-bridge/internal/app"
@@ -34,6 +36,8 @@ func main() {
 		handleStepCommand(os.Args[1:])
 	case "gate":
 		handleGateCommand(os.Args[2:])
+	case "doctor":
+		runDoctor()
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printUsage()
@@ -56,11 +60,13 @@ func printUsage() {
 	fmt.Println("  submit        <runID> <taskFile.yaml> (Synonym for step start)")
 	fmt.Println("  step status    <stepID>")
 	fmt.Println("  step result    <stepID>")
+	fmt.Println("  step logs      <stepID>")
 	fmt.Println("  step artifacts <stepID>")
 	fmt.Println("  step validations <stepID>")
 	fmt.Println("  step wait      <stepID>")
 	fmt.Println("  gate approve    <id>")
 	fmt.Println("  gate reject    <id>")
+	fmt.Println("  doctor         Run environment health checks")
 }
 
 func handleRunCommand(args []string) {
@@ -237,6 +243,12 @@ func runWait(runID string, interval, timeout time.Duration) {
 
 			if run.State.IsTerminal() || run.State == domain.RunStatePausedForGate {
 				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Run %s: %s\n", runID, run.State)
+				
+				// Hint at artifact directory if possible
+				if run.State == domain.RunStateCompleted {
+					fmt.Fprintf(os.Stderr, "Artifacts: .codencer/artifacts/%s\n", runID)
+				}
+				
 				printJSON(body)
 				return
 			}
@@ -253,30 +265,36 @@ func handleStepCommand(args []string) {
 		os.Exit(1)
 	}
 
-	cmd := args[0]
-	// Handle 'submit <runID> <file>' case
-	if cmd == "submit" {
-		if len(args) < 3 {
+	// args[0] is "step" or "submit"
+	if len(args) < 2 {
+		if args[0] == "submit" {
 			fmt.Println("Usage: orchestratorctl submit <runID> <taskFile.yaml>")
-			os.Exit(1)
+		} else {
+			fmt.Println("Usage: orchestratorctl step <command> [args]")
 		}
-		startStep(args[1], args[2])
-		return
-	}
-
-	// Handle 'step <subcommand>' case
-	subArgs := args[1:]
-	if len(subArgs) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|list|status|result|artifacts|validations|wait> [args]")
 		os.Exit(1)
 	}
-	switch subArgs[0] {
+
+	subCommand := args[1]
+	subArgs := args[1:]
+
+	// Alias 'submit <runID> <taskFile.yaml>' to 'step start <runID> <taskFile.yaml>'
+	if args[0] == "submit" {
+		subCommand = "start"
+		subArgs = args
+	}
+
+	switch subCommand {
 	case "start":
 		if len(subArgs) < 3 {
-			fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml>")
+			if args[0] == "submit" {
+				fmt.Println("Usage: orchestratorctl submit <runID> <taskFile.yaml>")
+			} else {
+				fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml>")
+			}
 			os.Exit(1)
 		}
-		startStep(subArgs[1], subArgs[2])
+		stepStart(subArgs[1], subArgs[2])
 	case "list":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step list <runID>")
@@ -295,6 +313,12 @@ func handleStepCommand(args []string) {
 			os.Exit(1)
 		}
 		stepResult(subArgs[1])
+	case "logs":
+		if len(subArgs) < 2 {
+			fmt.Println("Usage: orchestratorctl step logs <stepID>")
+			os.Exit(1)
+		}
+		stepLogs(subArgs[1])
 	case "artifacts":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step artifacts <stepID>")
@@ -315,12 +339,12 @@ func handleStepCommand(args []string) {
 		interval, timeout := parseWaitFlags(subArgs[2:])
 		stepWait(subArgs[1], interval, timeout)
 	default:
-		fmt.Printf("Unknown step command: %s\n", subArgs[0])
+		fmt.Printf("Unknown step command: %s\n", subCommand)
 		os.Exit(1)
 	}
 }
 
-func startStep(runID, taskFile string) {
+func stepStart(runID, taskFile string) {
 	spec, err := validation.ParseTaskSpec(taskFile)
 	if err != nil {
 		fmt.Printf(`{"error": "parsing task spec: %v"}`+"\n", err)
@@ -400,6 +424,29 @@ func stepResult(stepID string) {
 	printJSON(body)
 }
 
+func stepLogs(stepID string) {
+	fmt.Printf("Fetching logs for step %s...\n", stepID)
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/logs")
+	if err != nil {
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		fmt.Println("No logs available for this step.")
+		return
+	}
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf(`{"error": "fetching logs", "details": %s}`+"\n", string(body))
+		os.Exit(1)
+	}
+
+	_, _ = io.Copy(os.Stdout, resp.Body)
+}
+
 func stepArtifacts(stepID string) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/artifacts")
 	if err != nil {
@@ -475,9 +522,15 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 			}
 
 			// Check for terminal or intervention-required states
-			st := domain.StepState(result.State)
-			if st.IsTerminal() || st == domain.StepStateNeedsApproval || st == domain.StepStateNeedsManualAttention {
-				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Step %s: %s\n", stepID, st)
+			if result.State.IsTerminal() || result.State == domain.StepStateNeedsApproval || result.State == domain.StepStateNeedsManualAttention {
+				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Step %s: %s\n", stepID, result.State)
+				
+				// Hint at artifact directory if possible
+				if result.RawOutputRef != "" {
+					fmt.Fprintf(os.Stderr, "Logs: %s\n", result.RawOutputRef)
+					fmt.Fprintf(os.Stderr, "Artifacts: %s\n", filepath.Dir(result.RawOutputRef))
+				}
+				
 				printJSON(body)
 				return
 			}
@@ -545,6 +598,65 @@ func handleGateCommand(args []string) {
 	}
 	out, _ := json.Marshal(respBody)
 	printJSON(out)
+}
+
+func runDoctor() {
+	fmt.Println("==> Verifying local environment...")
+
+	// 1. Check .codencer presence
+	if _, err := os.Stat(".codencer"); os.IsNotExist(err) {
+		fmt.Println("[WARN]  .codencer directory missing. Run 'make setup'")
+	} else {
+		fmt.Println("[OK]    .codencer directory found")
+	}
+
+	// 2. Check Daemon connectivity
+	resp, err := http.Get(orchestratordURL + "/api/v1/compatibility")
+	if err != nil {
+		fmt.Printf("[ERROR] Daemon unreachable at %s: %v\n", orchestratordURL, err)
+	} else {
+		defer resp.Body.Close()
+		fmt.Printf("[OK]    Daemon reachable at %s\n", orchestratordURL)
+	}
+
+	// 3. Check Adapter Binaries
+	fmt.Println("Checking adapter binaries...")
+	adapters := []struct {
+		name string
+		bin  string
+		env  string
+	}{
+		{"Codex", "codex-agent", "CODEX_BINARY"},
+		{"Claude", "claude-code", "CLAUDE_BINARY"},
+		{"Qwen/Aider", "aider", "AIDER_BINARY"},
+	}
+
+	for _, a := range adapters {
+		path := os.Getenv(a.env)
+		if path == "" {
+			path = a.bin
+		}
+		
+		// Real check for binary presence using exec.LookPath
+		found := false
+		if filepath.IsAbs(path) {
+			if _, err := os.Stat(path); err == nil {
+				found = true
+			}
+		} else {
+			if _, err := exec.LookPath(path); err == nil {
+				found = true
+			}
+		}
+		
+		if !found {
+			fmt.Printf("[INFO]  %s binary (%s) not found in PATH or %s\n", a.name, a.bin, a.env)
+		} else {
+			fmt.Printf("[OK]    %s binary detected or configured\n", a.name)
+		}
+	}
+
+	fmt.Println("\nReady for local development.")
 }
 
 func printJSON(body []byte) {

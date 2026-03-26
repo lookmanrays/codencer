@@ -29,12 +29,8 @@ setup:
 	@mkdir -p .codencer/workspace
 
 doctor: build
-	@echo "==> Verifying local environment..."
-	@ls -d .codencer > /dev/null 2>&1 || echo "WARNING: .codencer directory missing. Run 'make setup'"
-	@which go > /dev/null 2>&1 || echo "ERROR: go not found"
-	@echo "Checking adapter binaries..."
-	@which codex-agent > /dev/null 2>&1 || echo "INFO: codex-agent not found (Simulation Mode or CODEX_BINARY required for real use)"
-	@echo "Ready for local development."
+	@echo "==> Verifying local environment using orchestratorctl..."
+	@./bin/orchestratorctl doctor
 
 clean:
 	@echo "==> Cleaning up build artifacts..."

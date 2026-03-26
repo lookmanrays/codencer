@@ -5,3 +5,4 @@ vendor/
 .vscode/
 .codencer/
 *.log
+bin/

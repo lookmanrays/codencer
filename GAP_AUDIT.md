@@ -202,32 +202,23 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Relay Model Enforcement**: [RESOLVED] Removed language implying autonomous bridge-side decisions; outcomes are now strictly reported properties.
 - **State Machine Coherence**: [RESOLVED] Hardened `internal/state/machine.go` to support transitions to `timeout` and `needs_manual_attention`.
 
-## Local Dev Usability Audit (V1.5.5)
+## Usability & Logs Audit (Phase V1.7)
 
-### Current Flow
-- **Config**: JSON-driven via `LoadConfig`; no environment variable overrides for the daemon envelope.
-- **Startup**: Manual `make setup` then `make run`. Simulation toggled via `ALL_ADAPTERS_SIMULATION_MODE=1`.
-- **CLI**: Canonical surface for `run`/`step` control; JSON-first outputs.
+### Current Surfaces
+- **Daemon Logs**: JSON-structured via `slog` to `stdout`.
+- **CLI Inspection**: `step result/artifacts/validations` return structured JSON.
+- **Storage**: Unified under `.codencer/` (DB, artifacts, workspace).
+- **Verification**: `make smoke` and `make doctor`.
 
-### Friction Points
-- **Env Divergence**: `DefaultConfig()` paths (`.artifacts`) mismatch `Makefile` setup (`.codencer/artifacts`).
-- **Hidden Config**: Adapter binary paths (`CODEX_BINARY`) and simulate flags are ad-hoc env vars, not unified in `Config`.
-- **Destructive Clean**: `make clean` nukes the database, preventing history persistence during dev.
-- **No Init**: No `orchestratord init/doctor` to verify local environment readiness.
+### Main Friction Points
+1. **Fragmented Logs**: [RESOLVED] Implemented `orchestratorctl step logs <stepID>` for immediate, integrated viewing of agent output via the daemon's new `/logs` endpoint.
+2. **Path Exhaustion**: [RESOLVED] Updated CLI `wait` loops to explicitly print the log and artifact directory paths upon terminal state achievement.
+3. **No "Tail" Visibility**: [RESOLVED] `orchestratorctl step logs` allows real-time viewing of the most current agent output during execution.
+4. **Log Retention**: [RESOLVED] Refactored `README.md` to include a "Troubleshooting & Observability" guide for better operator clarity.
 
-### Recommended Cleanup
-- **Unified Config**: Support environment overrides (PORT, LOG_LEVEL, BINARY_PATHS) natively in `Config`.
-- **Initialization Tooling**: [RESOLVED] Added `make dev` and `make doctor` to verify local environment readiness.
-- **Path Alignment**: [RESOLVED] Unified all default paths to `.codencer/` root in `internal/app/config.go`.
-
-## Readiness for Phase V1.6 (Local Usability)
-- Default paths are aligned (`.codencer/`).
-- Convenience targets (`make dev`, `make doctor`, `make nuke`) implemented.
-- README Quickstart provides clear daily-use instructions.
-- [RESOLVED] Execution modes (Real vs. Simulation) clearly documented with `.env.example`.
-- [RESOLVED] Automated smoke test (`make smoke`) implemented for rapid local relay verification.
-
-## Readiness for Phase V1.5 (State Discovery)
-- Canonical terminal outcomes are explicit and documented.
-- `orchestratorctl` provides consistent, machine-usable terminal evidence.
-- Bridge/Planner boundary is strictly factual (Bridge reports, Planner decides).
+### What Should be Improved Next
+- **Integrated Inspection**: [RESOLVED] Implemented `orchestratorctl step logs <id>` and `orchestratorctl doctor` (with $PATH detection).
+- **Enhanced Result Context**: [RESOLVED] `orchestratorctl step wait` now prints the artifact directory and log paths upon achievement of terminal states.
+- **Log Unification**: [RESOLVED] Created `docs/TROUBLESHOOTING.md` and `docs/EXAMPLES.md` for clear operator-facing recovery guidance.
+- **Usage Examples**: [RESOLVED] Created `docs/EXAMPLES.md` providing copy-pasteable command sequences for simulation and real-world Codex execution.
+- **Self-Review**: [RESOLVED] Completed strict self-review of discovery hardening and alignment.

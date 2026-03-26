@@ -184,6 +184,27 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		isArtifacts := strings.HasSuffix(r.URL.Path, "/artifacts")
 		isResult := strings.HasSuffix(r.URL.Path, "/result")
 		isValidations := strings.HasSuffix(r.URL.Path, "/validations")
+		isLogs := strings.HasSuffix(r.URL.Path, "/logs")
+
+		if isLogs {
+			result, err := h.RunSvc.GetResultByStep(r.Context(), stepID)
+			if err != nil {
+				http.Error(w, "Result not found: "+err.Error(), http.StatusNotFound)
+				return
+			}
+			if result.RawOutputRef == "" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			content, err := os.ReadFile(result.RawOutputRef)
+			if err != nil {
+				http.Error(w, "Error reading logs: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write(content)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		
