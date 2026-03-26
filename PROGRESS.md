@@ -140,4 +140,5 @@
 - [x] Final alignment for Batch V1.4.2 (V1.4.9 Complete) <!-- id: 121 -->
 - [x] Audit local dev/config workflow (V1.5.5 Complete) <!-- id: 125 -->
 - [x] Align default paths and improve local startup (V1.6.1 Complete) <!-- id: 127 -->
+- [x] Clarify execution modes (Real vs. Simulation) (V1.6.2 Complete) <!-- id: 130 -->
 - [ ] Implement unified config with env overrides

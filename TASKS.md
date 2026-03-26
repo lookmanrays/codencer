@@ -116,6 +116,7 @@
 - [x] Audit local dev/config workflow (V1.5.5 Complete) <!-- id: 125 -->
 - [ ] Implement unified config with env overrides <!-- id: 126 -->
 - [x] Align default paths and improve local startup (V1.6.1 Complete) <!-- id: 127 -->
+- [x] Clarify execution modes and config expectations (V1.6.2 Complete) <!-- id: 130 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->
 - [ ] Consolidate intervention states (NeedsApproval/NeedsManualAttention) <!-- id: 117 -->
 - [ ] Expose Telemetry and Routing CLI groups

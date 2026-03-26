@@ -51,6 +51,21 @@ make clean
 make nuke
 ```
 
+## Execution Modes (Real vs. Simulation)
+
+Codencer supports two primary execution modes to balance high-fidelity work with rapid bridge development.
+
+### 1. Real Mode (Production / Local Use)
+- **Requirements**: Requires the `codex-agent` (or equivalent) binary in your `PATH` or configured via `CODEX_BINARY`.
+- **Behavior**: Executes the actual agent logic, writes real files, and produces real artifacts.
+- **Usage**: Standard daily use for solving coding tasks.
+
+### 2. Simulation Mode (Bridge Testing / Development)
+- **Activation**: Enable via `CODEX_SIMULATION_MODE=1` or `ALL_ADAPTERS_SIMULATION_MODE=1`.
+- **Behavior**: Stubs the actual subprocess execution. The bridge still performs all ledgering, state transitions, and artifact harvesting (using stubbed outcomes).
+- **Usage**: Use this to test the orchestrator's state machine, policy engine, and CLI/API without waiting for real LLM runs or requiring agent binaries.
+- **Fail-Fast**: If an agent binary is missing and simulation is NOT enabled, the bridge will fail immediately at `Start()` with an informative error.
+
 ### State Semantics
 The Bridge reports state; the Planner decides the next action.
 - **pending**: Work is queued in the ledger.
