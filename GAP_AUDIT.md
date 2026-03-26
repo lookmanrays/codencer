@@ -202,6 +202,29 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Relay Model Enforcement**: [RESOLVED] Removed language implying autonomous bridge-side decisions; outcomes are now strictly reported properties.
 - **State Machine Coherence**: [RESOLVED] Hardened `internal/state/machine.go` to support transitions to `timeout` and `needs_manual_attention`.
 
+## Local Dev Usability Audit (V1.5.5)
+
+### Current Flow
+- **Config**: JSON-driven via `LoadConfig`; no environment variable overrides for the daemon envelope.
+- **Startup**: Manual `make setup` then `make run`. Simulation toggled via `ALL_ADAPTERS_SIMULATION_MODE=1`.
+- **CLI**: Canonical surface for `run`/`step` control; JSON-first outputs.
+
+### Friction Points
+- **Env Divergence**: `DefaultConfig()` paths (`.artifacts`) mismatch `Makefile` setup (`.codencer/artifacts`).
+- **Hidden Config**: Adapter binary paths (`CODEX_BINARY`) and simulate flags are ad-hoc env vars, not unified in `Config`.
+- **Destructive Clean**: `make clean` nukes the database, preventing history persistence during dev.
+- **No Init**: No `orchestratord init/doctor` to verify local environment readiness.
+
+### Recommended Cleanup
+- **Unified Config**: Support environment overrides (PORT, LOG_LEVEL, BINARY_PATHS) natively in `Config`.
+- **Initialization Tooling**: [RESOLVED] Added `make dev` and `make doctor` to verify local environment readiness.
+- **Path Alignment**: [RESOLVED] Unified all default paths to `.codencer/` root in `internal/app/config.go`.
+
+## Readiness for Phase V1.6 (Local Usability)
+- Default paths are aligned (`.codencer/`).
+- Convenience targets (`make dev`, `make doctor`, `make nuke`) implemented.
+- README Quickstart provides clear daily-use instructions.
+
 ## Readiness for Phase V1.5 (State Discovery)
 - Canonical terminal outcomes are explicit and documented.
 - `orchestratorctl` provides consistent, machine-usable terminal evidence.

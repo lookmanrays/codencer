@@ -16,6 +16,41 @@ Agents are chaotic and non-deterministic. Codencer wraps them in a deterministic
 
 Codencer is a **bridge**, not a brain. The **Planner** (operator or autonomous agent) defines the intent and logic, while Codencer handles the tactical execution, environment isolation, and high-fidelity evidence reporting.
 
+## Local-First Quickstart
+
+The bridge maintains all local state in a hidden `.codencer/` directory in the project root.
+
+### 1. Simple Startup
+```bash
+# Initialize environment, build binaries, and start the daemon
+make dev
+```
+
+### 2. Basic Workflow
+In a separate terminal:
+```bash
+# 1. Start a new run
+./bin/orchestratorctl run start my-dev-run my-project --force
+
+# 2. Submit a task (using a YAML payload)
+./bin/orchestratorctl submit my-dev-run my-task.yaml
+
+# 3. Wait for the result
+./bin/orchestratorctl step wait <step-id>
+```
+
+### 3. Verification & Cleanup
+```bash
+# Verify binary availability and paths
+make doctor
+
+# Reset intermediate build files (keeps history)
+make clean
+
+# Nuke everything (deletes database and history)
+make nuke
+```
+
 ### State Semantics
 The Bridge reports state; the Planner decides the next action.
 - **pending**: Work is queued in the ledger.

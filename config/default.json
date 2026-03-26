@@ -1,0 +1,8 @@
+{
+  "log_level": "info",
+  "db_path": ".codencer/codencer.db",
+  "artifact_root": ".codencer/artifacts",
+  "workspace_root": ".codencer/workspace",
+  "host": "127.0.0.1",
+  "port": 8080
+}

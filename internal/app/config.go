@@ -20,9 +20,9 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		LogLevel:     "info",
-		DBPath:       "codencer.db",
-		ArtifactRoot:  ".artifacts",
-		WorkspaceRoot: ".workspace",
+		DBPath:       ".codencer/codencer.db",
+		ArtifactRoot:  ".codencer/artifacts",
+		WorkspaceRoot: ".codencer/workspace",
 		Host:          "127.0.0.1",
 		Port:          8080,
 	} // MVP values
