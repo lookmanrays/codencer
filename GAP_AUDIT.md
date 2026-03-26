@@ -25,7 +25,12 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - [x] Implement Codex-specific result normalization and outcome mapping (V1.3.1 Complete) <!-- id: 64 -->
 - [x] Align Codex adapter reporting with relay contracts (V1.3.1 Complete) <!-- id: 65 -->
 - [x] Harden Codex result file harvesting and artifact linking (V1.3.1 Complete) <!-- id: 68 -->
-- [x] Harden Codex artifact discovery- [x] Final alignment for Batch V1.3.2 (Complete) <!-- id: 71 -->
+- [x] Harden Codex artifact discovery (V1.3.1 Complete) <!-- id: 71 -->
+- [x] Audit example coverage for daily planner-to-bridge usage (V1.7.5 Complete)
+- [x] Create realistic YAML payload library (V1.7.5 Complete)
+- [x] Document iterative "Fix-Test-Repeat" and "Simulation-to-Real" workflows (V1.7.6 Complete)
+- [x] Add concise planner-driven usage guidance (Batch V1.7.7 Complete)
+- [ ] Implement Unified Configuration Engine (Batch V1.5.3/V1.8 Next)
 - [x] Define and document local validation scenario (V1.3.2 Complete) <!-- id: 72 -->
 - [x] Add/align practical local validation path (V1.3.2 Complete) <!-- id: 73 -->
 - [x] Improve observable success/failure evidence (V1.3.2 Complete) <!-- id: 74 -->
@@ -221,4 +226,24 @@ However, a rigorous audit reveals the following gaps to address for a more featu
 - **Enhanced Result Context**: [RESOLVED] `orchestratorctl step wait` now prints the artifact directory and log paths upon achievement of terminal states.
 - **Log Unification**: [RESOLVED] Created `docs/TROUBLESHOOTING.md` and `docs/EXAMPLES.md` for clear operator-facing recovery guidance.
 - **Usage Examples**: [RESOLVED] Created `docs/EXAMPLES.md` providing copy-pasteable command sequences for simulation and real-world Codex execution.
+
+### Examples Coverage Audit (Micro-task)
+
+#### Current Example Coverage
+- **Task Input**: `examples/execution_request.json` (technical JSON reference) and `docs/validation_task.yaml` (simple version-bump).
+- **Result Output**: `examples/execution_result.json` (structure-only) and CLI wait-loop hints.
+- **Workflows**: Basic "submit-wait-result" flow for single steps.
+- **Modes**: Documented distinction between real and simulation in `README.md`.
+
+#### Missing Daily Workflow Patterns
+- **Iterative "Fix-Test-Repeat"**: Examples of follow-up steps after a validation failure or `needs_manual_attention` outcome.
+- **"Exploration" Tasks**: Tasks designed for investigation (broad `allowed_paths`, no `validations`).
+- **"Docs-Only" vs "Code-Only"**: Realistic YAML payloads for distinct change-sets.
+- **Planner Logic**: Documentation on how an autonomous planner should interpret `is_simulation: true` benchmarks versus real ones.
+- **Promotional Workflows**: Testing a multi-step Run in simulation mode before executing in real mode.
+
+#### Completed in V1.7.5 / V1.7.6
+- **Realistic YAML Payload Library**: [RESOLVED] Created templates for `bug_fix.yaml`, `docs_only.yaml`, and `simulation_task.yaml` in `examples/tasks/`.
+- **Daily Local Workflow Guide**: [RESOLVED] Authoritative 4-step guide added to `docs/EXAMPLES.md`.
+- **Planner-Driven Guidance**: [RESOLVED] Explicit role definitions and feedback loop visualized in `README.md`.
 - **Self-Review**: [RESOLVED] Completed strict self-review of discovery hardening and alignment.

@@ -1,6 +1,63 @@
 # Practical Usage Examples
 
-This guide provides copy-pasteable command sequences for daily local workflows with the Codencer Orchestration Bridge.
+This guide provides copy-pasteable command sequences and role-based workflows for daily local use.
+
+## Core Roles
+- **Planner (Brain)**: You (or an LLM) decide *what* to do next.
+- **Bridge (Codencer)**: Executes the instruction, polls for completion, and reports evidence.
+- **Coding Agent (Worker)**: The underlying tool (Codex, Claude, etc.) that performs the file edits.
+
+---
+
+## 0. Daily Local Workflow
+
+This is the standard inner-loop for using the bridge with a planner.
+
+### Step 1: Start the Bridge (Daemon)
+The bridge must be running to receive and execute tasks.
+
+```bash
+# Real Mode (Executes actual code changes via Codex/Claude)
+./bin/orchestratord
+
+# OR Simulation Mode (Verifies orchestrator logic without edits)
+# ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord
+```
+
+### Step 2: Submit a Task (Planner Decision)
+The **Planner** issues a declarative `TaskSpec` (YAML) to the bridge.
+
+```bash
+# Start a session (Run) if not already active
+./bin/orchestratorctl run start daily-fix my-project
+
+# Submit the instruction
+./bin/orchestratorctl submit daily-fix examples/tasks/bug_fix.yaml
+```
+
+### Step 3: Monitor & Report (Bridge Execution)
+The **Bridge** handles the tactical execution and provides real-time progress.
+
+```bash
+# Tail the agent's output as it works
+./bin/orchestratorctl step logs step-fix-nil-err
+
+# Wait for the bridge to reach a terminal state
+./bin/orchestratorctl step wait step-fix-nil-err
+```
+
+### Step 4: Final Insight (Planner Review)
+The **Planner** inspects the bridge's report to decide the next action.
+
+```bash
+# Inspect the structured result and validation outcome
+./bin/orchestratorctl step result step-fix-nil-err | jq .
+```
+
+- **If `completed`**: The Planner proceeds to the next high-level goal.
+- **If `failed` or `needs_manual_attention`**: The Planner (or human) reviews logs and submits a corrective follow-up step.
+
+---
 
 ## 1. Setup & Environment Health
 
@@ -43,9 +100,26 @@ In a new terminal:
 ./bin/orchestratorctl step logs my-step-1
 ```
 
+
 ---
 
-## 3. Real Work: Codex Execution
+## 3. Realistic Task Library
+
+A set of realistic, planner-ready `TaskSpec` templates is available in the `examples/tasks/` directory:
+
+- **[bug_fix.yaml](../examples/tasks/bug_fix.yaml)**: Small code fix with build validation.
+- **[docs_only.yaml](../examples/tasks/docs_only.yaml)**: Documentation-only update with strict path constraints.
+- **[config_update.yaml](../examples/tasks/config_update.yaml)**: Internal configuration change.
+- **[simulation_task.yaml](../examples/tasks/simulation_task.yaml)**: Template for verifying orchestrator logic.
+
+Submit these using:
+```bash
+./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml
+```
+
+---
+
+## 4. Real Work: Codex Execution
 
 Use this mode for real daily coding tasks. Requires the `codex-agent` binary.
 

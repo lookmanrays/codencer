@@ -1,0 +1,20 @@
+version: "v1"
+project_id: "codencer-internal"
+run_id: "run-config-01"
+phase_id: "phase-infra"
+step_id: "step-update-ports"
+title: "Update Internal Port Configuration"
+goal: "Change the default daemon port from 8080 to 9090 in the default configuration file."
+context:
+  summary: "Port 8080 conflicts with local dev servers on some machines."
+allowed_paths:
+  - "config/default.json"
+validations:
+  - name: "json-validate"
+    command: "cat config/default.json"
+acceptance:
+  - "default.json has port set to 9090."
+policy_bundle: "default_safe_refactor"
+adapter_profile: "codex"
+timeout_seconds: 120
+is_simulation: false

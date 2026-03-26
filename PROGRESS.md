@@ -149,5 +149,9 @@
 - [x] Final alignment for Batch V1.5.1 (Micro-task Complete) <!-- id: 132 -->
 - [x] Audit logs, results, and usability surfaces (V1.7.1 Complete)
 - [x] Implement integrated log inspection and CLI evidence retrieval (V1.7.2 Complete)
-- [x] Create practical local usage examples (V1.7.3 Complete)
-- [ ] Implement Unified Configuration Engine (Batch V1.5.2 Next)
+- [x] Create practical local usage examples (Batch V1.7.3 Complete)
+- [x] Audit example coverage for daily planner-to-bridge usage (V1.7.5 Complete)
+- [x] Create realistic YAML payload library (Complete)
+- [x] Document iterative \"Fix-Test-Repeat\" and \"Simulation-to-Real\" workflows (Complete)
+- [x] Add concise planner-driven usage guidance (Complete)
+- [ ] Implement Unified Configuration Engine (Batch V1.5.3/V1.8 Next)

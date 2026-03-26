@@ -129,10 +129,8 @@
 - [ ] Consolidate intervention states (NeedsApproval/NeedsManualAttention) <!-- id: 117 -->
 - [ ] Expose Telemetry and Routing CLI groups
 
-## Phase V1.7: Logs, Results, and Usability Audit [x]
-- [x] Audit daemon logs and CLI surfaces (Micro-task complete)
-- [x] Identify major daily-use friction points (Micro-task complete)
-- [x] Update GAP_AUDIT and TASKS with usability priorities (Micro-task complete)
-- [ ] Implement `orchestratorctl step logs <id>` for integrated output streaming
-- [ ] Add optional daemon log persistence to `.codencer/daemon.log`
-- [ ] Implement human-friendly result summary in CLI (non-JSON mode)
+- [x] Audit example coverage for daily planner-to-bridge usage (Micro-task Complete)
+- [x] Create realistic YAML payload library (Complete)
+- [x] Document iterative "Fix-Test-Repeat" and "Simulation-to-Real" workflows (Complete)
+- [x] Add concise planner-driven usage guidance (Complete)
+- [ ] Implement Unified Configuration Engine (Batch V1.5.3/V1.8 Next)

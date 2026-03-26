@@ -1,0 +1,27 @@
+version: "v1"
+project_id: "codencer-internal"
+run_id: "run-docs-01"
+phase_id: "phase-polish"
+step_id: "step-update-readme"
+title: "Update Project README"
+goal: "Clarify the simulation mode toggle and link the new troubleshooting guide in README.md."
+context:
+  summary: "The current README has a typo in the simulation mode section and lacks a direct link to the recovery guide."
+constraints:
+  - "Do not change any functional code or implementation details."
+  - "Maintain consistent markdown formatting."
+allowed_paths:
+  - "README.md"
+forbidden_paths:
+  - "internal/**"
+  - "cmd/**"
+validations:
+  - name: "markdown-lint"
+    command: "ls README.md"
+acceptance:
+  - "README.md contains a link to docs/TROUBLESHOOTING.md."
+  - "Simulation mode section is technically accurate."
+policy_bundle: "default_safe_refactor"
+adapter_profile: "codex"
+timeout_seconds: 300
+is_simulation: false

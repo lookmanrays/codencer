@@ -1,0 +1,23 @@
+version: "v1"
+project_id: "codencer-internal"
+run_id: "run-fix-01"
+phase_id: "phase-bugfix"
+step_id: "step-fix-nil-err"
+title: "Fix Nil Pointer dereference in CLI"
+goal: "Fix a potential nil pointer dereference when the daemon is unreachable during 'orchestratorctl status'."
+context:
+  summary: "Users report a crash when running 'status' if the daemon is down, likely due to an unchecked error in the HTTP client wrapper."
+constraints:
+  - "Apply minimal changes to the CLI logic."
+  - "Ensure the error message is user-friendly."
+allowed_paths:
+  - "cmd/orchestratorctl/main.go"
+validations:
+  - name: "build-check"
+    command: "go build -o /dev/null ./cmd/orchestratorctl"
+acceptance:
+  - "The CLI prints 'Error: could not connect to daemon' instead of crashing."
+policy_bundle: "default_safe_refactor"
+adapter_profile: "codex"
+timeout_seconds: 600
+is_simulation: false

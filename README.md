@@ -77,7 +77,52 @@ Codencer supports two primary execution modes to balance high-fidelity work with
 - **Behavior**: Executes the actual agent logic, writes real files, and produces real artifacts.
 - **Usage**: Standard daily use for solving coding tasks.
 
-### 2. Simulation Mode (Bridge Testing / Development)
+The Codencer orchestration bridge acts as a powerful local relay between high-level planners (human or machine) and tactical coding agents.
+
+### Core Roles
+- **Planner (Brain)**: You (or an LLM) decide **what** to do next and how to handle results.
+- **Bridge (Codencer)**: Receives instructions, manages workspace isolation, enforces timeouts, and reports evidence.
+- **Coding Agent (Worker)**: The tactical tool (Codex, Claude-code, Aider) performing the actual file edits.
+
+### Daily Local Workflow
+The bridge is designed for an iterative "Plan-Execute-Review" loop:
+1. **Start the Bridge**: `bin/orchestratord`
+2. **Submit Instruction**: `bin/orchestratorctl submit <runID> <task.yaml>`
+3. **Monitor Progress**: `bin/orchestratorctl step logs <stepID>`
+4. **Review Report**: `bin/orchestratorctl step result <stepID>`
+
+See the full **[Daily Local Workflow Guide](docs/EXAMPLES.md#0-daily-local-workflow)** for concrete command examples, including simulation and real-world scenarios.
+
+---
+
+## 2. Planner-Driven Workflow
+
+The bridge is a **reactive relay**. It does not decide the high-level strategy; it executes tactical instructions provided by an external **Planner** (you or an LLM).
+
+### The Feedback Loop
+```text
+[ Planner ] ---------------------> [ Bridge ] -------------------> [ Agent ]
+  (Decides)      (TaskSpec)         (Relay)       (Subprocess)      (Executes)
+      ^                                |                                |
+      |          (ResultSpec)          |         (Artifacts)            |
+      +--------------------------------+ <------------------------------+
+```
+
+### Typical Loop Example
+1. **Planner**: Prepares a `TaskSpec` (YAML) based on the current codebase state.
+2. **Bridge**: Receives the task, sets up a git worktree, and dispatches the **Coding Agent**.
+3. **Agent**: Performs the work and exits.
+4. **Bridge**: Harvests logs/diffs, runs validations, and returns a `ResultSpec`.
+5. **Planner**: Analyzes the `ResultSpec`. If tests failed, it prepares a follow-up task.
+
+For realistic task templates, see the **[Task Library](examples/tasks/)**.
+
+---
+
+## 3. Quickstart (Simulation Mode)
+Use this mode to verify the bridge's state machine and your integration logic without requiring real LLM agents.
+
+### 1. Activation
 - **Activation**: Enable via `CODEX_SIMULATION_MODE=1` or `ALL_ADAPTERS_SIMULATION_MODE=1`.
 - **Behavior**: Stubs the actual subprocess execution. The bridge still performs all ledgering, state transitions, and artifact harvesting (using stubbed outcomes).
 - **Usage**: Use this to test the orchestrator's state machine, policy engine, and CLI/API without waiting for real LLM runs or requiring agent binaries.
