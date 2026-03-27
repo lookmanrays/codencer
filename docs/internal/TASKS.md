@@ -1,7 +1,7 @@
 # Technical Task Backlog
-> [!NOTE]
-> This is an **internal tracking document** for the Codencer project development.
-> For the public user guide, see the [README.md](../../README.md).
+> [!WARNING]
+> **INTERNAL DEVELOPER DOCUMENT**: This file is for project maintainers and contains technical debt audits, task backlogs, and roadmap tracking.
+> For the official **User Guide**, please refer to the [README.md](../../README.md).
 
 ## Priority 1 — Refactor and strengthen orchestration runtime [COMPLETE]
 - [x] Extract orchestration workflow out of monolithic `DispatchStep()`.
@@ -140,12 +140,11 @@
 - [x] Final alignment for Phase V1.F1 (V1.8.7 Complete)
 - [/] Phase V1.F3: Packaging & Governance (Active)
     - [x] Audit publication blockers and trust gaps (V1.F3.1 Complete) <!-- id: 168 -->
-    - [x] Improve public-facing trust and clarity (V1.F3.2 Complete) <!-- id: 231 -->
-    - [x] Resolve/Standardize publication essentials (V1.F3.3 Complete) <!-- id: 169 -->
     - [x] Reduce confusion between public and internal docs (V1.F3.4 Complete) <!-- id: 234 -->
-    - [x] Audit phase/task model inconsistency (V1.F3.5 Complete) <!-- id: 237 -->
-    - [ ] Implement JIT phase creation for orphan-step protection <!-- id: 238 -->
-    - [ ] Author CONTRIBUTING.md (Governance) <!-- id: 170 -->
+    - [x] Resolve Critical Blockers (LICENSE, CONTRIBUTING, Makefile version) <!-- id: 244 -->
+    - [x] Author CONTRIBUTING.md (Governance) <!-- id: 170 -->
+    - [x] Move/Ignore `codencer.db` from root <!-- id: 245 -->
+    - [x] Improve public-facing trust and clarity (V1.F3.2 Complete) <!-- id: 231 -->
     - [ ] Enhance `doctor` with binary version checking (Trust) <!-- id: 171 -->
     - [ ] Final alignment for V1 publication (Review) <!-- id: 173 -->
 - [ ] Decouple attempt outcomes from orchestrator states <!-- id: 116 -->

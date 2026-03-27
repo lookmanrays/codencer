@@ -1,7 +1,7 @@
 # Implementation Progress
-> [!NOTE]
-> This is an **internal tracking document** for the Codencer project development.
-> For the public user guide, see the [README.md](../../README.md).
+> [!WARNING]
+> **INTERNAL DEVELOPER DOCUMENT**: This file is for project maintainers and contains technical debt audits, task backlogs, and roadmap tracking.
+> For the official **User Guide**, please refer to the [README.md](../../README.md).
 
 ## Phase 1: MVP Foundation (Completed)
 - [x] Daemon bootstrap & SQLite Ledger
@@ -168,17 +168,12 @@
     - [x] Human-readable data rendering for all CLI lists (V1.F2.5)
 - [/] Phase V1.F3: Packaging & Governance (Active)
     - [x] Audit publication blockers and trust gaps (V1.F3.1 Complete)
+    - [x] Resolve Critical Blockers (LICENSE, CONTRIBUTING, Makefile)
+    - [x] Move/Ignore `codencer.db`
     - [x] Harden public-facing trust signals (V1.F3.2 Complete)
-    - [x] Resolve/Standardize publication essentials (V1.F3.3 Complete)
     - [x] Clarify public vs internal doc hierarchy (V1.F3.4 Complete)
-    - [x] Audit phase/task model inconsistency (V1.F3.5 Complete)
-    - [x] Implement JIT phase alignment (V1.F3.6 Complete)
-    - [x] Align examples and smoke flow with V1 runtime (V1.F3.7 Complete)
-    - [x] Harden Quickstart & Setup command parity (V1.F3.8 Complete)
-    - [x] Final alignment for Phase V1.C1 (V1.C1 Complete)
-    - [ ] Finalize MIT/Apache License
     - [ ] Implement `doctor` binary version checking
-    - [ ] Author `CONTRIBUTING.md`
+    - [x] Author `CONTRIBUTING.md`
 
 ## Phase V1.D: Local Operator Ergonomics [/]
 - [x] Tighten `submit` -> `wait` -> `result` sequence (V1.D2 Complete)

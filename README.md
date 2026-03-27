@@ -105,6 +105,16 @@ Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 
 ---
 
+## ⚠️ Known Limitations (Beta/MVP)
+
+As a local-first Beta/MVP, Codencer has the following constraints:
+- **Relay Only**: The bridge does not "think" or plan; it only executes what the Planner instructs.
+- **Single-User**: Designed for local development; no multi-user or cloud concurrency.
+- **Agent Dependency**: "Real Mode" efficacy is strictly bound to the quality of the underlying agent (Codex, Claude, etc.).
+- **Manual Decisions**: The bridge reports terminal states; all recovery or retry decisions remain with the human operator or external planner.
+
+---
+
 ## 📊 Maturity & Capability Matrix
 
 Codencer is currently in an **MVP/Beta** state. Use the following matrix to understand current support:
@@ -116,9 +126,9 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 | **Codex Adapter** | ✅ **Ready** | High-fidelity relay for the `codex-agent` binary. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
 | **Simulation Mode** | ✅ **Ready** | Robust stubs for orchestrator validation without LLM use. |
-| **IDE Chat Bridge** | 🧪 **Prototype** | Proxy-mediated file access via VS Code extension. |
-| **Adaptive Routing** | 🧪 **Blueprint** | Static fallback chain; benchmark-aware logic is a blueprint. |
-| **Cloud / Multi-User** | 📅 **Out of Scope**| Not planned. Codencer is strictly local-first. |
+| **IDE Chat Bridge** | 🧪 **Prototype** | Experimental proxy-mediated file access via VS Code. |
+| **Adaptive Routing** | 📅 **Blueprint** | Heuristic fallback is implemented; dynamic optimization is a blueprint. |
+| **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
 
 ## 🧪 Simulation vs. Real Execution
 
@@ -129,25 +139,22 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 
 ## 📖 Documentation
 
-### ⚡️ Getting Started
-- **[Self-Host Runbook (Flows)](docs/EXAMPLES.md)** — Start here for daily use.
-- **[Setup & Self-Hosting Guide](docs/SETUP.md)** — Installation and configuration.
-- **[Troubleshooting & Recovery](docs/TROUBLESHOOTING.md)** — What to do when things fail.
+Review the following guides to get started with Codencer.
 
-### 🏛 Architecture & Design
-- **[Product Scope](docs/01_product_scope.md)** — Vision and mission.
-- **[Architecture Overview](docs/02_architecture.md)** — How the bridge works.
-- **[Detailed Roadmap](docs/03_roadmap.md)** — Long-term visionary phases.
+### ⚡️ User Guidance (Start Here)
+- **[Self-Host Runbook](docs/EXAMPLES.md)** — Practical flows for daily tactical use.
+- **[Setup & Configuration](docs/SETUP.md)** — Installation, environment, and agent setup.
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** — How to handle non-success states and recovery.
+- **[Architecture Overview](docs/02_architecture.md)** — High-level design and the "Bridge not Brain" model.
 
-### 🛠 Phase Tracking (Internal)
-- **[Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)** — Current V1 release blockers.
-- **[Development Progress](docs/internal/PROGRESS.md)** — Technical implementation timeline.
-- **[Task Backlog](docs/internal/TASKS.md)** — Current micro-task status.
+### 🛠 Project Governance & Maintenance (Internal)
+- **[Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)** — Current V1 release blockers and debt.
+- **[Development Progress](docs/internal/PROGRESS.md)** — Historical and current technical timeline.
+- **[Technical Task Backlog](docs/internal/TASKS.md)** — Detailed micro-task status for maintainers.
+- **[Contributing Guide](CONTRIBUTING.md)** — How to set up a dev environment and submit PRs.
 
 ---
 
 ## ⚖ License
 
-> [!CAUTION]
-> **PUBLICATION BLOCKER**: This repository currently has **no formal license**.
-> A legal license (e.g., MIT or Apache 2.0) must be selected and committed to a `LICENSE` file before the first public v1.0.0 release.
+Codencer is released under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.
