@@ -75,9 +75,9 @@
 - [x] Define and document canonical execution/result state semantics <!-- id: 45 -->
 - [x] Clarify lifecycle meaning of Runs, Steps, and Attempts <!-- id: 46 -->
 - [x] Align manual-attention and simulation semantics with relay model <!-- id: 47 -->
-- [ ] Decouple Attempt states from StepState <!-- id: 41 -->
-- [ ] Standardize `ValidationState` and `GateState` (remove "Status" suffix) <!-- id: 43 -->
-- [ ] Update supervisor to natively trigger `StepStateTimeout` <!-- id: 44 -->
+- [ ] Decouple Attempt states from StepState (V1.x Roadmap) <!-- id: 41 -->
+- [ ] Standardize `ValidationState` and `GateState` (V1.x Roadmap) <!-- id: 43 -->
+- [ ] Update supervisor to natively trigger `StepStateTimeout` (V1.x Roadmap) <!-- id: 44 -->
 
 ## Phase 16: Planner-Facing CLI Surface (V1.2) [x]
 - [x] Audit existing CLI and identify gaps (V1.2.1 Complete) <!-- id: 50 -->
@@ -161,7 +161,7 @@
 - [x] Harden post-execution inspection (V1.D3 Complete)
 - [x] Clarify non-success terminal outcomes (V1.D4/C2 Complete)
 - [x] Final alignment for Phase V1.C2 (Alignment Complete)
-- [ ] Implement `latest` keyword support for CLI commands (V1.D2)
-- [ ] Implement `step logs --follow` streaming (V1.D3)
-- [ ] Implement synthesized `step report` (Summary + Diffs + Validations) (V1.D4)
-- [ ] Add direct `cat` hints for unified.diff in `step wait` (V1.D5)
+- [ ] Implement `latest` keyword support for CLI commands (V1.x Roadmap)
+- [ ] Implement `step logs --follow` streaming (V1.x Roadmap)
+- [ ] Implement synthesized `step report` (V1.x Roadmap)
+- [ ] Add direct `cat` hints for unified.diff in `step wait` (V1.x Roadmap)

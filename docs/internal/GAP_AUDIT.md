@@ -8,7 +8,7 @@ The repository contains a functionally operational MVP implementation of the orc
 
 - **Lifecycle Meaning Cleanup**: [RESOLVED] Explicitly defined Run (Session), Step (Planner Unit), and Attempt (Execution Try) in domain code and README. Verified that no bridge-side decision logic is implied.
 - **Terminology Inconsistency**: [RESOLVED] Renamed all outcome indicators to `State` (RunState, StepState, Result.State) for uniform operator experience.
-- **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and added absolute evidence paths to all inspection commands.
+- **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and established the **Canonical Local Runbook** in `EXAMPLES.md`.
 - **Trust & Transparency**: [RESOLVED] Added "Known Limitations" and clarified the distinction between simulation and real-mode execution in README.
 
 ## Feature Status Matrix
@@ -35,7 +35,7 @@ The repository contains a functionally operational MVP implementation of the orc
 2. **CONTRIBUTING.md**: ✅ RESOLVED.
 3. **Repository Noise**: ✅ RESOLVED (`codencer.db` removed/ignored).
 4. **Makefile Version**: ✅ RESOLVED (`v0.1.0`).
-5. **Setup Reproducibility**: Verify `make setup build` works on a clean clone.
+5. **Setup Reproducibility**: ✅ RESOLVED (`make setup build` verified).
 
 ### 🛡 Trust & Readability Gaps (Should Fix)
 1. **Agent Versioning**: `doctor` command detects binary existence but not version compatibility (e.g. `codex-agent` v0.5 vs v1.0).

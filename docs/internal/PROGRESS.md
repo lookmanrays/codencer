@@ -47,7 +47,7 @@
 - [x] Implement Step Idempotency for MCP Retries (Self-Review)
 - [x] Phase V1.7: Improve log and result discoverability (V1.7 Complete)
 - [x] Strict Self-Review of Batch V1.5.2 Usability Hardening (Complete)
-- [ ] Phase V1.8: Unified Configuration Engine (Next)
+- [ ] Phase V1.8: Unified Configuration Engine (V1.x Roadmap)
 
 ## Phase 6: Retrieval & Inspection Hardening (Completed)
 - [x] Modernize `Artifact` and `ValidationResult` Domain Models
@@ -148,7 +148,7 @@
 - [x] Audit local dev/config workflow (V1.5.5 Complete) <!-- id: 125 -->
 - [x] Align default paths and improve local startup (Batch V1.5.1 Complete) <!-- id: 127 -->
 - [x] Clarify execution modes (Real vs. Simulation) (Batch V1.5.1 Complete) <!-- id: 130 -->
-- [ ] Implement unified config with env overrides (Batch V1.5.2 Next) <!-- id: 126 -->
+- [ ] Implement unified config with env overrides (V1.x Roadmap) <!-- id: 126 -->
 - [x] Final alignment for Batch V1.5.1 (Micro-task Complete) <!-- id: 132 -->
 - [x] Audit maturity & limitations framing (V1.7.8 Complete)
 - [x] Audit self-host/setup ergonomics (V1.7.9 Complete)
@@ -175,11 +175,8 @@
     - [ ] Implement `doctor` binary version checking
     - [x] Author `CONTRIBUTING.md`
 
-## Phase V1.D: Local Operator Ergonomics [/]
-- [x] Tighten `submit` -> `wait` -> `result` sequence (V1.D2 Complete)
-- [x] Harden post-execution inspection (V1.D3 Complete)
-- [x] Clarify non-success terminal outcomes (V1.D4/C2 Complete)
 - [x] Final alignment for Phase V1.C2 (Alignment Complete)
-- [ ] Implement `latest` keyword support for session memory
-- [ ] Implement incremental log streaming (`--follow`)
-- [ ] Implement synthesized `step report` (Outcome + Diffs + Validations)
+- [x] Create canonical first-user local runbook (V1.D6 Complete)
+- [ ] Implement `latest` keyword support for session memory (V1.x Roadmap)
+- [ ] Implement incremental log streaming (`--follow`) (V1.x Roadmap)
+- [ ] Implement synthesized `step report` (Outcome + Diffs + Validations) (V1.x Roadmap)

@@ -25,7 +25,7 @@ Codencer is a **bridge, not a brain**. It does not decide the high-level strateg
 - **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
 - **Coding Agent**: The underlying tactical tool performing the actual work (e.g., `codex-agent`, `claude-code`).
 
-For detailed local setup instructions, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
+For the definitive Day-0 guide, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
 
 ---
 
@@ -90,7 +90,7 @@ Every task execution leaves a permanent audit trail:
 3. **Artifacts**: Every modified file and diff is stored in `.codencer/artifacts/`. Use `./bin/orchestratorctl step artifacts <id>` to see the exact paths and SHA-256 hashes.
 4. **Validations**: Run `./bin/orchestratorctl step validations <id>` to see specific test/lint results.
 
-For a deeper dive into agent installation and advanced flows, see the **[Setup & Self-Hosting Guide](docs/SETUP.md)**.
+For a deeper dive into agent installation and advanced configuration, see the **[Environmental Reference Guide](docs/SETUP.md)**.
 
 ---
 
@@ -142,8 +142,8 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 Review the following guides to get started with Codencer.
 
 ### ⚡️ User Guidance (Start Here)
-- **[Self-Host Runbook](docs/EXAMPLES.md)** — Practical flows for daily tactical use.
-- **[Setup & Configuration](docs/SETUP.md)** — Installation, environment, and agent setup.
+- **[Canonical Local Runbook](docs/EXAMPLES.md)** — The definitive Day-0 operator flow.
+- **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and agent setup.
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — How to handle non-success states and recovery.
 - **[Architecture Overview](docs/02_architecture.md)** — High-level design and the "Bridge not Brain" model.
 
