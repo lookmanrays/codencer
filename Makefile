@@ -5,9 +5,9 @@ all: lint test build
 
 build:
 	@echo "==> Building orchestratord..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v0.1.0" -o bin/orchestratord ./cmd/orchestratord
+	@go build -ldflags "-X agent-bridge/internal/app.Version=v0.1.0-beta" -o bin/orchestratord ./cmd/orchestratord
 	@echo "==> Building orchestratorctl..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v0.1.0" -o bin/orchestratorctl ./cmd/orchestratorctl
+	@go build -ldflags "-X agent-bridge/internal/app.Version=v0.1.0-beta" -o bin/orchestratorctl ./cmd/orchestratorctl
 
 test:
 	@echo "==> Running tests..."

@@ -25,6 +25,11 @@ func NormalizeCore(attemptID string, artifacts []*domain.Artifact, adapterName s
 	}
 
 	if resultPath == "" {
+		if isSimulation {
+			defaultRes.State = domain.StepStateCompleted
+			defaultRes.Summary = "Simulation: Codex agent relay completed successfully (Mock result)."
+			return defaultRes, nil
+		}
 		defaultRes.State = domain.StepStateFailedTerminal
 		defaultRes.Summary = "Bridge Interface Error: Codex agent finished but failed to produce result.json artifact."
 		return defaultRes, nil

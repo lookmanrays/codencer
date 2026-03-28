@@ -67,8 +67,9 @@ EOF
 ./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml --wait > .codencer/smoke_result.json
 
 # Extract State and ID robustly without jq
-STATE=$(grep -o '"state":"[^"]*"' .codencer/smoke_result.json | head -1 | cut -d'"' -f4)
-STEP_ID=$(grep -o '"id":"[^"]*"' .codencer/smoke_result.json | head -1 | cut -d'"' -f4)
+# Initial Step JSON is first, final ResultSpec JSON is last.
+STATE=$(grep -o '"state":[[:space:]]*"[^"]*"' .codencer/smoke_result.json | tail -1 | cut -d'"' -f4)
+STEP_ID=$(grep -o '"id":[[:space:]]*"[^"]*"' .codencer/smoke_result.json | head -1 | cut -d'"' -f4)
 
 echo "--- SMOKE TEST SUMMARY ---"
 echo "Step ID:        $STEP_ID"

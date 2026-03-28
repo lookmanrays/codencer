@@ -185,6 +185,10 @@
 - [x] Improve CLI Clarity & Output Guidance (Batch V1.L2 Complete)
 - [x] Audit Trust & Readiness Alignment (Batch V1.L3 Complete)
 - [x] Finalize Trust & Readiness Alignment (Batch V1.L3 Complete)
-- [x] V1 Publication Readiness Audit (Batch V1.F5 Complete)
-- [ ] Align Smoke Test & Implement "Latest" ID Alias (V1.x Roadmap)
-- [ ] Harden `doctor` with binary version checking (Batch V1.F5 Next)
+- [x] Harden `doctor` with binary version checking (Batch V1.R1 Complete)
+- [x] Align Smoke Test with modern CLI ergonomics (Batch V1.R1 Complete)
+- [x] Final alignment for Batch V1.R1 (Micro-task Complete)
+- [/] Batch R2: Final Metadata & Release Notes (Active)
+    - [x] Update version strings to `v0.1.0-beta`
+    - [x] Create `CHANGELOG.md`
+    - [ ] Final Sanity Audit

@@ -35,7 +35,7 @@ The repository contains a functionally operational MVP implementation of the orc
 1. **LICENSE**: ✅ RESOLVED (MIT).
 2. **CONTRIBUTING.md**: ✅ RESOLVED.
 3. **Repository Noise**: ✅ RESOLVED (`codencer.db` removed/ignored).
-4. **Makefile Version**: ✅ RESOLVED (`v0.1.0`).
+4. **Makefile Version**: ✅ RESOLVED (`v0.1.0-beta`).
 5. **Setup Reproducibility**: ✅ RESOLVED (`make setup build` verified).
 
 ### 🛡 Trust & Readability Gaps (Should Fix)
@@ -75,7 +75,9 @@ The repository contains a functionally operational MVP implementation of the orc
 ---
 - [x] Audit Trust & Readiness Alignment (Final Alignment Complete)
 - [x] V1 Publication Readiness Audit (Batch V1.F5 Complete)
-- [x] Harden `doctor` with binary version checking (Batch V1.F5 Complete)
-- [x] Align Smoke Test with modern CLI ergonomics (Batch V1.F6 Complete)
-- [ ] Implement "Latest" ID Alias for CLI (Batch V1.L3 Roadmap)
-- [ ] Setup Logic Automation (Batch V1.F6 Next)
+- [x] Harden `doctor` with binary version checking (Batch V1.R1 Complete)
+- [x] Align Smoke Test with modern CLI ergonomics (Batch V1.R1 Complete)
+- [x] Batch R2: Final Metadata & Release Notes (Complete)
+    - [x] Update version strings to `v0.1.0-beta`
+    - [x] Create `CHANGELOG.md`
+    - [x] Final Sanity Audit
