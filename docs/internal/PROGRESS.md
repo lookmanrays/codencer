@@ -187,8 +187,9 @@
 - [x] Finalize Trust & Readiness Alignment (Batch V1.L3 Complete)
 - [x] Harden `doctor` with binary version checking (Batch V1.R1 Complete)
 - [x] Align Smoke Test with modern CLI ergonomics (Batch V1.R1 Complete)
-- [x] Final alignment for Batch V1.R1 (Micro-task Complete)
-- [/] Batch R2: Final Metadata & Release Notes (Active)
-    - [x] Update version strings to `v0.1.0-beta`
-    - [x] Create `CHANGELOG.md`
-    - [ ] Final Sanity Audit
+- [x] Harden Primary Operator Sequence (submit -> wait -> inspect) (Batch V1.R1 Complete)
+- [x] Tighten Result & Evidence Inspection Path (Visual Audit) (Batch V1.R1 Complete)
+- [x] Clarify Non-Success Terminal Outcomes & Recovery (Batch V1.R1 Complete)
+- [x] Implement "Latest" ID Alias for CLI (Batch V1.L3 Roadmap)
+- [ ] Setup Logic Automation (Batch V1.F6 Next)
+- [x] Batch R2: Final Metadata & Release Notes (Complete)

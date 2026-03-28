@@ -72,7 +72,7 @@ STATE=$(grep -o '"state":[[:space:]]*"[^"]*"' .codencer/smoke_result.json | tail
 STEP_ID=$(grep -o '"id":[[:space:]]*"[^"]*"' .codencer/smoke_result.json | head -1 | cut -d'"' -f4)
 
 echo "--- SMOKE TEST SUMMARY ---"
-echo "Step ID:        $STEP_ID"
+echo "UUID Handle:    $STEP_ID"
 echo "Terminal State: $STATE"
 
 if [[ "$STATE" == "completed" || "$STATE" == "completed_with_warnings" || "$STATE" == "failed_terminal" ]]; then

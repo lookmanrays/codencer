@@ -34,9 +34,8 @@ Submit a realistic task and wait for the bridge to report results.
 
 # 2. Submit a tactical task and wait for completion
 ./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait
-
-# NOTE: The Step ID is a server-generated UUID (e.g., 'step-f027-...') 
-# and is printed immediately after submission. Use this UUID for all 
+# NOTE: The Step ID is a server-generated UUID Handle (e.g., 'step-f027-...') 
+# and is printed immediately after submission. Use this UUID Handle for all 
 # follow-up 'step' commands.
 ```
 
@@ -60,6 +59,36 @@ Once the wait returns, use the Step ID to inspect the high-fidelity evidence cap
 - **Immediate Feedback**: `submit --wait` provides the terminal JSON state.
 - **Human Summary**: `step result` is the best source for an "at-a-glance" status.
 - **Audit Truth**: `step artifacts` and `step validations` are the definitive source for evidence.
+
+---
+
+## 🔍 Visual Audit: What to Expect
+
+### Success Outcome (`completed`)
+```text
+--- Authoritative Step Result: step-f027-... ---
+State:   completed
+Summary: Bug fixed successfully. All tests passed.
+
+[GUIDE] Evidence Drill-down:
+  Logs:      ./bin/orchestratorctl step logs step-f027-...
+  Artifacts: ./bin/orchestratorctl step artifacts step-f027-...
+  Validations: ./bin/orchestratorctl step validations step-f027-...
+---------------------------
+```
+
+### Failure Outcome (`failed_terminal`)
+```text
+--- Authoritative Step Result: step-e123-... ---
+State:   failed_terminal
+Summary: Bridge Interface Error: Codex agent finished but one or more tests failed.
+
+[GUIDE] Evidence Drill-down:
+  Logs:      ./bin/orchestratorctl step logs step-e123-...
+  Artifacts: ./bin/orchestratorctl step artifacts step-e123-...
+  Validations: ./bin/orchestratorctl step validations step-e123-...
+---------------------------
+```
 ```
 
 ---

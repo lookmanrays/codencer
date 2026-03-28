@@ -53,19 +53,25 @@ make start-sim
 make start
 ```
 
-### 3. Run Your First Task
+### 3. Run Your First Tactical Task
 Submit a task and wait for the bridge to report results:
 ```bash
-# 1. Start a new orchestration run (System of Record)
+# 1. Start a new mission (System of Record)
 ./bin/orchestratorctl run start first-run my-project
 
 # 2. Submit a tactical task and wait for completion
 ./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait
 
-# 3. Inspect the final outcome
+# 3. View the Authoritative Truth (Summary)
+# NOTE: The Step ID is a server-generated UUID Handle (e.g., 'step-f027-...') 
+# and is printed immediately after submission. Use this UUID for all 
+# follow-up 'step' commands.
 ./bin/orchestratorctl step result <stepID>
+
+# 4. Drill down into evidence
 ./bin/orchestratorctl step logs <stepID>
 ./bin/orchestratorctl step artifacts <stepID>
+./bin/orchestratorctl step validations <stepID>
 ```
 
 ---

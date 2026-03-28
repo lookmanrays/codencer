@@ -54,28 +54,26 @@ func main() {
 
 func printUsage() {
 	fmt.Println("Usage: orchestratorctl <command> [args]")
-	fmt.Println("\n1. Run & Session Management:")
+	fmt.Println("\n1. Session & Mission Management:")
 	fmt.Println("  run start      [id] [project]  Initialize a new mission (System of Record)")
-	fmt.Println("  run list                      Show recent run history")
-	fmt.Println("  run state      <runID>         Check run lifecycle state")
-	fmt.Println("  run wait       <runID>         Block until run reaches terminal state")
-	fmt.Println("  run abort      <runID>         Halt an active run mission")
+	fmt.Println("  run list                      Show mission history")
+	fmt.Println("  run state      <runID>         Check mission lifecycle state")
+	fmt.Println("  run abort      <runID>         Halt an active mission")
 	
-	fmt.Println("\n2. Tactical Execution (Tasks):")
-	fmt.Println("  submit         <runID> <file>  Execute a TaskSpec (Synonym: step start)")
+	fmt.Println("\n2. Tactical Execution (The Bridge):")
+	fmt.Println("  submit         <runID> <file>  Execute TaskSpec (returns UUID Handle)")
 	fmt.Println("  submit --wait  <runID> <file>  Execute and poll until terminal state")
-	fmt.Println("  step start     <runID> <file>  Submit a manual TaskSpec for execution")
-	fmt.Println("  step list      <runID>         List all task steps in a run")
-	fmt.Println("  step wait      <stepID>        Poll until a specific step completes")
+	fmt.Println("  step list      <runID>         List all task handles in a mission")
+	fmt.Println("  step wait      <handle>        Poll a specific UUID until completion")
 	
-	fmt.Println("\n3. Authoritative Audit (The Truth):")
-	fmt.Println("  step result    <stepID>        Authoritative human-readable summary")
-	fmt.Println("  step logs      <stepID>        Raw agent stdout/stderr log trail")
-	fmt.Println("  step artifacts <stepID>        List harvested files, diffs, and hashes")
-	fmt.Println("  step validations <stepID>      Check specific test/lint outcomes")
+	fmt.Println("\n3. Evidence & Inspection (The Truth):")
+	fmt.Println("  step result    <handle>        Authoritative Truth (Summary)")
+	fmt.Println("  step logs      <handle>        Raw agent stdout/stderr trail")
+	fmt.Println("  step artifacts <handle>        List harvested files and diffs")
+	fmt.Println("  step validations <handle>      Check specific test/lint results")
 	
-	fmt.Println("\n4. System & Health:")
-	fmt.Println("  doctor                        Verify local environment and binaries")
+	fmt.Println("\n4. Maintenance & Health:")
+	fmt.Println("  doctor                        Verify local environment/binaries")
 	fmt.Println("  gate approve   <gateID>        Approve a paused policy gate")
 	fmt.Println("  gate reject    <gateID>        Reject a paused policy gate")
 	fmt.Println("  version                       Show version")
@@ -411,8 +409,9 @@ func stepStart(runID, taskFile string, shouldWait bool) {
 
 	// Output raw JSON response for machine readability
 	printJSON(body)
-	fmt.Fprintf(os.Stderr, "\n[SUCCESS] Task submitted. UUID Handle: %s\n", step.ID)
-	fmt.Fprintf(os.Stderr, "[GUIDE] To wait for results:\n  ./bin/orchestratorctl step wait %s\n", step.ID)
+	fmt.Fprintf(os.Stderr, "\n[SUCCESS] Unified Step UUID: %s\n", step.ID)
+	fmt.Fprintf(os.Stderr, "[GUIDE] To monitor transition:\n  ./bin/orchestratorctl step wait %s\n", step.ID)
+	fmt.Fprintf(os.Stderr, "[GUIDE] To view total audit trail:\n  ./bin/orchestratorctl step result %s\n", step.ID)
 }
 
 func listStepsByRun(runID string) {
@@ -481,13 +480,15 @@ func stepResult(stepID string) {
 	body, _ := io.ReadAll(resp.Body)
 	var result domain.ResultSpec
 	if err := json.Unmarshal(body, &result); err == nil {
-		fmt.Printf("--- Authoritative Step Result: %s ---\n", stepID)
+		fmt.Printf("--- Authoritative Truth (Summary): %s ---\n", stepID)
 		fmt.Printf("State:   %s\n", result.State)
 		fmt.Printf("Summary: %s\n", result.Summary)
+		fmt.Println("\n[GUIDE] Evidence Drill-down:")
 		if result.RawOutputRef != "" {
-			fmt.Printf("Logs:      %s\n", result.RawOutputRef)
-			fmt.Printf("Artifacts: %s\n", filepath.Dir(result.RawOutputRef))
+			fmt.Printf("  Logs:      ./bin/orchestratorctl step logs %s\n", stepID)
+			fmt.Printf("  Artifacts: ./bin/orchestratorctl step artifacts %s\n", stepID)
 		}
+		fmt.Printf("  Validations: ./bin/orchestratorctl step validations %s\n", stepID)
 		fmt.Println("---------------------------")
 	} else {
 		printJSON(body)
@@ -631,35 +632,39 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 
 			// Check for terminal or intervention-required states
 			if result.State.IsTerminal() || result.State == domain.StepStateNeedsApproval || result.State == domain.StepStateNeedsManualAttention {
-				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Step %s: %s\n", stepID, result.State)
+				fmt.Fprintf(os.Stderr, "\n[BRIDGE] Mission Handle %s reached terminal condition: %s\n", stepID, result.State)
 				
 				switch result.State {
 				case domain.StepStateNeedsApproval:
-					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Policy gate hit. To approve:\n")
-					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl gate approve gate-%s\n", stepID)
+					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Policy gate hit. Bridge is waiting for approval.\n")
+					fmt.Fprintf(os.Stderr, "  To approve: ./bin/orchestratorctl gate approve gate-%s\n", stepID)
+					fmt.Fprintf(os.Stderr, "  To reject:  ./bin/orchestratorctl gate reject gate-%s\n", stepID)
 				case domain.StepStateFailedTerminal:
-					fmt.Fprintf(os.Stderr, "\n[AUDIT] Goal not met (e.g. test failure). Inspect evidence:\n")
-					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step validations %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "\n[AUDIT REQUIRED] Goal not met (e.g., task failed/unmet). Bridge does not retry automatically.\n")
+					fmt.Fprintf(os.Stderr, "  Next Step:  ./bin/orchestratorctl step result %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "  Evidence:   ./bin/orchestratorctl step validations %s\n", stepID)
 				case domain.StepStateTimeout:
-					fmt.Fprintf(os.Stderr, "\n[AUDIT] Execution exceeded time limit. Check logs for hang/infinite loop:\n")
-					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step logs %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "\n[AUDIT REQUIRED] Execution exceeded time limit. Bridge killed the process.\n")
+					fmt.Fprintf(os.Stderr, "  Next Step:  ./bin/orchestratorctl step logs %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "  Resolution: Check for loops or increase timeout_seconds in TaskSpec.\n")
 				case domain.StepStateNeedsManualAttention:
-					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] System ambiguity or agent crash. Review logs:\n")
-					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl step logs %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "\n[SYSTEM HALT] Ambient failure or bridge/agent crash. Control returned to human.\n")
+					fmt.Fprintf(os.Stderr, "  Next Step:  Check .codencer/smoke_daemon.log (or daemon log)\n")
+					fmt.Fprintf(os.Stderr, "  Evidence:   ./bin/orchestratorctl step logs %s\n", stepID)
 				case domain.StepStateCancelled:
-					fmt.Fprintf(os.Stderr, "\n[NOTE] Execution was manually stopped by operator.\n")
+					fmt.Fprintf(os.Stderr, "\n[NOTE] Execution was explicitly stopped by operator/mission abort.\n")
 				case domain.StepStateFailedRetryable:
-					fmt.Fprintf(os.Stderr, "\n[RECOVERY] Transient failure (e.g. rate limit). You may retry:\n")
-					fmt.Fprintf(os.Stderr, "  ./bin/orchestratorctl submit <runID> <task.yaml> --wait\n")
+					fmt.Fprintf(os.Stderr, "\n[RECOVERY OPPORTUNITY] Transient failure (e.g., rate limit). Safe to retry mission.\n")
+					fmt.Fprintf(os.Stderr, "  Submit:     ./bin/orchestratorctl submit <runID> <file> --wait\n")
 				}
 				fmt.Fprintln(os.Stderr)
 
 				// Hint at artifact directory if possible
 				if result.RawOutputRef != "" {
+					fmt.Fprintf(os.Stderr, "[DONE] Terminal outcome: %s\n", result.State)
 					fmt.Fprintf(os.Stderr, "Summary:   %s\n", result.Summary)
-					fmt.Fprintf(os.Stderr, "Logs:      %s\n", result.RawOutputRef)
-					fmt.Fprintf(os.Stderr, "Artifacts: %s\n", filepath.Dir(result.RawOutputRef))
-					fmt.Fprintf(os.Stderr, "\n[DONE] To inspect the full human-readable audit trail:\n  ./bin/orchestratorctl step result %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "\n[GUIDE] To view the human-readable summary (Authoritative Truth):\n  ./bin/orchestratorctl step result %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "[GUIDE] To drill down into artifacts and validations:\n  ./bin/orchestratorctl step artifacts %s\n  ./bin/orchestratorctl step validations %s\n", stepID, stepID)
 				}
 				
 				printJSON(body)

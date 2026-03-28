@@ -36,27 +36,30 @@ Always start here to verify your environment:
 ---
 
 ### 3.1 `timeout`
-- **Bridge Report**: The agent exceeded the `timeout_seconds` limit.
-- **Audit**: Run `./bin/orchestratorctl step logs <id>` to find the hang.
-- **Operator Decision**: Increase timeout in YAML OR simplify the task if the agent is stuck in a loop.
+- **Bridge State**: The agent exceeded the `timeout_seconds` limit (Bridge killed the process).
+- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` for the terminal summary.
+- **Evidence Drill-down**: Run `./bin/orchestratorctl step logs <id>` to find the hang.
+- **Recovery Decision**: Increase `timeout_seconds` in your TaskSpec YAML OR simplify the instructions. Resubmit to the same mission.
 
 ### 3.2 `failed_terminal`
-- **Bridge Report**: The task finished, but validations (tests/lint) failed.
-- **Audit**: Run `./bin/orchestratorctl step validations <id>` for the failure list.
-- **Operator Decision**: Correct the `task.yaml` instructions OR fix the agent's logic manually in the worktree.
+- **Bridge State**: Action finished but goal was not met (e.g., test/lint failure).
+- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` for the failure summary.
+- **Evidence Drill-down**: Run `./bin/orchestratorctl step validations <id>` for the list of unmet criteria.
+- **Recovery Decision**: Correct the `task.yaml` instructions OR fix the local project environment. Resubmit to the same mission.
 
 ### 3.3 `needs_manual_attention`
-- **Bridge Report**: An unexpected error or crash occurred.
-- **Audit**: Check `.codencer/daemon.log` and `./bin/orchestratorctl step logs <id>`.
-- **Operator Decision**: Resolve the system conflict (lock, disk, etc.) and resubmit.
+- **Bridge State**: System ambiguity, agent crash, or ambient environment failure. 
+- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` for system error logs.
+- **Evidence Drill-down**: Check `.codencer/smoke_daemon.log` and `./bin/orchestratorctl step logs <id>`.
+- **Recovery Decision**: Resolve the ambient conflict (lock, disk, permissions) and resubmit.
 
 ### 3.4 `failed_retryable`
-- **Bridge Report**: Transient error (e.g. 429 Rate Limit).
-- **Operator Decision**: Wait and resubmit: `./bin/orchestratorctl submit <runID> <file> --wait`.
+- **Bridge State**: Transient external error (e.g., 429 Rate Limit, Network Drop).
+- **Recovery Decision**: Wait for the cooldown and resubmit the mission: `./bin/orchestratorctl submit <runID> <file> --wait`.
 
 ### 3.5 `cancelled`
-- **Bridge Report**: Execution was stopped via `run abort` or CLI interruption.
-- **Operator Decision**: Start a new run or step if the original goal is still required.
+- **Bridge State**: Mission was explicitly aborted by the operator or CLI signal.
+- **Recovery Decision**: Start a new mission or step handle if the original goal is still required.
 
 ---
 
