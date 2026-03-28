@@ -53,29 +53,30 @@ func main() {
 
 func printUsage() {
 	fmt.Println("Usage: orchestratorctl <command> [args]")
-	fmt.Println("\nRun Management (Sessions):")
-	fmt.Println("  run start      [id] [project]  Initialize a new orchestration run")
-	fmt.Println("  run list                      List all recent runs")
+	fmt.Println("\n1. Run & Session Management:")
+	fmt.Println("  run start      [id] [project]  Initialize a new mission (System of Record)")
+	fmt.Println("  run list                      Show recent run history")
 	fmt.Println("  run state      <runID>         Check run lifecycle state")
-	fmt.Println("  run abort      <runID>         Halt an active run")
 	fmt.Println("  run wait       <runID>         Block until run reaches terminal state")
+	fmt.Println("  run abort      <runID>         Halt an active run mission")
 	
-	fmt.Println("\nStep Execution (Tasks):")
-	fmt.Println("  submit         <runID> <file>  Submit a TaskSpec (Synonym: step start)")
-	fmt.Println("  step start     <runID> <file>  Submit a TaskSpec for execution")
-	fmt.Println("  step list      <runID>         List all steps in a run")
-	fmt.Println("  step wait      <stepID>        Block until step reaches terminal state")
+	fmt.Println("\n2. Tactical Execution (Tasks):")
+	fmt.Println("  submit         <runID> <file>  Execute a TaskSpec (Synonym: step start)")
+	fmt.Println("  submit --wait  <runID> <file>  Execute and poll until terminal state")
+	fmt.Println("  step start     <runID> <file>  Submit a manual TaskSpec for execution")
+	fmt.Println("  step list      <runID>         List all task steps in a run")
+	fmt.Println("  step wait      <stepID>        Poll until a specific step completes")
 	
-	fmt.Println("\nInspection & Audit:")
-	fmt.Println("  step result    <stepID>        Show high-level outcome summary")
-	fmt.Println("  step logs      <stepID>        View integrated agent output (stdout)")
-	fmt.Println("  step artifacts <stepID>        List all captured files and diffs")
-	fmt.Println("  step validations <stepID>      Check test/lint verification outcomes")
+	fmt.Println("\n3. Authoritative Audit (The Truth):")
+	fmt.Println("  step result    <stepID>        Authoritative human-readable summary")
+	fmt.Println("  step logs      <stepID>        Raw agent stdout/stderr log trail")
+	fmt.Println("  step artifacts <stepID>        List harvested files, diffs, and hashes")
+	fmt.Println("  step validations <stepID>      Check specific test/lint outcomes")
 	
-	fmt.Println("\nIntervention & Health:")
+	fmt.Println("\n4. System & Health:")
+	fmt.Println("  doctor                        Verify local environment and binaries")
 	fmt.Println("  gate approve   <gateID>        Approve a paused policy gate")
 	fmt.Println("  gate reject    <gateID>        Reject a paused policy gate")
-	fmt.Println("  doctor                        Verify local environment health")
 	fmt.Println("  version                       Show version")
 }
 
@@ -409,7 +410,8 @@ func stepStart(runID, taskFile string, shouldWait bool) {
 
 	// Output raw JSON response for machine readability
 	printJSON(body)
-	fmt.Fprintf(os.Stderr, "\n[HINT] To wait for results:\n  ./bin/orchestratorctl step wait %s\n", step.ID)
+	fmt.Fprintf(os.Stderr, "\n[SUCCESS] Task submitted. UUID Handle: %s\n", step.ID)
+	fmt.Fprintf(os.Stderr, "[GUIDE] To wait for results:\n  ./bin/orchestratorctl step wait %s\n", step.ID)
 }
 
 func listStepsByRun(runID string) {
@@ -478,7 +480,7 @@ func stepResult(stepID string) {
 	body, _ := io.ReadAll(resp.Body)
 	var result domain.ResultSpec
 	if err := json.Unmarshal(body, &result); err == nil {
-		fmt.Printf("--- Step Result: %s ---\n", stepID)
+		fmt.Printf("--- Authoritative Step Result: %s ---\n", stepID)
 		fmt.Printf("State:   %s\n", result.State)
 		fmt.Printf("Summary: %s\n", result.Summary)
 		if result.RawOutputRef != "" {
@@ -656,7 +658,7 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 					fmt.Fprintf(os.Stderr, "Summary:   %s\n", result.Summary)
 					fmt.Fprintf(os.Stderr, "Logs:      %s\n", result.RawOutputRef)
 					fmt.Fprintf(os.Stderr, "Artifacts: %s\n", filepath.Dir(result.RawOutputRef))
-					fmt.Fprintf(os.Stderr, "\n[HINT] To see full result details:\n  ./bin/orchestratorctl step result %s\n", stepID)
+					fmt.Fprintf(os.Stderr, "\n[DONE] To inspect the full human-readable audit trail:\n  ./bin/orchestratorctl step result %s\n", stepID)
 				}
 				
 				printJSON(body)

@@ -3,7 +3,7 @@
 Codencer is a persistent orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by external agents. It acts as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). It is designed for **local-first, self-hosted developer toolchains.**
 
 > [!IMPORTANT]
-> **Project Status: Beta/MVP**. Codencer is technically functional for local dev use, but the API and protocols are subject to change. The primary, most-hardened execution path is via the **Codex** adapter.
+> **Project Status: MVP / Public Beta**. Codencer is technically functional for local dev use, but the API and protocols are subject to change. The primary, most-hardened execution path is via the **Codex** adapter.
 
 ---
 
@@ -29,11 +29,9 @@ For the definitive Day-0 guide, see the **[Canonical Local Runbook](docs/EXAMPLE
 
 ---
 
----
+## ⚡️ Quickstart: Local Setup
 
-## ⚡️ Quickstart: 1-2-3 Local Setup
-
-Get up and running locally in less than a minute.
+Get up and running in simulation mode to verify the orchestrator logic.
 
 ### 1. Build & Configure
 ```bash
@@ -59,15 +57,16 @@ make start
 Submit a task and wait for the bridge to report results:
 ```bash
 # 1. Start a new orchestration run (System of Record)
-./bin/orchestratorctl run start my-first-run
+./bin/orchestratorctl run start first-run my-project
 
 # 2. Submit a tactical task and wait for completion
-./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait
+./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait
 
-# 3. Inspect the final outcome (See hints in 'wait' output for these)
+# 3. Inspect the final outcome
 ./bin/orchestratorctl step result <stepID>
 ./bin/orchestratorctl step logs <stepID>
 ./bin/orchestratorctl step artifacts <stepID>
+```
 
 ---
 
@@ -121,11 +120,11 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 
 | Feature Area | Status | Description |
 | :--- | :--- | :--- |
-| **Orchestration Core** | ✅ **Ready** | Persistent SQLite ledger, state machine, and Git Worktrees. |
-| **CLI & MCP Layer** | ✅ **Ready** | Structured JSON outputs, log tailing, and health checks. |
-| **Codex Adapter** | ✅ **Ready** | High-fidelity relay for the `codex-agent` binary. |
+| **Orchestration Core** | ✅ **Ready (Beta)** | Persistent SQLite ledger, state machine, and Git Worktrees. |
+| **CLI & MCP Layer** | ✅ **Ready (Beta)** | Structured JSON outputs, log tailing, and health checks. |
+| **Codex Adapter** | ✅ **Ready (Beta)** | High-fidelity relay for the `codex-agent` binary. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
-| **Simulation Mode** | ✅ **Ready** | Robust stubs for orchestrator validation without LLM use. |
+| **Simulation Mode** | ✅ **Ready (Beta)** | Robust stubs for orchestrator validation without LLM use. |
 | **IDE Chat Bridge** | 🧪 **Prototype** | Experimental proxy-mediated file access via VS Code. |
 | **Adaptive Routing** | 📅 **Blueprint** | Heuristic fallback is implemented; dynamic optimization is a blueprint. |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |

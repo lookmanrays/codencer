@@ -176,7 +176,13 @@
     - [x] Author `CONTRIBUTING.md`
 
 - [x] Final alignment for Phase V1.C2 (Alignment Complete)
-- [x] Create canonical first-user local runbook (V1.D6 Complete)
 - [ ] Implement `latest` keyword support for session memory (V1.x Roadmap)
 - [ ] Implement incremental log streaming (`--follow`) (V1.x Roadmap)
 - [ ] Implement synthesized `step report` (Outcome + Diffs + Validations) (V1.x Roadmap)
+- [x] Fix README Formatting & Align Quickstart Flow (Batch V1.L1 Complete)
+- [x] Audit Operator Flow & Daily Ambiguities (Batch V1.L2 Complete)
+- [x] Create canonical first-user local runbook (Batch V1.L2 Complete)
+- [x] Improve CLI Clarity & Output Guidance (Batch V1.L2 Complete)
+- [x] Audit Trust & Readiness Alignment (Batch V1.L3 Complete)
+- [x] Finalize Trust & Readiness Alignment (Batch V1.L3 Complete)
+- [ ] Align Smoke Test & Implement "Latest" ID Alias (V1.x Roadmap)

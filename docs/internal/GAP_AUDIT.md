@@ -15,13 +15,13 @@ The repository contains a functionally operational MVP implementation of the orc
 
 | Component | Status | Implementation Type | Notes |
 | :--- | :--- | :--- | :--- |
-| **Orchestration Core** | ✅ **Ready** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
-| **CLI & MCP Layer** | ✅ **Ready** | Native | Human-readable hints, logs, and structured JSON. |
-| **Codex Adapter** | ✅ **Ready** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
+| **Orchestration Core** | ✅ **Ready (Beta)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
+| **CLI & MCP Layer** | ✅ **Ready (Beta)** | Native | Human-readable hints, logs, and structured JSON. |
+| **Codex Adapter** | ✅ **Ready (Beta)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrappers; lacks deep extraction. |
-| **Simulation Mode** | ✅ **Ready** | Native | Robust stubs for orchestrator validation. |
+| **Simulation Mode** | ✅ **Ready (Beta)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |
-| **Governance** | ✅ **Ready** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
+| **Governance** | ✅ **Ready (Beta)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
 
 ## Known Technical Debt & Limitations
 - **Adaptive Routing**: Routing is currently based on a static heuristic chain; benchmark-driven optimization is documented but not dynamic.
@@ -45,10 +45,28 @@ The repository contains a functionally operational MVP implementation of the orc
 ### 🛠 Ready for Release Finalization
 1. **Governance**: ✅ RESOLVED (MIT & CONTRIBUTING.md).
 2. **Health**: Enhance `doctor` with version checks for `git` and `sqlite3`.
+3. **Documentation Quality Audit**: ✅ PASS (Rendering issues fixed; Quickstart aligned).
 
----
-- [x] Final alignment for Phase V1.C1 (Alignment Complete)
-- [x] Tighten `submit` -> `wait` -> `result` sequence (V1.D2/C2 Complete)
-- [x] Harden post-execution inspection (V1.D3/C2 Complete)
-- [x] Clarify non-success terminal outcomes (V1.D4/C2 Complete)
-- [x] Final alignment for Local Operator Flow (V1.C2 Complete)
+### 📖 V1 Documentation Audit (Readiness Check)
+- **README Rendering**: Critical unclosed ` ```bash ` at line 60 (swallows 50% of content). Redundant separators.
+- **Quickstart Inconsistencies**: 
+    - Divergent RunIDs (`my-first-run` vs `my-first-mission`).
+    - Divergent `submit` ergonomics (`submit --wait` vs explicit `step wait` in smoke test).
+    - Missing projectID in some examples.
+- **Current Status**: All critical V1 blockers resolved.
+
+### 🕹 Operator Flow Audit (Readiness Check)
+- **Current Flow**: `run start` -> `submit --wait` -> `step result/logs`.
+- **Ambiguity Points**:
+    - **ID Friction**: The server-generated UUID is the required handle, but users must manually copy-paste it from `submit` output. The YAML `step_id` is not the primary handle.
+    - **Result Overlap**: `step wait` outputs the same JSON as `step result`, leading to "What now?" confusion.
+    - **Discovery**: `smoke_test.sh` uses brittle grep/cut to find IDs; this highlights a programmatic friction point.
+- **Next Fix**: Standardize `smoke_test.sh` for programmatic use (V1.x Roadmap).
+
+### ⚖ Trust & Readiness Audit (Readiness Check)
+- **Codex Status**: ✅ RESOLVED (Maturity Matrix updated to `Ready (Beta)`).
+- **Quickstart Speed**: ✅ RESOLVED (Speed claims softened; focused on simulation).
+- **Maturity Alignment**: ✅ RESOLVED (Beta qualifiers applied consistently).
+
+- [x] Audit Trust & Readiness Alignment (Final Alignment Complete)
+- [ ] Align Smoke Test & Implement "Latest" ID Alias (V1.x Roadmap)

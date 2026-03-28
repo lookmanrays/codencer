@@ -26,19 +26,21 @@ make start-sim
 Submit a realistic task and wait for the bridge to report results.
 ```bash
 # 1. Start a new orchestration run (System of Record)
-./bin/orchestratorctl run start my-first-mission
+./bin/orchestratorctl run start first-run my-project
 
 # 2. Submit a tactical task and wait for completion
-./bin/orchestratorctl submit my-first-mission examples/tasks/bug_fix.yaml --wait
+./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait
 
-# NOTE: The Step ID (e.g., 'bug-fix-01') is echoed immediately after submission.
+# NOTE: The Step ID is a server-generated UUID (e.g., 'step-f027-...') 
+# and is printed immediately after submission. Use this UUID for all 
+# follow-up 'step' commands.
 ```
 
 ### 4. Inspect the Truth (The Audit Trail)
 Once the wait returns, use the Step ID to inspect the high-fidelity evidence captured by the bridge:
 
 ```bash
-# A. View the human-readable result summary
+# A. View the human-readable result summary (Authoritative Truth)
 ./bin/orchestratorctl step result <stepID>
 
 # B. Tail the raw agent logs (What the agent saw/did)
@@ -49,6 +51,11 @@ Once the wait returns, use the Step ID to inspect the high-fidelity evidence cap
 
 # D. Verify specific validations (tests/linters)
 ./bin/orchestratorctl step validations <stepID>
+
+### 💡 Authoritative Truth Sources
+- **Immediate Feedback**: `submit --wait` provides the terminal JSON state.
+- **Human Summary**: `step result` is the best source for an "at-a-glance" status.
+- **Audit Truth**: `step artifacts` and `step validations` are the definitive source for evidence.
 ```
 
 ---
