@@ -11,6 +11,16 @@ This guide describes the technical prerequisites and environmental configuration
 - **SQLite3**: For the local persistent ledger.
 - **Git**: Required for workspace-isolated runs (Git Worktrees).
 
+### ⚡️ The 30-Second Mission (Simulation)
+Use this flow to verify the bridge logic (ledger, state machine, CLI) without requiring external LLMs or agent binaries.
+
+### 1. Automated Verification (Recommended)
+From a clean clone, run the automated verification suite:
+```bash
+make setup build smoke
+```
+This single command initializes the environment, builds the binaries, and runs a full simulation loop.
+
 ### 2. Tactical Agents (Real Mode Only)
 To perform real file edits, you need at least one tactical agent binary in your `$PATH`.
 
@@ -67,8 +77,34 @@ Codencer honors environment variable overrides and a local `.env` file.
 ---
 
 ## 🔍 Self-Review & Health
-- Run `./bin/orchestratorctl doctor` to verify local binary availability.
-- Run `make smoke` to execute the automated state-machine validation suite.
+
+Before running your first mission, use the built-in diagnostic tool to verify your local environment:
+
+```bash
+./bin/orchestratorctl doctor
+```
+
+The doctor checks:
+- **Environment**: Presence of `.env` and `.codencer/` directory.
+- **Permissions**: Write access to the local ledger storage.
+- **Binaries**: Presence and versions of `git`, `sqlite3`, and `go`.
+- **Adapters**: Detects whether `codex-agent` or other adapters are reachable in your PATH.
+- **Mode**: Confirms whether you are running in **Simulation** or **Real** execution mode.
+
+If any check fails, the doctor will provide targeted instructions (e.g., "Run 'make setup'" or "Install git").
+
+### 🧪 Relay Validation
+Once the doctor reports `[OK]`, execute the automated smoke test to verify the full end-to-end relay loop in simulation mode:
+
+```bash
+make smoke
+```
+
+The smoke test validates:
+1. Daemon startup and health connectivity.
+2. Mission run initialization.
+3. Task submission and synchronous completion (`submit --wait`).
+4. Authoritative result reporting (`step result`).
 
 ## 📖 Further Reading
 - [Canonical Local Runbook](EXAMPLES.md)

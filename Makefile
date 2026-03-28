@@ -41,6 +41,10 @@ start-sim: build setup
 
 setup:
 	@echo "==> Initializing local environment (.codencer/)..."
+	@if [ ! -f .env ]; then \
+		echo "==> Creating .env from .env.example..."; \
+		cp .env.example .env; \
+	fi
 	@mkdir -p bin
 	@mkdir -p .codencer/artifacts
 	@mkdir -p .codencer/workspace

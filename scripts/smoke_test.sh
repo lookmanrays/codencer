@@ -50,38 +50,37 @@ done
 RUN_ID="smoke-run-$(date +%s)"
 PROJECT="smoke-project"
 
-echo "1. Starting run: $RUN_ID"
+echo "1. Starting run mission: $RUN_ID"
 ./bin/orchestratorctl run start "$RUN_ID" "$PROJECT" > /dev/null
 
-echo "2. Submitting simulation task..."
-# Provide a full TaskSpec for reliable parsing
+echo "2. Submitting task (Flow: submit --wait)..."
 cat <<EOF > .codencer/smoke_task.yaml
 version: "1.1"
 run_id: "$RUN_ID"
-step_id: "smoke-step-1"
-# [AUTO-GENERATED] phase_id: "phase-execution-$RUN_ID"
-title: "Smoke Test Task"
+title: "Smoke Test Validation"
 goal: "Verify the bridge relay loop"
 adapter_profile: "codex"
 is_simulation: true
 EOF
 
-STEP_OUTPUT=$(./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml)
-# Robustly extract "id" using basic grep and tr
-STEP_ID=$(echo "$STEP_OUTPUT" | grep '"id":' | cut -d'"' -f4)
+# Execute and capture JSON output
+./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml --wait > .codencer/smoke_result.json
 
-echo "3. Waiting for terminal state (Step: $STEP_ID)..."
-./bin/orchestratorctl step wait "$STEP_ID" --timeout 30s > .codencer/smoke_result.json
+# Extract State and ID robustly without jq
+STATE=$(grep -o '"state":"[^"]*"' .codencer/smoke_result.json | head -1 | cut -d'"' -f4)
+STEP_ID=$(grep -o '"id":"[^"]*"' .codencer/smoke_result.json | head -1 | cut -d'"' -f4)
 
-echo "--- RESULTS ---"
-# Check if result is valid JSON and has a terminal state
-STATE=$(grep -oP '"state":\s*"\K[^"]+' .codencer/smoke_result.json)
+echo "--- SMOKE TEST SUMMARY ---"
+echo "Step ID:        $STEP_ID"
 echo "Terminal State: $STATE"
 
-if [[ "$STATE" == "completed" || "$STATE" == "completed_with_warnings" || "$STATE" == "failed_retryable" || "$STATE" == "failed_terminal" ]]; then
-    echo "SUCCESS: Smoke test passed!"
+if [[ "$STATE" == "completed" || "$STATE" == "completed_with_warnings" || "$STATE" == "failed_terminal" ]]; then
+    echo "SUCCESS: Bridge relay loop verified."
+    echo ""
+    echo "Authoritative Result Summary:"
+    ./bin/orchestratorctl step result "$STEP_ID"
 else
-    echo "FAILURE: Unexpected terminal state: $STATE"
+    echo "FAILURE: Unexpected state reached."
     cat .codencer/smoke_result.json
     exit 1
 fi

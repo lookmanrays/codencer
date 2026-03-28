@@ -33,13 +33,13 @@ For the definitive Day-0 guide, see the **[Canonical Local Runbook](docs/EXAMPLE
 
 Get up and running in simulation mode to verify the orchestrator logic.
 
-### 1. Build & Configure
+### 1. Build & Setup
 ```bash
 # Initialize and build binaries
 make setup build
 
-# Copy example environment configuration
-cp .env.example .env
+# (Optional) Verify your local environment
+./bin/orchestratorctl doctor
 ```
 
 ### 2. Start the Daemon
@@ -125,6 +125,7 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 | **Codex Adapter** | ✅ **Ready (Beta)** | High-fidelity relay for the `codex-agent` binary. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
 | **Simulation Mode** | ✅ **Ready (Beta)** | Robust stubs for orchestrator validation without LLM use. |
+| **Diagnostics & Health**| ✅ **Ready (Beta)** | CLI-based `doctor` and `smoke` verification tools. |
 | **IDE Chat Bridge** | 🧪 **Prototype** | Experimental proxy-mediated file access via VS Code. |
 | **Adaptive Routing** | 📅 **Blueprint** | Heuristic fallback is implemented; dynamic optimization is a blueprint. |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |

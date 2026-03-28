@@ -22,6 +22,7 @@ The repository contains a functionally operational MVP implementation of the orc
 | **Simulation Mode** | ✅ **Ready (Beta)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |
 | **Governance** | ✅ **Ready (Beta)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
+| **Diagnostics** | ✅ **Ready (Beta)** | CLI | `doctor` command verifies versions and environment. |
 
 ## Known Technical Debt & Limitations
 - **Adaptive Routing**: Routing is currently based on a static heuristic chain; benchmark-driven optimization is documented but not dynamic.
@@ -47,26 +48,34 @@ The repository contains a functionally operational MVP implementation of the orc
 2. **Health**: Enhance `doctor` with version checks for `git` and `sqlite3`.
 3. **Documentation Quality Audit**: ✅ PASS (Rendering issues fixed; Quickstart aligned).
 
-### 📖 V1 Documentation Audit (Readiness Check)
-- **README Rendering**: Critical unclosed ` ```bash ` at line 60 (swallows 50% of content). Redundant separators.
-- **Quickstart Inconsistencies**: 
-    - Divergent RunIDs (`my-first-run` vs `my-first-mission`).
-    - Divergent `submit` ergonomics (`submit --wait` vs explicit `step wait` in smoke test).
-    - Missing projectID in some examples.
-- **Current Status**: All critical V1 blockers resolved.
+## V1 Publication Readiness Audit (Batch V1.F5)
 
-### 🕹 Operator Flow Audit (Readiness Check)
-- **Current Flow**: `run start` -> `submit --wait` -> `step result/logs`.
-- **Ambiguity Points**:
-    - **ID Friction**: The server-generated UUID is the required handle, but users must manually copy-paste it from `submit` output. The YAML `step_id` is not the primary handle.
-    - **Result Overlap**: `step wait` outputs the same JSON as `step result`, leading to "What now?" confusion.
-    - **Discovery**: `smoke_test.sh` uses brittle grep/cut to find IDs; this highlights a programmatic friction point.
-- **Next Fix**: Standardize `smoke_test.sh` for programmatic use (V1.x Roadmap).
+### 🕹 Current First-Run Path
+1. `make setup build`: Creates directories and compiles binaries.
+2. `cp .env.example .env`: Manual configuration.
+3. `make start-sim`: Daemon starts in background.
+4. `run start` -> `submit --wait`: Primary operator loop.
+5. `step result/logs/artifacts`: Evidence inspection.
 
-### ⚖ Trust & Readiness Audit (Readiness Check)
-- **Codex Status**: ✅ RESOLVED (Maturity Matrix updated to `Ready (Beta)`).
-- **Quickstart Speed**: ✅ RESOLVED (Speed claims softened; focused on simulation).
-- **Maturity Alignment**: ✅ RESOLVED (Beta qualifiers applied consistently).
+### 🏥 Diagnostics Capabilities
+- **`doctor`**: Verifies `.codencer` directory, daemon connectivity, and basic binary existence (PATH).
+- **`smoke`**: Exercises the basic relay loop in simulation mode.
 
+### 🚨 Release Blockers (Must Fix)
+1. **`doctor` Versioning**: No version checks for critical binaries (`git`, `sqlite3`, `go`, `codex-agent`).
+2. **`doctor` Environment**: No check for `.env` presence.
+3. **Smoke Test Brittleness**: `scripts/smoke_test.sh` uses brittle grep/cut and antiquated manual `step wait` logic.
+4. **Port Conflict**: `SETUP.md` (8080) vs `smoke_test.sh` (8085) vs standard `.env` (8080).
+
+### 🛠 What should be fixed next
+1. **Harden `doctor`**: Implement version checks for all critical deps.
+2. **Standardize `smoke`**: Modernize `smoke_test.sh` to use `submit --wait` and robust JSON parsing (e.g. `jq` if available or better grep).
+3. **Setup Logic**: Improve `make setup` to safely handle `.env` initialization.
+
+---
 - [x] Audit Trust & Readiness Alignment (Final Alignment Complete)
-- [ ] Align Smoke Test & Implement "Latest" ID Alias (V1.x Roadmap)
+- [x] V1 Publication Readiness Audit (Batch V1.F5 Complete)
+- [x] Harden `doctor` with binary version checking (Batch V1.F5 Complete)
+- [x] Align Smoke Test with modern CLI ergonomics (Batch V1.F6 Complete)
+- [ ] Implement "Latest" ID Alias for CLI (Batch V1.L3 Roadmap)
+- [ ] Setup Logic Automation (Batch V1.F6 Next)

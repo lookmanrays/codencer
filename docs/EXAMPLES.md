@@ -9,20 +9,24 @@ Use this flow to verify the bridge logic (ledger, state machine, CLI) without re
 
 ### 1. Build & Initial Setup
 ```bash
-# Initialize directories and build binaries
+# Initialize directories, .env, and build binaries
 make setup build
-
-# Use simulation defaults
-cp .env.example .env
 ```
 
-### 2. Start the Simulated Bridge
+### 2. Automated Verification (Recommended)
+Before manual testing, run the full simulation loop to verify your environment:
+```bash
+make smoke
+```
+
+### 3. Start the Simulated Bridge
+If the smoke test passes, you are ready for interactive use:
 ```bash
 # Start in the background (recommended)
 make start-sim
 ```
 
-### 3. Run Your First Tactical Task
+### 4. Run Your First Tactical Task
 Submit a realistic task and wait for the bridge to report results.
 ```bash
 # 1. Start a new orchestration run (System of Record)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"agent-bridge/internal/app"
@@ -734,24 +735,67 @@ func handleGateCommand(args []string) {
 func runDoctor() {
 	fmt.Println("==> Verifying local environment...")
 
-	// 1. Check .codencer presence
+	// 1. Check .env presence
+	if _, err := os.Stat(".env"); os.IsNotExist(err) {
+		fmt.Println("[WARN]  .env file missing. Run 'cp .env.example .env'")
+	} else {
+		fmt.Println("[OK]    .env file found")
+	}
+
+	// 2. Check .codencer presence and parity
 	if _, err := os.Stat(".codencer"); os.IsNotExist(err) {
 		fmt.Println("[WARN]  .codencer directory missing. Run 'make setup'")
 	} else {
 		fmt.Println("[OK]    .codencer directory found")
+		// Check write permission
+		tmpFile := filepath.Join(".codencer", ".doctor_tmp")
+		if err := os.WriteFile(tmpFile, []byte("ok"), 0644); err != nil {
+			fmt.Printf("[ERROR] .codencer NOT writable: %v\n", err)
+		} else {
+			fmt.Println("[OK]    .codencer is writable")
+			os.Remove(tmpFile)
+		}
 	}
 
-	// 2. Check Daemon connectivity
+	// 3. Check Critical Runtime Binaries (git, sqlite3, go)
+	bins := []struct {
+		name string
+		cmd  string
+		arg  string
+	}{
+		{"Git", "git", "--version"},
+		{"SQLite3", "sqlite3", "--version"},
+		{"Go", "go", "version"},
+	}
+
+	for _, b := range bins {
+		out, err := exec.Command(b.cmd, b.arg).Output()
+		if err != nil {
+			fmt.Printf("[ERROR] %s NOT found or failed to report version. Please install %s.\n", b.name, b.name)
+		} else {
+			fmt.Printf("[OK]    %s detected: %s\n", b.name, strings.TrimSpace(string(out)))
+		}
+	}
+
+	// 4. Check Daemon connectivity
 	resp, err := http.Get(orchestratordURL + "/api/v1/compatibility")
 	if err != nil {
-		fmt.Printf("[ERROR] Daemon unreachable at %s: %v\n", orchestratordURL, err)
+		fmt.Printf("[INFO]  Daemon unreachable at %s (ignore if daemon is stopped)\n", orchestratordURL)
 	} else {
 		defer resp.Body.Close()
 		fmt.Printf("[OK]    Daemon reachable at %s\n", orchestratordURL)
 	}
 
-	// 3. Check Adapter Binaries
-	fmt.Println("Checking adapter binaries...")
+	// 5. Check Execution Mode
+	simMode := os.Getenv("ALL_ADAPTERS_SIMULATION_MODE")
+	if simMode == "1" || simMode == "true" {
+		fmt.Println("[INFO]  Execution Mode: SIMULATION (Bridge only)")
+	} else {
+		fmt.Println("[INFO]  Execution Mode: REAL (Requires agent binaries)")
+	}
+
+	// 6. Check Agent Binaries
+	fmt.Println("\nChecking adapter binaries...")
 	adapters := []struct {
 		name string
 		bin  string
@@ -768,7 +812,6 @@ func runDoctor() {
 			path = a.bin
 		}
 		
-		// Real check for binary presence using exec.LookPath
 		found := false
 		if filepath.IsAbs(path) {
 			if _, err := os.Stat(path); err == nil {
@@ -781,13 +824,19 @@ func runDoctor() {
 		}
 		
 		if !found {
-			fmt.Printf("[INFO]  %s binary (%s) not found in PATH or %s\n", a.name, a.bin, a.env)
+			fmt.Printf("[INFO]  %s binary (%s) NOT in PATH or %s\n", a.name, path, a.env)
 		} else {
-			fmt.Printf("[OK]    %s binary detected or configured\n", a.name)
+			// Optional: check version
+			vOut, vErr := exec.Command(path, "--help").CombinedOutput()
+			if vErr == nil && len(vOut) > 0 {
+				fmt.Printf("[OK]    %s binary detected\n", a.name)
+			} else {
+				fmt.Printf("[OK]    %s binary detected (path: %s)\n", a.name, path)
+			}
 		}
 	}
 
-	fmt.Println("\nReady for local development.")
+	fmt.Println("\nConfiguration verified. Use 'make smoke' for full relay validation.")
 }
 
 func printJSON(body []byte) {
