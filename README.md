@@ -1,9 +1,10 @@
-**Defensive, Local-First Relay for Tactical Coding Agents.**
+# Codencer: The Tactical Orchestration Bridge
 
 Codencer is a persistent orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by external agents. It acts as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). It is designed for **local-first, self-hosted developer toolchains.**
 
 > [!IMPORTANT]
-> **Project Status: MVP / Public Beta**. Codencer is technically functional for local dev use, but the API and protocols are subject to change. The primary, most-hardened execution path is via the **Codex** adapter.
+> **Project Status: Public Beta (v0.1.0-beta)**.
+> Codencer is technically functional for local dev use, with a hardened execution path via the **Codex** adapter. While the core engine is stable, the API and protocols are subject to refinement as we gather community feedback.
 
 ---
 
@@ -54,7 +55,8 @@ make start
 ```
 
 ### 3. Run Your First Tactical Task
-Submit a task and wait for the bridge to report results:
+Submit a task and wait for the bridge to report results. For the full auditing sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
+
 ```bash
 # 1. Start a new mission (System of Record)
 ./bin/orchestratorctl run start first-run my-project
@@ -62,23 +64,20 @@ Submit a task and wait for the bridge to report results:
 # 2. Submit a tactical task and wait for completion
 ./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait
 
-# 3. View the Authoritative Truth (Summary)
-# NOTE: The Step ID is a server-generated UUID Handle (e.g., 'step-f027-...') 
-# and is printed immediately after submission. Use this UUID for all 
-# follow-up 'step' commands.
-./bin/orchestratorctl step result <stepID>
-
-# 4. Drill down into evidence
-./bin/orchestratorctl step logs <stepID>
-./bin/orchestratorctl step artifacts <stepID>
-./bin/orchestratorctl step validations <stepID>
+# 3. View the Authoritative Truth (The Summary)
+# Note: Use the Step UUID Handle printed after submission
+./bin/orchestratorctl step result <UUID>
 ```
 
 ---
 
-## 🔍 Interpreting Outcomes
+## 🔍 The Audit Trail (Authoritative Evidence)
 
-The Bridge reports high-fidelity evidence for every attempt. Note that **the bridge is a relay**, not a decision-maker; once a terminal state is reached, control returns to the operator/planner to decide the next move.
+Codencer ensures that every tactical execution is backed by high-fidelity evidence. Follow the **Canonical Sequence** in `EXAMPLES.md` to audit your task:
+
+1.  **Authoritative Summary**: `step result <UUID>` (Start here).
+2.  **Raw Execution Trail**: `step logs <UUID>` (The agent's brain).
+3.  **Audit Evidence**: `step artifacts <UUID>` and `step validations <UUID>` (The proof).
 
 - **`completed`**: Goal met, all tests passed.
 - **`completed_with_warnings`**: Success, but with non-critical issues (lint/tests).

@@ -4,8 +4,6 @@
 > For the official **User Guide**, please refer to the [README.md](../../README.md).
 
 ## Current Reality
-The repository contains a functionally operational MVP implementation of the orchestration bridge. It successfully integrates a SQLite ledger, a robust state machine, a `DispatchStep` orchestrator loop, CLI endpoints, basic MCP routes, and a skeletal VS Code extension.
-
 - **Lifecycle Meaning Cleanup**: [RESOLVED] Explicitly defined Run (Session), Step (Planner Unit), and Attempt (Execution Try) in domain code and README. Verified that no bridge-side decision logic is implied.
 - **Terminology Inconsistency**: [RESOLVED] Renamed all outcome indicators to `State` (RunState, StepState, Result.State) for uniform operator experience.
 - **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and established the **Canonical Local Runbook** in `EXAMPLES.md`.
@@ -62,15 +60,14 @@ The repository contains a functionally operational MVP implementation of the orc
 - **`smoke`**: Exercises the basic relay loop in simulation mode.
 
 ### 🚨 Release Blockers (Must Fix)
-1. **`doctor` Versioning**: No version checks for critical binaries (`git`, `sqlite3`, `go`, `codex-agent`).
-2. **`doctor` Environment**: No check for `.env` presence.
-3. **Smoke Test Brittleness**: `scripts/smoke_test.sh` uses brittle grep/cut and antiquated manual `step wait` logic.
-4. **Port Conflict**: `SETUP.md` (8080) vs `smoke_test.sh` (8085) vs standard `.env` (8080).
+1. **`doctor` Versioning**: ✅ RESOLVED (Version checks for `git`, `sqlite3`, `go`, and `codex-agent` implemented).
+2. **`doctor` Environment**: ✅ RESOLVED (Checks for `.env` and directory structure implemented).
+3. **Smoke Test Brittleness**: ✅ RESOLVED (Modernized `smoke_test.sh` with JSON parsing and `submit --wait`).
+4. **Port Conflict**: ✅ RESOLVED (Standardized on 8080 in `.env` and `smoke_test.sh`).
 
-### 🛠 What should be fixed next
-1. **Harden `doctor`**: Implement version checks for all critical deps.
-2. **Standardize `smoke`**: Modernize `smoke_test.sh` to use `submit --wait` and robust JSON parsing (e.g. `jq` if available or better grep).
-3. **Setup Logic**: Improve `make setup` to safely handle `.env` initialization.
+### 🛠 Deployment/CI Hardening (Next Phase)
+1. **Setup Logic**: Improve `make setup` to safely handle `.env` initialization (Current: Manual `cp`).
+2. **Binary Distribution**: Move beyond `go build` to pre-compiled releases.
 
 ---
 - [x] Audit Trust & Readiness Alignment (Final Alignment Complete)

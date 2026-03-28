@@ -39,26 +39,34 @@ Submit a realistic task and wait for the bridge to report results.
 # follow-up 'step' commands.
 ```
 
-### 4. Inspect the Truth (The Audit Trail)
-Once the wait returns, use the Step ID to inspect the high-fidelity evidence captured by the bridge:
+### 5. Inspect the Truth (The Audit Trail)
+Once the wait returns, use the server-generated **UUID Handle** to inspect the high-fidelity evidence captured by the bridge:
 
 ```bash
-# A. View the human-readable result summary (Authoritative Truth)
-./bin/orchestratorctl step result <stepID>
+# 1. The Authoritative Summary (The Truth)
+./bin/orchestratorctl step result <UUID>
 
-# B. Tail the raw agent logs (What the agent saw/did)
-./bin/orchestratorctl step logs <stepID>
+# 2. The Raw Execution Trail (What the agent did)
+./bin/orchestratorctl step logs <UUID>
 
-# C. List harvested evidence (diffs, artifacts, hashes)
-./bin/orchestratorctl step artifacts <stepID>
+# 3. Evidence Drill-down (Artifacts and Logic)
+./bin/orchestratorctl step artifacts <UUID>
+./bin/orchestratorctl step validations <UUID>
+```
 
-# D. Verify specific validations (tests/linters)
-./bin/orchestratorctl step validations <stepID>
+---
 
-### 💡 Authoritative Truth Sources
-- **Immediate Feedback**: `submit --wait` provides the terminal JSON state.
-- **Human Summary**: `step result` is the best source for an "at-a-glance" status.
-- **Audit Truth**: `step artifacts` and `step validations` are the definitive source for evidence.
+## 💡 The Canonical Sequence
+
+For every tactical task, follow this explicit sequence to maintain a perfect audit trail:
+
+1.  **`submit --wait`**: Triggers the bridge relay. This command returns the **UUID Handle** (your permanent reference) and the final **State** of the execution.
+2.  **`step result <UUID>`**: Always your first audit step. This provides the authoritative human-readable summary of what the bridge captured.
+3.  **`step logs <UUID>`**: Use this to see the raw "brain" of the agent—exactly what it saw and typed.
+4.  **`step artifacts/validations <UUID>`**: Use these for deep evidence—listing changed files, diffs, and specific test successes or failures.
+
+> [!TIP]
+> **On Failure**: If the state is not `completed`, run `step result` first to see the error summary, then `step validations` to see which specific criteria failed.
 
 ---
 
@@ -89,7 +97,6 @@ Summary: Bridge Interface Error: Codex agent finished but one or more tests fail
   Validations: ./bin/orchestratorctl step validations step-e123-...
 ---------------------------
 ```
-```
 
 ---
 
@@ -107,7 +114,7 @@ Ensure `.env` has `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_BINARY=codex-agent
 # Submit, Wait, and Audit
 ./bin/orchestratorctl run start fixer-01
 ./bin/orchestratorctl submit fixer-01 examples/tasks/bug_fix.yaml --wait
-./bin/orchestratorctl step artifacts <stepID>
+./bin/orchestratorctl step artifacts <UUID>
 ```
 
 ---
@@ -118,13 +125,13 @@ The bridge reports what happened; you decide the next move.
 
 ### 1. Recovering from `failed_terminal`
 *Check validations first.*
-1. `step validations <id>`: See which specific test failed.
-2. `step logs <id>`: See the agent's internal error messages.
+1. `step validations <UUID>`: See which specific test failed.
+2. `step logs <UUID>`: See the agent's internal error messages.
 3. **Action**: Correct your `task.yaml` instructions or fix the project environment, then re-submit to the same run.
 
 ### 2. Responding to `timeout`
 *Check logs first.*
-1. `step logs <id>`: Is the agent hanging or just slow?
+1. `step logs <UUID>`: Is the agent hanging or just slow?
 2. **Action**: If slow, increase `timeout_seconds` in the TaskSpec YAML and re-submit.
 
 ### 3. Reconciling `needs_manual_attention`
