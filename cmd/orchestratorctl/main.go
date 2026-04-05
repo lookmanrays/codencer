@@ -15,13 +15,16 @@ import (
 	"agent-bridge/internal/app"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/validation"
+	"github.com/joho/godotenv"
 )
 
 var (
-	orchestratordURL = "http://127.0.0.1:8080"
+	orchestratordURL = "http://127.0.0.1:8085"
 )
 
 func main() {
+	_ = godotenv.Load(".env")
+	
 	if env := os.Getenv("ORCHESTRATORD_URL"); env != "" {
 		orchestratordURL = env
 	} else if env := os.Getenv("PORT"); env != "" {
@@ -762,26 +765,35 @@ func runDoctor() {
 		}
 	}
 
-	// 3. Check Critical Runtime Binaries (git, sqlite3, go)
+	// 3. Check Critical Runtime Binaries (git, go, c-compiler)
 	bins := []struct {
 		name string
 		cmd  string
 		arg  string
+		req  bool
 	}{
-		{"Git", "git", "--version"},
-		{"SQLite3", "sqlite3", "--version"},
-		{"Go", "go", "version"},
+		{"Git", "git", "--version", true},
+		{"Go", "go", "version", true},
+		{"C Compiler (for SQLite CGO)", "cc", "--version", true},
 	}
 
 	for _, b := range bins {
 		out, err := exec.Command(b.cmd, b.arg).Output()
 		if err != nil {
-			fmt.Printf("[ERROR] %s NOT found or failed to report version. Please install %s.\n", b.name, b.name)
+			if b.req {
+				fmt.Printf("[ERROR] %s NOT found or failed to report version. Please install %s.\n", b.name, b.name)
+			} else {
+				fmt.Printf("[INFO]  %s NOT found (Optional, unless building CGO bridge).\n", b.name)
+			}
 		} else {
-			fmt.Printf("[OK]    %s detected: %s\n", b.name, strings.TrimSpace(string(out)))
+			outStr := strings.TrimSpace(string(out))
+			if len(outStr) > 40 {
+				outStr = outStr[:37] + "..."
+			}
+			fmt.Printf("[OK]    %s detected: %s\n", b.name, outStr)
 		}
 	}
-
+	
 	// 4. Check Daemon connectivity
 	resp, err := http.Get(orchestratordURL + "/api/v1/compatibility")
 	if err != nil {

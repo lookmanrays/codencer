@@ -19,7 +19,7 @@ Always start here to verify your environment:
 - **Cause**: The `orchestratord` process is not running or is on a different port.
 - **Fix**: 
   - Ensure the daemon is started: `./bin/orchestratord`.
-  - Check the port in your CLI command or `.env` file (default is `8080`).
+  - Check the port in your CLI command or `.env` file (default is `8085`).
 
 ### 2.2 "Agent Binary Not Found"
 **Symptoms**: Submitting a task fails immediately; `doctor` shows `MISSING` for an adapter.

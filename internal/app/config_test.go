@@ -15,8 +15,8 @@ func TestLoadConfigDefault(t *testing.T) {
 	if cfg.DBPath == "" {
 		t.Errorf("expected default DBPath, got empty string")
 	}
-	if cfg.Port != 8080 {
-		t.Errorf("expected default port 8080, got %d", cfg.Port)
+	if cfg.Port != 8085 {
+		t.Errorf("expected default port 8085, got %d", cfg.Port)
 	}
 }
 

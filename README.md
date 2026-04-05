@@ -103,7 +103,7 @@ For a deeper dive into agent installation and advanced configuration, see the **
 Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 
 1. **Workspace Safety**: Agents run in isolated Git Worktrees. Diffs are captured and validated before any commit.
-2. **Audit-Proof Ledger**: Every attempt is recorded in a local SQLite database with SHA-256 hashes of all artifacts.
+2. **Audit-Proof Ledger**: Every attempt is recorded in a local SQLite database (embedded via CGO) with SHA-256 hashes of all artifacts.
 3. **Idempotency**: Interrupted tasks can be resumed or securely analyzed post-crash.
 4. **Validation-First**: Tasks only "complete" when your defined validation commands (tests, linters) pass.
 

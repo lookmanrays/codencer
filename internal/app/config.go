@@ -25,7 +25,7 @@ func DefaultConfig() *Config {
 		ArtifactRoot:  ".codencer/artifacts",
 		WorkspaceRoot: ".codencer/workspace",
 		Host:          "127.0.0.1",
-		Port:          8080,
+		Port:          8085,
 	} // MVP values
 }
 
@@ -52,6 +52,9 @@ func LoadConfig(path string) (*Config, error) {
 		if p, err := strconv.Atoi(env); err == nil {
 			config.Port = p
 		}
+	}
+	if env := os.Getenv("HOST"); env != "" {
+		config.Host = env
 	}
 	if env := os.Getenv("DB_PATH"); env != "" {
 		config.DBPath = env

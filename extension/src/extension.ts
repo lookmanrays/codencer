@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as http from 'http';
 
 export function activate(context: vscode.ExtensionContext) {
-    const client = new CodencerClient('127.0.0.1', 8080);
+    const client = new CodencerClient('127.0.0.1', 8085);
     const provider = new CodencerProvider(client);
     
     vscode.window.registerTreeDataProvider('codencerRuns', provider);

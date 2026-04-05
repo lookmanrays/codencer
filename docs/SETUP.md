@@ -8,7 +8,7 @@ This guide describes the technical prerequisites and environmental configuration
 
 ### 1. Core Runtime (Required)
 - **Go**: Version 1.21 or higher.
-- **SQLite3**: For the local persistent ledger.
+- **C Compiler**: `gcc`, `clang`, or `cc` (Required to build the CGO embedded SQLite driver).
 - **Git**: Required for workspace-isolated runs (Git Worktrees).
 
 ### ⚡️ The 30-Second Mission (Simulation)
@@ -58,7 +58,7 @@ Codencer honors environment variable overrides and a local `.env` file.
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `PORT` | Listening port for the daemon API. | `8080` |
+| `PORT` | Listening port for the daemon API. | `8085` |
 | `DB_PATH` | Path to the SQLite ledger. | `.codencer/codencer.db` |
 | `ARTIFACT_ROOT`| Storage vault for diffs and logs. | `.codencer/artifacts` |
 | `CODEX_BINARY` | Path to the Codex agent binary. | `codex-agent` |
@@ -105,6 +105,29 @@ The smoke test validates:
 2. Mission run initialization.
 3. Task submission and synchronous completion (`submit --wait`).
 4. Authoritative result reporting (`step result`).
+
+---
+
+## 🏗 Single vs. Multi-Instance Workflows
+By default, Codencer is designed as a single-instance bridge for a single repository checkout.
+- **1 Repo Checkout = 1 Daemon Instance**
+
+If you need to work with multiple repositories simultaneously on the same machine, you must run multiple daemon instances on different ports:
+
+```bash
+# Repo A
+cd repo_a
+PORT=8085 make start
+
+# Repo B
+cd repo_b
+PORT=8086 make start
+```
+
+## 💻 Environment Workflows (macOS / WSL)
+Codencer provides an identical local-first technical surface on macOS and Windows Subsystem for Linux (WSL).
+- **WSL Users**: Run the daemon inside your WSL instance. Windows-side IDEs (like VS Code) can connect to the daemon over the local loopback `http://localhost:8085` transparently.
+- **Embedded DB Architecture**: The bridge embeds SQLite via Go's CGO. This means no external DB service (like Postgres or SQLite daemon) needs to be installed, though a standard local C compiler (`cc`/`gcc`) is briefly hit during the `go build` step.
 
 ## 📖 Further Reading
 - [Canonical Local Runbook](EXAMPLES.md)
