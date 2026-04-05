@@ -11,11 +11,15 @@ import (
 func (s *Server) ToolStartRun(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 	id, ok1 := args["id"].(string)
 	projectID, ok2 := args["project_id"].(string)
+	conversationID, _ := args["conversation_id"].(string)
+	plannerID, _ := args["planner_id"].(string)
+	executorID, _ := args["executor_id"].(string)
+	
 	if !ok1 || !ok2 {
 		return nil, fmt.Errorf("missing or invalid arguments: id, project_id")
 	}
 
-	run, err := s.runSvc.StartRun(ctx, id, projectID)
+	run, err := s.runSvc.StartRun(ctx, id, projectID, conversationID, plannerID, executorID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +61,39 @@ func (s *Server) ToolGetStatus(ctx context.Context, args map[string]interface{})
 			},
 		},
 		"run_id": run.ID,
+		"project_id": run.ProjectID,
+		"conversation_id": run.ConversationID,
+		"planner_id": run.PlannerID,
+		"executor_id": run.ExecutorID,
 		"state":  run.State,
 		"recovery_notes": run.RecoveryNotes,
+	}, nil
+}
+
+// ToolListRuns implements `orchestrator.list_runs` tool.
+func (s *Server) ToolListRuns(ctx context.Context, args map[string]interface{}) (interface{}, error) {
+	filters := make(map[string]string)
+	if v, ok := args["project_id"].(string); ok {
+		filters["project_id"] = v
+	}
+	if v, ok := args["state"].(string); ok {
+		filters["state"] = v
+	}
+
+	runs, err := s.runSvc.List(ctx, filters)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := fmt.Sprintf("Found %d runs", len(runs))
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": summary,
+			},
+		},
+		"runs": runs,
 	}, nil
 }
 

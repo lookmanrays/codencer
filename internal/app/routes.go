@@ -12,12 +12,14 @@ import (
 	"agent-bridge/internal/service"
 	"time"
 	"fmt"
+	"path/filepath"
 )
 
 // APIHandler holds dependencies for exposing REST routes.
 type APIHandler struct {
 	RunSvc  *service.RunService
 	GateSvc *service.GateService
+	AppCtx  *AppContext
 }
 
 // RegisterRoutes attaches the API to the given mux.
@@ -29,6 +31,7 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/compatibility", h.handleCompatibility)
 	mux.HandleFunc("/api/v1/benchmarks", h.handleBenchmarks)
 	mux.HandleFunc("/api/v1/routing", h.handleRouting)
+	mux.HandleFunc("/api/v1/instance", h.handleInstance)
 	
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
@@ -36,7 +39,18 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		runs, err := h.RunSvc.List(r.Context())
+		filters := make(map[string]string)
+		if p := r.URL.Query().Get("project_id"); p != "" {
+			filters["project_id"] = p
+		}
+		if c := r.URL.Query().Get("conversation_id"); c != "" {
+			filters["conversation_id"] = c
+		}
+		if s := r.URL.Query().Get("state"); s != "" {
+			filters["state"] = s
+		}
+
+		runs, err := h.RunSvc.List(r.Context(), filters)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -52,8 +66,11 @@ func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID        string `json:"id"`
-		ProjectID string `json:"project_id"`
+		ID             string `json:"id"`
+		ProjectID      string `json:"project_id"`
+		ConversationID string `json:"conversation_id"`
+		PlannerID      string `json:"planner_id"`
+		ExecutorID     string `json:"executor_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -67,7 +84,7 @@ func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 		req.ProjectID = "default-project"
 	}
 
-	run, err := h.RunSvc.StartRun(r.Context(), req.ID, req.ProjectID)
+	run, err := h.RunSvc.StartRun(r.Context(), req.ID, req.ProjectID, req.ConversationID, req.PlannerID, req.ExecutorID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -371,4 +388,32 @@ func (h *APIHandler) handleRouting(w http.ResponseWriter, r *http.Request) {
 	config := h.RunSvc.GetRoutingConfig(r.Context())
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(config)
+}
+func (h *APIHandler) handleInstance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	simMode := os.Getenv("ALL_ADAPTERS_SIMULATION_MODE")
+	execMode := "real"
+	if simMode == "1" || simMode == "true" {
+		execMode = "simulation"
+	}
+
+	info := domain.InstanceInfo{
+		Version:       Version,
+		RepoRoot:      h.AppCtx.RepoRoot,
+		StateDir:      filepath.Join(h.AppCtx.RepoRoot, ".codencer"),
+		WorkspaceRoot: h.AppCtx.Config.WorkspaceRoot,
+		Host:          h.AppCtx.Config.Host,
+		Port:          h.AppCtx.Config.Port,
+		BaseURL:       fmt.Sprintf("http://%s:%d", h.AppCtx.Config.Host, h.AppCtx.Config.Port),
+		ExecutionMode: execMode,
+		PID:           os.Getpid(),
+		StartedAt:     h.AppCtx.StartedAt,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(info)
 }

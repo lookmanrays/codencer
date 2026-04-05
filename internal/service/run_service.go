@@ -59,14 +59,17 @@ func NewRunService(
 
 // StartRun initiates an execution session (Run) as requested by the planner.
 // It creates the necessary sequence containers (Phases) to house upcoming steps.
-func (s *RunService) StartRun(ctx context.Context, id, projectID string) (*domain.Run, error) {
+func (s *RunService) StartRun(ctx context.Context, id, projectID, conversationID, plannerID, executorID string) (*domain.Run, error) {
 	now := time.Now().UTC()
 	run := &domain.Run{
-		ID:        id,
-		ProjectID: projectID,
-		State:     domain.RunStateCreated,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:             id,
+		ProjectID:      projectID,
+		ConversationID: conversationID,
+		PlannerID:      plannerID,
+		ExecutorID:     executorID,
+		State:          domain.RunStateCreated,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	if err := s.runsRepo.Create(ctx, run); err != nil {
@@ -107,9 +110,9 @@ func (s *RunService) GetStep(ctx context.Context, id string) (*domain.Step, erro
 	return s.stepsRepo.Get(ctx, id)
 }
 
-// List returns all runs.
-func (s *RunService) List(ctx context.Context) ([]*domain.Run, error) {
-	return s.runsRepo.List(ctx)
+// List returns runs based on optional filters.
+func (s *RunService) List(ctx context.Context, filters map[string]string) ([]*domain.Run, error) {
+	return s.runsRepo.List(ctx, filters)
 }
 
 // GetStepsByRun returns all steps for a run.
@@ -412,7 +415,8 @@ func (s *RunService) shouldRetry(res *domain.ResultSpec, policy *domain.Policy, 
 
 
 func (s *RunService) failStep(ctx context.Context, step *domain.Step, reason string) error {
-	step.State = domain.StepStateFailedTerminal
+	step.State = domain.StepStateFailedBridge
+	step.StatusReason = reason
 	step.UpdatedAt = time.Now().UTC()
 	_ = s.stepsRepo.UpdateState(ctx, step)
 	return fmt.Errorf(reason)
@@ -447,10 +451,12 @@ func (s *RunService) executeAttempt(
 	
 	if err := workspace.CreateWorktree(ctx, baseRepo, workspaceRoot, branchName); err != nil {
 		slog.Error("Failed to create worktree", "runID", runID, "error", err)
+		reason := fmt.Sprintf("Workspace creation failed: %v", err)
 		attempt.Result = &domain.ResultSpec{
-				State:   domain.StepStateFailedTerminal,
-				Summary: fmt.Sprintf("Adapter dispatch failed: %v", err),
+				State:   domain.StepStateFailedBridge,
+				Summary: reason,
 		}
+		step.StatusReason = reason // Propagate to step state
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -478,7 +484,9 @@ func (s *RunService) executeAttempt(
 	// 4. Collect & Finalize
 	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, s.artifactRoot)
 	if err != nil {
-		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedTerminal, Summary: "Failed to collect artifacts: " + err.Error()}
+		reason := "Failed to collect artifacts: " + err.Error()
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
+		step.StatusReason = reason
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -490,9 +498,14 @@ func (s *RunService) executeAttempt(
 
 	res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts)
 	if err != nil {
-		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedTerminal, Summary: "Normalization failed: " + err.Error()}
+		reason := "Normalization failed: " + err.Error()
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
+		step.StatusReason = reason
 	} else {
 		attempt.Result = res
+		if res.State == domain.StepStateFailedTerminal || res.State == domain.StepStateFailedAdapter {
+			step.StatusReason = res.Summary
+		}
 	}
 
 	// Enrich with step-level requested context
@@ -546,10 +559,15 @@ func (s *RunService) finalizeStep(
 			}
 		} else {
 			slog.Error("Failed to create gate", "error", gerr)
-			step.State = domain.StepStateFailedTerminal
+			step.State = domain.StepStateFailedBridge
+			step.StatusReason = "Infrastructure error: failed to create gate"
 		}
-	} else if eval.ShouldFail || (finalResult != nil && (finalResult.State != domain.StepStateCompleted && finalResult.State != domain.StepStateCompletedWithWarnings)) {
-		step.State = domain.StepStateFailedTerminal
+	} else if eval.ShouldFail {
+		step.State = domain.StepStateFailedValidation
+		step.StatusReason = "Policy enforced failure: " + strings.Join(eval.FailReasons, ", ")
+	} else if finalResult != nil && (finalResult.State != domain.StepStateCompleted && finalResult.State != domain.StepStateCompletedWithWarnings) {
+		step.State = domain.StepStateFailedAdapter
+		step.StatusReason = "Adapter reported unsuccessful state: " + finalResult.Summary
 	} else {
 		step.State = domain.StepStateCompleted
 	}

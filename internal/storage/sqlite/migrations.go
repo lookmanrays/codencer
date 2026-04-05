@@ -11,6 +11,9 @@ func RunMigrations(db *sql.DB) error {
 CREATE TABLE IF NOT EXISTS runs (
 	id TEXT PRIMARY KEY,
 	project_id TEXT NOT NULL,
+	conversation_id TEXT,
+	planner_id TEXT,
+	executor_id TEXT,
 	state TEXT NOT NULL,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
@@ -36,6 +39,7 @@ CREATE TABLE IF NOT EXISTS steps (
 	policy TEXT NOT NULL,
 	adapter TEXT NOT NULL,
 	timeout_seconds INTEGER NOT NULL DEFAULT 0,
+	status_reason TEXT,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (phase_id) REFERENCES phases(id) ON DELETE CASCADE
@@ -153,12 +157,20 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE attempts ADD COLUMN version TEXT",
 		"ALTER TABLE attempts ADD COLUMN artifacts TEXT",
 		"ALTER TABLE steps ADD COLUMN timeout_seconds INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE runs ADD COLUMN conversation_id TEXT",
+		"ALTER TABLE runs ADD COLUMN planner_id TEXT",
+		"ALTER TABLE runs ADD COLUMN executor_id TEXT",
+		"ALTER TABLE steps ADD COLUMN status_reason TEXT",
 	}
 
 	for _, m := range extraMigrations {
-		// Ignore errors if columns already exist
+		// Ignore errors if columns/indexes already exist
 		_, _ = db.Exec(m)
 	}
+
+	// Add indexes for Batch 2 metadata
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_runs_project_id ON runs(project_id)")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation_id ON runs(conversation_id)")
 
 	return nil
 }

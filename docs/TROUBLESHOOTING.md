@@ -42,10 +42,24 @@ Always start here to verify your environment:
 - **Recovery Decision**: Increase `timeout_seconds` in your TaskSpec YAML OR simplify the instructions. Resubmit to the same mission.
 
 ### 3.2 `failed_terminal`
-- **Bridge State**: Action finished but goal was not met (e.g., test/lint failure).
-- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` for the failure summary.
-- **Evidence Drill-down**: Run `./bin/orchestratorctl step validations <id>` for the list of unmet criteria.
+- **Bridge State**: Action finished but goal was not met (e.g., test/lint failure). This is a legacy fallback state.
+- **Audit Truth**: Run `./bin/orchestratorctl step state <id>` for the `Reason`.
 - **Recovery Decision**: Correct the `task.yaml` instructions OR fix the local project environment. Resubmit to the same mission.
+
+### 3.3 `failed_validation`
+- **Bridge State**: Agent finished successfully (exited 0), but the post-execution validations (tests, linting) failed.
+- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` to see which validations failed.
+- **Recovery Decision**: Provide more specific instructions to the agent or fix the underlying code issue.
+
+### 3.4 `failed_adapter`
+- **Bridge State**: The agent binary or process itself failed (e.g. crashed, exited non-zero, or had an internal error).
+- **Audit Truth**: Run `./bin/orchestratorctl step logs <id>` to see the agent's stderr.
+- **Recovery Decision**: Check your agent configuration, API keys, or binary permissions.
+
+### 3.5 `failed_bridge`
+- **Bridge State**: Codencer itself encountered a blocking error (e.g. git worktree conflict, disk full, or lock issue).
+- **Audit Truth**: Check the `Reason` in `./bin/orchestratorctl step state <id>`.
+- **Recovery Decision**: Resolve the local environment conflict and resubmit.
 
 ### 3.3 `needs_manual_attention`
 - **Bridge State**: System ambiguity, agent crash, or ambient environment failure. 
@@ -60,6 +74,18 @@ Always start here to verify your environment:
 ### 3.5 `cancelled`
 - **Bridge State**: Mission was explicitly aborted by the operator or CLI signal.
 - **Recovery Decision**: Start a new mission or step handle if the original goal is still required.
+
+---
+
+### 4.1 Multi-Instance Port Conflict
+**Symptoms**: `make start` or `make start-sim` fails with a "failed to start" error.
+- **Cause**: Another Codencer instance (or another service) is already using the configured `PORT` (default `8085`).
+- **Fix**: 
+  - Use `orchestratorctl instance` to see which repository is currently served on the default port.
+  - To run another instance, specify a different port in your `.env` or as an environment variable: `PORT=8086 make start`.
+  - Ensure your CLI commands also use the correct port: `PORT=8086 orchestratorctl instance`.
+
+---
 
 ---
 

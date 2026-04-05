@@ -35,7 +35,7 @@ start: build setup
 	echo "Waiting for health check..."; \
 	for i in $$(seq 1 10); do \
 		if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
-			echo "Daemon successfully started (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"; \
+			echo "Daemon successfully started on http://$$HOST:$$PORT (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"; \
 			exit 0; \
 		fi; \
 		sleep 1; \
@@ -72,7 +72,7 @@ start-sim: build setup
 	echo "Waiting for health check..."; \
 	for i in $$(seq 1 10); do \
 		if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
-			echo "Simulated daemon successfully started (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"; \
+			echo "Simulated daemon successfully started on http://$$HOST:$$PORT (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"; \
 			exit 0; \
 		fi; \
 		sleep 1; \

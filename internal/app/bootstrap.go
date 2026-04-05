@@ -23,14 +23,19 @@ import (
 
 // AppContext holds the core dependencies for the daemon.
 type AppContext struct {
-	Config *Config
-	Logger *slog.Logger
-	DB     *sql.DB
-	Server *http.Server
+	Config    *Config
+	Logger    *slog.Logger
+	DB        *sql.DB
+	Server    *http.Server
+	StartedAt time.Time
+	RepoRoot  string
 }
 
 // Bootstrap initializes configuration, logger, storage, artifact paths, and the HTTP server.
 func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
+	startedAt := time.Now()
+	repoRoot, _ := os.Getwd()
+	repoRoot, _ = filepath.Abs(repoRoot)
 	// 1. Load configuration
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
@@ -121,13 +126,6 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {
 		logger.Warn("Failed to sweep stale runs during bootstrap", "error", err)
 	}
-
-	apiHandler := &APIHandler{
-		RunSvc:  runSvc,
-		GateSvc: gateSvc,
-	}
-	apiHandler.RegisterRoutes(mux)
-
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	server := &http.Server{
 		Addr:         addr,
@@ -136,14 +134,27 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	app := &AppContext{
-		Config: cfg,
-		Logger: logger,
-		DB:     db,
-		Server: server,
+	appCtx := &AppContext{
+		Config:    cfg,
+		Logger:    logger,
+		DB:        db,
+		Server:    server,
+		StartedAt: startedAt,
+		RepoRoot:  repoRoot,
 	}
 
-	return app, nil
+	apiHandler := &APIHandler{
+		RunSvc:  runSvc,
+		GateSvc: gateSvc,
+		AppCtx:  appCtx,
+	}
+	apiHandler.RegisterRoutes(mux)
+
+	appCtx.Logger.Info("Codencer instance ready", 
+		"repo_root", repoRoot, 
+		"base_url", fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port))
+
+	return appCtx, nil
 }
 
 // StartHTTP starts the background web server and blocks until an error or context cancellation occurs.

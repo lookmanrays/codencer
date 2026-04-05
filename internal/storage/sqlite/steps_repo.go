@@ -21,8 +21,8 @@ func NewStepsRepo(db *sql.DB) *StepsRepo {
 // Create inserts a new step.
 func (r *StepsRepo) Create(ctx context.Context, step *domain.Step) error {
 	const q = `
-		INSERT INTO steps (id, phase_id, title, goal, state, policy, adapter, timeout_seconds, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO steps (id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, q,
 		step.ID,
@@ -33,6 +33,7 @@ func (r *StepsRepo) Create(ctx context.Context, step *domain.Step) error {
 		step.Policy,
 		step.Adapter,
 		step.TimeoutSeconds,
+		step.StatusReason,
 		step.CreatedAt,
 		step.UpdatedAt,
 	)
@@ -45,7 +46,7 @@ func (r *StepsRepo) Create(ctx context.Context, step *domain.Step) error {
 // Get retrieves a step by ID.
 func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 	const q = `
-		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, created_at, updated_at
+		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, created_at, updated_at
 		FROM steps WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
@@ -61,6 +62,7 @@ func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 		&step.Policy,
 		&step.Adapter,
 		&step.TimeoutSeconds,
+		&step.StatusReason,
 		&step.CreatedAt,
 		&step.UpdatedAt,
 	)
@@ -78,9 +80,9 @@ func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 // UpdateState updates the state of a step.
 func (r *StepsRepo) UpdateState(ctx context.Context, step *domain.Step) error {
 	const q = `
-		UPDATE steps SET state = ?, updated_at = ? WHERE id = ?
+		UPDATE steps SET state = ?, status_reason = ?, updated_at = ? WHERE id = ?
 	`
-	_, err := r.db.ExecContext(ctx, q, string(step.State), step.UpdatedAt, step.ID)
+	_, err := r.db.ExecContext(ctx, q, string(step.State), step.StatusReason, step.UpdatedAt, step.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update step state: %w", err)
 	}
@@ -90,7 +92,7 @@ func (r *StepsRepo) UpdateState(ctx context.Context, step *domain.Step) error {
 // ListByPhase returns all steps for a phase.
 func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.Step, error) {
 	const q = `
-		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, created_at, updated_at
+		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, created_at, updated_at
 		FROM steps WHERE phase_id = ? ORDER BY created_at ASC
 	`
 	rows, err := r.db.QueryContext(ctx, q, phaseID)
@@ -106,7 +108,7 @@ func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.
 		if err := rows.Scan(
 			&step.ID, &step.PhaseID, &step.Title, &step.Goal,
 			&stateStr, &step.Policy, &step.Adapter, &step.TimeoutSeconds,
-			&step.CreatedAt, &step.UpdatedAt,
+			&step.StatusReason, &step.CreatedAt, &step.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -122,7 +124,7 @@ func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.
 // ListByRun returns all steps for a run, joining on phases to find them efficiently.
 func (r *StepsRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Step, error) {
 	const q = `
-		SELECT s.id, s.phase_id, s.title, s.goal, s.state, s.policy, s.adapter, s.timeout_seconds, s.created_at, s.updated_at
+		SELECT s.id, s.phase_id, s.title, s.goal, s.state, s.policy, s.adapter, s.timeout_seconds, s.status_reason, s.created_at, s.updated_at
 		FROM steps s
 		JOIN phases p ON s.phase_id = p.id
 		WHERE p.run_id = ? ORDER BY s.created_at ASC
@@ -140,7 +142,7 @@ func (r *StepsRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Step
 		if err := rows.Scan(
 			&step.ID, &step.PhaseID, &step.Title, &step.Goal,
 			&stateStr, &step.Policy, &step.Adapter, &step.TimeoutSeconds,
-			&step.CreatedAt, &step.UpdatedAt,
+			&step.StatusReason, &step.CreatedAt, &step.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

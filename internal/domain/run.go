@@ -20,6 +20,9 @@ const (
 type Run struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"project_id"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	PlannerID      string `json:"planner_id,omitempty"`
+	ExecutorID     string `json:"executor_id,omitempty"`
 	State     RunState  `json:"state"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

@@ -131,12 +131,25 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 | **Orchestration Core** | ✅ **Ready (Beta)** | Persistent SQLite ledger, state machine, and Git Worktrees. |
 | **CLI & MCP Layer** | ✅ **Ready (Beta)** | Structured JSON outputs, log tailing, and health checks. |
 | **Codex Adapter** | ✅ **Ready (Beta)** | High-fidelity relay for the `codex-agent` binary. |
+| **Instance Identity** | ✅ **Ready (Beta)** | One-repo-one-daemon model with explicit `instance` inspection. |
+| **Run Metadata**      | ✅ **Ready (Beta)** | Label runs by `project`, `conversation`, `planner`, and `executor`. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
 | **Simulation Mode** | ✅ **Ready (Beta)** | Robust stubs for orchestrator validation without LLM use. |
 | **Diagnostics & Health**| ✅ **Ready (Beta)** | CLI-based `doctor` and `smoke` verification tools. |
 | **IDE Chat Bridge** | 🧪 **Prototype** | Experimental proxy-mediated file access via VS Code. |
-| **Adaptive Routing** | 📅 **Blueprint** | Heuristic fallback is implemented; dynamic optimization is a blueprint. |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
+
+### 🔍 Terminal Step States
+Codencer distinguishes between different failure modes to help you recover faster:
+
+| State | Meaning | Typical Recovery |
+| :--- | :--- | :--- |
+| `completed` | Success: All goals and validations met. | Next step. |
+| `failed_validation` | Validations failed: Agent finished but tests/lint failed. | Fix code/prompt. |
+| `failed_adapter` | Agent crashed: The binary or process failed. | Check config/keys. |
+| `failed_bridge` | Bridge error: Orchestrator infrastructure failure. | Check disk/git/locks. |
+| `timeout` | Time limit exceeded: Process was killed. | Increase timeout. |
+| `cancelled` | Explicit stop: Operator aborted the run. | Resubmit if needed. |
 
 ## 🧪 Simulation vs. Real Execution
 
@@ -164,5 +177,12 @@ Review the following guides to get started with Codencer.
 ---
 
 ## ⚖ License
+## 🏗 One-Repo-One-Instance Model
+Codencer is designed around a strictly local, repo-bound execution model:
+- **1 Git Clone = 1 Daemon Instance**: Each repository checkout manages its own ledger and workspaces.
+- **Multi-Instance Support**: To run multiple instances on the same machine, simply use different ports (e.g., `PORT=8086 make start`).
+- **Identity Verification**: Use `./bin/orchestratorctl instance` to verify which repository and port a daemon is serving.
+
+For more details, see **[Setup & Multi-Instance Workflows](docs/SETUP.md)**.
 
 Codencer is released under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.

@@ -138,6 +138,39 @@ The bridge reports what happened; you decide the next move.
 *Check daemon logs.*
 1. View `.codencer/daemon.log` for system-level crashes or adapter errors.
 2. **Action**: Restart the daemon or check binary permissions.
+---
+
+## 📂 Parallel Project Work (Metadata & Filtering)
+Codencer allows you to tag runs with metadata (`project`, `conversation`, `planner`, `executor`) to distinguish parallel work inside a single repository instance.
+
+### 1. Start Parallel Runs
+```bash
+# Task for Project A (UI refactor)
+./bin/orchestratorctl run start run-ui --project ui-cleanup --conversation chat-99 --planner user-alpha
+
+# Task for Project B (API fix)
+./bin/orchestratorctl run start run-api --project backend-fixes --conversation chat-101 --planner user-beta
+```
+
+### 2. Filter and Inspect
+```bash
+# List only runs for Project A
+./bin/orchestratorctl run list --project ui-cleanup
+
+# List only runs from a specific conversation
+./bin/orchestratorctl run list --conversation chat-101
+
+# Inspect full metadata for a run
+./bin/orchestratorctl run state run-ui
+```
+
+### 3. Machine-Readable Audit
+For planners and automated scripts, use the `--json` flag:
+```bash
+./bin/orchestratorctl run state run-ui --json
+```
+
+The metadata is purely for your (and your planner's) organizational benefit; the bridge remains a neutral relay.
 
 ---
 
@@ -150,3 +183,29 @@ The bridge reports what happened; you decide the next move.
 - [Setup & Environment Guide](SETUP.md) — Prerequisites and custom configuration.
 - [Troubleshooting Reference](TROUBLESHOOTING.md) — Advanced error scenarios.
 - [Architecture Overview](02_architecture.md) — The "Bridge not Brain" relay model.
+
+---
+
+## 🏗 Multi-Instance Mission Control
+If you need to cross-pollinate work between two separate repositories, you run two distinct Codencer instances.
+
+### 1. Identify Instances
+```bash
+# Verify Instance A
+cd repo_a
+./bin/orchestratorctl instance
+# Output: Repo Root: /home/user/repo_a, Base URL: http://127.0.0.1:8085
+
+# Verify Instance B
+cd repo_b
+PORT=9000 ./bin/orchestratorctl instance
+# Output: Repo Root: /home/user/repo_b, Base URL: http://127.0.0.1:9000
+```
+
+### 2. Cross-Repo Task Dispatch
+```bash
+# Submitting a task to repo_b while working in repo_a
+PORT=9000 ./bin/orchestratorctl submit repo_b_run task.yaml
+```
+
+The `orchestratorctl instance` command ensures you never confuse your tactical bridges during multi-mission runs.

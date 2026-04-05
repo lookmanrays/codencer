@@ -50,6 +50,15 @@ func TestStepTransitions(t *testing.T) {
 	if err := CheckStepTransition(domain.StepStateValidating, domain.StepStateNeedsManualAttention); err != nil {
 		t.Error(err)
 	}
+	if err := CheckStepTransition(domain.StepStateValidating, domain.StepStateFailedValidation); err != nil {
+		t.Error(err)
+	}
+	if err := CheckStepTransition(domain.StepStateRunning, domain.StepStateFailedAdapter); err != nil {
+		t.Error(err)
+	}
+	if err := CheckStepTransition(domain.StepStateDispatching, domain.StepStateFailedBridge); err != nil {
+		t.Error(err)
+	}
 
 	// Invalid transitions
 	if err := CheckStepTransition(domain.StepStatePending, domain.StepStateCompleted); err == nil {

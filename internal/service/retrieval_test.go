@@ -39,7 +39,7 @@ func TestRunService_Retrieval(t *testing.T) {
 	stepID := "test-step"
 
 	// 1. Setup minimal run/phase/step
-	_, _ = svc.StartRun(ctx, runID, "test-proj")
+	_, _ = svc.StartRun(ctx, runID, "test-proj", "", "", "")
 	step := &domain.Step{
 		ID:      stepID,
 		PhaseID: "phase-01-" + runID,

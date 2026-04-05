@@ -101,7 +101,7 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 	ctx := context.Background()
 
 	runId := "isolated-run-1"
-	_, err = runSvc.StartRun(ctx, runId, "isolated-project")
+	_, err = runSvc.StartRun(ctx, runId, "isolated-project", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}

@@ -92,6 +92,7 @@ The doctor checks:
 - **Binaries**: Presence and versions of `git`, `go`, `curl`, and `cc` (for embedded DB).
 - **Adapters**: Detects whether `codex-agent` or other adapters are reachable in your PATH (Informational/Optional).
 - **Mode**: Confirms whether you are running in **Simulation** or **Real** execution mode.
+- **Identity**: Use `./bin/orchestratorctl instance` to see exactly which repository and port the daemon is serving.
 
 If any check fails, the doctor will provide targeted instructions (e.g., "Run 'make setup'" or "Install git").
 
@@ -111,20 +112,29 @@ The smoke test validates:
 ---
 
 ## 🏗 Single vs. Multi-Instance Workflows
-By default, Codencer is designed as a single-instance bridge for a single repository checkout.
+Codencer is designed as a **strictly local, repo-bound bridge**.
 - **1 Repo Checkout = 1 Daemon Instance**
+- **1 .codencer folder = 1 Ledger + 1 Identity**
 
 If you need to work with multiple repositories simultaneously on the same machine, you must run multiple daemon instances on different ports:
 
 ```bash
 # Repo A
-cd repo_a
-PORT=8085 make start
+cd ~/projects/repo_a
+./bin/orchestratorctl instance  # Verify: http://127.0.0.1:8085
 
 # Repo B
-cd repo_b
-PORT=8086 make start
+cd ~/projects/repo_b
+PORT=8086 make start           # Starts new instance on 8086
+PORT=8086 ./bin/orchestratorctl instance  # Verify: http://127.0.0.1:8086
 ```
+
+### 🔍 Identifying Instances
+If you are unsure which instance is running on which port, run:
+```bash
+./bin/orchestratorctl instance
+```
+The output will include the absolute `repo_root` and `base_url`.
 
 ## 💻 Environment Workflows (macOS / WSL)
 Codencer provides an identical local-first technical surface on macOS and Windows Subsystem for Linux (WSL).

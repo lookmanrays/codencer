@@ -46,7 +46,7 @@ func TestAPI_Endpoints(t *testing.T) {
 
 	ctx := context.Background()
 	runID := "api-test-run"
-	_, _ = runSvc.StartRun(ctx, runID, "api-project")
+	_, _ = runSvc.StartRun(ctx, runID, "api-project", "", "", "")
 
 	t.Run("GET /api/v1/runs", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/runs", nil)

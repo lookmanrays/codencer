@@ -65,7 +65,7 @@ func TestE2EFlow(t *testing.T) {
 
 	// 2. Start Run
 	runId := "test-run-1"
-	_, err = runSvc.StartRun(ctx, runId, "test-project")
+	_, err = runSvc.StartRun(ctx, runId, "test-project", "", "", "")
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}

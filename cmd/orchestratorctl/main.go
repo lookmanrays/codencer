@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +57,8 @@ func main() {
 		handleGateCommand(os.Args[2:])
 	case "doctor":
 		runDoctor()
+	case "instance":
+		handleInstanceCommand(os.Args[2:])
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printUsage()
@@ -66,10 +69,10 @@ func main() {
 func printUsage() {
 	fmt.Println("Usage: orchestratorctl <command> [args]")
 	fmt.Println("\n1. Session & Mission Management:")
-	fmt.Println("  run start      [id] [project]  Initialize a new mission (System of Record)")
-	fmt.Println("  run list                      Show mission history")
-	fmt.Println("  run state      <runID>         Check mission lifecycle state")
-	fmt.Println("  run abort      <runID>         Halt an active mission")
+	fmt.Println("  run start      [id] [p] [--project x] [--conversation y]  Initialize a mission")
+	fmt.Println("  run list       [--project x] [--conversation y] [--json]  Show mission history")
+	fmt.Println("  run state      <runID> [--json]                         Check mission state")
+	fmt.Println("  run abort      <runID>                                  Halt an active mission")
 	
 	fmt.Println("\n2. Tactical Execution (The Bridge):")
 	fmt.Println("  submit         <runID> <file>  Execute TaskSpec (returns UUID Handle)")
@@ -87,12 +90,15 @@ func printUsage() {
 	fmt.Println("  doctor                        Verify local environment/binaries")
 	fmt.Println("  gate approve   <gateID>        Approve a paused policy gate")
 	fmt.Println("  gate reject    <gateID>        Reject a paused policy gate")
+	fmt.Println("  instance      [--json]         Show current daemon identity")
 	fmt.Println("  version                       Show version")
 }
 
 func handleRunCommand(args []string) {
 	if len(args) < 1 {
 		fmt.Println("Usage: orchestratorctl run <start|list|state|abort|wait> [args]")
+		fmt.Println("  start: orchestratorctl run start [id] [project] [--project p] [--conversation c] [--planner p] [--executor e]")
+		fmt.Println("  list:  orchestratorctl run list [--project p] [--conversation c] [--state s] [--json]")
 		os.Exit(1)
 	}
 
@@ -100,22 +106,27 @@ func handleRunCommand(args []string) {
 	switch cmd {
 	case "start":
 		id := ""
-		projectID := ""
-		if len(args) > 1 {
+		if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
 			id = args[1]
 		}
-		if len(args) > 2 {
-			projectID = args[2]
-		}
-		startRun(id, projectID)
+		
+		flags := parseRunStartFlags(args)
+		startRun(id, flags)
 	case "list":
-		listRuns()
+		filters := parseRunListFilters(args[1:])
+		listRuns(filters)
 	case "status", "state":
 		if len(args) < 2 {
-			fmt.Println("Usage: orchestratorctl run state <runID>")
+			fmt.Println("Usage: orchestratorctl run state <runID> [--json]")
 			os.Exit(1)
 		}
-		runState(args[1])
+		asJSON := false
+		for _, arg := range args[2:] {
+			if arg == "--json" {
+				asJSON = true
+			}
+		}
+		runState(args[1], asJSON)
 	case "abort":
 		if len(args) < 2 {
 			fmt.Println("Usage: orchestratorctl run abort <id>")
@@ -135,10 +146,13 @@ func handleRunCommand(args []string) {
 	}
 }
 
-func startRun(id, projectID string) {
+func startRun(id string, flags map[string]string) {
 	reqBody := map[string]string{
-		"id":         id,
-		"project_id": projectID,
+		"id":              id,
+		"project_id":      flags["project"],
+		"conversation_id": flags["conversation"],
+		"planner_id":      flags["planner"],
+		"executor_id":     flags["executor"],
 	}
 	data, _ := json.Marshal(reqBody)
 
@@ -159,7 +173,7 @@ func startRun(id, projectID string) {
 	printJSON(body)
 }
 
-func runState(id string) {
+func runState(id string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + id)
 	if err != nil {
 		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
@@ -167,15 +181,35 @@ func runState(id string) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
 		printJSON(body)
 		os.Exit(1)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	// Output raw JSON response for machine readability
-	printJSON(body)
+	if asJSON {
+		printJSON(body)
+		return
+	}
+
+	var run domain.Run
+	if err := json.Unmarshal(body, &run); err != nil {
+		printJSON(body)
+		return
+	}
+
+	fmt.Printf("--- Run State: %s ---\n", run.ID)
+	fmt.Printf("State:        %s\n", run.State)
+	fmt.Printf("Project:      %s\n", run.ProjectID)
+	fmt.Printf("Conversation: %s\n", run.ConversationID)
+	fmt.Printf("Planner:      %s\n", run.PlannerID)
+	fmt.Printf("Executor:     %s\n", run.ExecutorID)
+	fmt.Printf("Created:      %s\n", run.CreatedAt.Format(time.RFC3339))
+	fmt.Printf("Updated:      %s\n", run.UpdatedAt.Format(time.RFC3339))
+	if run.RecoveryNotes != "" {
+		fmt.Printf("Notes:        %s\n", run.RecoveryNotes)
+	}
+	fmt.Println("---------------------------")
 }
 
 func abortRun(id string) {
@@ -209,31 +243,113 @@ func abortRun(id string) {
 	printJSON(out)
 }
 
-func listRuns() {
-	resp, err := http.Get(orchestratordURL + "/api/v1/runs")
+func listRuns(filters map[string]string) {
+	u, _ := url.Parse(orchestratordURL + "/api/v1/runs")
+	if len(filters) > 0 {
+		q := u.Query()
+		if v, ok := filters["project"]; ok {
+			q.Set("project_id", v)
+		}
+		if v, ok := filters["conversation"]; ok {
+			q.Set("conversation_id", v)
+		}
+		if v, ok := filters["state"]; ok {
+			q.Set("state", v)
+		}
+		u.RawQuery = q.Encode()
+	}
+
+	resp, err := http.Get(u.String())
 	if err != nil {
 		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
 		printJSON(body)
 		os.Exit(1)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
 	var runs []domain.Run
 	if err := json.Unmarshal(body, &runs); err == nil {
-		fmt.Printf("%-24s %-20s %-15s %-20s\n", "RUN ID", "PROJECT", "STATE", "CREATED")
-		fmt.Println("--------------------------------------------------------------------------------")
+		fmt.Printf("%-24s %-15s %-15s %-15s %s\n", "ID", "STATE", "PROJECT", "CONVERSATION", "CREATED")
+		fmt.Println(strings.Repeat("-", 85))
 		for _, r := range runs {
-			fmt.Printf("%-24s %-20s %-15s %-20s\n", r.ID, r.ProjectID, r.State, r.CreatedAt.Format("2006-01-02 15:04"))
+			proj := r.ProjectID
+			if len(proj) > 15 {
+				proj = proj[:12] + "..."
+			}
+			conv := r.ConversationID
+			if len(conv) > 15 {
+				conv = conv[:12] + "..."
+			}
+			fmt.Printf("%-24s %-15s %-15s %-15s %s\n", r.ID, r.State, proj, conv, r.CreatedAt.Format("2006-01-02 15:04"))
 		}
 	} else {
 		printJSON(body)
 	}
+}
+
+func parseRunStartFlags(args []string) map[string]string {
+	flags := make(map[string]string)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				flags["project"] = args[i+1]
+				i++
+			}
+		case "--conversation":
+			if i+1 < len(args) {
+				flags["conversation"] = args[i+1]
+				i++
+			}
+		case "--planner":
+			if i+1 < len(args) {
+				flags["planner"] = args[i+1]
+				i++
+			}
+		case "--executor":
+			if i+1 < len(args) {
+				flags["executor"] = args[i+1]
+				i++
+			}
+		}
+	}
+	// Support legacy positional project if not provided via flag
+	// positional project is usually args[2] if args[1] is runID
+	if flags["project"] == "" && len(args) > 2 && !strings.HasPrefix(args[2], "-") {
+		flags["project"] = args[2]
+	}
+	return flags
+}
+
+func parseRunListFilters(args []string) map[string]string {
+	filters := make(map[string]string)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				filters["project"] = args[i+1]
+				i++
+			}
+		case "--conversation":
+			if i+1 < len(args) {
+				filters["conversation"] = args[i+1]
+				i++
+			}
+		case "--state":
+			if i+1 < len(args) {
+				filters["state"] = args[i+1]
+				i++
+			}
+		case "--json":
+			filters["json"] = "true"
+		}
+	}
+	return filters
 }
 
 func runWait(runID string, interval, timeout time.Duration) {
@@ -341,10 +457,16 @@ func handleStepCommand(args []string) {
 		listStepsByRun(subArgs[1])
 	case "status", "state":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step state <stepID>")
+			fmt.Println("Usage: orchestratorctl step state <stepID> [--json]")
 			os.Exit(1)
 		}
-		stepState(subArgs[1])
+		asJSON := false
+		for _, arg := range subArgs[2:] {
+			if arg == "--json" {
+				asJSON = true
+			}
+		}
+		stepState(subArgs[1], asJSON)
 	case "result":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step result <stepID>")
@@ -442,21 +564,25 @@ func listStepsByRun(runID string) {
 	body, _ := io.ReadAll(resp.Body)
 	var steps []domain.Step
 	if err := json.Unmarshal(body, &steps); err == nil {
-		fmt.Printf("%-24s %-20s %-10s %-20s\n", "STEP ID", "TITLE", "STATE", "UPDATED")
-		fmt.Println("--------------------------------------------------------------------------------")
+		fmt.Printf("%-24s %-20s %-20s %-20s\n", "STEP ID", "TITLE", "STATE", "UPDATED")
+		fmt.Println(strings.Repeat("-", 85))
 		for _, s := range steps {
 			title := s.Title
 			if len(title) > 18 {
 				title = title[:15] + "..."
 			}
-			fmt.Printf("%-24s %-20s %-10s %-20s\n", s.ID, title, s.State, s.UpdatedAt.Format("2006-01-02 15:04"))
+			state := string(s.State)
+			if s.StatusReason != "" && (s.State == domain.StepStateFailedBridge || s.State == domain.StepStateFailedAdapter || s.State == domain.StepStateFailedValidation) {
+				// Optionally append (failed) or similar? For now just show original state enum.
+			}
+			fmt.Printf("%-24s %-20s %-20s %-20s\n", s.ID, title, state, s.UpdatedAt.Format("2006-01-02 15:04"))
 		}
 	} else {
 		printJSON(body)
 	}
 }
 
-func stepState(stepID string) {
+func stepState(stepID string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
 	if err != nil {
 		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
@@ -464,14 +590,33 @@ func stepState(stepID string) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
 		printJSON(body)
 		os.Exit(1)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	if asJSON {
+		printJSON(body)
+		return
+	}
+
+	var step domain.Step
+	if err := json.Unmarshal(body, &step); err == nil {
+		fmt.Printf("--- Step State: %s ---\n", step.ID)
+		fmt.Printf("State:        %s\n", step.State)
+		fmt.Printf("Title:        %s\n", step.Title)
+		fmt.Printf("Goal:         %s\n", step.Goal)
+		fmt.Printf("Adapter:      %s\n", step.Adapter)
+		if step.StatusReason != "" {
+			fmt.Printf("Reason:       %s\n", step.StatusReason)
+		}
+		fmt.Printf("Created:      %s\n", step.CreatedAt.Format(time.RFC3339))
+		fmt.Printf("Updated:      %s\n", step.UpdatedAt.Format(time.RFC3339))
+		fmt.Println("---------------------------")
+	} else {
+		printJSON(body)
+	}
 }
 
 func stepResult(stepID string) {
@@ -494,6 +639,10 @@ func stepResult(stepID string) {
 		fmt.Printf("--- Authoritative Truth (Summary): %s ---\n", stepID)
 		fmt.Printf("State:   %s\n", result.State)
 		fmt.Printf("Summary: %s\n", result.Summary)
+		
+		// Note: ResultSpec doesn't have StatusReason, but the Step does. 
+		// For result command, Summary is usually the detailed "why" from the adapter.
+		
 		fmt.Println("\n[GUIDE] Evidence Drill-down:")
 		if result.RawOutputRef != "" {
 			fmt.Printf("  Logs:      ./bin/orchestratorctl step logs %s\n", stepID)
@@ -863,6 +1012,50 @@ func runDoctor() {
 	}
 
 	fmt.Println("\nConfiguration verified. Use 'make smoke' for full relay validation.")
+}
+
+func handleInstanceCommand(args []string) {
+	asJSON := false
+	for _, arg := range args {
+		if arg == "--json" {
+			asJSON = true
+		}
+	}
+
+	resp, err := http.Get(orchestratordURL + "/api/v1/instance")
+	if err != nil {
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		printJSON(body)
+		os.Exit(1)
+	}
+
+	if asJSON {
+		printJSON(body)
+		return
+	}
+
+	var info domain.InstanceInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		printJSON(body)
+		return
+	}
+
+	fmt.Printf("--- Codencer Instance Identity ---\n")
+	fmt.Printf("Version:       %s\n", info.Version)
+	fmt.Printf("Repo Root:     %s\n", info.RepoRoot)
+	fmt.Printf("Base URL:      %s\n", info.BaseURL)
+	fmt.Printf("PID:           %d\n", info.PID)
+	fmt.Printf("Started At:    %s\n", info.StartedAt.Format(time.RFC3339))
+	fmt.Printf("Execution:     %s\n", info.ExecutionMode)
+	fmt.Printf("State Dir:     %s\n", info.StateDir)
+	fmt.Printf("Workspace:     %s\n", info.WorkspaceRoot)
+	fmt.Println("----------------------------------")
 }
 
 func printJSON(body []byte) {

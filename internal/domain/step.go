@@ -29,6 +29,12 @@ const (
 	StepStateFailedRetryable       StepState = "failed_retryable"
 	// StepStateFailedTerminal: Execution reached an unsuccessful terminal state; requires a new plan or fix by the planner.
 	StepStateFailedTerminal        StepState = "failed_terminal"
+	// StepStateFailedValidation: Agent finished but one or more tests/validations failed.
+	StepStateFailedValidation      StepState = "failed_validation"
+	// StepStateFailedAdapter: The adapter process or agent binary crashed/failed.
+	StepStateFailedAdapter         StepState = "failed_adapter"
+	// StepStateFailedBridge: Orchestrator/Bridge error (e.g. worktree, lock, disk failure).
+	StepStateFailedBridge          StepState = "failed_bridge"
 	// StepStateTimeout: Execution exceeded defined limits and was killed by the bridge supervisor.
 	StepStateTimeout               StepState = "timeout"
 	// StepStateCancelled: Execution was explicitly stopped by the planner/operator.
@@ -46,6 +52,7 @@ type Step struct {
 	Policy         string    `json:"policy"`
 	Adapter        string    `json:"adapter"`
 	TimeoutSeconds int       `json:"timeout_seconds"`
+	StatusReason   string    `json:"status_reason,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -53,7 +60,9 @@ type Step struct {
 // IsTerminal returns true if the step has reached a final state.
 func (s StepState) IsTerminal() bool {
 	switch s {
-	case StepStateCompleted, StepStateCompletedWithWarnings, StepStateFailedTerminal, StepStateFailedRetryable, StepStateTimeout, StepStateCancelled:
+	case StepStateCompleted, StepStateCompletedWithWarnings, StepStateFailedTerminal,
+		StepStateFailedValidation, StepStateFailedAdapter, StepStateFailedBridge,
+		StepStateFailedRetryable, StepStateTimeout, StepStateCancelled:
 		return true
 	default:
 		return false

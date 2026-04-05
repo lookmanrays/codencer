@@ -64,7 +64,7 @@ func TestCodexValidationScenario(t *testing.T) {
 
 	// 3. Start Run and Step
 	runID := "val-run-01"
-	_, _ = runSvc.StartRun(ctx, runID, "val-project")
+	_, _ = runSvc.StartRun(ctx, runID, "val-project", "", "", "")
 
 	step := &domain.Step{
 		ID:      "val-step-01",
