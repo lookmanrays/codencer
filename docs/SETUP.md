@@ -1,5 +1,7 @@
 # Setup & Environmental Reference
 
+> **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during execution.
+
 This guide describes the technical prerequisites and environmental configuration required to run the Codencer bridge. For the operational guide, see the **[Canonical Local Runbook](EXAMPLES.md)**.
 
 ---
@@ -87,7 +89,7 @@ Before running your first mission, use the built-in diagnostic tool to verify yo
 The doctor checks:
 - **Environment**: Presence of `.env` and `.codencer/` directory.
 - **Permissions**: Write access to the local ledger storage.
-- **Binaries**: Presence and versions of `git`, `go`, and `cc` (for embedded DB).
+- **Binaries**: Presence and versions of `git`, `go`, `curl`, and `cc` (for embedded DB).
 - **Adapters**: Detects whether `codex-agent` or other adapters are reachable in your PATH (Informational/Optional).
 - **Mode**: Confirms whether you are running in **Simulation** or **Real** execution mode.
 

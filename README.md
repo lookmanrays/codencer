@@ -8,6 +8,8 @@ Codencer is a persistent orchestration daemon designed to securely manage, execu
 
 ---
 
+> **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
+
 ## 🏛 The Relay Model
 
 Codencer is a **bridge, not a brain**. It does not decide the high-level strategy; it executes tactical instructions and reports high-fidelity evidence.

@@ -773,7 +773,7 @@ func runDoctor() {
 		}
 	}
 
-	// 3. Check Critical Runtime Binaries (git, go, c-compiler)
+	// 3. Check Critical Runtime Binaries (git, go, c-compiler, curl)
 	bins := []struct {
 		name string
 		cmd  string
@@ -783,6 +783,7 @@ func runDoctor() {
 		{"Git", "git", "--version", true},
 		{"Go", "go", "version", true},
 		{"C Compiler (for SQLite CGO)", "cc", "--version", true},
+		{"curl (for Makefile polling)", "curl", "--version", true},
 	}
 
 	for _, b := range bins {
