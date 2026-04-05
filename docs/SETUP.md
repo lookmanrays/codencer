@@ -87,8 +87,8 @@ Before running your first mission, use the built-in diagnostic tool to verify yo
 The doctor checks:
 - **Environment**: Presence of `.env` and `.codencer/` directory.
 - **Permissions**: Write access to the local ledger storage.
-- **Binaries**: Presence and versions of `git`, `sqlite3`, and `go`.
-- **Adapters**: Detects whether `codex-agent` or other adapters are reachable in your PATH.
+- **Binaries**: Presence and versions of `git`, `go`, and `cc` (for embedded DB).
+- **Adapters**: Detects whether `codex-agent` or other adapters are reachable in your PATH (Informational/Optional).
 - **Mode**: Confirms whether you are running in **Simulation** or **Real** execution mode.
 
 If any check fails, the doctor will provide targeted instructions (e.g., "Run 'make setup'" or "Install git").

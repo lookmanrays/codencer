@@ -27,8 +27,16 @@ func main() {
 	
 	if env := os.Getenv("ORCHESTRATORD_URL"); env != "" {
 		orchestratordURL = env
-	} else if env := os.Getenv("PORT"); env != "" {
-		orchestratordURL = fmt.Sprintf("http://127.0.0.1:%s", env)
+	} else {
+		host := os.Getenv("HOST")
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8085"
+		}
+		orchestratordURL = fmt.Sprintf("http://%s:%s", host, port)
 	}
 
 	if len(os.Args) < 2 {

@@ -114,6 +114,7 @@ Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 As a local-first Beta/MVP, Codencer has the following constraints:
 - **Relay Only**: The bridge does not "think" or plan; it only executes what the Planner instructs.
 - **Single-User**: Designed for local development; no multi-user or cloud concurrency.
+- **Static Extension Routing**: The experimental VS Code extension assumes the daemon binds at `127.0.0.1:8085`. Dynamic connection configuration for running instances on multiple ports is not yet natively surfaced in the IDE client.
 - **Agent Dependency**: "Real Mode" efficacy is strictly bound to the quality of the underlying agent (Codex, Claude, etc.).
 - **Manual Decisions**: The bridge reports terminal states; all recovery or retry decisions remain with the human operator or external planner.
 

@@ -24,16 +24,17 @@ dev: setup build
 
 start: build setup
 	@echo "==> Starting orchestratord in background..."
-	@if [ -f .env ]; then source .env; fi; \
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	HOST=$${HOST:-127.0.0.1}; \
 	PORT=$${PORT:-8085}; \
-	if curl -s http://127.0.0.1:$$PORT/health | grep -q "ok"; then \
-		echo "Daemon already running and healthy on port $$PORT."; \
+	if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
+		echo "Daemon already running and healthy on $$HOST:$$PORT."; \
 		exit 0; \
 	fi; \
 	nohup ./bin/orchestratord > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid; \
 	echo "Waiting for health check..."; \
 	for i in $$(seq 1 10); do \
-		if curl -s http://127.0.0.1:$$PORT/health | grep -q "ok"; then \
+		if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
 			echo "Daemon successfully started (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"; \
 			exit 0; \
 		fi; \
@@ -60,16 +61,17 @@ stop:
 
 start-sim: build setup
 	@echo "==> Starting orchestratord in SIMULATION MODE (background)..."
-	@if [ -f .env ]; then source .env; fi; \
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	HOST=$${HOST:-127.0.0.1}; \
 	PORT=$${PORT:-8085}; \
-	if curl -s http://127.0.0.1:$$PORT/health | grep -q "ok"; then \
-		echo "Daemon already running and healthy on port $$PORT."; \
+	if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
+		echo "Daemon already running and healthy on $$HOST:$$PORT."; \
 		exit 0; \
 	fi; \
 	nohup env ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid; \
 	echo "Waiting for health check..."; \
 	for i in $$(seq 1 10); do \
-		if curl -s http://127.0.0.1:$$PORT/health | grep -q "ok"; then \
+		if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
 			echo "Simulated daemon successfully started (PID: $$(cat .codencer/daemon.pid)). Logs: .codencer/daemon.log"; \
 			exit 0; \
 		fi; \

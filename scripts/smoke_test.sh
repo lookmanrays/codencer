@@ -4,6 +4,7 @@ set -e
 
 # Default to simulation mode unless overridden
 export ALL_ADAPTERS_SIMULATION_MODE=${ALL_ADAPTERS_SIMULATION_MODE:-1}
+export HOST=${HOST:-127.0.0.1}
 export PORT=${PORT:-8085}
 
 echo "--- Codencer Smoke Test ---"
@@ -13,12 +14,12 @@ echo "Mode: $([ "$ALL_ADAPTERS_SIMULATION_MODE" == "1" ] && echo "Simulation" ||
 make setup build > /dev/null
 
 # 2. Start Daemon
-echo "Checking for daemon on port $PORT..."
-if curl -s http://127.0.0.1:$PORT/health | grep -q "ok"; then
-    echo "Daemon already running on $PORT. Using existing daemon."
+echo "Checking for daemon on $HOST:$PORT..."
+if curl -s http://$HOST:$PORT/api/v1/compatibility | grep -q '"tier"'; then
+    echo "Daemon already running on $HOST:$PORT. Using existing daemon."
     DAEMON_ALREADY_RUNNING=1
 else
-    echo "Starting daemon on port $PORT..."
+    echo "Starting daemon on $HOST:$PORT..."
     ./bin/orchestratord > .codencer/smoke_daemon.log 2>&1 &
     DAEMON_PID=$!
     DAEMON_ALREADY_RUNNING=0
@@ -35,7 +36,7 @@ trap cleanup EXIT
 # Wait for health check
 echo "Waiting for daemon to be ready..."
 for i in {1..10}; do
-    if curl -s http://127.0.0.1:$PORT/health | grep -q "ok"; then
+    if curl -s http://$HOST:$PORT/api/v1/compatibility | grep -q '"tier"'; then
         echo "Daemon ready."
         break
     fi
