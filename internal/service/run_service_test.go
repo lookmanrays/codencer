@@ -136,3 +136,116 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 		t.Fatalf("Expected artifacts to be persisted")
 	}
 }
+
+// FailingMockAdapter simulates various terminal failure states
+type FailingMockAdapter struct {
+	FailState domain.StepState
+}
+
+func (m *FailingMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+	return nil
+}
+
+func (m *FailingMockAdapter) Poll(ctx context.Context, attemptID string) (bool, error) {
+	return false, nil
+}
+
+func (m *FailingMockAdapter) Cancel(ctx context.Context, attemptID string) error {
+	return nil
+}
+
+func (m *FailingMockAdapter) Capabilities() []string {
+	return []string{"mock"}
+}
+
+func (m *FailingMockAdapter) Name() string {
+	return "failing-mock"
+}
+
+func (m *FailingMockAdapter) CollectArtifacts(ctx context.Context, attemptID, artifactRoot string) ([]*domain.Artifact, error) {
+	return nil, nil
+}
+
+func (m *FailingMockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
+	return &domain.ResultSpec{
+		State:   m.FailState,
+		Summary: "Simulated failure",
+	}, nil
+}
+
+func TestRunService_DispatchStep_GranularFailurePreservation(t *testing.T) {
+	tests := []struct {
+		name          string
+		failState     domain.StepState
+		expectedState domain.StepState
+	}{
+		{
+			name:          "Preserve-FailedBridge",
+			failState:     domain.StepStateFailedBridge,
+			expectedState: domain.StepStateFailedBridge,
+		},
+		{
+			name:          "Preserve-FailedValidation",
+			failState:     domain.StepStateFailedValidation,
+			expectedState: domain.StepStateFailedValidation,
+		},
+		{
+			name:          "Preserve-Timeout",
+			failState:     domain.StepStateTimeout,
+			expectedState: domain.StepStateTimeout,
+		},
+		{
+			name:          "Collapse-Unknown-to-FailedAdapter",
+			failState:     domain.StepState("unknown_failure"),
+			expectedState: domain.StepStateFailedAdapter,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbPath := filepath.Join(t.TempDir(), "test.db")
+			db, _ := sql.Open("sqlite3", dbPath)
+			defer db.Close()
+			_ = sqlite.RunMigrations(db)
+
+			runsRepo := sqlite.NewRunsRepo(db)
+			phasesRepo := sqlite.NewPhasesRepo(db)
+			stepsRepo := sqlite.NewStepsRepo(db)
+			attemptsRepo := sqlite.NewAttemptsRepo(db)
+			gatesRepo := sqlite.NewGatesRepo(db)
+			artifactsRepo := sqlite.NewArtifactsRepo(db)
+			benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+			failingAdapter := &FailingMockAdapter{FailState: tt.failState}
+			adapters := map[string]domain.Adapter{
+				"failing-mock": failingAdapter,
+			}
+
+			routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+			runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
+				gatesRepo, artifactsRepo, sqlite.NewValidationsRepo(db),
+				routingSvc, service.NewPolicyRegistry(), t.TempDir(), t.TempDir())
+
+			ctx := context.Background()
+			runId := "fail-test-" + tt.name
+			_, _ = runSvc.StartRun(ctx, runId, "fail-project", "", "", "")
+
+			step := &domain.Step{
+				ID:      "step-" + tt.name,
+				PhaseID: "phase-01-" + runId,
+				Title:   "Failing Step",
+				Adapter: "failing-mock",
+			}
+
+			_ = runSvc.DispatchStep(ctx, runId, step)
+
+			s, _ := runSvc.GetStep(ctx, step.ID)
+			if s.State != tt.expectedState {
+				t.Errorf("Expected state %s, got %s", tt.expectedState, s.State)
+			}
+			if s.StatusReason != "Simulated failure" {
+				t.Errorf("Expected status reason 'Simulated failure', got %s", s.StatusReason)
+			}
+		})
+	}
+}

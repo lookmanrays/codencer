@@ -566,8 +566,14 @@ func (s *RunService) finalizeStep(
 		step.State = domain.StepStateFailedValidation
 		step.StatusReason = "Policy enforced failure: " + strings.Join(eval.FailReasons, ", ")
 	} else if finalResult != nil && (finalResult.State != domain.StepStateCompleted && finalResult.State != domain.StepStateCompletedWithWarnings) {
-		step.State = domain.StepStateFailedAdapter
-		step.StatusReason = "Adapter reported unsuccessful state: " + finalResult.Summary
+		// Preserve granular failure states if reported by the adapter/system
+		switch finalResult.State {
+		case domain.StepStateFailedBridge, domain.StepStateFailedValidation, domain.StepStateTimeout, domain.StepStateNeedsManualAttention:
+			step.State = finalResult.State
+		default:
+			step.State = domain.StepStateFailedAdapter
+		}
+		step.StatusReason = finalResult.Summary
 	} else {
 		step.State = domain.StepStateCompleted
 	}

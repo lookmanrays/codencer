@@ -244,6 +244,7 @@ func abortRun(id string) {
 }
 
 func listRuns(filters map[string]string) {
+	asJSON := filters["json"] == "true"
 	u, _ := url.Parse(orchestratordURL + "/api/v1/runs")
 	if len(filters) > 0 {
 		q := u.Query()
@@ -270,6 +271,11 @@ func listRuns(filters map[string]string) {
 	if resp.StatusCode >= 400 {
 		printJSON(body)
 		os.Exit(1)
+	}
+
+	if asJSON {
+		printJSON(body)
+		return
 	}
 
 	var runs []domain.Run
