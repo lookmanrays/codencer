@@ -493,9 +493,7 @@ func (s *RunService) executeAttempt(
 	}
 
 	provRes, err := s.provisioner.Provision(ctx, spec, baseRepo, workspaceRoot)
-	if attempt.Result != nil {
-		attempt.Result.Provisioning = provRes
-	}
+	// provRes is attached to any ResultSpec created below.
 	
 	if err != nil {
 		slog.Error("Failed to provision workspace", "runID", runID, "error", err)
@@ -516,13 +514,13 @@ func (s *RunService) executeAttempt(
 	_ = os.MkdirAll(attemptArtifactRoot, 0755)
 
 	if err := adapter.Start(ctx, step, attempt, workspaceRoot, attemptArtifactRoot); err != nil {
-		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error(), Provisioning: provRes}
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
 
 	// 3. Poll
-	if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo, step) {
+	if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo, step, provRes) {
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -534,7 +532,7 @@ func (s *RunService) executeAttempt(
 	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, attemptArtifactRoot)
 	if err != nil {
 		reason := "Failed to collect artifacts: " + err.Error()
-		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason, Provisioning: provRes}
 		step.StatusReason = reason
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
@@ -548,7 +546,7 @@ func (s *RunService) executeAttempt(
 	res, err := adapter.NormalizeResult(ctx, attempt.ID, artifacts)
 	if err != nil {
 		reason := "Normalization failed: " + err.Error()
-		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason, Provisioning: provRes}
 		step.StatusReason = reason
 	} else {
 		res.Provisioning = provRes
@@ -667,7 +665,7 @@ func (s *RunService) finalizeStep(
 	step.UpdatedAt = time.Now().UTC()
 	return s.stepsRepo.UpdateState(ctx, step)
 }
-func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, attempt *domain.Attempt, repo *sqlite.AttemptsRepo, step *domain.Step) bool {
+func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, attempt *domain.Attempt, repo *sqlite.AttemptsRepo, step *domain.Step, prov *domain.ProvisioningResult) bool {
 	interval := 2 * time.Second
 	pollTicker := time.NewTicker(interval)
 	defer pollTicker.Stop()
@@ -688,8 +686,9 @@ func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, at
 			slog.Warn("Attempt timed out", "attemptID", attempt.ID, "timeoutSeconds", step.TimeoutSeconds)
 			_ = adapter.Cancel(context.Background(), attempt.ID)
 			attempt.Result = &domain.ResultSpec{
-				State:   domain.StepStateTimeout,
-				Summary: fmt.Sprintf("Execution timed out after %d seconds", step.TimeoutSeconds),
+				State:        domain.StepStateTimeout,
+				Summary:      fmt.Sprintf("Execution timed out after %d seconds", step.TimeoutSeconds),
+				Provisioning: prov,
 			}
 			_ = repo.UpdateResult(ctx, attempt)
 			return false
@@ -697,8 +696,9 @@ func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, at
 			running, err := adapter.Poll(ctx, attempt.ID)
 			if err != nil {
 				attempt.Result = &domain.ResultSpec{
-					State:   domain.StepStateFailedAdapter,
-					Summary: fmt.Sprintf("Poll error: %v", err),
+					State:        domain.StepStateFailedAdapter,
+					Summary:      fmt.Sprintf("Poll error: %v", err),
+					Provisioning: prov,
 				}
 				_ = repo.UpdateResult(ctx, attempt)
 				return false

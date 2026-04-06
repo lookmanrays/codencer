@@ -180,3 +180,39 @@ func TestProvisioner_Hooks(t *testing.T) {
 		t.Errorf("Hook output mismatch: %s", string(got))
 	}
 }
+
+func TestProvisioner_Telemetry(t *testing.T) {
+	base := t.TempDir()
+	work := t.TempDir()
+	
+	// Setup sources
+	os.WriteFile(filepath.Join(base, ".env"), []byte("ok"), 0644)
+	os.Mkdir(filepath.Join(base, "node_modules"), 0755)
+
+	p := NewLocalProvisioner()
+	spec := &domain.ProvisioningSpec{
+		Copy:     []string{".env"},
+		Symlinks: []string{"node_modules"},
+		Hooks: domain.ProvisioningHooks{
+			PostCreate: "echo 'hello'",
+		},
+	}
+
+	res, err := p.Provision(context.Background(), spec, base, work)
+	if err != nil {
+		t.Fatalf("Provision failed: %v", err)
+	}
+
+	if len(res.EnvironmentFiles) != 1 || res.EnvironmentFiles[0] != ".env" {
+		t.Errorf("Wrong environment files telemetry: %v", res.EnvironmentFiles)
+	}
+	if len(res.Symlinks) != 1 || res.Symlinks[0] != "node_modules" {
+		t.Errorf("Wrong symlinks telemetry: %v", res.Symlinks)
+	}
+	if res.PostCreateHook != "echo 'hello'" {
+		t.Errorf("Wrong hook telemetry: %s", res.PostCreateHook)
+	}
+	if res.HookStatus != "success" {
+		t.Errorf("Wrong hook status: %s", res.HookStatus)
+	}
+}

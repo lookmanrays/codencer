@@ -663,8 +663,42 @@ func stepResult(stepID string) {
 		}
 		fmt.Printf("State:   %s\n", result.State)
 		fmt.Printf("Summary: %s\n", result.Summary)
-		
-		// For result command, Summary is usually the detailed "why" from the adapter.
+
+		// Provisioning Outcome Visibility
+		if result.Provisioning != nil {
+			status := "SUCCESS"
+			if !result.Provisioning.Success {
+				status = "FAILED"
+			}
+			fmt.Printf("\nWorkspace Provisioning [%s] (%dms):\n", status, result.Provisioning.DurationMs)
+			if len(result.Provisioning.EnvironmentFiles) > 0 {
+				fmt.Printf("  Files:     %s\n", strings.Join(result.Provisioning.EnvironmentFiles, ", "))
+			}
+			if len(result.Provisioning.Symlinks) > 0 {
+				fmt.Printf("  Symlinks:  %s\n", strings.Join(result.Provisioning.Symlinks, ", "))
+			}
+			if result.Provisioning.PostCreateHook != "" {
+				fmt.Printf("  Hook:      %s (%s)\n", result.Provisioning.PostCreateHook, result.Provisioning.HookStatus)
+			}
+			if result.Provisioning.Summary != "" && !result.Provisioning.Success {
+				fmt.Printf("  Error:     %s\n", result.Provisioning.Summary)
+			}
+		}
+
+		// Execution Context Visibility (Broker-backed)
+		if result.Artifacts != nil {
+			taskID := result.Artifacts["broker_task_id"]
+			repoRoot := result.Artifacts["broker_repo_root"]
+			if taskID != "" || repoRoot != "" {
+				fmt.Println("\nExecution Context (Antigravity Broker):")
+				if taskID != "" {
+					fmt.Printf("  Task ID:   %s\n", taskID)
+				}
+				if repoRoot != "" {
+					fmt.Printf("  Bound Repo: %s\n", repoRoot)
+				}
+			}
+		}
 		
 		if len(result.Validations) > 0 {
 			fmt.Println("\n--- Validations ---")

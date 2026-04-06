@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -630,4 +631,135 @@ func TestRunService_ProvisioningResultPersistence(t *testing.T) {
 	if len(res.Provisioning.Log) == 0 || res.Provisioning.Log[0] != "[DONE] Test Setup" {
 		t.Errorf("Expected provisioning log '[DONE] Test Setup', got %v", res.Provisioning.Log)
 	}
+}
+
+type startErrAdapter struct {
+	MockAdapter
+}
+
+func (a *startErrAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	return fmt.Errorf("simulated start error")
+}
+
+func (a *startErrAdapter) Name() string { return "start-err" }
+
+func TestRunService_ProvisioningSurvival_OnStartError(t *testing.T) {
+	ctx := context.Background()
+	db, _ := sql.Open("sqlite3", ":memory:")
+	sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+
+	adapter := &startErrAdapter{}
+	routingSvc := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{
+		"start-err": adapter,
+	})
+
+	prov := &MockProvisioner{
+		Log: []string{"Setup succeeded before crash"},
+	}
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		routingSvc, service.NewPolicyRegistry(), prov, artifactRoot, workspaceRoot,
+	)
+
+	runID := "run-start-fail"
+	runSvc.StartRun(ctx, runID, "p1", "", "", "")
+
+	step := &domain.Step{
+		ID:      "step-1",
+		Adapter: "start-err",
+	}
+
+	_ = runSvc.DispatchStep(ctx, runID, step)
+
+	res, _ := runSvc.GetResultByStep(ctx, step.ID)
+	if res == nil {
+		t.Fatal("Expected result even on start failure")
+	}
+	if res.Provisioning == nil {
+		t.Fatal("Expected provisioning metadata to survive adapter start failure")
+	}
+	if len(res.Provisioning.Log) == 0 || res.Provisioning.Log[0] != "Setup succeeded before crash" {
+		t.Errorf("Wrong provisioning log: %v", res.Provisioning.Log)
+	}
+}
+
+func TestRunService_Isolation_ProvisionedWorktree(t *testing.T) {
+	ctx := context.Background()
+	db, _ := sql.Open("sqlite3", ":memory:")
+	sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+
+	mockAdapter := &MockAdapter{}
+	routingSvc := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{
+		"mock": mockAdapter,
+	})
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		routingSvc, service.NewPolicyRegistry(), &fileProv{}, artifactRoot, workspaceRoot,
+	)
+
+	runID := "iso-test"
+	runSvc.StartRun(ctx, runID, "p1", "", "", "")
+
+	// Validation that checks for the setup.txt file
+	step := &domain.Step{
+		ID:      "step-check-iso",
+		Adapter: "mock",
+		Validations: []domain.ValidationCommand{
+			{Name: "check-setup", Command: "cat setup.txt"},
+		},
+	}
+
+	_ = runSvc.DispatchStep(ctx, runID, step)
+
+	res, _ := runSvc.GetResultByStep(ctx, step.ID)
+	if res.State != domain.StepStateCompleted {
+		t.Errorf("Expected completed, got %s. Summary: %s", res.State, res.Summary)
+	}
+
+	// Verify the validation actually passed
+	found := false
+	for _, v := range res.Validations {
+		if v.Name == "check-setup" && v.Passed {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("Validation 'check-setup' failed or was not found, meaning it could not find 'setup.txt' in the worktree")
+	}
+}
+
+type fileProv struct{ MockProvisioner }
+
+func (p *fileProv) Provision(ctx context.Context, spec *domain.ProvisioningSpec, baseRepo, workspaceRoot string) (*domain.ProvisioningResult, error) {
+	err := os.WriteFile(filepath.Join(workspaceRoot, "setup.txt"), []byte("ok"), 0644)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ProvisioningResult{Success: true, Log: []string{"Setup file created"}}, nil
 }

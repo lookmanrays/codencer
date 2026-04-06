@@ -1,80 +1,102 @@
-# Workspace Provisioning & Isolation
+# Environmental Reference & Setup
 
-Codencer uses Git Worktrees to isolate task attempts. To ensure these worktrees are ready for execution (e.g., they have the necessary `.env` files or `node_modules`), Codencer provides a native provisioning layer.
+This guide provides the technical baseline for running the Codencer Orchestration Bridge.
 
-## Native Configuration: `.codencer/workspace.json`
+## 1. Prerequisites
 
-Create a `.codencer/workspace.json` file in your repository root to define the provisioning plan.
+### Software Requirements
+- **Git**: Required for worktree isolation.
+- **Go 1.21+**: Required to build the daemon and CLI.
+- **C Compiler (gcc/cc)**: Required for the CGO-based SQLite driver.
+- **curl**: Required for health checking and polling.
 
+### Operating System
+- **Linux** (Native): Primary supported platform.
+- **WSL2** (Ubuntu/Debian): Fully supported.
+- **Windows**: Not natively supported for the daemon; use the **Antigravity Broker** for cross-side communication.
+
+---
+
+## 2. Getting Started (Canonical Path)
+
+### 2.1 Clone & Build
+```bash
+git clone https://github.com/verbaux/codencer
+cd codencer
+
+# 1. Initialize environment and check requirements
+make setup
+
+# 2. Build orchestratord and orchestratorctl binaries
+make build
+```
+
+### 2.2 Verify Environment
+The `doctor` tool verifies if your environment is ready for tactical execution.
+```bash
+./bin/orchestratorctl doctor
+```
+
+---
+
+## 3. Daemon Management
+
+The `orchestratord` is the persistent system of record. It must be running to receive tasks.
+
+### 3.1 Simulation Mode (Orchestrator Validation)
+Use this mode to test your local setup, CLI, and MCP layers without consuming LLM credits or requiring agent binaries.
+```bash
+make start-sim
+```
+
+### 3.2 Real Mode (Tactical Execution)
+Use this mode for real-world tasks. It requires agents like `codex-agent` or `aider` to be installed.
+```bash
+# Edit .env to set ALL_ADAPTERS_SIMULATION_MODE=0
+make start
+```
+
+---
+
+## 4. Multi-Instance Workflows
+Codencer follows a **One-Repo-One-Instance** model. Each repo clone manages its own database and worktrees.
+
+To run multiple instances on one machine:
+1. Ensure each instance has a unique port.
+2. Set the `PORT` environment variable.
+
+```bash
+# Start an instance on port 8086
+PORT=8086 ./bin/orchestratord
+```
+
+Check instance identity:
+```bash
+./bin/orchestratorctl instance
+```
+
+---
+
+## 5. Workspace Provisioning
+Codencer isolates every task attempt in a dedicated Git worktree. You can configure how these worktrees are prepared using `.codencer/workspace.json`.
+
+### Example `.codencer/workspace.json`
 ```json
 {
   "provisioning": {
-    "copy": [
-      ".env",
-      ".env.local",
-      "config/secrets.json"
-    ],
-    "symlinks": [
-      "node_modules",
-      "vendor"
-    ],
+    "copy": [".env"],
+    "symlinks": ["node_modules"],
     "hooks": {
-      "post_create": "npm install --offline"
+      "post_create": "go mod download"
     }
   }
 }
 ```
 
-### Configuration Fields
+### Grove Compatibility
+Codencer optionally reads an environment-prep subset of Grove config (`grove.yaml` or `.groverc.json`) if a native config is missing. 
 
-- **`copy`**: A list of relative paths to files that should be replicated from the base repository to the attempt worktree. This is ideal for small configuration or secret files that are not committed to git.
-- **`symlinks`**: A list of relative paths to directories or files that should be symlinked from the base repository. This is critical for large dependency folders like `node_modules` to avoid the overhead of copying millions of files.
-- **`hooks.post_create`**: A single shell command to run immediately after file preparation and before the agent starts. Use this for lightweight setup like `go mod download`.
+> [!IMPORTANT]
+> Codencer does **not** depend on the Grove CLI and is designed to coexist with existing Grove setups.
 
-## Grove Compatibility (Optional Subset)
-
-Codencer includes an **optional compatibility layer** for [Grove](https://github.com/verbaux/grove) configuration. If you already use Grove for local development, Codencer will automatically detect and import your environment preparation settings if a native `.codencer/workspace.json` is not present. 
-
-**Note**: Codencer does NOT depend on the Grove CLI and only reads the configuration files directly.
-
-### Supported Grove Subset
-Codencer only imports the environment preparation subset of Grove configuration. It ignores Grove's native lifecycle tracking, state files, and aliases.
-
-The following fields are mapped:
-- **Environment Replication**: `setup.copy` or `setup.env_files` -> `copy`
-- **Dependency Optimization**: `setup.symlinks` or `symlink` -> `symlinks`
-- **Preparation Hooks**: `hooks.post_create` or `afterCreate` -> `post_create`
-
-### Precedence Rules
-Codencer merges configuration from multiple sources using the following absolute priority:
-1. **`.codencer/workspace.json`** (Codencer-native)
-2. **`grove.yaml`** (Spec-Grove)
-3. **`.groverc.json`** (Legacy-Grove)
-
-If a field (e.g., `symlinks`) is defined in the native config, any definitions in Grove files for that specific field are ignored.
-
-## Audit & Visibility
-
-Every provisioning action is recorded in the attempt evidence. If provisioning fails, the attempt is marked as **`failed_bridge`**, and the reason is populated in the `StatusReason`.
-
-You can inspect the setup logs using the CLI:
-
-```bash
-# View the high-level result (including provisioning summary)
-./bin/orchestratorctl step result <UUID>
-```
-
-In the resulting JSON, look for the `provisioning` section:
-```json
-"provisioning": {
-  "success": true,
-  "summary": "",
-  "log": [
-    "Copy: .env -> .env",
-    "Symlink: node_modules -> node_modules",
-    "Hook (PostCreate): npm install --offline",
-    "added 1 package in 2s..."
-  ],
-  "duration_ms": 2450
-}
-```
+For advanced provisioning examples, see **[EXAMPLES.md](EXAMPLES.md)**.

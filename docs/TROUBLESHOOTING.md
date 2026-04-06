@@ -12,92 +12,68 @@ Always start here to verify your environment:
 
 ---
 
-## 2. Common Failure Modes
+## 2. Common Infrastructure Failures
 
 ### 2.1 "Connection Refused" (CLI cannot reach Daemon)
 **Symptoms**: `./bin/orchestratorctl` returns `error connecting to orchestratord`.
 - **Cause**: The `orchestratord` process is not running or is on a different port.
 - **Fix**: 
-  - Ensure the daemon is started: `./bin/orchestratord`.
+  - Ensure the daemon is started: `make start` or `make start-sim`.
   - Check the port in your CLI command or `.env` file (default is `8085`).
 
-### 2.2 "Agent Binary Not Found"
+### 2.2 "Agent Binary Not Found" (`failed_adapter`)
 **Symptoms**: Submitting a task fails immediately; `doctor` shows `MISSING` for an adapter.
 - **Cause**: The bridge cannot find the `codex-agent`, `claude-code`, or `aider` binary in your `$PATH`.
 - **Fix**:
   - Export the specific path: `export CODEX_BINARY=/path/to/codex-agent`.
   - Or ensure the binary is in your global `$PATH`.
 
-### 2.3 Why are my logs empty? (Simulation Confusion)
-**Symptoms**: `./bin/orchestratorctl step logs <id>` shows `No logs available`.
-- **Cause**: You are running in **Simulation Mode** (`ALL_ADAPTERS_SIMULATION_MODE=1`).
-- **Fix**: Simulation mode stubs agent execution; it does not produce real `stdout.log` or `unified.diff` files. Switch to real mode by unsetting the variable and ensuring agent binaries are installed.
+### 2.3 "Workspace Creation Failed" (`failed_bridge`)
+**Symptoms**: `failed_bridge` reported during attempt.
+- **Cause**: Git worktree conflict or permission issue.
+- **Fix**: Run `git worktree prune` and ensure the `~/.codencer/workspaces` directory is writable.
 
 ---
 
-### 3.1 `timeout`
-- **Bridge State**: The agent exceeded the `timeout_seconds` limit (Bridge killed the process).
-- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` for the terminal summary.
-- **Evidence Drill-down**: Run `./bin/orchestratorctl step logs <id>` to find the hang.
-- **Recovery Decision**: Increase `timeout_seconds` in your TaskSpec YAML OR simplify the instructions. Resubmit to the same mission.
+## 3. Interpreting Step States
 
-### 3.2 `failed_terminal`
-- **Bridge State**: Action finished but goal was not met (e.g., test/lint failure). This is a legacy fallback state.
-- **Audit Truth**: Run `./bin/orchestratorctl step state <id>` for the `Reason`.
-- **Recovery Decision**: Correct the `task.yaml` instructions OR fix the local project environment. Resubmit to the same mission.
+Every task result includes a `state`. Understanding the difference between **Infrastructure** and **Goal** failure is key to recovery.
 
-### 3.3 `failed_validation`
-- **Bridge State**: Agent finished successfully (exited 0), but the post-execution validations (tests, linting) failed.
-- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` to see which validations failed.
-- **Recovery Decision**: Provide more specific instructions to the agent or fix the underlying code issue.
+### 3.1 Goal & Task Failures (Fix the code/prompt)
 
-### 3.4 `failed_adapter`
-- **Bridge State**: The agent binary or process itself failed (e.g. crashed, exited non-zero, or had an internal error).
-- **Audit Truth**: Run `./bin/orchestratorctl step logs <id>` to see the agent's stderr.
-- **Recovery Decision**: Check your agent configuration, API keys, or binary permissions.
+- **`failed_terminal`**: The agent finished execution, but the summary reports that the goal was not met.
+    - *Resolution*: Refine your task instructions or check if the agent is stuck in a loop.
+- **`failed_validation`**: The agent finished and exited with 0, but your post-execution validations (tests, lint) failed.
+    - *Resolution*: Review the `step validations` output and fix the code or the test.
 
-### 3.5 `failed_bridge` (Infrastructure)
-- **Bridge State**: Codencer encountered an environment-level blocking error (e.g. git worktree conflict, disk full).
-- **Audit Truth**: Check the `Reason` in `./bin/orchestratorctl step result <id>`.
-- **Recovery Decision**: Resolve the local conflict (e.g. clean up stale worktrees) and resubmit.
+### 3.2 Infrastructure & Bridge Failures (Fix the system)
 
-### 3.6 `failed_bridge` (Provisioning)
-- **Bridge State**: The workspace setup phase failed during file copying, symlinking, or hook execution.
-- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` and inspect the `provisioning` JSON block.
-- **Common Causes**:
-    - **Missing Source**: A file listed in the `copy` spec is missing from the base repository (e.g. `.env` not found).
-    - **Hook Exit Code**: A `post_create` shell command exited with a non-zero status.
-- **Recovery Decision**: Correct the path in `.codencer/workspace.json` or fix the script logic in the `post_create` hook and resubmit.
-
-### 3.3 `needs_manual_attention`
-- **Bridge State**: System ambiguity, agent crash, or ambient environment failure. 
-- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` for system error logs.
-- **Evidence Drill-down**: Check `.codencer/smoke_daemon.log` and `./bin/orchestratorctl step logs <id>`.
-- **Recovery Decision**: Resolve the ambient conflict (lock, disk, permissions) and resubmit.
-
-### 3.4 `failed_retryable`
-- **Bridge State**: Transient external error (e.g., 429 Rate Limit, Network Drop).
-- **Recovery Decision**: Wait for the cooldown and resubmit the mission: `./bin/orchestratorctl submit <runID> <file> --wait`.
-
-### 3.5 `cancelled`
-- **Bridge State**: Mission was explicitly aborted by the operator or CLI signal.
-- **Recovery Decision**: Start a new mission or step handle if the original goal is still required.
+- **`failed_adapter`**: The agent process crashed or exited with a non-zero code before it could report its outcome.
+    - *Resolution*: Check `step logs` for agent-side crashes (e.g., API key errors, OOM).
+- **`failed_bridge`**: Codencer encountered an internal error during worktree creation or **provisioning**.
+    - *Resolution*: Check the `provisioning` telemetry in `step result` for copy/link errors.
+- **`timeout`**: The execution exceeded `timeout_seconds` and was killed by the bridge.
+    - *Resolution*: Increase the timeout in your TaskSpec or simplify the task.
 
 ---
 
-### 4.1 Multi-Instance Port Conflict
-**Symptoms**: `make start` or `make start-sim` fails with a "failed to start" error.
-- **Cause**: Another Codencer instance (or another service) is already using the configured `PORT` (default `8085`).
-- **Fix**: 
-  - Use `orchestratorctl instance` to see which repository is currently served on the default port.
-  - To run another instance, specify a different port in your `.env` or as an environment variable: `PORT=8086 make start`.
-  - Ensure your CLI commands also use the correct port: `PORT=8086 orchestratorctl instance`.
+## 4. Antigravity & Broker Issues (Experimental)
+
+### 4.1 "Broker bind error: connection refused"
+- **Cause**: The Windows-side `agent-broker.exe` is not running.
+- **Fix**: Start the broker on the host machine. Verify port 8088 is open.
+
+### 4.2 "No instances discovered"
+- **Cause**: Antigravity is not active in your IDE or the `.gemini` daemon directory is hidden/unreachable.
+- **Fix**: Open a project in VS Code with Antigravity enabled. Ensure your WSL mount for `C:` is working correctly.
+
+### 4.3 "Stale Binding"
+- **Cause**: The IDE instance was closed or restarted.
+- **Fix**: Run `orchestratorctl antigravity list` and re-bind to the new PID.
 
 ---
 
----
-
-## 4. Resetting Your Environment
+## 5. Resetting the Bridge
 
 If the local state becomes corrupted or you want a fresh start:
 ```bash
@@ -106,43 +82,5 @@ make nuke
 
 # Rebuild and start fresh
 make build
-./bin/orchestratord
+make start-sim
 ```
-
----
-
-## 5. Antigravity Specifics
-
-### 5.1 No instances discovered
-**Symptoms**: `antigravity list` returns an empty list.
-### Antigravity Broker Issues
-If using the recommended `antigravity-broker` path (Phase BP-1+):
-
-#### 1. "Broker bind error: connection refused"
-- **Cause**: The broker is not running on the host machine or the port (8088) is blocked by a firewall.
-- **Fix**: Ensure `agent-broker.exe` is running on the Windows side. Check `netstat -ano | findstr 8088` to verify the listener.
-
-#### 2. "WSL loopback unreachable"
-- **Cause**: Older WSL2 versions or custom `.wslconfig` may disable mirrored networking.
-- **Fix**: Verify by running `curl http://localhost:8088/health` from within WSL. If it fails, use the host's Windows IP address instead of `localhost`.
-
-#### 3. "No instances found"
-- **Cause**: Antigravity LS has not started or the `.gemini/antigravity/daemon` directory on Windows is empty.
-- **Fix**: Open an IDE with Antigravity installed to trigger the LS daemon file creation.
-  - Windows default: `%USERPROFILE%\.gemini\antigravity\daemon`
-  - WSL view: `/mnt/c/Users/<user>/.gemini/antigravity/daemon`
-
-### 5.2 Binding shows "STALE"
-**Symptoms**: `antigravity status` reports `STALE (Process not reachable)`.
-- **Cause**: The bound PID no longer exists, the LS instance has restarted on a different port, or the shared loopback is unreachable.
-- **Fix**: Re-discover with `antigravity list`, verify reachability, and re-bind.
-
-### 5.3 Step state is "failed_adapter"
-**Symptoms**: Task fails with `Poll error: ...` or transport issues.
-- **Meaning**: This is a **Bridge/Infrastructure** issue, not a task failure. The Antigravity LS may have crashed or become unreachable during execution.
-- **Fix**: Restart the Antigravity session in your IDE and re-bind Codencer.
-
-### 5.4 Step state is "failed_terminal"
-**Symptoms**: Task finishes but goals are not met.
-- **Meaning**: This is a **Task** failure. The Antigravity executor finished successfully but the agent failed the prompt or validations.
-- **Fix**: Refine your prompt/task or fix underlying code issues.

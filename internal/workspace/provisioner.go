@@ -50,6 +50,7 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 		dst := filepath.Join(workspaceRoot, relPath)
 		
 		res.Log = append(res.Log, fmt.Sprintf("[COPY] %s", relPath))
+		res.EnvironmentFiles = append(res.EnvironmentFiles, relPath)
 		if err := p.copyFile(src, dst); err != nil {
 			return p.fail(res, start, "Copy failed for "+relPath, err)
 		}
@@ -65,6 +66,7 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 		dst := filepath.Join(workspaceRoot, relPath)
 		
 		res.Log = append(res.Log, fmt.Sprintf("[SYMLINK] %s", relPath))
+		res.Symlinks = append(res.Symlinks, relPath)
 		// Remove existing to allow idempotency/retries in the same folder if needed
 		_ = os.Remove(dst)
 		if err := os.Symlink(src, dst); err != nil {
@@ -74,6 +76,7 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 
 	// 3. PostCreate Hook
 	if spec.Hooks.PostCreate != "" {
+		res.PostCreateHook = spec.Hooks.PostCreate
 		res.Log = append(res.Log, fmt.Sprintf("[HOOK] %s", spec.Hooks.PostCreate))
 		slog.Info("Provision: executing PostCreate hook", "hook", spec.Hooks.PostCreate)
 		
@@ -86,8 +89,10 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 		}
 		
 		if err != nil {
+			res.HookStatus = "failed"
 			return p.fail(res, start, "Post-create hook failed", err)
 		}
+		res.HookStatus = "success"
 	}
 
 	res.DurationMs = time.Since(start).Milliseconds()

@@ -206,6 +206,15 @@ func (a *BrokerAdapter) NormalizeResult(ctx context.Context, attemptID string, a
 		finalState = domain.StepStateFailedAdapter
 	}
 
+	res := &domain.ResultSpec{
+		State:     finalState,
+		Summary:   finalSummary,
+		Artifacts: make(map[string]string),
+	}
+	res.Artifacts["broker_task_id"] = taskID
+	res.Artifacts["broker_repo_root"] = a.baseRepoRoot
+	res.Artifacts["broker_base_url"] = a.baseURL
+
 	// Deep Error Extraction from trajectory.json (if available)
 	for _, art := range artifacts {
 		if art.Name == "trajectory.json" {
@@ -236,7 +245,7 @@ func (a *BrokerAdapter) NormalizeResult(ctx context.Context, attemptID string, a
 						}
 					}
 					if detail != "" {
-						finalSummary = fmt.Sprintf("%s (Detail: %s)", finalSummary, detail)
+						res.Summary = fmt.Sprintf("%s (Detail: %s)", finalSummary, detail)
 					}
 				}
 			}
@@ -244,11 +253,8 @@ func (a *BrokerAdapter) NormalizeResult(ctx context.Context, attemptID string, a
 		}
 	}
 
-	return &domain.ResultSpec{
-		State:     finalState,
-		Summary:   finalSummary,
-		Artifacts: map[string]string{"broker_task_id": taskID},
-		RawOutput: fmt.Sprintf("Broker Task ID: %s\nBroker State: %s", taskID, task.State),
-		UpdatedAt: time.Now(),
-	}, nil
+	res.RawOutput = fmt.Sprintf("Broker Task ID: %s\nBroker State: %s", taskID, task.State)
+	res.UpdatedAt = time.Now()
+
+	return res, nil
 }

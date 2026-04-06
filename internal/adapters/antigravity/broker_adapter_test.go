@@ -65,3 +65,32 @@ func TestBrokerAdapter_PollMapping(t *testing.T) {
 		server.Close()
 	}
 }
+
+func TestBrokerAdapter_NormalizeResult_Metadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"state":   "completed",
+			"summary": "all good",
+		})
+	}))
+	defer server.Close()
+
+	adapter := NewBrokerAdapter(server.URL, "/repo/stable")
+	adapter.taskCache["att-1"] = "task-1"
+
+	res, err := adapter.NormalizeResult(context.Background(), "att-1", nil)
+	if err != nil {
+		t.Fatalf("NormalizeResult failed: %v", err)
+	}
+
+	if res.Artifacts["broker_task_id"] != "task-1" {
+		t.Errorf("Expected broker_task_id=task-1, got %s", res.Artifacts["broker_task_id"])
+	}
+	if res.Artifacts["broker_repo_root"] != "/repo/stable" {
+		t.Errorf("Expected broker_repo_root=/repo/stable, got %s", res.Artifacts["broker_repo_root"])
+	}
+	if res.Artifacts["broker_base_url"] != server.URL {
+		t.Errorf("Expected broker_base_url=%s, got %s", server.URL, res.Artifacts["broker_base_url"])
+	}
+}

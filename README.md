@@ -1,6 +1,8 @@
 # Codencer: The Tactical Orchestration Bridge
 
-Codencer is a persistent orchestration daemon designed to securely manage, execute, validate, and audit coding tasks performed by external agents. It acts as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). It is designed for **local-first, self-hosted developer toolchains.**
+Codencer is a tactical orchestration bridge that manages execution, isolation, and high-fidelity audit trails for coding agents. It serves as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). 
+
+Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
 > [!IMPORTANT]
 > **Project Status: Public Beta (v0.1.0-beta)**.
@@ -18,9 +20,14 @@ Codencer is a persistent orchestration daemon designed to securely manage, execu
 
 > **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
 
+---
+
 ## 🏛 The Relay Model
 
 Codencer is a **bridge, not a brain**. It does not decide the high-level strategy; it executes tactical instructions and reports high-fidelity evidence.
+
+- **What it is**: A system of record, a workspace isolator, a validator, and a provider of immutable artifacts.
+- **What it is not**: A planner, a chat UI, a cloud service, or an AI "agent" that thinks about what to do next.
 
 ```text
 [ Planner (Brain) ] <---------- (ResultSpec) ---------+
@@ -36,7 +43,21 @@ Codencer is a **bridge, not a brain**. It does not decide the high-level strateg
 - **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
 - **Coding Agent**: The underlying tactical tool performing the actual work (e.g., `codex-agent`, `claude-code`).
 
-For the definitive Day-0 guide, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
+---
+
+## 🚀 The Canonical Run Path (Local-First)
+
+The standard sequence for performing an audited tactical task:
+
+1.  **Clone & Setup**: `git clone` the repo → `make setup build`.
+2.  **Start the Bridge**: `make start-sim` (for testing) or `make start` (for real agents).
+3.  **Inspect Instance**: `./bin/orchestratorctl instance` (Verify port/repo).
+4.  **Start a Run**: `./bin/orchestratorctl run start <RUN_ID> <PROJECT>`.
+5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> <TASK_FILE> --wait`.
+6.  **Audit the Result**: `./bin/orchestratorctl step result <UUID>` (The Summary).
+7.  **Evidence Drill-down**: `./bin/orchestratorctl step logs/artifacts/validations <UUID>`.
+
+---
 
 ---
 
@@ -130,22 +151,19 @@ As a local-first Beta/MVP, Codencer has the following constraints:
 
 ---
 
-## 📊 Maturity & Capability Matrix
+### 📊 Maturity & Capability Matrix
 
-Codencer is currently in an **MVP/Beta** state. Use the following matrix to understand current support:
+Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs. experimental.
 
 | Feature Area | Status | Description |
 | :--- | :--- | :--- |
-| **Orchestration Core** | ✅ **Ready (Beta)** | Persistent SQLite ledger, state machine, and Git Worktrees. |
-| **CLI & MCP Layer** | ✅ **Ready (Beta)** | Structured JSON outputs, log tailing, and health checks. |
-| **Codex Adapter** | ✅ **Ready (Beta)** | High-fidelity relay for the `codex-agent` binary. |
-| **Instance Identity** | ✅ **Ready (Beta)** | One-repo-one-daemon model with explicit `instance` inspection. |
-| **Run Metadata**      | ✅ **Ready (Beta)** | Label runs by `project`, `conversation`, `planner`, and `executor`. |
-| **Claude/Qwen Adapters** | 🟡 **Functional** | Basic subprocess wrappers; lacks deep artifact extraction. |
-| **Simulation Mode** | ✅ **Ready (Beta)** | Robust stubs for orchestrator validation without LLM use. |
-| **Diagnostics & Health**| ✅ **Ready (Beta)** | CLI-based `doctor` and `smoke` verification tools. |
-| **Antigravity Adapter**| ✅ **Ready (Beta)** | Direct-local execution via the Antigravity LS protocol. |
-| **IDE Chat Bridge** | 🧪 **Prototype** | Experimental proxy-mediated file access via VS Code. |
+| **Local Bridge Core** | ✅ **Stable Beta** | Persistence, state machine, Git Worktrees. |
+| **Provisioning Layer**| ✅ **Stable Beta** | Native copy/symlink layer; optional Grove subset. |
+| **Codex Adapter** | ✅ **Stable Beta** | Primary high-fidelity relay for `codex-agent`. |
+| **Antigravity Metadata** | ✅ **Ready (Beta)** | Broker-backed context, task IDs, and provenance. |
+| **Antigravity Broker** | 🟡 **Operational** | Cross-side (WSL/Windows) bridge for IDE instances. |
+| **Simulation Mode** | ✅ **Stable Beta** | Stub-based validation (Bridge-only smoke tests). |
+| **IDE Chat Bridge** | 🧪 **Experimental** | Proxy-mediated file access via VS Code (Prototype). |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
 
 ### 🔍 Direct-Local Antigravity Integration
