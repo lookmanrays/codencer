@@ -291,7 +291,9 @@ func TestRunService_DispatchStep_ImmutableNamespacing(t *testing.T) {
 
 	// Dispatch Attempt 1
 	t.Log("Dispatching Attempt 1")
-	_ = runSvc.DispatchStep(ctx, runID, step)
+	if err := runSvc.DispatchStep(ctx, runID, step); err != nil {
+		t.Fatalf("DispatchStep 1 failed: %v", err)
+	}
 	t.Log("Attempt 1 finished")
 	attempts, _ := attemptsRepo.ListByStep(ctx, step.ID)
 	if len(attempts) != 1 {
@@ -307,7 +309,9 @@ func TestRunService_DispatchStep_ImmutableNamespacing(t *testing.T) {
 	// Reset step state to pending for redispatch simulation
 	step.State = domain.StepStatePending
 	t.Log("Dispatching Attempt 2")
-	_ = runSvc.DispatchStep(ctx, runID, step)
+	if err := runSvc.DispatchStep(ctx, runID, step); err != nil {
+		t.Fatalf("DispatchStep 2 failed: %v", err)
+	}
 	t.Log("Attempt 2 finished")
 	
 	attempts, _ = attemptsRepo.ListByStep(ctx, step.ID)
@@ -328,10 +332,16 @@ func TestRunService_DispatchStep_ImmutableNamespacing(t *testing.T) {
 
 // Local mock for validation tests
 type valMockAdapter struct {
-	res *domain.ResultSpec
+	res            *domain.ResultSpec
+	WorkspaceFiles map[string]string
 }
 
-func (m *valMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+func (a *valMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	for name, content := range a.WorkspaceFiles {
+		path := filepath.Join(workspaceRoot, name)
+		_ = os.MkdirAll(filepath.Dir(path), 0755)
+		_ = os.WriteFile(path, []byte(content), 0644)
+	}
 	return nil
 }
 func (m *valMockAdapter) Poll(ctx context.Context, attemptID string) (bool, error) {
@@ -443,5 +453,44 @@ func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	}
 	if !failedFound {
 		t.Error("Expected failing validation result in ResultSpec")
+	}
+
+	// Manually create the isolator file in the expected workspace path
+	// We'll use the adapter to inject it during Start
+	isoAdapter := &valMockAdapter{
+		res: &domain.ResultSpec{State: domain.StepStateCompleted},
+		WorkspaceFiles: map[string]string{
+			"isolator.txt": "isolated-truth",
+		},
+	}
+	routingSvcIso := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"mock-iso": isoAdapter})
+	runSvcIso := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		routingSvcIso, &service.PolicyRegistry{}, artifactRoot, workspaceRoot,
+	)
+
+	stepIso := &domain.Step{
+		ID:      "step-val-iso",
+		Adapter: "mock-iso",
+		Validations: []domain.ValidationCommand{
+			{Name: "check-iso", Command: "cat isolator.txt"},
+		},
+	}
+
+	_ = runSvcIso.DispatchStep(ctx, runID, stepIso)
+
+	if stepIso.State != domain.StepStateCompleted {
+		t.Errorf("Expected StepStateCompleted for isolation check, got %s", stepIso.State)
+	}
+
+	resIso, _ := runSvc.GetResultByStep(ctx, stepIso.ID)
+	foundIso := false
+	for _, v := range resIso.Validations {
+		if v.Name == "check-iso" && v.Passed {
+			foundIso = true
+		}
+	}
+	if !foundIso {
+		t.Error("Validation failed to find isolator.txt in attempt workspace")
 	}
 }

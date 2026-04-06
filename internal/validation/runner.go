@@ -12,16 +12,15 @@ import (
 
 // Runner executes validation commands in the context of the workspace.
 type Runner struct {
-	workspaceRoot string
 }
 
-// NewRunner creates a new validation runner mapping to the given root directory.
-func NewRunner(workspaceRoot string) *Runner {
-	return &Runner{workspaceRoot: workspaceRoot}
+// NewRunner creates a new validation runner.
+func NewRunner() *Runner {
+	return &Runner{}
 }
 
 // Run executes a validation command and returns the structured result.
-func (r *Runner) Run(ctx context.Context, cmdSpec domain.ValidationCommand) (*domain.ValidationResult, error) {
+func (r *Runner) Run(ctx context.Context, cmdSpec domain.ValidationCommand, workspaceRoot string) (*domain.ValidationResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
@@ -35,7 +34,7 @@ func (r *Runner) Run(ctx context.Context, cmdSpec domain.ValidationCommand) (*do
 	}
 
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
-	cmd.Dir = r.workspaceRoot
+	cmd.Dir = workspaceRoot
 
 	// Capture outputs
 	out, err := cmd.CombinedOutput()

@@ -55,7 +55,7 @@ func NewRunService(
 		validationsRepo: validationsRepo,
 		routingSvc:    routingSvc,
 		policyRegistry: policyReg,
-		validationRunner: validation.NewRunner(workspaceRoot),
+		validationRunner: validation.NewRunner(),
 		artifactRoot:  artifactRoot,
 		workspaceRoot: workspaceRoot,
 	}
@@ -540,7 +540,7 @@ func (s *RunService) executeAttempt(
 		failed := 0
 		anyFailed := false
 		for _, cmd := range step.Validations {
-			vres, verr := s.validationRunner.Run(ctx, cmd)
+			vres, verr := s.validationRunner.Run(ctx, cmd, workspaceRoot)
 			if verr != nil {
 				slog.Error("Validation runner system error", "error", verr, "cmd", cmd.Name)
 			}
