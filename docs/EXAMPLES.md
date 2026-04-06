@@ -1,6 +1,41 @@
-# Canonical Local Runbook
+- [⚡️ The 30-Second Mission (Simulation)](#the-30-second-mission-simulation)
+- [🏗 Antigravity Broker Workflow (WSL ↔ Windows)](#antigravity-broker-workflow-wsl--windows)
+- [💡 The Canonical Sequence](#the-canonical-sequence)
+- [📂 Parallel Project Work](#parallel-project-work-metadata--filtering)
 
-This is the definitive "Day 0" guide for operating the Codencer orchestration bridge locally.
+---
+
+## 🏗 Antigravity Broker Workflow (WSL ↔ Windows)
+This is the recommended path for users running Codencer in WSL and the IDE on Windows.
+
+### 1. Start the Broker (Windows Host)
+In a PowerShell terminal on your Windows machine:
+```powershell
+cd cmd/broker
+go run main.go
+# 2026/04/06 ... Antigravity Broker v0.1.0-alpha starting on 127.0.0.1:8088
+```
+
+### 2. Configure Codencer (WSL Guest)
+In your WSL terminal where you run Codencer:
+```bash
+export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
+orchestratord start
+# INFO AntigravityService initialized in BROKER mode url=http://localhost:8088
+```
+
+### 3. Bind and Execute
+```bash
+# List instances discovered by the broker
+orchestratorctl antigravity list
+
+# Bind to the active IDE instance
+orchestratorctl antigravity bind <PID>
+
+# Submit a task via the broker-backed adapter
+orchestratorctl run start my-refactoring --executor antigravity-broker --conversation c-123
+orchestratorctl submit my-refactoring task.yaml --wait
+```
 
 ---
 

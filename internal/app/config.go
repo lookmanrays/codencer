@@ -13,8 +13,9 @@ type Config struct {
 	DBPath       string `json:"db_path"`
 	ArtifactRoot  string `json:"artifact_root"`
 	WorkspaceRoot string `json:"workspace_root"`
-	Host          string `json:"host"`
-	Port          int    `json:"port"`
+	Host                  string `json:"host"`
+	Port                  int    `json:"port"`
+	AntigravityBrokerURL  string `json:"antigravity_broker_url"`
 }
 
 // DefaultConfig defines default values for the daemon configuration.
@@ -67,6 +68,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if env := os.Getenv("LOG_LEVEL"); env != "" {
 		config.LogLevel = env
+	}
+	if env := os.Getenv("CODENCER_ANTIGRAVITY_BROKER_URL"); env != "" {
+		config.AntigravityBrokerURL = env
 	}
 
 	return config, nil

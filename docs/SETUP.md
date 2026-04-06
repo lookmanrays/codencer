@@ -144,20 +144,54 @@ Codencer provides an identical local-first technical surface on macOS and Window
 ---
 
 ## 🔍 Antigravity Direct-Local Setup
-The `antigravity` adapter allows Codencer to act as a bridge for active Antigravity Language Server instances.
+### Antigravity Integration (IDE-First)
 
-### 1. Prerequisites (Experimental WSL Support)
-The `antigravity` adapter traditionally requires both Codencer and the Antigravity process to be on the **same OS side**. 
+Codencer can bridge to a running Antigravity Language Server (LS) instance to perform IDE-native code changes.
+
+For the most robust experience (especially in WSL/Windows environments), it is recommended to use the **Antigravity Broker**:
+
+1. Start the Antigravity Broker on your Windows Host:
+   ```bash
+   cd cmd/broker
+   go build -o agent-broker main.go
+   ./agent-broker
+   ```
+2. Enable the broker path in your Codencer environment:
+   ```bash
+   export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
+   ```
+3. Bind your repository to the active IDE instance:
+   ```bash
+   orchestratorctl antigravity bind <PID>
+   ```
+ 
 - **Same-Side**: Both in Linux/WSL or both in Windows.
 - **WSL ↔ Windows (Experimental)**: Cross-side discovery is now supported. Codencer in WSL can find Windows instances if the host's `.gemini` directory is reachable via the default `/mnt/c/Users/<user>` path.
 
-### 2. Configuration & Overrides
-If your WSL mount point is non-standard or your Windows username differs from your WSL username, you can explicitly point Codencer to the Windows daemon directory:
+### Option 1: Native Heuristic (Legacy/Direct)
+Codencer in WSL attempts to scan your Windows home directory (`/mnt/c/Users/...`) for active daemon files. This requires predictable path mapping.
 
-```bash
-# Override the discovery path for Windows-side instances
-export CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR="/mnt/d/WindowsHome/.gemini/antigravity/daemon"
-```
+### Option 2: Antigravity Broker (Recommended)
+The **Antigravity Broker** is a same-side proxy that runs natively where the IDE runs. It eliminates discovery brittle-ness.
+
+#### Setup (Windows Host)
+1. Build the broker:
+   ```powershell
+   cd cmd/broker
+   go build -o agent-broker.exe main.go
+   .\agent-broker.exe
+   ```
+
+#### Configuration (WSL Guest)
+1. Point Codencer to the broker:
+   ```bash
+   export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
+   ```
+2. Proceed with standard listing and binding:
+   ```bash
+   orchestratorctl antigravity list
+   orchestratorctl antigravity bind <PID>
+   ```
 
 ### 3. Discovery & Binding
 Codencer automatically discovers active Antigravity instances by scanning the configured daemon directories.

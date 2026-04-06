@@ -1,4 +1,4 @@
-# Troubleshooting Guide
+# Troubleshooting Reference
 
 This guide helps you resolve common issues encountered when running the Codencer Orchestration Bridge locally.
 
@@ -107,10 +107,20 @@ make build
 
 ### 5.1 No instances discovered
 **Symptoms**: `antigravity list` returns an empty list.
-### 5.1 Cross-Side Discovery Failures
-**Symptoms**: `antigravity list` doesn't show instances running on the other OS side (e.g., Windows host from WSL).
-- **Cause**: Non-standard mount point (not `/mnt/c`) or mismatched usernames.
-- **Fix**: Use the `CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR` environment variable to point directly to the Windows daemon folder.
+### Antigravity Broker Issues
+If using the recommended `antigravity-broker` path (Phase BP-1+):
+
+#### 1. "Broker bind error: connection refused"
+- **Cause**: The broker is not running on the host machine or the port (8088) is blocked by a firewall.
+- **Fix**: Ensure `agent-broker.exe` is running on the Windows side. Check `netstat -ano | findstr 8088` to verify the listener.
+
+#### 2. "WSL loopback unreachable"
+- **Cause**: Older WSL2 versions or custom `.wslconfig` may disable mirrored networking.
+- **Fix**: Verify by running `curl http://localhost:8088/health` from within WSL. If it fails, use the host's Windows IP address instead of `localhost`.
+
+#### 3. "No instances found"
+- **Cause**: Antigravity LS has not started or the `.gemini/antigravity/daemon` directory on Windows is empty.
+- **Fix**: Open an IDE with Antigravity installed to trigger the LS daemon file creation.
   - Windows default: `%USERPROFILE%\.gemini\antigravity\daemon`
   - WSL view: `/mnt/c/Users/<user>/.gemini/antigravity/daemon`
 
