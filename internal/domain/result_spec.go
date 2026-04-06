@@ -14,6 +14,7 @@ type ResultSpec struct {
 	Adapter            string            `json:"adapter"`
 	RequestedAdapter   string            `json:"requested_adapter"`
 	State              StepState         `json:"state"`
+	Provisioning       *ProvisioningResult `json:"provisioning,omitempty"`
 	Summary            string            `json:"summary"`
 	FilesChanged       []string          `json:"files_changed"`
 	Validations        []ValidationResult `json:"validations"`

@@ -1,216 +1,74 @@
-# Setup & Environmental Reference
+# Workspace Provisioning & Isolation
 
-> **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during execution.
+Codencer uses Git Worktrees to isolate task attempts. To ensure these worktrees are ready for execution (e.g., they have the necessary `.env` files or `node_modules`), Codencer provides a native provisioning layer.
 
-This guide describes the technical prerequisites and environmental configuration required to run the Codencer bridge. For the operational guide, see the **[Canonical Local Runbook](EXAMPLES.md)**.
+## Native Configuration: `.codencer/workspace.json`
 
----
+Create a `.codencer/workspace.json` file in your repository root to define the provisioning plan.
 
-## 📋 Prerequisites
-
-### 1. Core Runtime (Required)
-- **Go**: Version 1.21 or higher.
-- **C Compiler**: `gcc`, `clang`, or `cc` (Required to build the CGO embedded SQLite driver).
-- **Git**: Required for workspace-isolated runs (Git Worktrees).
-
-### ⚡️ The 30-Second Mission (Simulation)
-Use this flow to verify the bridge logic (ledger, state machine, CLI) without requiring external LLMs or agent binaries.
-
-### 1. Automated Verification (Recommended)
-From a clean clone, run the automated verification suite:
-```bash
-make setup build smoke
-```
-This single command initializes the environment, builds the binaries, and runs a full simulation loop.
-
-### 2. Tactical Agents (Real Mode Only)
-To perform real file edits, you need at least one tactical agent binary in your `$PATH`.
-
-#### **Claude (Recommended)**
-```bash
-npm install -g @anthropic-ai/claude-code
+```json
+{
+  "provisioning": {
+    "copy": [
+      ".env",
+      ".env.local",
+      "config/secrets.json"
+    ],
+    "symlinks": [
+      "node_modules",
+      "vendor"
+    ],
+    "hooks": {
+      "post_create": "npm install --offline"
+    }
+  }
+}
 ```
 
-#### **Codex**
-```bash
-npm install -g @lookman/codex-agent
-```
+### Configuration Fields
 
----
+- **`copy`**: A list of relative paths to files that should be replicated from the base repository to the attempt worktree. This is ideal for small configuration or secret files that are not committed to git.
+- **`symlinks`**: A list of relative paths to directories or files that should be symlinked from the base repository. This is critical for large dependency folders like `node_modules` to avoid the overhead of copying millions of files.
+- **`hooks.post_create`**: A single shell command to run immediately after file preparation and before the agent starts. Use this for lightweight setup like `go mod download`.
 
-## 🎭 Execution Modes
+## Grove Compatibility (Optional)
 
-Codencer allows you to decouple **Orchestrator** verification from **Agent** reasoning.
+Codencer is **Grove-compatible**. If you are already using [Grove](https://github.com/verbaux/grove) for local development, Codencer will automatically detect and import your existing configuration if a native `.codencer/workspace.json` is not present.
 
-### 1. Simulation Mode
-- **Goal**: Verify state machine, ledger, and CLI.
-- **Config**: `ALL_ADAPTERS_SIMULATION_MODE=1` in `.env`.
-- **Start**: `make start-sim` (background) or `make simulate` (foreground).
+### Supported Grove Files
+1. **`grove.yaml`**: Standard spec-style configuration.
+2. **`.groverc.json`**: Legacy-style configuration used by the reference implementation.
 
-### 2. Real Mode
-- **Goal**: Perform actual file edits using LLM-based agents.
-- **Config**: `ALL_ADAPTERS_SIMULATION_MODE=0` and agent binary paths.
-- **Start**: `make start` (background) or `./bin/orchestratord` (foreground).
+### Precedence Rules
+Codencer merges configuration from multiple sources using the following priority:
+1. **`.codencer/workspace.json`** (Authoritative)
+2. **`grove.yaml`** (Secondary)
+3. **`.groverc.json`** (Tertiary)
 
----
+If a field (e.g., `symlinks`) is defined in the native config, any definitions in Grove files for that specific field are ignored.
 
-## ⚙️ Detailed Configuration
+## Audit & Visibility
 
-Codencer honors environment variable overrides and a local `.env` file.
+Every provisioning action is recorded in the attempt evidence. If provisioning fails, the attempt is marked as **`failed_bridge`**, and the reason is populated in the `StatusReason`.
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `PORT` | Listening port for the daemon API. | `8085` |
-| `DB_PATH` | Path to the SQLite ledger. | `.codencer/codencer.db` |
-| `ARTIFACT_ROOT`| Storage vault for diffs and logs. | `.codencer/artifacts` |
-| `CODEX_BINARY` | Path to the Codex agent binary. | `codex-agent` |
-| `LOG_LEVEL` | `debug`, `info`, `warn`, `error`. | `info` |
-
----
-
-## 🏗 Storage Model
-
-| Path | Responsibility |
-| :--- | :--- |
-| `.codencer/codencer.db` | The system-of-record (SQLite). |
-| `.codencer/artifacts/` | Per-attempt diffs, logs, and artifacts. |
-| `.codencer/workspace/` | Temporary Git Worktrees for isolated execution. |
-
----
-
-## 🔍 Self-Review & Health
-
-Before running your first mission, use the built-in diagnostic tool to verify your local environment:
+You can inspect the setup logs using the CLI:
 
 ```bash
-./bin/orchestratorctl doctor
+# View the high-level result (including provisioning summary)
+./bin/orchestratorctl step result <UUID>
 ```
 
-The doctor checks:
-- **Environment**: Presence of `.env` and `.codencer/` directory.
-- **Permissions**: Write access to the local ledger storage.
-- **Binaries**: Presence and versions of `git`, `go`, `curl`, and `cc` (for embedded DB).
-- **Adapters**: Detects whether `codex-agent` or other adapters are reachable in your PATH (Informational/Optional).
-- **Mode**: Confirms whether you are running in **Simulation** or **Real** execution mode.
-- **Identity**: Use `./bin/orchestratorctl instance` to see exactly which repository and port the daemon is serving.
-
-If any check fails, the doctor will provide targeted instructions (e.g., "Run 'make setup'" or "Install git").
-
-### 🧪 Relay Validation
-Once the doctor reports `[OK]`, execute the automated smoke test to verify the full end-to-end relay loop in simulation mode:
-
-```bash
-make smoke
+In the resulting JSON, look for the `provisioning` section:
+```json
+"provisioning": {
+  "success": true,
+  "summary": "",
+  "log": [
+    "Copy: .env -> .env",
+    "Symlink: node_modules -> node_modules",
+    "Hook (PostCreate): npm install --offline",
+    "added 1 package in 2s..."
+  ],
+  "duration_ms": 2450
+}
 ```
-
-The smoke test validates:
-1. Daemon startup and health connectivity.
-2. Mission run initialization.
-3. Task submission and synchronous completion (`submit --wait`).
-4. Authoritative result reporting (`step result`).
-
----
-
-## 🏗 Single vs. Multi-Instance Workflows
-Codencer is designed as a **strictly local, repo-bound bridge**.
-- **1 Repo Checkout = 1 Daemon Instance**
-- **1 .codencer folder = 1 Ledger + 1 Identity**
-
-If you need to work with multiple repositories simultaneously on the same machine, you must run multiple daemon instances on different ports:
-
-```bash
-# Repo A
-cd ~/projects/repo_a
-./bin/orchestratorctl instance  # Verify: http://127.0.0.1:8085
-
-# Repo B
-cd ~/projects/repo_b
-PORT=8086 make start           # Starts new instance on 8086
-PORT=8086 ./bin/orchestratorctl instance  # Verify: http://127.0.0.1:8086
-```
-
-### 🔍 Identifying Instances
-If you are unsure which instance is running on which port, run:
-```bash
-./bin/orchestratorctl instance
-```
-The output will include the absolute `repo_root` and `base_url`.
-
-## 💻 Environment Workflows (macOS / WSL)
-Codencer provides an identical local-first technical surface on macOS and Windows Subsystem for Linux (WSL).
-- **WSL Users**: Run the daemon inside your WSL instance. Windows-side IDEs (like VS Code) can connect to the daemon over the local loopback `http://localhost:8085` transparently.
-- **Embedded DB Architecture**: The bridge embeds SQLite via Go's CGO. This means no external DB service (like Postgres or SQLite daemon) needs to be installed, though a standard local C compiler (`cc`/`gcc`) is briefly hit during the `go build` step.
-
----
-
-## 🔍 Antigravity Direct-Local Setup
-### Antigravity Integration (IDE-First)
-
-Codencer can bridge to a running Antigravity Language Server (LS) instance to perform IDE-native code changes.
-
-For the most robust experience (especially in WSL/Windows environments), it is recommended to use the **Antigravity Broker**:
-
-1. Start the Antigravity Broker on your Windows Host:
-   ```bash
-   cd cmd/broker
-   go build -o agent-broker main.go
-   ./agent-broker
-   ```
-2. Enable the broker path in your Codencer environment:
-   ```bash
-   export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
-   ```
-3. Bind your repository to the active IDE instance:
-   ```bash
-   orchestratorctl antigravity bind <PID>
-   ```
- 
-- **Same-Side**: Both in Linux/WSL or both in Windows.
-- **WSL ↔ Windows (Experimental)**: Cross-side discovery is now supported. Codencer in WSL can find Windows instances if the host's `.gemini` directory is reachable via the default `/mnt/c/Users/<user>` path.
-
-### Option 1: Native Heuristic (Legacy/Direct)
-Codencer in WSL attempts to scan your Windows home directory (`/mnt/c/Users/...`) for active daemon files. This requires predictable path mapping.
-
-### Option 2: Antigravity Broker (Recommended)
-The **Antigravity Broker** is a same-side proxy that runs natively where the IDE runs. It eliminates discovery brittle-ness.
-
-#### Setup (Windows Host)
-1. Build the broker:
-   ```powershell
-   cd cmd/broker
-   go build -o agent-broker.exe main.go
-   .\agent-broker.exe
-   ```
-
-#### Configuration (WSL Guest)
-1. Point Codencer to the broker:
-   ```bash
-   export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
-   ```
-2. Proceed with standard listing and binding:
-   ```bash
-   orchestratorctl antigravity list
-   orchestratorctl antigravity bind <PID>
-   ```
-
-### 3. Discovery & Binding
-Codencer automatically discovers active Antigravity instances by scanning the configured daemon directories.
-
-```bash
-# 1. List discovered instances
-./bin/orchestratorctl antigravity list
-
-# 2. Bind the current repository to a specific PID
-./bin/orchestratorctl antigravity bind <PID>
-
-# 3. Verify the binding
-./bin/orchestratorctl antigravity status
-```
-
-Once bound, you can submit tasks using the `antigravity` adapter profile.
-
----
-
-## 📖 Further Reading
-- [Canonical Local Runbook](EXAMPLES.md)
-- [Architecture Overview](02_architecture.md)

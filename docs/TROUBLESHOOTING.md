@@ -56,10 +56,18 @@ Always start here to verify your environment:
 - **Audit Truth**: Run `./bin/orchestratorctl step logs <id>` to see the agent's stderr.
 - **Recovery Decision**: Check your agent configuration, API keys, or binary permissions.
 
-### 3.5 `failed_bridge`
-- **Bridge State**: Codencer itself encountered a blocking error (e.g. git worktree conflict, disk full, or lock issue).
-- **Audit Truth**: Check the `Reason` in `./bin/orchestratorctl step state <id>`.
-- **Recovery Decision**: Resolve the local environment conflict and resubmit.
+### 3.5 `failed_bridge` (Infrastructure)
+- **Bridge State**: Codencer encountered an environment-level blocking error (e.g. git worktree conflict, disk full).
+- **Audit Truth**: Check the `Reason` in `./bin/orchestratorctl step result <id>`.
+- **Recovery Decision**: Resolve the local conflict (e.g. clean up stale worktrees) and resubmit.
+
+### 3.6 `failed_bridge` (Provisioning)
+- **Bridge State**: The workspace setup phase failed during file copying, symlinking, or hook execution.
+- **Audit Truth**: Run `./bin/orchestratorctl step result <id>` and inspect the `provisioning` JSON block.
+- **Common Causes**:
+    - **Missing Source**: A file listed in the `copy` spec is missing from the base repository (e.g. `.env` not found).
+    - **Hook Exit Code**: A `post_create` shell command exited with a non-zero status.
+- **Recovery Decision**: Correct the path in `.codencer/workspace.json` or fix the script logic in the `post_create` hook and resubmit.
 
 ### 3.3 `needs_manual_attention`
 - **Bridge State**: System ambiguity, agent crash, or ambient environment failure. 

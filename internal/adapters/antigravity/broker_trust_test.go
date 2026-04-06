@@ -35,7 +35,7 @@ func TestBrokerAdapter_Trust_FailureMapping(t *testing.T) {
 			}))
 			defer server.Close()
 
-			adapter := NewBrokerAdapter(server.URL)
+			adapter := NewBrokerAdapter(server.URL, "/repo")
 			adapter.taskCache["att-1"] = "task-1"
 
 			spec, err := adapter.NormalizeResult(context.Background(), "att-1", nil)
@@ -82,7 +82,7 @@ func TestBrokerAdapter_Trust_DeepErrorExtraction(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewBrokerAdapter(server.URL)
+	adapter := NewBrokerAdapter(server.URL, "/repo")
 	adapter.taskCache["att-1"] = "task-1"
 
 	arts := []*domain.Artifact{

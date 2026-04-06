@@ -12,6 +12,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -98,6 +99,7 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 		sqlite.NewValidationsRepo(db),
 		routingSvc,
 		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
 		artifactRoot, workspaceRoot)
 
 	ctx := context.Background()
@@ -226,7 +228,7 @@ func TestRunService_DispatchStep_GranularFailurePreservation(t *testing.T) {
 			routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 			runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
 				gatesRepo, artifactsRepo, sqlite.NewValidationsRepo(db),
-				routingSvc, service.NewPolicyRegistry(), t.TempDir(), t.TempDir())
+				routingSvc, service.NewPolicyRegistry(), workspace.NewNullProvisioner(), t.TempDir(), t.TempDir())
 
 			ctx := context.Background()
 			runId := "fail-test-" + tt.name
@@ -292,7 +294,7 @@ func TestRunService_DispatchStep_PollErrorMapping(t *testing.T) {
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
 		gatesRepo, artifactsRepo, sqlite.NewValidationsRepo(db),
-		routingSvc, service.NewPolicyRegistry(), t.TempDir(), t.TempDir())
+		routingSvc, service.NewPolicyRegistry(), workspace.NewNullProvisioner(), t.TempDir(), t.TempDir())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -340,7 +342,8 @@ func TestRunService_DispatchStep_ImmutableNamespacing(t *testing.T) {
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
 		gatesRepo, artifactsRepo, sqlite.NewValidationsRepo(db),
-		routingSvc, service.NewPolicyRegistry(), artifactRoot, workspaceRoot)
+		routingSvc, service.NewPolicyRegistry(), workspace.NewNullProvisioner(),
+		artifactRoot, workspaceRoot)
 
 	ctx := context.Background()
 	runID := "namespace-run"
@@ -455,7 +458,7 @@ func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	// Use service. prefix for package-level types and functions
 	runSvc := service.NewRunService(
 		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
-		routingSvc, &service.PolicyRegistry{}, artifactRoot, workspaceRoot,
+		routingSvc, service.NewPolicyRegistry(), workspace.NewNullProvisioner(), artifactRoot, workspaceRoot,
 	)
 
 	runID := "run-val-1"
@@ -530,7 +533,7 @@ func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	routingSvcIso := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"mock-iso": isoAdapter})
 	runSvcIso := service.NewRunService(
 		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
-		routingSvcIso, &service.PolicyRegistry{}, artifactRoot, workspaceRoot,
+		routingSvcIso, &service.PolicyRegistry{}, workspace.NewNullProvisioner(), artifactRoot, workspaceRoot,
 	)
 
 	stepIso := &domain.Step{

@@ -19,6 +19,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -122,11 +123,12 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 		"qwen":     qwen.NewAdapter(),
 		"ide-chat": ide.NewAdapter(),
 		"antigravity": antigravity.NewAdapter(agSvc),
-		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL),
+		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, cfg.WorkspaceRoot),
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, cfg.ArtifactRoot, cfg.WorkspaceRoot)
+	provisioner := workspace.NewLocalProvisioner()
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, provisioner, cfg.ArtifactRoot, cfg.WorkspaceRoot)
 
 	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot)
 	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {

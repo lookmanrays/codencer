@@ -9,6 +9,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -31,8 +32,11 @@ func TestRunService_Retrieval(t *testing.T) {
 	artifactsRepo := sqlite.NewArtifactsRepo(db)
 	validationsRepo := sqlite.NewValidationsRepo(db)
 	routingSvc := service.NewRoutingService(nil, nil)
+	policyReg := service.NewPolicyRegistry()
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
 
-	svc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, service.NewPolicyRegistry(), t.TempDir(), t.TempDir())
+	svc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, workspace.NewNullProvisioner(), artifactRoot, workspaceRoot)
 
 	ctx := context.Background()
 	runID := "test-run"

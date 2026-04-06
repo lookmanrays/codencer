@@ -21,7 +21,7 @@ func TestBrokerAdapter_Start(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewBrokerAdapter(server.URL)
+	adapter := NewBrokerAdapter(server.URL, "/repo")
 	step := &domain.Step{Goal: "test goal"}
 	attempt := &domain.Attempt{ID: "att-1"}
 
@@ -52,7 +52,7 @@ func TestBrokerAdapter_PollMapping(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]string{"state": tt.brokerState})
 		}))
 		
-		adapter := NewBrokerAdapter(server.URL)
+		adapter := NewBrokerAdapter(server.URL, "/repo")
 		adapter.taskCache["att-1"] = "task-1"
 		
 		running, err := adapter.Poll(context.Background(), "att-1")

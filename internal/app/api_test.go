@@ -11,6 +11,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -36,7 +37,7 @@ func TestAPI_Endpoints(t *testing.T) {
 	routingSvc := service.NewRoutingService(benchRepo, nil)
 	policyReg := service.NewPolicyRegistry()
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artsRepo, valsRepo, routingSvc, policyReg, "/tmp/codencer-artifacts", "/tmp/codencer-workspace")
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artsRepo, valsRepo, routingSvc, policyReg, workspace.NewNullProvisioner(), "/tmp/codencer-artifacts", "/tmp/codencer-workspace")
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	handler := &APIHandler{

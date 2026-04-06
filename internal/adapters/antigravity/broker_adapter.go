@@ -21,19 +21,23 @@ type BrokerAdapter struct {
 	baseURL string
 	client  *http.Client
 	
+	// baseRepoRoot is the fixed repository path used for binding lookup
+	baseRepoRoot string
+	
 	// taskCache maps attemptID -> broker_task_id
 	taskCache map[string]string
 	mu        sync.RWMutex
 }
 
-func NewBrokerAdapter(baseURL string) *BrokerAdapter {
+func NewBrokerAdapter(baseURL, baseRepoRoot string) *BrokerAdapter {
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:8088"
 	}
 	return &BrokerAdapter{
-		baseURL: baseURL,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		taskCache: make(map[string]string),
+		baseURL:      baseURL,
+		client:       &http.Client{Timeout: 10 * time.Second},
+		baseRepoRoot: baseRepoRoot,
+		taskCache:    make(map[string]string),
 	}
 }
 
@@ -48,8 +52,9 @@ func (a *BrokerAdapter) Capabilities() []string {
 func (a *BrokerAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	url := fmt.Sprintf("%s/tasks", a.baseURL)
 	reqBody := map[string]string{
-		"prompt":    step.Goal,
-		"repo_root": workspaceRoot,
+		"prompt":         step.Goal,
+		"repo_root":      a.baseRepoRoot, // Binding Identity
+		"workspace_root": workspaceRoot,  // Execution Context
 	}
 	data, _ := json.Marshal(reqBody)
 

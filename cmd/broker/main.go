@@ -308,8 +308,9 @@ func main() {
 	http.HandleFunc("/tasks", logger(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" { http.Error(w, "method not allowed", 405); return }
 		var b struct {
-			Prompt   string `json:"prompt"`
-			RepoRoot string `json:"repo_root"`
+			Prompt        string `json:"prompt"`
+			RepoRoot      string `json:"repo_root"`
+			WorkspaceRoot string `json:"workspace_root"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&b); err != nil { http.Error(w, "invalid JSON", 400); return }
 		if b.RepoRoot == "" { http.Error(w, "repo_root is required", 400); return }
@@ -317,9 +318,12 @@ func main() {
 		inst := registry.Get(b.RepoRoot)
 		if inst == nil { http.Error(w, "no instance bound for this repo", 400); return }
 
+		runWorkspace := b.WorkspaceRoot
+		if runWorkspace == "" { runWorkspace = inst.WorkspaceRoot }
+
 		req := map[string]any{
 			"userPrompt": b.Prompt,
-			"workspaceFolderAbsoluteUri": inst.WorkspaceRoot,
+			"workspaceFolderAbsoluteUri": runWorkspace,
 			"metadata": map[string]any{"fileAccessGranted": true},
 			"cascadeConfig": map[string]any{"plannerConfig": map[string]any{"plannerTypeConfig": map[string]any{"planning": map[string]any{}}}},
 		}

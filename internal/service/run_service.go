@@ -27,6 +27,7 @@ type RunService struct {
 	routingSvc    *RoutingService
 	policyRegistry *PolicyRegistry
 	validationRunner *validation.Runner
+	provisioner     workspace.Provisioner
 	artifactRoot  string
 	workspaceRoot string
 }
@@ -42,6 +43,7 @@ func NewRunService(
 	validationsRepo *sqlite.ValidationsRepo,
 	routingSvc *RoutingService,
 	policyReg *PolicyRegistry,
+	provisioner workspace.Provisioner,
 	artifactRoot string,
 	workspaceRoot string,
 ) *RunService {
@@ -56,6 +58,7 @@ func NewRunService(
 		routingSvc:    routingSvc,
 		policyRegistry: policyReg,
 		validationRunner: validation.NewRunner(),
+		provisioner:     provisioner,
 		artifactRoot:  artifactRoot,
 		workspaceRoot: workspaceRoot,
 	}
@@ -480,7 +483,35 @@ func (s *RunService) executeAttempt(
 		_ = workspace.RemoveWorktree(context.Background(), baseRepo, workspaceRoot)
 	}()
 
-	// 2. Start Execution
+	// 2. Provision Workspace
+	slog.Info("Provisioning workspace", "runID", runID, "workspace", workspaceRoot)
+	
+	// Load repo-local provisioning config
+	spec, err := workspace.LoadWorkspaceConfig(baseRepo)
+	if err != nil {
+		slog.Warn("Failed to load provisioning config (skipping)", "error", err)
+	}
+
+	provRes, err := s.provisioner.Provision(ctx, spec, baseRepo, workspaceRoot)
+	if attempt.Result != nil {
+		attempt.Result.Provisioning = provRes
+	}
+	
+	if err != nil {
+		slog.Error("Failed to provision workspace", "runID", runID, "error", err)
+		reason := fmt.Sprintf("Provisioning failed: %v", err)
+		if attempt.Result == nil {
+			attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason, Provisioning: provRes}
+		} else {
+			attempt.Result.State = domain.StepStateFailedBridge
+			attempt.Result.Summary = reason
+		}
+		step.StatusReason = reason
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
+	}
+
+	// 3. Start Execution
 	attemptArtifactRoot := filepath.Join(s.artifactRoot, runID, step.ID, attempt.ID)
 	_ = os.MkdirAll(attemptArtifactRoot, 0755)
 

@@ -12,6 +12,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -54,11 +55,12 @@ func TestCodexValidationScenario(t *testing.T) {
 
 	adapters := map[string]domain.Adapter{"codex": adapter}
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+	policyReg := service.NewPolicyRegistry()
 
 	runSvc := service.NewRunService(
 		runsRepo, phasesRepo, stepsRepo, attemptsRepo,
 		gatesRepo, artifactsRepo, validationsRepo,
-		routingSvc, service.NewPolicyRegistry(),
+		routingSvc, policyReg, workspace.NewNullProvisioner(),
 		artifactRoot, workspaceRoot,
 	)
 

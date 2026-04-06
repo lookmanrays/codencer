@@ -11,6 +11,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
 	"agent-bridge/internal/storage/sqlite"
+	"agent-bridge/internal/workspace"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -43,6 +44,7 @@ func TestE2EFlow(t *testing.T) {
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+	policyReg := service.NewPolicyRegistry()
 
 	artifactRoot := "/tmp/codencer/artifacts"
 	workspaceRoot := "/tmp/codencer/workspace"
@@ -55,7 +57,8 @@ func TestE2EFlow(t *testing.T) {
 		artifactsRepo,
 		validationsRepo,
 		routingSvc,
-		service.NewPolicyRegistry(),
+		policyReg,
+		workspace.NewNullProvisioner(),
 		artifactRoot,
 		workspaceRoot,
 	)
