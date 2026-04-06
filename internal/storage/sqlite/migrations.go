@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS attempts (
 	retryable BOOLEAN NOT NULL DEFAULT 0,
 	version TEXT,
 	artifacts TEXT,
+	provisioning TEXT,
 	FOREIGN KEY (step_id) REFERENCES steps(id) ON DELETE CASCADE
 );
 
@@ -168,6 +169,7 @@ CREATE TABLE IF NOT EXISTS settings (
 		"ALTER TABLE runs ADD COLUMN executor_id TEXT",
 		"ALTER TABLE steps ADD COLUMN status_reason TEXT",
 		"ALTER TABLE steps ADD COLUMN validations TEXT",
+		"ALTER TABLE attempts ADD COLUMN provisioning TEXT",
 	}
 
 	for _, m := range extraMigrations {

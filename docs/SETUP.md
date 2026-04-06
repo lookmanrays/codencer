@@ -31,9 +31,11 @@ Create a `.codencer/workspace.json` file in your repository root to define the p
 - **`symlinks`**: A list of relative paths to directories or files that should be symlinked from the base repository. This is critical for large dependency folders like `node_modules` to avoid the overhead of copying millions of files.
 - **`hooks.post_create`**: A single shell command to run immediately after file preparation and before the agent starts. Use this for lightweight setup like `go mod download`.
 
-## Grove Compatibility (Optional)
+## Grove Compatibility (Optional Subset)
 
-Codencer is **Grove-compatible**. If you are already using [Grove](https://github.com/verbaux/grove) for local development, Codencer will automatically detect and import your existing configuration if a native `.codencer/workspace.json` is not present.
+Codencer includes an **optional compatibility layer** for [Grove](https://github.com/verbaux/grove) configuration. If you already use Grove for local development, Codencer will automatically detect and import your environment preparation settings if a native `.codencer/workspace.json` is not present. 
+
+**Note**: Codencer does NOT depend on the Grove CLI and only reads the configuration files directly.
 
 ### Supported Grove Subset
 Codencer only imports the environment preparation subset of Grove configuration. It ignores Grove's native lifecycle tracking, state files, and aliases.

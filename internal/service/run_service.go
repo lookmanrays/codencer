@@ -551,6 +551,7 @@ func (s *RunService) executeAttempt(
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
 		step.StatusReason = reason
 	} else {
+		res.Provisioning = provRes
 		attempt.Result = res
 		if res.State == domain.StepStateFailedTerminal || res.State == domain.StepStateFailedAdapter {
 			step.StatusReason = res.Summary

@@ -53,6 +53,17 @@ func (m *MockAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptAr
 	return arts, nil
 }
 
+type MockProvisioner struct {
+	Log []string
+}
+
+func (m *MockProvisioner) Provision(ctx context.Context, spec *domain.ProvisioningSpec, baseRepo, workspaceRoot string) (*domain.ProvisioningResult, error) {
+	return &domain.ProvisioningResult{
+		Success: true,
+		Log:     m.Log,
+	}, nil
+}
+
 func (m *MockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	// Provide a successful domain result
 	return &domain.ResultSpec{
@@ -559,5 +570,64 @@ func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	}
 	if !foundIso {
 		t.Error("Validation failed to find isolator.txt in attempt workspace")
+	}
+}
+
+func TestRunService_ProvisioningResultPersistence(t *testing.T) {
+	ctx := context.Background()
+	db, _ := sql.Open("sqlite3", ":memory:")
+	sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+
+	mockAdapter := &MockAdapter{}
+	routingSvc := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{
+		"mock": mockAdapter,
+	})
+
+	// Use a mock provisioner that returns a detectable log
+	prov := &MockProvisioner{
+		Log: []string{"[DONE] Test Setup"},
+	}
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		routingSvc, service.NewPolicyRegistry(), prov, artifactRoot, workspaceRoot,
+	)
+
+	runID := "run-prov-persist"
+	runSvc.StartRun(ctx, runID, "p1", "c1", "pl1", "ex1")
+
+	step := &domain.Step{
+		ID:      "step-prov-1",
+		Adapter: "mock",
+	}
+
+	err := runSvc.DispatchStep(ctx, runID, step)
+	if err != nil {
+		t.Fatalf("DispatchStep failed: %v", err)
+	}
+
+	res, err := runSvc.GetResultByStep(ctx, step.ID)
+	if err != nil {
+		t.Fatalf("GetResultByStep failed: %v", err)
+	}
+
+	if res.Provisioning == nil {
+		t.Fatal("Expected Provisioning metadata to be persisted in final result, got nil")
+	}
+
+	if len(res.Provisioning.Log) == 0 || res.Provisioning.Log[0] != "[DONE] Test Setup" {
+		t.Errorf("Expected provisioning log '[DONE] Test Setup', got %v", res.Provisioning.Log)
 	}
 }

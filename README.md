@@ -12,7 +12,9 @@ Codencer is a persistent orchestration daemon designed to securely manage, execu
 
 - **Step-Isolation**: Each step executes in its own git worktree, preventing cross-task interference.
 - **Immutable Evidence**: All logs, results, and artifacts are namespaced by Run, Step, and Attempt ID under `.codencer/artifacts/<run-id>/<step-id>/<attempt-id>/`, ensuring full auditability of repeated attempts.
-- **Workspace Provisioning**: Automatically prepares attempt worktrees by copying secrets (`.env`), symlinking dependencies (`node_modules`), and running setup hooks (`post_create`). Codencer is **Grove-compatible** and can optionally read a documented safe subset of your existing `grove.yaml` or `.groverc.json` configuration.
+- **Workspace Provisioning**: Automatically prepares attempt worktree environments (copying `.env`, symlinking `node_modules`, running `post_create` hooks). Codencer includes an **optional Grove-compatible subset** for environment preparation; it does not depend on the Grove CLI and is designed to coexist with existing `.groverc.json` or `grove.yaml` files.
+  - *Inspiration*: This layer was inspired in part by [Grove](https://github.com/verbaux/grove).
+  - *Thanks*: Special thanks to [@verbaux](https://github.com/verbaux) for the conceptual foundation of local workspace preparation.
 
 > **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
 
