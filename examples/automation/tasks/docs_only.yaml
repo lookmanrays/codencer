@@ -1,0 +1,11 @@
+version: "v1"
+title: "Automation Example: README polish"
+goal: "Clarify the simulation mode section in README.md without changing code."
+context:
+  summary: "Example task file for ordered wrapper execution. The wrapper supplies run_id."
+allowed_paths:
+  - "README.md"
+policy_bundle: "default_safe_refactor"
+adapter_profile: "codex"
+timeout_seconds: 180
+is_simulation: true

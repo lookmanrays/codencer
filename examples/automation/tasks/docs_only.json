@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "title": "Automation Example: README polish (JSON)",
+  "goal": "Clarify the simulation mode section in README.md without changing code.",
+  "context": {
+    "summary": "Example strict JSON task for ordered wrapper execution."
+  },
+  "allowed_paths": [
+    "README.md"
+  ],
+  "policy_bundle": "default_safe_refactor",
+  "adapter_profile": "codex",
+  "timeout_seconds": 180,
+  "is_simulation": true
+}

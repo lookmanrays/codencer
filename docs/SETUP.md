@@ -9,6 +9,7 @@ This guide provides the technical baseline for running the Codencer Orchestratio
 - **Go 1.21+**: Required to build the daemon and CLI.
 - **C Compiler (gcc/cc)**: Required for the CGO-based SQLite driver.
 - **curl**: Required for health checking and polling.
+- **jq or Python 3**: Recommended for bash/zsh automation wrappers that parse Codencer JSON output.
 
 ### Operating System
 - **Linux** (Native): Primary supported platform.
@@ -100,3 +101,27 @@ Codencer optionally reads an environment-prep subset of Grove config (`grove.yam
 > Codencer does **not** depend on the Grove CLI and is designed to coexist with existing Grove setups.
 
 For advanced provisioning examples, see **[EXAMPLES.md](EXAMPLES.md)**.
+
+---
+
+## 6. Automation-Friendly Submission Inputs
+
+`orchestratorctl submit` supports both rich canonical task definitions and narrow direct convenience input.
+
+Use a full YAML or JSON `TaskSpec` when you need rich structure such as constraints, path controls, or custom validation layouts.
+
+Use direct convenience input when a shell wrapper, planner, or local script needs a deterministic way to submit one task without authoring YAML first:
+- `--task-json <path|->`
+- `--prompt-file <path>`
+- `--goal <text>`
+- `--stdin`
+
+Exactly one primary source is required.
+
+Direct convenience input stays intentionally narrow. It deterministically normalizes into the canonical `TaskSpec` used by the daemon and preserves both:
+- `original-input.*`
+- `normalized-task.json`
+
+For concrete submit examples, see **[EXAMPLES.md](EXAMPLES.md)**. For planner- and wrapper-oriented examples, see **[CLI_AUTOMATION.md](CLI_AUTOMATION.md)**.
+
+The official v1 ordered-task model is wrapper-based. Use the scripts in `examples/automation/` when you need to execute an explicit ordered list one item at a time.

@@ -1,8 +1,6 @@
 version: v1
 project_id: local-agent-bridge
 run_id: run-0002
-phase_id: phase-04-qwen-adapter
-step_id: step-02
 title: Implement Qwen adapter
 goal: Build a working Qwen adapter
 context:
@@ -23,4 +21,4 @@ acceptance:
 stop_conditions:
   - Adapter interface must be redesigned.
 policy_bundle: safe_refactor
-adapter_profile: qwen-default
+adapter_profile: qwen

@@ -1,0 +1,11 @@
+version: "v1"
+title: "Automation Example: Docs config update"
+goal: "Update docs to mention the current default daemon port without changing code paths."
+context:
+  summary: "Example wrapper-friendly YAML task with no hard-coded run_id."
+allowed_paths:
+  - "docs/**"
+policy_bundle: "default_safe_refactor"
+adapter_profile: "codex"
+timeout_seconds: 180
+is_simulation: true

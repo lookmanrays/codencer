@@ -14,7 +14,7 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
 
 ## 3. Simulation Run (The "Smoke Test")
 - [ ] Start a run: `./bin/orchestratorctl run start smoke-test local-verify`.
-- [ ] Submit the example task: `./bin/orchestratorctl submit smoke-test examples/tasks/bug_fix.yaml --wait`.
+- [ ] Submit the example task: `./bin/orchestratorctl submit smoke-test examples/tasks/bug_fix.yaml --wait --json`.
 - [ ] Verify the state reaches `completed` (in simulation mode).
 
 ## 4. Evidence Inspection

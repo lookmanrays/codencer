@@ -109,8 +109,134 @@ make start-sim
 ### 1.2 Submit & Wait
 ```bash
 # Submit the task and follow it to completion
-./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait
+./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait --json
 ```
+
+## 1.3 Direct Convenience Input
+
+Use direct input when a shell wrapper or planner needs a narrow, automation-friendly submit path without authoring YAML for every task.
+
+Exactly one primary source is required:
+- positional task file
+- `--task-json <path|->`
+- `--prompt-file <path>`
+- `--goal <text>`
+- `--stdin`
+
+Direct metadata flags are only supported with `--prompt-file`, `--goal`, and `--stdin`:
+- `--title`
+- `--context`
+- `--adapter`
+- `--timeout`
+- `--policy`
+- repeated `--acceptance`
+- repeated `--validation`
+
+### Positional TaskSpec File (YAML or JSON)
+```bash
+./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --wait --json
+./bin/orchestratorctl submit my-first-run .codencer/task.json --wait --json
+```
+
+### Explicit JSON Task Mode
+```bash
+./bin/orchestratorctl submit my-first-run --task-json .codencer/task.json --wait --json
+
+cat .codencer/task.json | ./bin/orchestratorctl submit my-first-run --task-json - --wait --json
+```
+
+### Prompt File Mode
+```bash
+./bin/orchestratorctl submit my-first-run \
+  --prompt-file prompts/fix-tests.md \
+  --title "Fix failing tests" \
+  --adapter codex \
+  --validation "go test ./pkg/foo" \
+  --wait --json
+```
+
+### Inline Goal Mode
+```bash
+./bin/orchestratorctl submit my-first-run \
+  --goal "Fix the failing tests in pkg/foo without changing unrelated packages" \
+  --title "Fix pkg/foo tests" \
+  --adapter codex \
+  --policy default_safe_refactor \
+  --timeout 180 \
+  --validation "go test ./pkg/foo" \
+  --wait --json
+```
+
+### STDIN Mode
+```bash
+cat prompts/fix-tests.txt | ./bin/orchestratorctl submit my-first-run \
+  --stdin \
+  --title "Fix pkg/foo tests" \
+  --adapter codex \
+  --wait --json
+```
+
+### Invalid Multi-Source Example
+This is intentionally rejected because `submit` accepts exactly one primary input source.
+
+```bash
+./bin/orchestratorctl submit my-first-run examples/tasks/bug_fix.yaml --goal "Fix tests"
+```
+
+### Normalization and Provenance
+
+Direct input compiles deterministically into the same internal `TaskSpec` used by file-based submission:
+- `version` defaults to `v1`
+- `run_id` comes from the CLI run ID
+- `title` comes from `--title`, otherwise prompt filename basename, otherwise `Direct task`
+- `goal` is the exact text submitted
+- repeated `--validation` flags become `validation-1`, `validation-2`, and so on
+
+Each attempt preserves:
+- `original-input.*`
+- `normalized-task.json`
+
+These are written under the attempt artifact root and are visible through normal artifact inspection. `context` and `acceptance` are retained in the normalized payload for auditability, but they are not currently separate executor-driving runtime fields.
+
+## 1.4 Ordered Sequential Execution (Official v1)
+
+Codencer v1 does not include a native workflow engine or manifest runner. The official sequential model is an external wrapper loop that submits one item at a time with `submit --wait --json`.
+
+Official examples live in `examples/automation/`:
+- `run_tasks.sh`
+- `run_tasks.ps1`
+- `run_tasks.py`
+
+### Bash / zsh wrapper
+```bash
+examples/automation/run_tasks.sh \
+  --run-id run-seq-01 \
+  --project codencer-demo \
+  --input-mode task-file \
+  --tasks-file examples/automation/task_files.txt
+```
+
+### PowerShell wrapper
+```powershell
+./examples/automation/run_tasks.ps1 `
+  -RunId run-seq-01 `
+  -Project codencer-demo `
+  -InputMode prompt-file `
+  -TasksFile examples/automation/prompt_files.txt `
+  -Adapter codex
+```
+
+### Python wrapper
+```bash
+python3 examples/automation/run_tasks.py \
+  --run-id run-seq-01 \
+  --project codencer-demo \
+  --input-mode goal \
+  --tasks-file examples/automation/goals.txt \
+  --adapter codex
+```
+
+Default behavior is stop-on-failure. Use the wrapper’s explicit continue mode when you want to keep running after a non-zero task outcome.
 
 ---
 
@@ -160,9 +286,9 @@ Connect your local repository clone to an active Antigravity session.
 ```
 
 ### 3.3 Execute & Audit
-Submit as usual. Codencer will automatically route the task through the broker.
+Binding only establishes the repo-scoped Antigravity target. Execution still depends on explicit adapter selection in the submitted TaskSpec.
 ```bash
-./bin/orchestratorctl submit <runID> <file> --wait
+./bin/orchestratorctl submit <runID> <file> --wait --json
 ```
 
 Auditing a broker task includes extra **Provenance** metadata:

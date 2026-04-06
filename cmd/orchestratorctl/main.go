@@ -26,7 +26,7 @@ var (
 
 func main() {
 	_ = godotenv.Load(".env")
-	
+
 	if env := os.Getenv("ORCHESTRATORD_URL"); env != "" {
 		orchestratordURL = env
 	} else {
@@ -43,7 +43,7 @@ func main() {
 
 	if len(os.Args) < 2 {
 		printUsage()
-		os.Exit(1)
+		os.Exit(exitCodeUsage)
 	}
 
 	command := os.Args[1]
@@ -52,8 +52,10 @@ func main() {
 		fmt.Printf("orchestratorctl version %s\n", app.Version)
 	case "run":
 		handleRunCommand(os.Args[2:])
-	case "step", "submit":
+	case "step":
 		handleStepCommand(os.Args[1:])
+	case "submit":
+		handleSubmitCommand(os.Args[2:])
 	case "gate":
 		handleGateCmd(os.Args[2:])
 	case "antigravity":
@@ -63,47 +65,50 @@ func main() {
 	case "instance":
 		handleInstanceCommand(os.Args[2:])
 	default:
-		fmt.Printf("Unknown command: %s\n", command)
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		printUsage()
-		os.Exit(1)
+		os.Exit(exitCodeUsage)
 	}
 }
 
 func printUsage() {
 	fmt.Println("Usage: orchestratorctl <command> [args]")
 	fmt.Println("\n1. Session & Mission Management:")
-	fmt.Println("  run start      [id] [p] [--project x] [--conversation y]  Initialize a mission")
-	fmt.Println("  run list       [--project x] [--conversation y] [--json]  Show mission history")
-	fmt.Println("  run state      <runID> [--json]                         Check mission state")
-	fmt.Println("  run abort      <runID>                                  Halt an active mission")
-	
+	fmt.Println("  run start      [id] [p] [--project x] [--conversation y] [--json]  Initialize a mission")
+	fmt.Println("  run list       [--project x] [--conversation y] [--json]            Show mission history")
+	fmt.Println("  run state      <runID> [--json]                                     Check mission state")
+	fmt.Println("  run wait       <runID> [--interval d] [--timeout d] [--json]        Poll a run to terminal state")
+	fmt.Println("  run abort      <runID> [--json]                                     Halt an active mission")
+
 	fmt.Println("\n2. Tactical Execution (The Bridge):")
-	fmt.Println("  submit         <runID> <file>  Execute TaskSpec (returns UUID Handle)")
-	fmt.Println("  submit --wait  <runID> <file>  Execute and poll until terminal state")
-	fmt.Println("  step list      <runID>         List all task handles in a mission")
-	fmt.Println("  step wait      <handle>        Poll a specific UUID until completion")
-	
+	fmt.Println("  submit         <runID> <task-file>|--task-json <path|->|--prompt-file <path>|--goal <text>|--stdin [flags] [--wait] [--json]")
+	fmt.Println("                 exactly one primary source is required; direct metadata flags apply only to --prompt-file/--goal/--stdin")
+	fmt.Println("                 direct submissions persist original-input.* and normalized-task.json as attempt evidence")
+	fmt.Println("  step list      <runID> [--json]                                     List all task handles in a mission")
+	fmt.Println("  step state     <handle> [--json]                                    Check a specific UUID state")
+	fmt.Println("  step wait      <handle> [--interval d] [--timeout d] [--json]       Poll a specific UUID until completion")
+
 	fmt.Println("\n3. Evidence & Inspection (The Truth):")
-	fmt.Println("  step result    <handle>        Authoritative Truth (Summary)")
-	fmt.Println("  step logs      <handle>        Raw agent stdout/stderr trail")
-	fmt.Println("  step artifacts <handle>        List harvested files and diffs")
-	fmt.Println("  step validations <handle>      Check specific test/lint results")
-	
+	fmt.Println("  step result    <handle> [--json]                                    Authoritative Truth (Summary)")
+	fmt.Println("  step logs      <handle> [--json]                                    Raw agent stdout/stderr trail")
+	fmt.Println("  step artifacts <handle> [--json]                                    List harvested files and diffs")
+	fmt.Println("  step validations <handle> [--json]                                  Check specific test/lint results")
+
 	fmt.Println("\n4. Maintenance & Health:")
-	fmt.Println("  doctor                        Verify local environment/binaries")
-	fmt.Println("  gate approve   <gateID>        Approve a paused policy gate")
-	fmt.Println("  gate reject    <gateID>        Reject a paused policy gate")
-	fmt.Println("  antigravity    <cmd>           Manage antigravity bindings")
-	fmt.Println("  instance      [--json]         Show current daemon identity")
-	fmt.Println("  version                       Show version")
+	fmt.Println("  doctor                                                              Verify local environment/binaries")
+	fmt.Println("  gate approve   <gateID> [--json]                                   Approve a paused policy gate")
+	fmt.Println("  gate reject    <gateID> [--json]                                   Reject a paused policy gate")
+	fmt.Println("  antigravity    <cmd>                                                Manage antigravity bindings")
+	fmt.Println("  instance      [--json]                                              Show current daemon identity")
+	fmt.Println("  version                                                             Show version")
 }
 
 func handleRunCommand(args []string) {
 	if len(args) < 1 {
 		fmt.Println("Usage: orchestratorctl run <start|list|state|abort|wait> [args]")
-		fmt.Println("  start: orchestratorctl run start [id] [project] [--project p] [--conversation c] [--planner p] [--executor e]")
+		fmt.Println("  start: orchestratorctl run start [id] [project] [--project p] [--conversation c] [--planner p] [--executor e] [--json]")
 		fmt.Println("  list:  orchestratorctl run list [--project p] [--conversation c] [--state s] [--json]")
-		os.Exit(1)
+		os.Exit(exitCodeUsage)
 	}
 
 	cmd := args[0]
@@ -113,7 +118,7 @@ func handleRunCommand(args []string) {
 		if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
 			id = args[1]
 		}
-		
+
 		flags := parseRunStartFlags(args)
 		startRun(id, flags)
 	case "list":
@@ -122,31 +127,25 @@ func handleRunCommand(args []string) {
 	case "status", "state":
 		if len(args) < 2 {
 			fmt.Println("Usage: orchestratorctl run state <runID> [--json]")
-			os.Exit(1)
+			os.Exit(exitCodeUsage)
 		}
-		asJSON := false
-		for _, arg := range args[2:] {
-			if arg == "--json" {
-				asJSON = true
-			}
-		}
-		runState(args[1], asJSON)
+		runState(args[1], hasFlag(args[2:], "--json"))
 	case "abort":
 		if len(args) < 2 {
-			fmt.Println("Usage: orchestratorctl run abort <id>")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl run abort <id> [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		abortRun(args[1])
+		abortRun(args[1], hasFlag(args[2:], "--json"))
 	case "wait":
 		if len(args) < 2 {
-			fmt.Println("Usage: orchestratorctl run wait <id> [--interval <d>] [--timeout <d>]")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl run wait <id> [--interval <d>] [--timeout <d>] [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		interval, timeout := parseWaitFlags(args[2:])
-		runWait(args[1], interval, timeout)
+		interval, timeout, asJSON := parseWaitFlags(args[2:])
+		os.Exit(runWait(args[1], interval, timeout, asJSON))
 	default:
-		fmt.Printf("Unknown run command: %s\n", cmd)
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unknown run command: %s\n", cmd)
+		os.Exit(exitCodeUsage)
 	}
 }
 
@@ -162,37 +161,33 @@ func startRun(id string, flags map[string]string) {
 
 	resp, err := http.Post(orchestratordURL+"/api/v1/runs", "application/json", bytes.NewReader(data))
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(flags["json"] == "true", exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(flags["json"] == "true", resp.StatusCode, body)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	printJSON(body)
+	emitJSONBody(body)
 }
 
 func runState(id string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + id)
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	if asJSON {
-		printJSON(body)
+		emitJSONBody(body)
 		return
 	}
 
@@ -216,7 +211,7 @@ func runState(id string, asJSON bool) {
 	fmt.Println("---------------------------")
 }
 
-func abortRun(id string) {
+func abortRun(id string, asJSON bool) {
 	reqBody := map[string]string{
 		"action": "abort",
 	}
@@ -227,15 +222,13 @@ func abortRun(id string) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	respBody := map[string]string{
@@ -243,8 +236,11 @@ func abortRun(id string) {
 		"action": "abort",
 		"status": "success",
 	}
-	out, _ := json.Marshal(respBody)
-	printJSON(out)
+	if asJSON {
+		emitJSONDocument(respBody)
+		return
+	}
+	fmt.Printf("Run %s aborted successfully\n", id)
 }
 
 func listRuns(filters map[string]string) {
@@ -266,19 +262,17 @@ func listRuns(filters map[string]string) {
 
 	resp, err := http.Get(u.String())
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	if asJSON {
-		printJSON(body)
+		emitJSONBody(body)
 		return
 	}
 
@@ -298,7 +292,7 @@ func listRuns(filters map[string]string) {
 			fmt.Printf("%-24s %-15s %-15s %-15s %s\n", r.ID, r.State, proj, conv, r.CreatedAt.Format("2006-01-02 15:04"))
 		}
 	} else {
-		printJSON(body)
+		emitJSONBody(body)
 	}
 }
 
@@ -326,6 +320,8 @@ func parseRunStartFlags(args []string) map[string]string {
 				flags["executor"] = args[i+1]
 				i++
 			}
+		case "--json":
+			flags["json"] = "true"
 		}
 	}
 	// Support legacy positional project if not provided via flag
@@ -362,7 +358,7 @@ func parseRunListFilters(args []string) map[string]string {
 	return filters
 }
 
-func runWait(runID string, interval, timeout time.Duration) {
+func runWait(runID string, interval, timeout time.Duration, asJSON bool) int {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -376,20 +372,25 @@ func runWait(runID string, interval, timeout time.Duration) {
 		select {
 		case <-deadline:
 			fmt.Fprintf(os.Stderr, "\n")
-			fmt.Printf(`{"error": "client_side_timeout", "message": "wait exceeded CLI limit of %v"}`+"\n", timeout)
-			os.Exit(1)
+			if asJSON {
+				emitJSONDocument(cliErrorPayload{
+					Error:   "client_side_timeout",
+					Message: fmt.Sprintf("wait exceeded CLI limit of %v", timeout),
+				})
+			} else {
+				fmt.Fprintf(os.Stderr, "wait exceeded CLI limit of %v\n", timeout)
+			}
+			return exitCodeTimeout
 		default:
 			resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + runID)
 			if err != nil {
-				fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-				os.Exit(1)
+				failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 			}
 
 			if resp.StatusCode >= 400 {
 				body, _ := io.ReadAll(resp.Body)
-				printJSON(body)
 				resp.Body.Close()
-				os.Exit(1)
+				failHTTP(asJSON, resp.StatusCode, body)
 			}
 
 			var run domain.Run
@@ -397,20 +398,19 @@ func runWait(runID string, interval, timeout time.Duration) {
 			resp.Body.Close()
 
 			if err := json.Unmarshal(body, &run); err != nil {
-				fmt.Printf(`{"error": "parsing response: %v"}`+"\n", err)
-				os.Exit(1)
+				failCLI(asJSON, exitCodeInfrastructure, "parsing response", err.Error())
 			}
 
 			if run.State.IsTerminal() || run.State == domain.RunStatePausedForGate {
 				fmt.Fprintf(os.Stderr, "\nTerminal/Intervention condition reached for Run %s: %s\n", runID, run.State)
-				
+
 				// Hint at artifact directory if possible
 				if run.State == domain.RunStateCompleted {
 					fmt.Fprintf(os.Stderr, "Artifacts: .codencer/artifacts/%s\n", runID)
 				}
-				
-				printJSON(body)
-				return
+
+				emitJSONBody(body)
+				return exitCodeForRunState(run.State)
 			}
 
 			fmt.Fprintf(os.Stderr, ".")
@@ -422,156 +422,110 @@ func runWait(runID string, interval, timeout time.Duration) {
 func handleStepCommand(args []string) {
 	if len(args) < 1 {
 		fmt.Println("Usage: orchestratorctl step <start|list|state|result|artifacts|validations|wait> [args]")
-		os.Exit(1)
+		os.Exit(exitCodeUsage)
 	}
 
-	// args[0] is "step" or "submit"
 	if len(args) < 2 {
-		if args[0] == "submit" {
-			fmt.Println("Usage: orchestratorctl submit <runID> <taskFile.yaml>")
-		} else {
-			fmt.Println("Usage: orchestratorctl step <command> [args]")
-		}
-		os.Exit(1)
+		fmt.Println("Usage: orchestratorctl step <command> [args]")
+		os.Exit(exitCodeUsage)
 	}
 
 	subCommand := args[1]
 	subArgs := args[1:]
 
-	// Alias 'submit <runID> <taskFile.yaml>' to 'step start <runID> <taskFile.yaml>'
-	if args[0] == "submit" {
-		subCommand = "start"
-		subArgs = args
-	}
-
 	switch subCommand {
 	case "start":
 		if len(subArgs) < 3 {
-			if args[0] == "submit" {
-				fmt.Println("Usage: orchestratorctl submit <runID> <taskFile.yaml>")
-			} else {
-				fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml>")
-			}
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step start <runID> <taskFile.yaml> [--wait] [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		shouldWait := false
-		if len(subArgs) > 3 && subArgs[3] == "--wait" {
-			shouldWait = true
-		}
-		stepStart(subArgs[1], subArgs[2], shouldWait)
+		opts := parseStartOptions(subArgs[3:])
+		stepStart(subArgs[1], subArgs[2], opts.wait, opts.json)
 	case "list":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step list <runID>")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step list <runID> [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		listStepsByRun(subArgs[1])
+		listStepsByRun(subArgs[1], hasFlag(subArgs[2:], "--json"))
 	case "status", "state":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step state <stepID> [--json]")
-			os.Exit(1)
+			os.Exit(exitCodeUsage)
 		}
-		asJSON := false
-		for _, arg := range subArgs[2:] {
-			if arg == "--json" {
-				asJSON = true
-			}
-		}
-		stepState(subArgs[1], asJSON)
+		stepState(subArgs[1], hasFlag(subArgs[2:], "--json"))
 	case "result":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step result <stepID>")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step result <stepID> [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		stepResult(subArgs[1])
+		stepResult(subArgs[1], hasFlag(subArgs[2:], "--json"))
 	case "logs":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step logs <stepID>")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step logs <stepID> [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		stepLogs(subArgs[1])
+		stepLogs(subArgs[1], hasFlag(subArgs[2:], "--json"))
 	case "artifacts":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step artifacts <stepID>")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step artifacts <stepID> [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		stepArtifacts(subArgs[1])
+		stepArtifacts(subArgs[1], hasFlag(subArgs[2:], "--json"))
 	case "validations":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step validations <stepID>")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step validations <stepID> [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		stepValidations(subArgs[1])
+		stepValidations(subArgs[1], hasFlag(subArgs[2:], "--json"))
 	case "wait":
 		if len(subArgs) < 2 {
-			fmt.Println("Usage: orchestratorctl step wait <id> [--interval <d>] [--timeout <d>]")
-			os.Exit(1)
+			fmt.Println("Usage: orchestratorctl step wait <id> [--interval <d>] [--timeout <d>] [--json]")
+			os.Exit(exitCodeUsage)
 		}
-		interval, timeout := parseWaitFlags(subArgs[2:])
-		stepWait(subArgs[1], interval, timeout)
+		interval, timeout, asJSON := parseWaitFlags(subArgs[2:])
+		os.Exit(stepWait(subArgs[1], interval, timeout, asJSON))
 	default:
-		fmt.Printf("Unknown step command: %s\n", subCommand)
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unknown step command: %s\n", subCommand)
+		os.Exit(exitCodeUsage)
 	}
 }
 
-func stepStart(runID, taskFile string, shouldWait bool) {
-	spec, err := validation.ParseTaskSpec(taskFile)
+func stepStart(runID, taskFile string, shouldWait, asJSON bool) {
+	normalized, err := validation.NormalizeTaskInput(validation.NormalizeTaskInputRequest{
+		RunID:      runID,
+		SourceKind: domain.SubmissionSourceTaskFile,
+		SourceName: taskFile,
+		Content: func() []byte {
+			b, readErr := os.ReadFile(taskFile)
+			if readErr != nil {
+				failCLI(asJSON, exitCodeUsage, "reading task spec", readErr.Error())
+			}
+			return b
+		}(),
+	})
 	if err != nil {
-		fmt.Printf(`{"error": "parsing task spec: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeUsage, "parsing task spec", err.Error())
 	}
-
-	data, _ := json.Marshal(spec)
-
-	resp, err := http.Post(orchestratordURL+"/api/v1/runs/"+runID+"/steps", "application/json", bytes.NewReader(data))
-	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		printJSON(body)
-		os.Exit(1)
-	}
-
-	var step domain.Step
-	if err := json.Unmarshal(body, &step); err != nil {
-		printJSON(body)
-		return
-	}
-
-	if shouldWait {
-		// Output the initial step body so the user has the ID if the wait fails
-		printJSON(body)
-		fmt.Fprintf(os.Stderr, "==> Auto-waiting for Step %s...\n", step.ID)
-		stepWait(step.ID, 2*time.Second, 0)
-		return
-	}
-
-	// Output raw JSON response for machine readability
-	printJSON(body)
-	fmt.Fprintf(os.Stderr, "\n[SUCCESS] Unified Step UUID: %s\n", step.ID)
-	fmt.Fprintf(os.Stderr, "[GUIDE] To monitor transition:\n  ./bin/orchestratorctl step wait %s\n", step.ID)
-	fmt.Fprintf(os.Stderr, "[GUIDE] To view total audit trail:\n  ./bin/orchestratorctl step result %s\n", step.ID)
+	submitTaskSpec(runID, normalized.Task, shouldWait, asJSON)
 }
 
-func listStepsByRun(runID string) {
+func listStepsByRun(runID string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/runs/" + runID + "/steps")
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
+	if asJSON {
+		emitJSONBody(body)
+		return
+	}
 	var steps []domain.Step
 	if err := json.Unmarshal(body, &steps); err == nil {
 		fmt.Printf("%-24s %-20s %-20s %-20s\n", "STEP ID", "TITLE", "STATE", "UPDATED")
@@ -588,26 +542,24 @@ func listStepsByRun(runID string) {
 			fmt.Printf("%-24s %-20s %-20s %-20s\n", s.ID, title, state, s.UpdatedAt.Format("2006-01-02 15:04"))
 		}
 	} else {
-		printJSON(body)
+		emitJSONBody(body)
 	}
 }
 
 func stepState(stepID string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	if asJSON {
-		printJSON(body)
+		emitJSONBody(body)
 		return
 	}
 
@@ -625,25 +577,27 @@ func stepState(stepID string, asJSON bool) {
 		fmt.Printf("Updated:      %s\n", step.UpdatedAt.Format(time.RFC3339))
 		fmt.Println("---------------------------")
 	} else {
-		printJSON(body)
+		emitJSONBody(body)
 	}
 }
 
-func stepResult(stepID string) {
+func stepResult(stepID string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
+	if asJSON {
+		emitJSONBody(body)
+		return
+	}
 	var result domain.ResultSpec
 	if err := json.Unmarshal(body, &result); err == nil {
 		// Fetch Run metadata for Bridge Context (Batch 2/3 Alignment)
@@ -699,7 +653,7 @@ func stepResult(stepID string) {
 				}
 			}
 		}
-		
+
 		if len(result.Validations) > 0 {
 			fmt.Println("\n--- Validations ---")
 			for _, v := range result.Validations {
@@ -710,7 +664,7 @@ func stepResult(stepID string) {
 				fmt.Printf("  %s %-20s %s\n", status, v.Name, v.State)
 			}
 		}
-		
+
 		fmt.Println("\n[GUIDE] Evidence Drill-down:")
 		if result.RawOutputRef != "" {
 			fmt.Printf("  Logs:      ./bin/orchestratorctl step logs %s\n", stepID)
@@ -719,48 +673,74 @@ func stepResult(stepID string) {
 		fmt.Printf("  Validations: ./bin/orchestratorctl step validations %s\n", stepID)
 		fmt.Println("---------------------------")
 	} else {
-		printJSON(body)
+		emitJSONBody(body)
 	}
 }
 
-func stepLogs(stepID string) {
-	fmt.Printf("Fetching logs for step %s...\n", stepID)
+func stepLogs(stepID string, asJSON bool) {
+	if !asJSON {
+		fmt.Fprintf(os.Stderr, "Fetching logs for step %s...\n", stepID)
+	}
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/logs")
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent {
-		fmt.Println("No logs available for this step.")
+		if asJSON {
+			emitJSONDocument(map[string]any{
+				"step_id":      stepID,
+				"available":    false,
+				"content_type": "text/plain",
+				"content":      "",
+			})
+			return
+		}
+		fmt.Fprintln(os.Stderr, "No logs available for this step.")
 		return
 	}
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf(`{"error": "fetching logs", "details": %s}`+"\n", string(body))
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
-	_, _ = io.Copy(os.Stdout, resp.Body)
+	body, _ := io.ReadAll(resp.Body)
+	if asJSON {
+		contentType := resp.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "text/plain"
+		}
+		emitJSONDocument(map[string]any{
+			"step_id":      stepID,
+			"available":    true,
+			"content_type": contentType,
+			"content":      string(body),
+		})
+		return
+	}
+
+	fmt.Fprint(os.Stdout, string(body))
 }
 
-func stepArtifacts(stepID string) {
+func stepArtifacts(stepID string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/artifacts")
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
+	if asJSON {
+		emitJSONBody(body)
+		return
+	}
 	var artifacts []domain.Artifact
 	if err := json.Unmarshal(body, &artifacts); err == nil {
 		fmt.Printf("--- Artifacts for Step: %s ---\n", stepID)
@@ -791,24 +771,26 @@ func stepArtifacts(stepID string) {
 		}
 		fmt.Println("\n-------------------------------")
 	} else {
-		printJSON(body)
+		emitJSONBody(body)
 	}
 }
-func stepValidations(stepID string) {
+func stepValidations(stepID string, asJSON bool) {
 	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/validations")
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
+	if asJSON {
+		emitJSONBody(body)
+		return
+	}
 	var results map[string][]*domain.ValidationResult
 	if err := json.Unmarshal(body, &results); err == nil {
 		fmt.Printf("--- Validation Summary for Step: %s ---\n", stepID)
@@ -830,11 +812,11 @@ func stepValidations(stepID string) {
 		}
 		fmt.Println("\n---------------------------------------")
 	} else {
-		printJSON(body)
+		emitJSONBody(body)
 	}
 }
 
-func stepWait(stepID string, interval, timeout time.Duration) {
+func stepWait(stepID string, interval, timeout time.Duration, asJSON bool) int {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -848,20 +830,25 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 		select {
 		case <-deadline:
 			fmt.Fprintf(os.Stderr, "\n")
-			fmt.Printf(`{"error": "client_side_timeout", "message": "wait exceeded CLI limit of %v"}`+"\n", timeout)
-			os.Exit(1)
+			if asJSON {
+				emitJSONDocument(cliErrorPayload{
+					Error:   "client_side_timeout",
+					Message: fmt.Sprintf("wait exceeded CLI limit of %v", timeout),
+				})
+			} else {
+				fmt.Fprintf(os.Stderr, "wait exceeded CLI limit of %v\n", timeout)
+			}
+			return exitCodeTimeout
 		default:
 			resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
 			if err != nil {
-				fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-				os.Exit(1)
+				failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 			}
 
 			if resp.StatusCode >= 400 {
 				body, _ := io.ReadAll(resp.Body)
-				printJSON(body)
 				resp.Body.Close()
-				os.Exit(1)
+				failHTTP(asJSON, resp.StatusCode, body)
 			}
 
 			body, _ := io.ReadAll(resp.Body)
@@ -869,14 +856,13 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 
 			var result domain.ResultSpec
 			if err := json.Unmarshal(body, &result); err != nil {
-				fmt.Printf(`{"error": "parsing response: %v"}`+"\n", err)
-				os.Exit(1)
+				failCLI(asJSON, exitCodeInfrastructure, "parsing response", err.Error())
 			}
 
 			// Check for terminal or intervention-required states
 			if result.State.IsTerminal() || result.State == domain.StepStateNeedsApproval || result.State == domain.StepStateNeedsManualAttention {
 				fmt.Fprintf(os.Stderr, "\n[BRIDGE] Mission Handle %s reached terminal condition: %s\n", stepID, result.State)
-				
+
 				switch result.State {
 				case domain.StepStateNeedsApproval:
 					fmt.Fprintf(os.Stderr, "\n[ACTION REQUIRED] Policy gate hit. Bridge is waiting for approval.\n")
@@ -909,9 +895,9 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 					fmt.Fprintf(os.Stderr, "\n[GUIDE] To view the human-readable summary (Authoritative Truth):\n  ./bin/orchestratorctl step result %s\n", stepID)
 					fmt.Fprintf(os.Stderr, "[GUIDE] To drill down into artifacts and validations:\n  ./bin/orchestratorctl step artifacts %s\n  ./bin/orchestratorctl step validations %s\n", stepID, stepID)
 				}
-				
-				printJSON(body)
-				return
+
+				emitJSONBody(body)
+				return exitCodeForStepState(result.State)
 			}
 
 			fmt.Fprintf(os.Stderr, ".")
@@ -919,33 +905,6 @@ func stepWait(stepID string, interval, timeout time.Duration) {
 		}
 	}
 }
-
-func parseWaitFlags(args []string) (interval, timeout time.Duration) {
-	interval = 2 * time.Second
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--interval":
-			if i+1 < len(args) {
-				d, err := time.ParseDuration(args[i+1])
-				if err == nil {
-					interval = d
-					i++
-				}
-			}
-		case "--timeout":
-			if i+1 < len(args) {
-				d, err := time.ParseDuration(args[i+1])
-				if err == nil {
-					timeout = d
-					i++
-				}
-			}
-		}
-	}
-	return
-}
-
-
 
 func runDoctor() {
 	fmt.Println("==> Verifying local environment...")
@@ -1001,7 +960,7 @@ func runDoctor() {
 			fmt.Printf("[OK]    %s detected: %s\n", b.name, outStr)
 		}
 	}
-	
+
 	// 4. Check Daemon connectivity
 	resp, err := http.Get(orchestratordURL + "/api/v1/compatibility")
 	if err != nil {
@@ -1036,7 +995,7 @@ func runDoctor() {
 		if path == "" {
 			path = a.bin
 		}
-		
+
 		found := false
 		if filepath.IsAbs(path) {
 			if _, err := os.Stat(path); err == nil {
@@ -1047,7 +1006,7 @@ func runDoctor() {
 				found = true
 			}
 		}
-		
+
 		if !found {
 			fmt.Printf("[INFO]  %s binary (%s) NOT in PATH or %s\n", a.name, path, a.env)
 		} else {
@@ -1066,27 +1025,34 @@ func runDoctor() {
 
 func handleGateCmd(args []string) {
 	if len(args) < 2 {
-		fmt.Println("Usage: orchestratorctl gate <approve|reject> <id>")
-		os.Exit(1)
+		fmt.Println("Usage: orchestratorctl gate <approve|reject> <id> [--json]")
+		os.Exit(exitCodeUsage)
 	}
 
 	action := args[0]
 	id := args[1]
-	
+	asJSON := hasFlag(args[2:], "--json")
+
 	reqBody := map[string]string{"action": action}
 	data, _ := json.Marshal(reqBody)
-	
+
 	resp, err := http.Post(orchestratordURL+"/api/v1/gates/"+id, "application/json", bytes.NewReader(data))
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
+	}
+	if asJSON {
+		emitJSONDocument(map[string]string{
+			"id":     id,
+			"action": action,
+			"status": "success",
+		})
+		return
 	}
 	fmt.Printf("Gate %s processed successfully\n", id)
 }
@@ -1095,39 +1061,32 @@ func handleAntigravityCmd(args []string) {
 	if len(args) < 1 {
 		fmt.Println("Usage: orchestratorctl antigravity <command>")
 		fmt.Println("Commands: list, bind, unbind, status")
-		os.Exit(1)
+		os.Exit(exitCodeUsage)
 	}
 
 	cmd := args[0]
 	switch cmd {
 	case "list":
+		asJSON := hasFlag(args[1:], "--json")
 		resp, err := http.Get(orchestratordURL + "/api/v1/antigravity/instances")
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+			failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode >= 400 {
-			printJSON(body)
-			os.Exit(1)
+			failHTTP(asJSON, resp.StatusCode, body)
 		}
 
-		asJSON := false
-		for _, arg := range args[1:] {
-			if arg == "--json" {
-				asJSON = true
-			}
-		}
 		if asJSON {
-			printJSON(body)
+			emitJSONBody(body)
 			return
 		}
 
 		var instances []domain.AGInstance
 		if err := json.Unmarshal(body, &instances); err != nil {
-			printJSON(body)
+			emitJSONBody(body)
 			return
 		}
 
@@ -1144,61 +1103,75 @@ func handleAntigravityCmd(args []string) {
 	case "bind":
 		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" {
 			fmt.Println("Usage: orchestratorctl antigravity bind <PID>")
-			fmt.Println("\nNote: Codencer currently supports direct-local Antigravity integration.")
-			fmt.Println("Both Codencer and Antigravity must be running on the same OS side.")
-			fmt.Println("WSL-to-Windows cross-side binding is not yet supported in this mode.")
-			os.Exit(1)
+			fmt.Println("\nBinding records a repo-scoped Antigravity target identity for this daemon.")
+			fmt.Println("Execution still depends on explicit adapter selection via adapter_profile.")
+			os.Exit(exitCodeUsage)
 		}
+		asJSON := hasFlag(args[2:], "--json")
 		pid, err := strconv.Atoi(args[1])
 		if err != nil {
-			fmt.Printf("Invalid PID: %v\n", err)
-			os.Exit(1)
+			failCLI(asJSON, exitCodeUsage, "invalid pid", err.Error())
 		}
-		
+
 		reqBody := map[string]int{"pid": pid}
 		data, _ := json.Marshal(reqBody)
 		resp, err := http.Post(orchestratordURL+"/api/v1/antigravity/bind", "application/json", bytes.NewReader(data))
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+			failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 400 {
 			body, _ := io.ReadAll(resp.Body)
-			printJSON(body)
-			os.Exit(1)
+			failHTTP(asJSON, resp.StatusCode, body)
+		}
+		if asJSON {
+			emitJSONDocument(map[string]any{
+				"status": "success",
+				"pid":    pid,
+			})
+			return
 		}
 		fmt.Printf("Successfully bound repo to Antigravity PID %d\n", pid)
 
 	case "unbind":
+		asJSON := hasFlag(args[1:], "--json")
 		req, _ := http.NewRequest(http.MethodDelete, orchestratordURL+"/api/v1/antigravity/bind", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+			failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 400 {
 			body, _ := io.ReadAll(resp.Body)
-			printJSON(body)
-			os.Exit(1)
+			failHTTP(asJSON, resp.StatusCode, body)
+		}
+		if asJSON {
+			emitJSONDocument(map[string]string{
+				"status": "success",
+				"action": "unbind",
+			})
+			return
 		}
 		fmt.Println("Successfully unbound repo from Antigravity")
 
 	case "status":
+		asJSON := hasFlag(args[1:], "--json")
 		resp, err := http.Get(orchestratordURL + "/api/v1/antigravity/status")
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
+			failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 		}
 		defer resp.Body.Close()
 
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode >= 400 {
-			printJSON(body)
-			os.Exit(1)
+			failHTTP(asJSON, resp.StatusCode, body)
+		}
+
+		if asJSON {
+			emitJSONBody(body)
+			return
 		}
 
 		if string(body) == "null" {
@@ -1208,7 +1181,7 @@ func handleAntigravityCmd(args []string) {
 
 		var inst domain.AGInstance
 		if err := json.Unmarshal(body, &inst); err != nil {
-			printJSON(body)
+			emitJSONBody(body)
 			return
 		}
 
@@ -1225,8 +1198,8 @@ func handleAntigravityCmd(args []string) {
 		}
 
 	default:
-		fmt.Printf("Unknown command: %s\n", cmd)
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
+		os.Exit(exitCodeUsage)
 	}
 }
 
@@ -1240,25 +1213,23 @@ func handleInstanceCommand(args []string) {
 
 	resp, err := http.Get(orchestratordURL + "/api/v1/instance")
 	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		printJSON(body)
-		os.Exit(1)
+		failHTTP(asJSON, resp.StatusCode, body)
 	}
 
 	if asJSON {
-		printJSON(body)
+		emitJSONBody(body)
 		return
 	}
 
 	var info domain.InstanceInfo
 	if err := json.Unmarshal(body, &info); err != nil {
-		printJSON(body)
+		emitJSONBody(body)
 		return
 	}
 
@@ -1272,13 +1243,4 @@ func handleInstanceCommand(args []string) {
 	fmt.Printf("State Dir:     %s\n", info.StateDir)
 	fmt.Printf("Workspace:     %s\n", info.WorkspaceRoot)
 	fmt.Println("----------------------------------")
-}
-
-func printJSON(body []byte) {
-	var pretty bytes.Buffer
-	if err := json.Indent(&pretty, body, "", "  "); err == nil {
-		fmt.Println(pretty.String())
-	} else {
-		fmt.Println(string(body))
-	}
 }

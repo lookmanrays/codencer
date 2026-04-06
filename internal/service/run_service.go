@@ -2,34 +2,36 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/state"
 	"agent-bridge/internal/storage/sqlite"
-	"agent-bridge/internal/workspace"
 	"agent-bridge/internal/validation"
+	"agent-bridge/internal/workspace"
 	"path/filepath"
 	"strings"
 )
 
 type RunService struct {
-	runsRepo      *sqlite.RunsRepo
-	phasesRepo    *sqlite.PhasesRepo
-	stepsRepo     *sqlite.StepsRepo
-	attemptsRepo  *sqlite.AttemptsRepo
-	gatesRepo     *sqlite.GatesRepo
-	artifactsRepo *sqlite.ArtifactsRepo
-	validationsRepo *sqlite.ValidationsRepo
-	routingSvc    *RoutingService
-	policyRegistry *PolicyRegistry
+	runsRepo         *sqlite.RunsRepo
+	phasesRepo       *sqlite.PhasesRepo
+	stepsRepo        *sqlite.StepsRepo
+	attemptsRepo     *sqlite.AttemptsRepo
+	gatesRepo        *sqlite.GatesRepo
+	artifactsRepo    *sqlite.ArtifactsRepo
+	validationsRepo  *sqlite.ValidationsRepo
+	routingSvc       *RoutingService
+	policyRegistry   *PolicyRegistry
 	validationRunner *validation.Runner
-	provisioner     workspace.Provisioner
-	artifactRoot  string
-	workspaceRoot string
+	provisioner      workspace.Provisioner
+	artifactRoot     string
+	workspaceRoot    string
 }
 
 // NewRunService creates a new RunService.
@@ -48,19 +50,19 @@ func NewRunService(
 	workspaceRoot string,
 ) *RunService {
 	return &RunService{
-		runsRepo:      runsRepo,
-		phasesRepo:    phasesRepo,
-		stepsRepo:     stepsRepo,
-		attemptsRepo:  attemptsRepo,
-		gatesRepo:     gatesRepo,
-		artifactsRepo: artifactsRepo,
-		validationsRepo: validationsRepo,
-		routingSvc:    routingSvc,
-		policyRegistry: policyReg,
+		runsRepo:         runsRepo,
+		phasesRepo:       phasesRepo,
+		stepsRepo:        stepsRepo,
+		attemptsRepo:     attemptsRepo,
+		gatesRepo:        gatesRepo,
+		artifactsRepo:    artifactsRepo,
+		validationsRepo:  validationsRepo,
+		routingSvc:       routingSvc,
+		policyRegistry:   policyReg,
 		validationRunner: validation.NewRunner(),
-		provisioner:     provisioner,
-		artifactRoot:  artifactRoot,
-		workspaceRoot: workspaceRoot,
+		provisioner:      provisioner,
+		artifactRoot:     artifactRoot,
+		workspaceRoot:    workspaceRoot,
 	}
 }
 
@@ -190,7 +192,7 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 			latest.Result.Validations[i] = *v
 		}
 	}
- 
+
 	return latest.Result, nil
 }
 
@@ -208,8 +210,8 @@ func (s *RunService) GetBenchmarks(ctx context.Context, adapter string) ([]*doma
 func (s *RunService) GetRoutingConfig(ctx context.Context) map[string]interface{} {
 	chain, _ := s.routingSvc.BuildHeuristicChain(ctx, "")
 	return map[string]interface{}{
-		"mode": "Heuristic Static Fallback",
-		"chain": chain,
+		"mode":       "Heuristic Static Fallback",
+		"chain":      chain,
 		"disclaimer": "Benchmark data is currently logged but NOT used for dynamic routing decisions.",
 	}
 }
@@ -403,11 +405,11 @@ func (s *RunService) createAttempt(ctx context.Context, step *domain.Step, attem
 
 func (s *RunService) logBenchmark(ctx context.Context, phaseID, attemptID, adapterID string, res *domain.ResultSpec, durationMs int64, isSimulation bool) {
 	benchScore := &domain.BenchmarkScore{
-		ID:             fmt.Sprintf("bench-%s", attemptID),
-		Adapter:        adapterID,
-		PhaseID:        phaseID,
-		AttemptID:      attemptID,
-		DurationMs:     durationMs,
+		ID:         fmt.Sprintf("bench-%s", attemptID),
+		Adapter:    adapterID,
+		PhaseID:    phaseID,
+		AttemptID:  attemptID,
+		DurationMs: durationMs,
 		// ValidationsHit/Max are currently binary success markers (1/1 or 0/1)
 		// until the domain.Result model is expanded to include count metadata.
 		ValidationsHit: 1,
@@ -431,7 +433,6 @@ func (s *RunService) shouldRetry(res *domain.ResultSpec, policy *domain.Policy, 
 	return isFailed && policy.RetryWhen.AdapterProcessFailed && attemptNum < maxAttempts
 }
 
-
 func (s *RunService) failStep(ctx context.Context, step *domain.Step, reason string) error {
 	step.State = domain.StepStateFailedBridge
 	step.StatusReason = reason
@@ -450,31 +451,49 @@ func (s *RunService) executeAttempt(
 ) (*domain.ResultSpec, PolicyEvaluation, error) {
 	// 1. Setup Environment
 	workspaceRoot := fmt.Sprintf("%s/%s", s.workspaceRoot, runID)
+	attemptArtifactRoot := filepath.Join(s.artifactRoot, runID, step.ID, attempt.ID)
 	baseRepo := "."
 	branchName := "codencer-" + runID
 
 	// Create workspace dir if not exists (parent of worktree)
 	_ = os.MkdirAll(s.workspaceRoot, 0755)
+	if err := os.MkdirAll(attemptArtifactRoot, 0755); err != nil {
+		reason := fmt.Sprintf("Failed to create attempt artifact root: %v", err)
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
+		step.StatusReason = reason
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
+	}
+	if err := s.writeSubmissionProvenance(attemptArtifactRoot, step); err != nil {
+		reason := fmt.Sprintf("Failed to persist submission provenance: %v", err)
+		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
+		step.StatusReason = reason
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
+		s.updateAttemptResult(ctx, attempt)
+		return attempt.Result, PolicyEvaluation{}, nil
+	}
 
 	// Acquire exclusive lock for this run's workspace
 	lock, err := workspace.AcquireLock(s.workspaceRoot, runID)
 	if err != nil {
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Workspace lock conflict: " + err.Error()}
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
 	defer func() {
 		_ = lock.Release()
 	}()
-	
+
 	if err := workspace.CreateWorktree(ctx, baseRepo, workspaceRoot, branchName); err != nil {
 		slog.Error("Failed to create worktree", "runID", runID, "error", err)
 		reason := fmt.Sprintf("Workspace creation failed: %v", err)
 		attempt.Result = &domain.ResultSpec{
-				State:   domain.StepStateFailedBridge,
-				Summary: reason,
+			State:   domain.StepStateFailedBridge,
+			Summary: reason,
 		}
 		step.StatusReason = reason // Propagate to step state
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -485,7 +504,7 @@ func (s *RunService) executeAttempt(
 
 	// 2. Provision Workspace
 	slog.Info("Provisioning workspace", "runID", runID, "workspace", workspaceRoot)
-	
+
 	// Load repo-local provisioning config
 	spec, err := workspace.LoadWorkspaceConfig(baseRepo)
 	if err != nil {
@@ -494,7 +513,7 @@ func (s *RunService) executeAttempt(
 
 	provRes, err := s.provisioner.Provision(ctx, spec, baseRepo, workspaceRoot)
 	// provRes is attached to any ResultSpec created below.
-	
+
 	if err != nil {
 		slog.Error("Failed to provision workspace", "runID", runID, "error", err)
 		reason := fmt.Sprintf("Provisioning failed: %v", err)
@@ -505,22 +524,22 @@ func (s *RunService) executeAttempt(
 			attempt.Result.Summary = reason
 		}
 		step.StatusReason = reason
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
 
 	// 3. Start Execution
-	attemptArtifactRoot := filepath.Join(s.artifactRoot, runID, step.ID, attempt.ID)
-	_ = os.MkdirAll(attemptArtifactRoot, 0755)
-
 	if err := adapter.Start(ctx, step, attempt, workspaceRoot, attemptArtifactRoot); err != nil {
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error(), Provisioning: provRes}
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
 
 	// 3. Poll
 	if !s.pollAdapter(ctx, adapter, attempt, s.attemptsRepo, step, provRes) {
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -534,6 +553,7 @@ func (s *RunService) executeAttempt(
 		reason := "Failed to collect artifacts: " + err.Error()
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason, Provisioning: provRes}
 		step.StatusReason = reason
+		_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
 	}
@@ -555,17 +575,18 @@ func (s *RunService) executeAttempt(
 			step.StatusReason = res.Summary
 		}
 	}
+	s.attachSubmissionArtifactRefs(attempt.Result, artifacts)
 
 	// Enrich with step-level requested context
 	attempt.Result.RequestedAdapter = step.Adapter
-	
+
 	s.updateAttemptResult(ctx, attempt)
- 
+
 	// 4.5 Run Validations (3B)
 	if len(step.Validations) > 0 {
 		step.State = domain.StepStateValidating
 		s.stepsRepo.UpdateState(ctx, step)
- 
+
 		passed := 0
 		failed := 0
 		anyFailed := false
@@ -584,7 +605,7 @@ func (s *RunService) executeAttempt(
 				_ = s.validationsRepo.Create(ctx, attempt.ID, vres)
 			}
 		}
- 
+
 		if anyFailed {
 			attempt.Result.State = domain.StepStateFailedValidation
 			attempt.Result.Summary = fmt.Sprintf("Validation failed: %d passed, %d failed.", passed, failed)
@@ -595,7 +616,7 @@ func (s *RunService) executeAttempt(
 			s.updateAttemptResult(ctx, attempt)
 		}
 	}
- 
+
 	// 5. Evaluate Policy
 	var changedFiles []string
 	if os.Getenv("FORCE_GATE_FOR_TESTING") == "1" {
@@ -615,6 +636,150 @@ func (s *RunService) updateAttemptResult(ctx context.Context, attempt *domain.At
 	s.attemptsRepo.UpdateResult(ctx, attempt)
 }
 
+func (s *RunService) writeSubmissionProvenance(attemptArtifactRoot string, step *domain.Step) error {
+	normalizedTask := s.snapshotTaskSpec(step)
+	normalizedBytes, err := json.MarshalIndent(normalizedTask, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal normalized task: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(attemptArtifactRoot, "normalized-task.json"), normalizedBytes, 0644); err != nil {
+		return fmt.Errorf("write normalized-task.json: %w", err)
+	}
+
+	if step.SubmissionProvenance == nil || step.SubmissionProvenance.OriginalInput == "" {
+		return nil
+	}
+
+	ext := sanitizeSubmissionExtension(step.SubmissionProvenance.OriginalFormat)
+	originalPath := filepath.Join(attemptArtifactRoot, "original-input."+ext)
+	if err := os.WriteFile(originalPath, []byte(step.SubmissionProvenance.OriginalInput), 0644); err != nil {
+		return fmt.Errorf("write original input: %w", err)
+	}
+	return nil
+}
+
+func (s *RunService) snapshotTaskSpec(step *domain.Step) *domain.TaskSpec {
+	if step.TaskSpecSnapshot != nil {
+		snapshot := *step.TaskSpecSnapshot
+		return &snapshot
+	}
+
+	return &domain.TaskSpec{
+		RunID:                "",
+		PhaseID:              step.PhaseID,
+		StepID:               step.ID,
+		Title:                step.Title,
+		Goal:                 step.Goal,
+		PolicyBundle:         step.Policy,
+		AdapterProfile:       step.Adapter,
+		TimeoutSeconds:       step.TimeoutSeconds,
+		Validations:          append([]domain.ValidationCommand(nil), step.Validations...),
+		SubmissionProvenance: step.SubmissionProvenance,
+	}
+}
+
+func sanitizeSubmissionExtension(format string) string {
+	switch strings.ToLower(strings.TrimPrefix(format, ".")) {
+	case "yaml", "yml":
+		return "yaml"
+	case "json":
+		return "json"
+	case "md":
+		return "md"
+	case "txt":
+		return "txt"
+	default:
+		return "txt"
+	}
+}
+
+func (s *RunService) persistProvenanceArtifacts(ctx context.Context, attempt *domain.Attempt, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	filenames := []string{"normalized-task.json"}
+	if originalName, ok := findOriginalInputName(attemptArtifactRoot); ok {
+		filenames = append(filenames, originalName)
+	}
+
+	artifacts := make([]*domain.Artifact, 0, len(filenames))
+	for _, name := range filenames {
+		artifact, err := buildSubmissionArtifact(attempt.ID, filepath.Join(attemptArtifactRoot, name))
+		if err != nil {
+			continue
+		}
+		if err := s.artifactsRepo.Create(ctx, artifact); err != nil {
+			slog.Warn("Failed to persist provenance artifact", "attemptID", attempt.ID, "name", artifact.Name, "error", err)
+			continue
+		}
+		artifacts = append(artifacts, artifact)
+	}
+	s.attachSubmissionArtifactRefs(attempt.Result, artifacts)
+	return artifacts, nil
+}
+
+func buildSubmissionArtifact(attemptID, path string) (*domain.Artifact, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	sample := make([]byte, 512)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	n, _ := file.Read(sample)
+	artifactType := domain.ArtifactType("file")
+	if filepath.Base(path) == "normalized-task.json" {
+		artifactType = domain.ArtifactTypeInputJSON
+	}
+
+	return &domain.Artifact{
+		ID:        fmt.Sprintf("art-%s-%s", attemptID, strings.ReplaceAll(filepath.Base(path), ".", "-")),
+		AttemptID: attemptID,
+		Type:      artifactType,
+		Name:      filepath.Base(path),
+		Path:      path,
+		Size:      info.Size(),
+		MimeType:  http.DetectContentType(sample[:n]),
+		CreatedAt: info.ModTime(),
+		UpdatedAt: time.Now().UTC(),
+	}, nil
+}
+
+func findOriginalInputName(attemptArtifactRoot string) (string, bool) {
+	entries, err := os.ReadDir(attemptArtifactRoot)
+	if err != nil {
+		return "", false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(entry.Name(), "original-input.") {
+			return entry.Name(), true
+		}
+	}
+	return "", false
+}
+
+func (s *RunService) attachSubmissionArtifactRefs(result *domain.ResultSpec, artifacts []*domain.Artifact) {
+	if result == nil {
+		return
+	}
+	if result.Artifacts == nil {
+		result.Artifacts = make(map[string]string)
+	}
+	for _, artifact := range artifacts {
+		switch {
+		case artifact.Name == "normalized-task.json":
+			result.Artifacts["normalized_task_ref"] = artifact.Path
+		case strings.HasPrefix(artifact.Name, "original-input."):
+			result.Artifacts["original_input_ref"] = artifact.Path
+		}
+	}
+}
+
 func (s *RunService) finalizeStep(
 	ctx context.Context,
 	runID string,
@@ -623,7 +788,7 @@ func (s *RunService) finalizeStep(
 	eval PolicyEvaluation,
 	attemptID string,
 ) error {
-	
+
 	if eval.ShouldGate {
 		step.State = domain.StepStateNeedsApproval
 		gate := &domain.Gate{
@@ -634,7 +799,7 @@ func (s *RunService) finalizeStep(
 			State:       domain.GateStatePending,
 			CreatedAt:   time.Now().UTC(),
 		}
-		
+
 		if gerr := s.gatesRepo.Create(ctx, gate); gerr == nil {
 			if run, rerr := s.runsRepo.Get(ctx, runID); rerr == nil && run != nil {
 				run.State = domain.RunStatePausedForGate

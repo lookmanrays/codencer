@@ -1,0 +1,3 @@
+# One prompt file path per line.
+examples/automation/prompts/01_update_readme.md
+examples/automation/prompts/02_update_troubleshooting.md

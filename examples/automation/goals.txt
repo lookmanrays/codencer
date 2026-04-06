@@ -1,0 +1,3 @@
+# One goal per line.
+Clarify the simulation mode section in README.md and keep the wording consistent.
+Add a short troubleshooting note about machine-safe --json usage in docs/TROUBLESHOOTING.md.

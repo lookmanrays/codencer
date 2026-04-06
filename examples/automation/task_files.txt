@@ -1,0 +1,3 @@
+# One canonical task definition per line.
+examples/automation/tasks/docs_only.yaml
+examples/automation/tasks/config_update.yaml
