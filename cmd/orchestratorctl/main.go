@@ -17,6 +17,7 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/validation"
 	"github.com/joho/godotenv"
+	"strconv"
 )
 
 var (
@@ -54,7 +55,9 @@ func main() {
 	case "step", "submit":
 		handleStepCommand(os.Args[1:])
 	case "gate":
-		handleGateCommand(os.Args[2:])
+		handleGateCmd(os.Args[2:])
+	case "antigravity":
+		handleAntigravityCmd(os.Args[2:])
 	case "doctor":
 		runDoctor()
 	case "instance":
@@ -90,6 +93,7 @@ func printUsage() {
 	fmt.Println("  doctor                        Verify local environment/binaries")
 	fmt.Println("  gate approve   <gateID>        Approve a paused policy gate")
 	fmt.Println("  gate reject    <gateID>        Reject a paused policy gate")
+	fmt.Println("  antigravity    <cmd>           Manage antigravity bindings")
 	fmt.Println("  instance      [--json]         Show current daemon identity")
 	fmt.Println("  version                       Show version")
 }
@@ -907,40 +911,7 @@ func parseWaitFlags(args []string) (interval, timeout time.Duration) {
 	return
 }
 
-func handleGateCommand(args []string) {
-	if len(args) < 2 {
-		fmt.Println("Usage: orchestratorctl gate <approve|reject> <id>")
-		os.Exit(1)
-	}
 
-	cmd := args[0]
-	id := args[1]
-	
-	reqBody := map[string]string{"action": cmd}
-	data, _ := json.Marshal(reqBody)
-
-	resp, err := http.Post(orchestratordURL+"/api/v1/gates/"+id, "application/json", bytes.NewReader(data))
-	if err != nil {
-		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		printJSON(body)
-		os.Exit(1)
-	}
-
-	respBody := map[string]string{
-		"id":     id,
-		"action": cmd,
-		"status": "success",
-	}
-	out, _ := json.Marshal(respBody)
-	printJSON(out)
-	fmt.Fprintf(os.Stderr, "==> Gate %s: %sed successfully.\n", id, cmd)
-}
 
 func runDoctor() {
 	fmt.Println("==> Verifying local environment...")
@@ -1057,6 +1028,169 @@ func runDoctor() {
 	}
 
 	fmt.Println("\nConfiguration verified. Use 'make smoke' for full relay validation.")
+}
+
+func handleGateCmd(args []string) {
+	if len(args) < 2 {
+		fmt.Println("Usage: orchestratorctl gate <approve|reject> <id>")
+		os.Exit(1)
+	}
+
+	action := args[0]
+	id := args[1]
+	
+	reqBody := map[string]string{"action": action}
+	data, _ := json.Marshal(reqBody)
+	
+	resp, err := http.Post(orchestratordURL+"/api/v1/gates/"+id, "application/json", bytes.NewReader(data))
+	if err != nil {
+		fmt.Printf(`{"error": "connecting to orchestratord: %v"}`+"\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		printJSON(body)
+		os.Exit(1)
+	}
+	fmt.Printf("Gate %s processed successfully\n", id)
+}
+
+func handleAntigravityCmd(args []string) {
+	if len(args) < 1 {
+		fmt.Println("Usage: orchestratorctl antigravity <command>")
+		fmt.Println("Commands: list, bind, unbind, status")
+		os.Exit(1)
+	}
+
+	cmd := args[0]
+	switch cmd {
+	case "list":
+		resp, err := http.Get(orchestratordURL + "/api/v1/antigravity/instances")
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 400 {
+			printJSON(body)
+			os.Exit(1)
+		}
+
+		asJSON := false
+		for _, arg := range args[1:] {
+			if arg == "--json" {
+				asJSON = true
+			}
+		}
+		if asJSON {
+			printJSON(body)
+			return
+		}
+
+		var instances []domain.AGInstance
+		if err := json.Unmarshal(body, &instances); err != nil {
+			printJSON(body)
+			return
+		}
+
+		fmt.Printf("%-8s %-8s %-12s %-20s\n", "PID", "PORT", "REACHABLE", "WORKSPACE")
+		fmt.Println(strings.Repeat("-", 60))
+		for _, inst := range instances {
+			reachable := "no"
+			if inst.IsReachable {
+				reachable = "yes"
+			}
+			fmt.Printf("%-8d %-8d %-12s %-20s\n", inst.PID, inst.HTTPSPort, reachable, inst.WorkspaceRoot)
+		}
+
+	case "bind":
+		if len(args) < 2 {
+			fmt.Println("Usage: orchestratorctl antigravity bind <PID>")
+			os.Exit(1)
+		}
+		pid, err := strconv.Atoi(args[1])
+		if err != nil {
+			fmt.Printf("Invalid PID: %v\n", err)
+			os.Exit(1)
+		}
+		
+		reqBody := map[string]int{"pid": pid}
+		data, _ := json.Marshal(reqBody)
+		resp, err := http.Post(orchestratordURL+"/api/v1/antigravity/bind", "application/json", bytes.NewReader(data))
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			printJSON(body)
+			os.Exit(1)
+		}
+		fmt.Printf("Successfully bound repo to Antigravity PID %d\n", pid)
+
+	case "unbind":
+		req, _ := http.NewRequest(http.MethodDelete, orchestratordURL+"/api/v1/antigravity/bind", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			printJSON(body)
+			os.Exit(1)
+		}
+		fmt.Println("Successfully unbound repo from Antigravity")
+
+	case "status":
+		resp, err := http.Get(orchestratordURL + "/api/v1/antigravity/status")
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 400 {
+			printJSON(body)
+			os.Exit(1)
+		}
+
+		if string(body) == "null" {
+			fmt.Println("No Antigravity instance currently bound to this repo.")
+			return
+		}
+
+		var inst domain.AGInstance
+		if err := json.Unmarshal(body, &inst); err != nil {
+			printJSON(body)
+			return
+		}
+
+		fmt.Printf("Status:      %s\n", func() string {
+			if inst.IsReachable {
+				return "BOUND (Active)"
+			}
+			return "STALE (Process not reachable)"
+		}())
+		fmt.Printf("PID:         %d\n", inst.PID)
+		if inst.IsReachable {
+			fmt.Printf("Port:        %d\n", inst.HTTPSPort)
+			fmt.Printf("Workspace:   %s\n", inst.WorkspaceRoot)
+		}
+
+	default:
+		fmt.Printf("Unknown command: %s\n", cmd)
+		os.Exit(1)
+	}
 }
 
 func handleInstanceCommand(args []string) {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"agent-bridge/internal/adapters/antigravity"
 	"agent-bridge/internal/adapters/claude"
 	"agent-bridge/internal/adapters/codex"
 	"agent-bridge/internal/adapters/ide"
@@ -99,14 +100,8 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	artifactsRepo := sqlite.NewArtifactsRepo(db)
 	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
 	validationsRepo := sqlite.NewValidationsRepo(db)
+	settingsRepo := sqlite.NewSettingsRepo(db)
 	
-	adapters := map[string]domain.Adapter{
-		"codex":    codex.NewAdapter(),
-		"claude":   claude.NewAdapter(),
-		"qwen":     qwen.NewAdapter(),
-		"ide-chat": ide.NewAdapter(),
-	}
-
 	policyReg := service.NewPolicyRegistry()
 	policyDir := filepath.Join(filepath.Dir(cfg.DBPath), "config", "policies")
 	if _, err := os.Stat(policyDir); os.IsNotExist(err) {
@@ -118,9 +113,19 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 		logger.Warn("Failed to load policies, using internal defaults", "dir", policyDir, "error", err)
 	}
 
+	gateSvc := service.NewGateService(gatesRepo, runsRepo)
+	agSvc := service.NewAntigravityService(settingsRepo)
+
+	adapters := map[string]domain.Adapter{
+		"codex":    codex.NewAdapter(),
+		"claude":   claude.NewAdapter(),
+		"qwen":     qwen.NewAdapter(),
+		"ide-chat": ide.NewAdapter(),
+		"antigravity": antigravity.NewAdapter(agSvc),
+	}
+
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, cfg.ArtifactRoot, cfg.WorkspaceRoot)
-	gateSvc := service.NewGateService(gatesRepo, runsRepo)
 
 	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot)
 	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {
@@ -146,6 +151,7 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	apiHandler := &APIHandler{
 		RunSvc:  runSvc,
 		GateSvc: gateSvc,
+		AGSvc:   agSvc,
 		AppCtx:  appCtx,
 	}
 	apiHandler.RegisterRoutes(mux)

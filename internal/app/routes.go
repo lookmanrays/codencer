@@ -19,6 +19,7 @@ import (
 type APIHandler struct {
 	RunSvc  *service.RunService
 	GateSvc *service.GateService
+	AGSvc   *service.AntigravityService
 	AppCtx  *AppContext
 }
 
@@ -32,6 +33,9 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/benchmarks", h.handleBenchmarks)
 	mux.HandleFunc("/api/v1/routing", h.handleRouting)
 	mux.HandleFunc("/api/v1/instance", h.handleInstance)
+	mux.HandleFunc("/api/v1/antigravity/instances", h.handleAGInstances)
+	mux.HandleFunc("/api/v1/antigravity/status", h.handleAGStatus)
+	mux.HandleFunc("/api/v1/antigravity/bind", h.handleAGBind)
 	
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
@@ -417,4 +421,69 @@ func (h *APIHandler) handleInstance(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (h *APIHandler) handleAGInstances(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	instances, err := h.AGSvc.ListInstances(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(instances)
+}
+
+func (h *APIHandler) handleAGStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	inst, err := h.AGSvc.GetBinding(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if inst == nil {
+		w.Write([]byte("null"))
+		return
+	}
+	json.NewEncoder(w).Encode(inst)
+}
+
+func (h *APIHandler) handleAGBind(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		var req struct {
+			PID int `json:"pid"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := h.AGSvc.Bind(r.Context(), req.PID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
+	case http.MethodDelete:
+		if err := h.AGSvc.Unbind(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

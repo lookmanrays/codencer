@@ -122,6 +122,11 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 	is_simulation BOOLEAN NOT NULL DEFAULT 0,
 	created_at DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+	key TEXT PRIMARY KEY,
+	value TEXT
+);
 `
 
 	_, err := db.Exec(schema)
