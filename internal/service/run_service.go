@@ -664,7 +664,10 @@ func (s *RunService) pollAdapter(ctx context.Context, adapter domain.Adapter, at
 		case <-pollTicker.C:
 			running, err := adapter.Poll(ctx, attempt.ID)
 			if err != nil {
-				attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedTerminal, Summary: err.Error()}
+				attempt.Result = &domain.ResultSpec{
+					State:   domain.StepStateFailedAdapter,
+					Summary: fmt.Sprintf("Poll error: %v", err),
+				}
 				_ = repo.UpdateResult(ctx, attempt)
 				return false
 			}

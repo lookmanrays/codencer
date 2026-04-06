@@ -107,15 +107,24 @@ make build
 
 ### 5.1 No instances discovered
 **Symptoms**: `antigravity list` returns an empty list.
-- **Cause**: Codencer and Antigravity are on different OS sides (e.g. WSL vs Windows).
-- **Fix**: Run both Codencer and the Antigravity-supported IDE on the same side.
+### 5.1 Cross-Side Discovery Failures
+**Symptoms**: `antigravity list` doesn't show instances running on the other OS side (e.g., Windows host from WSL).
+- **Cause**: Non-standard mount point (not `/mnt/c`) or mismatched usernames.
+- **Fix**: Use the `CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR` environment variable to point directly to the Windows daemon folder.
+  - Windows default: `%USERPROFILE%\.gemini\antigravity\daemon`
+  - WSL view: `/mnt/c/Users/<user>/.gemini/antigravity/daemon`
 
 ### 5.2 Binding shows "STALE"
 **Symptoms**: `antigravity status` reports `STALE (Process not reachable)`.
-- **Cause**: The bound PID no longer exists or the LS instance has crashed/restarted on a different port.
-- **Fix**: Re-discover with `antigravity list` and re-bind with `antigravity bind <NEW_PID>`.
+- **Cause**: The bound PID no longer exists, the LS instance has restarted on a different port, or the shared loopback is unreachable.
+- **Fix**: Re-discover with `antigravity list`, verify reachability, and re-bind.
 
-### 5.3 Task fails with "Antigravity transport failure"
-**Symptoms**: Step state is `failed_adapter` with an RPC error.
-- **Cause**: Network interruption or invalid CSRF token.
-- **Fix**: Verify the instance is still active in the IDE and re-bind if necessary.
+### 5.3 Step state is "failed_adapter"
+**Symptoms**: Task fails with `Poll error: ...` or transport issues.
+- **Meaning**: This is a **Bridge/Infrastructure** issue, not a task failure. The Antigravity LS may have crashed or become unreachable during execution.
+- **Fix**: Restart the Antigravity session in your IDE and re-bind Codencer.
+
+### 5.4 Step state is "failed_terminal"
+**Symptoms**: Task finishes but goals are not met.
+- **Meaning**: This is a **Task** failure. The Antigravity executor finished successfully but the agent failed the prompt or validations.
+- **Fix**: Refine your prompt/task or fix underlying code issues.

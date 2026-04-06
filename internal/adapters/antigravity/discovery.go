@@ -110,8 +110,15 @@ func (d *Discovery) getDaemonDirs() ([]string, error) {
 	// WSL Detection & Cross-Side Discovery
 	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
 		if strings.Contains(strings.ToLower(string(content)), "microsoft") {
-			// In WSL, attempt to reach the Windows host home directory.
-			// Default path: /mnt/c/Users/<user>
+			// Check for explicit override first
+			if override := os.Getenv("CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR"); override != "" {
+				if info, err := os.Stat(override); err == nil && info.IsDir() {
+					dirs = append(dirs, override)
+					return dirs, nil
+				}
+			}
+
+			// Fallback to default heuristic: /mnt/c/Users/<user>
 			user := os.Getenv("USER")
 			if user != "" {
 				winHome := filepath.Join("/mnt/c/Users", user)

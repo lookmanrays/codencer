@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -248,6 +249,69 @@ func TestRunService_DispatchStep_GranularFailurePreservation(t *testing.T) {
 				t.Errorf("Expected status reason 'Simulated failure', got %s", s.StatusReason)
 			}
 		})
+	}
+}
+
+// PollErrorMockAdapter simulates a transport failure during polling
+type PollErrorMockAdapter struct{}
+
+func (m *PollErrorMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	return nil
+}
+func (m *PollErrorMockAdapter) Poll(ctx context.Context, attemptID string) (bool, error) {
+	return false, errors.New("Poll failed") // Just some error
+}
+func (m *PollErrorMockAdapter) Cancel(ctx context.Context, attemptID string) error { return nil }
+func (m *PollErrorMockAdapter) Capabilities() []string                           { return []string{"mock"} }
+func (m *PollErrorMockAdapter) Name() string                                     { return "poll-error-mock" }
+func (m *PollErrorMockAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	return nil, nil
+}
+func (m *PollErrorMockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
+	return nil, nil
+}
+
+func TestRunService_DispatchStep_PollErrorMapping(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	adapters := map[string]domain.Adapter{
+		"poll-error-mock": &PollErrorMockAdapter{},
+	}
+
+	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
+		gatesRepo, artifactsRepo, sqlite.NewValidationsRepo(db),
+		routingSvc, service.NewPolicyRegistry(), t.TempDir(), t.TempDir())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	runId := "poll-error-run"
+	_, _ = runSvc.StartRun(ctx, runId, "project", "", "", "")
+
+	step := &domain.Step{
+		ID:      "poll-error-step",
+		PhaseID: "phase-01-" + runId,
+		Title:   "Poll Error Test",
+		Adapter: "poll-error-mock",
+	}
+
+	_ = runSvc.DispatchStep(ctx, runId, step)
+
+	s, _ := runSvc.GetStep(ctx, step.ID)
+	if s.State != domain.StepStateFailedAdapter {
+		t.Errorf("Expected state %s for poll error, got %s", domain.StepStateFailedAdapter, s.State)
 	}
 }
 

@@ -146,12 +146,21 @@ Codencer provides an identical local-first technical surface on macOS and Window
 ## 🔍 Antigravity Direct-Local Setup
 The `antigravity` adapter allows Codencer to act as a bridge for active Antigravity Language Server instances.
 
-### 1. Prerequisites
-- **Active LS Instance**: An Antigravity-supported IDE or daemon must be running.
-- **Same-Side OS**: Both Codencer and the Antigravity process must be on the **same OS side** (e.g., both inside WSL or both in Windows). Cross-side PID discovery is not supported.
+### 1. Prerequisites (Experimental WSL Support)
+The `antigravity` adapter traditionally requires both Codencer and the Antigravity process to be on the **same OS side**. 
+- **Same-Side**: Both in Linux/WSL or both in Windows.
+- **WSL ↔ Windows (Experimental)**: Cross-side discovery is now supported. Codencer in WSL can find Windows instances if the host's `.gemini` directory is reachable via the default `/mnt/c/Users/<user>` path.
 
-### 2. Discovery & Binding
-Codencer automatically discovers active Antigravity instances by scanning `~/.gemini/antigravity/daemon`.
+### 2. Configuration & Overrides
+If your WSL mount point is non-standard or your Windows username differs from your WSL username, you can explicitly point Codencer to the Windows daemon directory:
+
+```bash
+# Override the discovery path for Windows-side instances
+export CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR="/mnt/d/WindowsHome/.gemini/antigravity/daemon"
+```
+
+### 3. Discovery & Binding
+Codencer automatically discovers active Antigravity instances by scanning the configured daemon directories.
 
 ```bash
 # 1. List discovered instances

@@ -147,9 +147,9 @@ Codencer is currently in an **MVP/Beta** state. Use the following matrix to unde
 
 ### 🔍 Direct-Local Antigravity Integration
 The `antigravity` adapter uses a **direct-local** model to control active Antigravity instances via RPC (Connect over HTTPS).
-- **Same-Side Requirement**: Codencer and Antigravity must run on the **same OS side** (e.g., both in Linux/WSL or both in Windows).
-- **Binding**: Use `orchestratorctl antigravity bind <PID>` to link a repository to an active Antigravity process discovered in `~/.gemini/antigravity/daemon`.
-- **WSL Note**: WSL-to-Windows cross-side communication is not yet supported in direct-local mode.
+- **Primary Model**: Codencer and Antigravity usually run on the **same OS side** (e.g., both in Linux or both in Windows).
+- **WSL ↔ Windows (Experimental)**: Cross-side communication is supported via the shared loopback (`127.0.0.1`). Codencer in WSL can discover Windows-side instances if the host's `.gemini` directory is reachable (e.g., via `/mnt/c`).
+- **Binding**: Use `orchestratorctl antigravity bind <PID>` to link a repository to an active Antigravity process discovered in the daemon directory.
 
 ### 🔍 Terminal Step States
 Codencer distinguishes between different failure modes to help you recover faster:
