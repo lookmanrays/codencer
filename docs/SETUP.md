@@ -35,15 +35,19 @@ Create a `.codencer/workspace.json` file in your repository root to define the p
 
 Codencer is **Grove-compatible**. If you are already using [Grove](https://github.com/verbaux/grove) for local development, Codencer will automatically detect and import your existing configuration if a native `.codencer/workspace.json` is not present.
 
-### Supported Grove Files
-1. **`grove.yaml`**: Standard spec-style configuration.
-2. **`.groverc.json`**: Legacy-style configuration used by the reference implementation.
+### Supported Grove Subset
+Codencer only imports the environment preparation subset of Grove configuration. It ignores Grove's native lifecycle tracking, state files, and aliases.
+
+The following fields are mapped:
+- **Environment Replication**: `setup.copy` or `setup.env_files` -> `copy`
+- **Dependency Optimization**: `setup.symlinks` or `symlink` -> `symlinks`
+- **Preparation Hooks**: `hooks.post_create` or `afterCreate` -> `post_create`
 
 ### Precedence Rules
-Codencer merges configuration from multiple sources using the following priority:
-1. **`.codencer/workspace.json`** (Authoritative)
-2. **`grove.yaml`** (Secondary)
-3. **`.groverc.json`** (Tertiary)
+Codencer merges configuration from multiple sources using the following absolute priority:
+1. **`.codencer/workspace.json`** (Codencer-native)
+2. **`grove.yaml`** (Spec-Grove)
+3. **`.groverc.json`** (Legacy-Grove)
 
 If a field (e.g., `symlinks`) is defined in the native config, any definitions in Grove files for that specific field are ignored.
 

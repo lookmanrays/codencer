@@ -123,7 +123,7 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 		"qwen":     qwen.NewAdapter(),
 		"ide-chat": ide.NewAdapter(),
 		"antigravity": antigravity.NewAdapter(agSvc),
-		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, cfg.WorkspaceRoot),
+		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, repoRoot),
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
