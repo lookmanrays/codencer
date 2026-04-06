@@ -32,10 +32,15 @@ orchestratorctl antigravity list
 # Bind to the active IDE instance
 orchestratorctl antigravity bind <PID>
 
-# Submit a task via the broker-backed adapter
+# Submit a task. The actual adapter is selected by 'adapter_profile' in the task YAML.
 orchestratorctl run start my-refactoring --executor antigravity-broker --conversation c-123
-orchestratorctl submit my-refactoring task.yaml --wait
+orchestratorctl submit my-refactoring examples/tasks/antigravity_refactor.yaml --wait
 ```
+
+> [!IMPORTANT]
+> **Executor ID vs. Adapter Profile**: 
+> - The `--executor` flag in `run start` sets diagnostic metadata only. It does NOT select the execution path.
+> - The actual adapter (e.g., `antigravity-broker`) must be specified in the task YAML's `adapter_profile` field.
 
 ---
 

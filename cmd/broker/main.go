@@ -164,46 +164,45 @@ func (d *Discovery) probeInstance(ctx context.Context, inst Instance) (string, b
 	return "", true
 }
 
-// BindingRegistry handles persistence of active instance.
+// BindingRegistry handles persistence of active instances keyed by repo_root.
 type BindingRegistry struct {
 	mu      sync.RWMutex
-	current *Instance
+	current map[string]*Instance
 	path    string
 }
 
 func NewBindingRegistry() *BindingRegistry {
 	home, _ := os.UserHomeDir()
 	path := filepath.Join(home, ".gemini", "antigravity", "broker_binding.json")
-	registry := &BindingRegistry{path: path}
+	registry := &BindingRegistry{
+		path:    path,
+		current: make(map[string]*Instance),
+	}
 	registry.load()
 	return registry
 }
 
-func (r *BindingRegistry) Set(inst Instance) {
+func (r *BindingRegistry) Set(repoRoot string, inst Instance) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.current = &inst
+	r.current[repoRoot] = &inst
 	r.save()
 }
 
-func (r *BindingRegistry) Get() *Instance {
+func (r *BindingRegistry) Get(repoRoot string) *Instance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.current
+	return r.current[repoRoot]
 }
 
-func (r *BindingRegistry) Clear() {
+func (r *BindingRegistry) Clear(repoRoot string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.current = nil
+	delete(r.current, repoRoot)
 	r.save()
 }
 
 func (r *BindingRegistry) save() {
-	if r.current == nil {
-		_ = os.Remove(r.path)
-		return
-	}
 	data, _ := json.Marshal(r.current)
 	_ = os.MkdirAll(filepath.Dir(r.path), 0755)
 	_ = os.WriteFile(r.path, data, 0644)
@@ -214,10 +213,7 @@ func (r *BindingRegistry) load() {
 	if err != nil {
 		return
 	}
-	var inst Instance
-	if err := json.Unmarshal(data, &inst); err == nil {
-		r.current = &inst
-	}
+	_ = json.Unmarshal(data, &r.current)
 }
 
 // Global Task Registry for Phase 4 (In-memory)
@@ -277,24 +273,31 @@ func main() {
 	}))
 
 	http.HandleFunc("/binding", logger(func(w http.ResponseWriter, r *http.Request) {
+		repoRoot := r.URL.Query().Get("repo_root")
 		switch r.Method {
 		case "GET":
-			inst := registry.Get()
+			if repoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+			inst := registry.Get(repoRoot)
 			if inst == nil { json.NewEncoder(w).Encode(map[string]string{"status": "unbound"}); return }
 			json.NewEncoder(w).Encode(inst)
 		case "POST":
-			var b struct{ PID int `json:"pid"` }
+			var b struct {
+				PID      int    `json:"pid"`
+				RepoRoot string `json:"repo_root"`
+			}
 			if err := json.NewDecoder(r.Body).Decode(&b); err != nil { http.Error(w, "invalid JSON", 400); return }
+			if b.RepoRoot == "" { http.Error(w, "repo_root is required", 400); return }
 			instances, _ := discovery.GetInstances(r.Context())
 			var chosen *Instance
 			for _, inst := range instances {
 				if inst.PID == b.PID { chosen = &inst; break }
 			}
 			if chosen == nil { http.Error(w, "instance not found", 404); return }
-			registry.Set(*chosen)
+			registry.Set(b.RepoRoot, *chosen)
 			json.NewEncoder(w).Encode(chosen)
 		case "DELETE":
-			registry.Clear()
+			if repoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+			registry.Clear(repoRoot)
 			w.WriteHeader(204)
 		default:
 			http.Error(w, "method not allowed", 405)
@@ -304,11 +307,15 @@ func main() {
 	// Task API (Experimental Phase 4)
 	http.HandleFunc("/tasks", logger(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" { http.Error(w, "method not allowed", 405); return }
-		inst := registry.Get()
-		if inst == nil { http.Error(w, "no instance bound", 400); return }
-
-		var b struct{ Prompt string `json:"prompt"` }
+		var b struct {
+			Prompt   string `json:"prompt"`
+			RepoRoot string `json:"repo_root"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&b); err != nil { http.Error(w, "invalid JSON", 400); return }
+		if b.RepoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+
+		inst := registry.Get(b.RepoRoot)
+		if inst == nil { http.Error(w, "no instance bound for this repo", 400); return }
 
 		req := map[string]any{
 			"userPrompt": b.Prompt,

@@ -114,7 +114,7 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	}
 
 	gateSvc := service.NewGateService(gatesRepo, runsRepo)
-	agSvc := service.NewAntigravityService(settingsRepo, cfg.AntigravityBrokerURL)
+	agSvc := service.NewAntigravityService(settingsRepo, cfg.AntigravityBrokerURL, cfg.WorkspaceRoot)
 
 	adapters := map[string]domain.Adapter{
 		"codex":    codex.NewAdapter(),

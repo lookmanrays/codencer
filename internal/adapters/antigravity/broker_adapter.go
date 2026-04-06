@@ -47,7 +47,10 @@ func (a *BrokerAdapter) Capabilities() []string {
 
 func (a *BrokerAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	url := fmt.Sprintf("%s/tasks", a.baseURL)
-	reqBody := map[string]string{"prompt": step.Goal}
+	reqBody := map[string]string{
+		"prompt":    step.Goal,
+		"repo_root": workspaceRoot,
+	}
 	data, _ := json.Marshal(reqBody)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))

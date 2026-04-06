@@ -33,14 +33,16 @@ export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
 - `GET /instances`: Lists all discovered Antigravity instances on the host.
 
 ### Binding Management
-- `GET /binding`: Returns the current repository binding.
-- `POST /binding`: Bind to a specific instance (JSON: `{"pid": <PID>}`).
-- `DELETE /binding`: Clear the current binding.
+Binding is repo-specific. Each repository on the guest machine can be bound to a separate Antigravity instance.
+
+- `GET /binding?repo_root=<path>`: Returns the active service instance for the repo.
+- `POST /binding`: Bind repo to an instance (JSON: `{"pid": <PID>, "repo_root": "<path>"}`).
+- `DELETE /binding?repo_root=<path>`: Clear the binding for the repo.
 
 ### Task Execution
-- `POST /tasks`: Starts an Antigravity cascade (JSON: `{"prompt": "goal"}`).
-- `GET /tasks/:id`: Polls task status and trajectory.
-- `GET /tasks/:id/result`: Retrieves the final task result and terminal state.
+- `POST /tasks`: Starts a cascade (JSON: `{"prompt": "goal", "repo_root": "<path>"}`).
+- `GET /tasks/:id`: Polls status.
+- `GET /tasks/:id/result`: Retrieves raw trajectory.
 
 ## Persistence
 Binding state is persisted to `~/.gemini/antigravity/broker_binding.json` on the host machine.

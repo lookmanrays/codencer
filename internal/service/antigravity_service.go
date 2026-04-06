@@ -31,14 +31,16 @@ type AntigravityService struct {
 	settingsRepo SettingsStore
 	discovery    *antigravity.Discovery
 	brokerURL    string
+	repoRoot     string
 	httpClient   *http.Client
 }
 
-func NewAntigravityService(settingsRepo SettingsStore, brokerURL string) *AntigravityService {
+func NewAntigravityService(settingsRepo SettingsStore, brokerURL string, repoRoot string) *AntigravityService {
 	svc := &AntigravityService{
 		settingsRepo: settingsRepo,
 		discovery:    antigravity.NewDiscovery(),
 		brokerURL:    brokerURL,
+		repoRoot:     repoRoot,
 		httpClient:   &http.Client{Timeout: 5 * time.Second},
 	}
 
@@ -75,7 +77,10 @@ func (s *AntigravityService) ListInstances(ctx context.Context) ([]domain.AGInst
 // Bind links this repo to a specific Antigravity instance by PID.
 func (s *AntigravityService) Bind(ctx context.Context, pid int) error {
 	if s.isBrokerEnabled() {
-		data, _ := json.Marshal(map[string]int{"pid": pid})
+		data, _ := json.Marshal(map[string]any{
+			"pid":       pid,
+			"repo_root": s.repoRoot,
+		})
 		resp, err := s.httpClient.Post(s.brokerURL+"/binding", "application/json", bytes.NewReader(data))
 		if err != nil {
 			return fmt.Errorf("broker bind error: %w (check if host-side broker is running on port 8088)", err)
@@ -93,7 +98,8 @@ func (s *AntigravityService) Bind(ctx context.Context, pid int) error {
 // Unbind clears the binding.
 func (s *AntigravityService) Unbind(ctx context.Context) error {
 	if s.isBrokerEnabled() {
-		req, _ := http.NewRequestWithContext(ctx, "DELETE", s.brokerURL+"/binding", nil)
+		url := fmt.Sprintf("%s/binding?repo_root=%s", s.brokerURL, s.repoRoot)
+		req, _ := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 		resp, err := s.httpClient.Do(req)
 		if err != nil {
 			return fmt.Errorf("broker unbind error: %w", err)
@@ -107,7 +113,8 @@ func (s *AntigravityService) Unbind(ctx context.Context) error {
 // GetBinding returns the currently bound instance if it is still alive.
 func (s *AntigravityService) GetBinding(ctx context.Context) (*domain.AGInstance, error) {
 	if s.isBrokerEnabled() {
-		resp, err := s.httpClient.Get(s.brokerURL + "/binding")
+		url := fmt.Sprintf("%s/binding?repo_root=%s", s.brokerURL, s.repoRoot)
+		resp, err := s.httpClient.Get(url)
 		if err != nil {
 			return nil, fmt.Errorf("broker get binding error: %w", err)
 		}

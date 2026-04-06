@@ -13,39 +13,61 @@ func TestBindingRegistry(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	path := filepath.Join(tmpDir, "binding.json")
-	registry := &BindingRegistry{path: path}
-
-	// 1. Initial State
-	if registry.Get() != nil {
-		t.Errorf("Expected initial state to be nil, got %v", registry.Get())
+	registry := &BindingRegistry{
+		path:    path,
+		current: make(map[string]*Instance),
 	}
 
-	// 2. Set Binding
-	inst := Instance{PID: 12345, HTTPSPort: 8080, CSRFToken: "token"}
-	registry.Set(inst)
+	repoA := "/path/to/repo/a"
+	repoB := "/path/to/repo/b"
 
-	if registry.Get() == nil || registry.Get().PID != 12345 {
-		t.Errorf("Expected PID 12345, got %v", registry.Get())
+	// 1. Initial State
+	if registry.Get(repoA) != nil {
+		t.Errorf("Expected initial state to be nil, got %v", registry.Get(repoA))
+	}
+
+	// 2. Set Bindings for separate repos
+	instA := Instance{PID: 111, HTTPSPort: 8081, CSRFToken: "tokenA"}
+	instB := Instance{PID: 222, HTTPSPort: 8082, CSRFToken: "tokenB"}
+	
+	registry.Set(repoA, instA)
+	registry.Set(repoB, instB)
+
+	if registry.Get(repoA) == nil || registry.Get(repoA).PID != 111 {
+		t.Errorf("Expected Repo A PID 111, got %v", registry.Get(repoA))
+	}
+	if registry.Get(repoB) == nil || registry.Get(repoB).PID != 222 {
+		t.Errorf("Expected Repo B PID 222, got %v", registry.Get(repoB))
 	}
 
 	// 3. Verify Persistence on re-load
 	registry2 := &BindingRegistry{path: path}
 	registry2.load()
-	if registry2.Get() == nil || registry2.Get().PID != 12345 {
-		t.Errorf("Expected PID 12345 after re-load, got %v", registry2.Get())
+	if registry2.Get(repoA) == nil || registry2.Get(repoA).PID != 111 {
+		t.Errorf("Expected Repo A PID 111 after re-load, got %v", registry2.Get(repoA))
+	}
+	if registry2.Get(repoB) == nil || registry2.Get(repoB).PID != 222 {
+		t.Errorf("Expected Repo B PID 222 after re-load, got %v", registry2.Get(repoB))
 	}
 
-	// 4. Clear
-	registry.Clear()
-	if registry.Get() != nil {
-		t.Errorf("Expected nil after clear, got %v", registry.Get())
+	// 4. Clear Repo A
+	registry.Clear(repoA)
+	if registry.Get(repoA) != nil {
+		t.Errorf("Expected Repo A nil after clear, got %v", registry.Get(repoA))
+	}
+	// Verify Repo B still exists
+	if registry.Get(repoB) == nil || registry.Get(repoB).PID != 222 {
+		t.Errorf("Expected Repo B to still exist after clearing A, got %v", registry.Get(repoB))
 	}
 
 	// 5. Verify Persistence after clear
 	registry3 := &BindingRegistry{path: path}
 	registry3.load()
-	if registry3.Get() != nil {
-		t.Errorf("Expected nil after clear re-load, got %v", registry3.Get())
+	if registry3.Get(repoA) != nil {
+		t.Errorf("Expected Repo A nil after clear re-load, got %v", registry3.Get(repoA))
+	}
+	if registry3.Get(repoB) == nil {
+		t.Errorf("Expected Repo B to still exist after clear re-load")
 	}
 }
 
