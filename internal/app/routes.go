@@ -10,9 +10,9 @@ import (
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/mcp"
 	"agent-bridge/internal/service"
-	"time"
 	"fmt"
 	"path/filepath"
+	"time"
 )
 
 // APIHandler holds dependencies for exposing REST routes.
@@ -36,7 +36,7 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/antigravity/instances", h.handleAGInstances)
 	mux.HandleFunc("/api/v1/antigravity/status", h.handleAGStatus)
 	mux.HandleFunc("/api/v1/antigravity/bind", h.handleAGBind)
-	
+
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
 }
@@ -158,16 +158,22 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			if spec.PhaseID == "" {
 				spec.PhaseID = fmt.Sprintf("phase-execution-%s", id)
 			}
+			if spec.RunID == "" {
+				spec.RunID = id
+			}
+			snapshot := spec
 
 			step := &domain.Step{
-				ID:             spec.StepID,
-				PhaseID:        spec.PhaseID,
-				Title:          spec.Title,
-				Goal:           spec.Goal,
-				Adapter:        spec.AdapterProfile,
-				Policy:         spec.PolicyBundle,
-				TimeoutSeconds: spec.TimeoutSeconds,
-				Validations:    spec.Validations,
+				ID:                   spec.StepID,
+				PhaseID:              spec.PhaseID,
+				Title:                spec.Title,
+				Goal:                 spec.Goal,
+				Adapter:              spec.AdapterProfile,
+				Policy:               spec.PolicyBundle,
+				TimeoutSeconds:       spec.TimeoutSeconds,
+				Validations:          spec.Validations,
+				TaskSpecSnapshot:     &snapshot,
+				SubmissionProvenance: snapshot.SubmissionProvenance,
 			}
 
 			go func() {
@@ -245,7 +251,7 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		if isArtifacts {
 			artifacts, err := h.RunSvc.GetArtifactsByStep(r.Context(), stepID)
 			if err != nil {
@@ -285,7 +291,7 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
-		
+
 		_ = json.NewEncoder(w).Encode(step)
 		return
 	}
@@ -335,11 +341,11 @@ func (h *APIHandler) handleGateByID(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		http.Error(w, "Unknown action", http.StatusBadRequest)
 		return
 	}
-	
+
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 func (h *APIHandler) handleCompatibility(w http.ResponseWriter, r *http.Request) {
@@ -358,7 +364,7 @@ func (h *APIHandler) handleCompatibility(w http.ResponseWriter, r *http.Request)
 			{"id": "ide-chat", "status": "active", "tier": 3},
 		},
 		"environment": map[string]interface{}{
-			"os": os.Getenv("OS"),
+			"os":              os.Getenv("OS"),
 			"vscode_detected": false, // Simplified for MVP
 		},
 	}

@@ -18,7 +18,7 @@ import (
 // CollectStandardArtifacts reads the artifact directory and populates domain artifacts.
 func CollectStandardArtifacts(ctx context.Context, attemptID string, attemptArtifactRoot string) ([]*domain.Artifact, error) {
 	var artifacts []*domain.Artifact
-	
+
 	entries, err := os.ReadDir(attemptArtifactRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -31,14 +31,14 @@ func CollectStandardArtifacts(ctx context.Context, attemptID string, attemptArti
 		if entry.IsDir() {
 			continue
 		}
-		
+
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
 
 		path := filepath.Join(attemptArtifactRoot, entry.Name())
-		
+
 		// 1. Calculate Hash and Detect MIME Type
 		hash, mimeType, err := calculateMetadata(path)
 		if err != nil {
@@ -55,6 +55,8 @@ func CollectStandardArtifacts(ctx context.Context, attemptID string, attemptArti
 			artType = domain.ArtifactTypeResultJSON
 		case "stderr.log":
 			artType = domain.ArtifactTypeStderr
+		case "normalized-task.json":
+			artType = domain.ArtifactTypeInputJSON
 		default:
 			if filepath.Ext(entry.Name()) == ".patch" || filepath.Ext(entry.Name()) == ".diff" {
 				artType = domain.ArtifactTypeDiff
@@ -74,7 +76,7 @@ func CollectStandardArtifacts(ctx context.Context, attemptID string, attemptArti
 			UpdatedAt: time.Now().UTC(),
 		})
 	}
-	
+
 	return artifacts, nil
 }
 

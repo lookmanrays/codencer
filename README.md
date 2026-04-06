@@ -53,9 +53,11 @@ The standard sequence for performing an audited tactical task:
 2.  **Start the Bridge**: `make start-sim` (for testing) or `make start` (for real agents).
 3.  **Inspect Instance**: `./bin/orchestratorctl instance` (Verify port/repo).
 4.  **Start a Run**: `./bin/orchestratorctl run start <RUN_ID> <PROJECT>`.
-5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> <TASK_FILE> --wait`.
+5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> <TASK_FILE>|--goal "<text>" --wait --json`.
 6.  **Audit the Result**: `./bin/orchestratorctl step result <UUID>` (The Summary).
 7.  **Evidence Drill-down**: `./bin/orchestratorctl step logs/artifacts/validations <UUID>`.
+
+For ordered task lists, the official v1 pattern is an external wrapper loop that calls Codencer one task at a time. Codencer does not include a native workflow engine or planner-like batch runner in v1.
 
 ---
 
@@ -92,8 +94,11 @@ Submit a task and wait for the bridge to report results. For the full auditing s
 # 1. Start a new mission (System of Record)
 ./bin/orchestratorctl run start first-run my-project
 
-# 2. Submit a tactical task and wait for completion
-./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait
+# 2a. Submit a rich TaskSpec file and wait for completion
+./bin/orchestratorctl submit first-run examples/tasks/bug_fix.yaml --wait --json
+
+# 2b. Or use direct convenience input for local automation
+./bin/orchestratorctl submit first-run --goal "Fix the failing tests in pkg/foo" --title "Fix pkg/foo tests" --adapter codex --wait --json
 
 # 3. View the Authoritative Truth (The Summary)
 # Note: Use the Step UUID Handle printed after submission
@@ -125,6 +130,67 @@ Every task execution leaves a permanent audit trail:
 3. **Artifacts**: Every modified file and diff is stored in `.codencer/artifacts/`. Use `./bin/orchestratorctl step artifacts <id>` to see the exact paths and SHA-256 hashes.
 4. **Validations**: Run `./bin/orchestratorctl step validations <id>` to see specific test/lint results.
 
+## 🧾 Submission Inputs
+
+Codencer supports two submit styles:
+
+1. **Canonical TaskSpec**: submit a full YAML or JSON task definition when you need rich structure.
+2. **Direct convenience input**: submit a prompt/goal directly and let the CLI deterministically normalize it into `TaskSpec`.
+
+Direct input is intentionally narrow. It does not plan, decompose work, merge multiple sources, or invent strategy.
+
+### Exactly One Primary Source
+
+`submit` requires exactly one of:
+- positional task file
+- `--task-json <path|->`
+- `--prompt-file <path>`
+- `--goal <text>`
+- `--stdin`
+
+Direct metadata flags are only supported with `--prompt-file`, `--goal`, and `--stdin`:
+- `--title`
+- `--context`
+- `--adapter`
+- `--timeout`
+- `--policy`
+- repeated `--acceptance`
+- repeated `--validation`
+
+### Deterministic Defaults
+
+For direct convenience input:
+- `version` defaults to `v1`
+- `run_id` comes from the CLI `<RUN_ID>`
+- `title` comes from `--title`, otherwise the prompt filename basename, otherwise `Direct task`
+- `goal` is the exact submitted text from `--goal`, `--prompt-file`, or `--stdin`
+- repeated `--validation` flags become deterministic validation commands named `validation-1`, `validation-2`, and so on
+
+`context` and `acceptance` are preserved in the normalized task and provenance, but they are currently retained metadata rather than separate executor-driving runtime fields.
+
+### Provenance and Auditability
+
+Every accepted submission keeps both:
+- the original input as `original-input.*`
+- the normalized canonical payload as `normalized-task.json`
+
+Those files are written under the attempt artifact root so a later audit can answer what exact content was submitted and what normalized task Codencer actually executed.
+
+## 🔁 Ordered Task Lists
+
+The official v1 sequential-execution story is wrapper-based:
+- start or reuse a run
+- submit one item at a time with `submit --wait --json`
+- inspect the exit code and terminal payload outside Codencer
+- decide whether to continue or stop outside Codencer
+
+Official wrapper examples live in [examples/automation](examples/automation):
+- [run_tasks.sh](examples/automation/run_tasks.sh)
+- [run_tasks.ps1](examples/automation/run_tasks.ps1)
+- [run_tasks.py](examples/automation/run_tasks.py)
+
+This keeps Codencer sharp and narrow as a bridge rather than a workflow brain.
+
 For a deeper dive into agent installation and advanced configuration, see the **[Environmental Reference Guide](docs/SETUP.md)**.
 
 ---
@@ -148,6 +214,7 @@ As a local-first Beta/MVP, Codencer has the following constraints:
 - **Static Extension Routing**: The experimental VS Code extension assumes the daemon binds at `127.0.0.1:8085`. Dynamic connection configuration for running instances on multiple ports is not yet natively surfaced in the IDE client.
 - **Agent Dependency**: "Real Mode" efficacy is strictly bound to the quality of the underlying agent (Codex, Claude, etc.).
 - **Manual Decisions**: The bridge reports terminal states; all recovery or retry decisions remain with the human operator or external planner.
+- **No Native Workflow Engine**: Ordered task lists are handled by wrappers/scripts outside Codencer core in v1.
 
 ---
 
@@ -170,7 +237,7 @@ Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs.
 The `antigravity` adapter uses a **direct-local** model to control active Antigravity instances via RPC (Connect over HTTPS).
 - **Primary Model**: Codencer and Antigravity usually run on the **same OS side** (e.g., both in Linux or both in Windows).
 - **WSL ↔ Windows (Experimental)**: Cross-side communication is supported via the shared loopback (`127.0.0.1`). Codencer in WSL can discover Windows-side instances if the host's `.gemini` directory is reachable (e.g., via `/mnt/c`).
-- **Binding**: Use `orchestratorctl antigravity bind <PID>` to link a repository to an active Antigravity process discovered in the daemon directory.
+- **Binding**: Use `orchestratorctl antigravity bind <PID>` to link this repository to an active Antigravity process. Binding establishes repo-scoped target identity and connectivity; execution still depends on the task's explicit `adapter_profile`.
 
 ### 🔍 Terminal Step States
 Codencer distinguishes between different failure modes to help you recover faster:
@@ -197,6 +264,7 @@ Review the following guides to get started with Codencer.
 
 ### ⚡️ User Guidance (Start Here)
 - **[Canonical Local Runbook](docs/EXAMPLES.md)** — The definitive Day-0 operator flow.
+- **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)** — Sequential wrapper loops, JSON mode, and shell-capable planner usage.
 - **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and agent setup.
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — How to handle non-success states and recovery.
 - **[Architecture Overview](docs/02_architecture.md)** — High-level design and the "Bridge not Brain" model.

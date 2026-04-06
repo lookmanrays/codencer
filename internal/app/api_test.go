@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"agent-bridge/internal/domain"
@@ -70,9 +71,9 @@ func TestAPI_Endpoints(t *testing.T) {
 	t.Run("GET /api/v1/benchmarks", func(t *testing.T) {
 		// Insert mock benchmark
 		bench := &domain.BenchmarkScore{
-			ID: "bench-1",
-			Adapter: "codex",
-			AttemptID: "att-1",
+			ID:         "bench-1",
+			Adapter:    "codex",
+			AttemptID:  "att-1",
 			DurationMs: 100,
 		}
 		_ = benchRepo.Save(ctx, bench)
@@ -109,6 +110,35 @@ func TestAPI_Endpoints(t *testing.T) {
 		}
 		if resp["mode"] != "Heuristic Static Fallback" {
 			t.Errorf("unexpected routing mode: %v", resp["mode"])
+		}
+	})
+
+	t.Run("POST /api/v1/runs/{id}/steps autofills phase_id and step_id", func(t *testing.T) {
+		payload := strings.NewReader(`{
+			"version":"1.1",
+			"run_id":"api-test-run",
+			"title":"Autofill IDs",
+			"goal":"Verify the daemon fills missing IDs",
+			"adapter_profile":"codex"
+		}`)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", payload)
+		w := httptest.NewRecorder()
+		handler.handleRunByID(w, req)
+
+		if w.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+		}
+
+		var resp domain.Step
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatal(err)
+		}
+		if resp.ID == "" {
+			t.Fatal("expected step ID to be auto-filled")
+		}
+		if resp.PhaseID == "" {
+			t.Fatal("expected phase ID to be auto-filled")
 		}
 	})
 }

@@ -3,13 +3,13 @@
   "title": "TaskSpec",
   "description": "Canonical execution request contract for the bridge.",
   "type": "object",
-  "required": ["version", "run_id", "phase_id", "step_id", "goal"],
+  "required": ["version", "goal"],
   "properties": {
     "version": { "type": "string", "example": "v1" },
     "project_id": { "type": "string" },
-    "run_id": { "type": "string" },
-    "phase_id": { "type": "string" },
-    "step_id": { "type": "string" },
+    "run_id": { "type": "string", "description": "Optional. Auto-filled from the submit target run when omitted." },
+    "phase_id": { "type": "string", "description": "Optional. Auto-filled by the daemon if omitted." },
+    "step_id": { "type": "string", "description": "Optional. Auto-filled by the daemon if omitted." },
     "title": { "type": "string" },
     "goal": { "type": "string", "description": "The primary prompt or instruction for the agent." },
     "context": {

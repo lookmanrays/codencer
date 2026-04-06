@@ -1,0 +1,3 @@
+# One strict JSON task definition per line.
+examples/automation/tasks/docs_only.json
+examples/automation/tasks/config_update.json

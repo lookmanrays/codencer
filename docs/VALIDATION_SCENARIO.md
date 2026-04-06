@@ -21,11 +21,13 @@ Update the internal application version string in `internal/app/version.go`.
 
 ## 2. Execution Specification (TaskSpec)
 
+This scenario intentionally uses a full `TaskSpec` because it carries richer structure (`constraints`, stable IDs, and explicit adapter choice). Direct convenience input is supported for narrower automation use cases, but it does not replace the full DSL when you need structured task metadata.
+
 ```yaml
 version: "1.1"
 run_id: "validation-run-01"
-step_id: "bump-version-01"
-# [OPTIONAL] phase_id: "phase-execution-$RUN_ID"
+# [OPTIONAL] step_id: "bump-version-01"
+# [OPTIONAL] phase_id: "phase-execution-validation-run-01"
 title: "Internal Version Bump"
 goal: "Update internal/app/version.go to set Version = \"v0.1.0-alpha\""
 adapter_profile: "codex"
@@ -63,13 +65,22 @@ constraints:
    Alternatively, you can run the steps manually:
    ```bash
    ./bin/orchestratorctl run start validation-run-01 validation-project
-   ./bin/orchestratorctl submit validation-run-01 docs/validation_task.yaml
-   ./bin/orchestratorctl step wait bump-version-01
+   ./bin/orchestratorctl submit validation-run-01 docs/validation_task.yaml --wait --json
    ```
+   A narrower direct-input equivalent is also possible when you only need goal/title/adapter-style fields:
+   ```bash
+   ./bin/orchestratorctl submit validation-run-01 \
+     --goal "Update internal/app/version.go to set Version = \"v0.1.0-alpha\"" \
+     --title "Internal Version Bump" \
+     --adapter codex \
+     --wait --json
+   ```
+   Use the full TaskSpec when you need richer fields like `constraints`.
+   For ordered multi-task runs, keep the same per-task submit contract and use the official wrapper patterns documented in `docs/CLI_AUTOMATION.md` and `examples/automation/`.
 3. **Verify Result**:
-   The `./bin/orchestratorctl` tool now **pretty-prints JSON by default**. Inspect the terminal outcome of the `wait` command:
+   In machine-facing flows, use `--json` so stdout contains a single terminal payload. Inspect the terminal outcome of the `submit --wait --json` command:
    
-   Example `step wait` output:
+   Example terminal payload:
    ```json
    {
      "state": "completed",

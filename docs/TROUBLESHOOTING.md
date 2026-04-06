@@ -33,6 +33,56 @@ Always start here to verify your environment:
 - **Cause**: Git worktree conflict or permission issue.
 - **Fix**: Run `git worktree prune` and ensure the `~/.codencer/workspaces` directory is writable.
 
+### 2.4 "submit requires exactly one primary input source"
+**Symptoms**: `submit` exits with a usage/input error before contacting the daemon.
+- **Cause**: No primary source was supplied, or multiple primary sources were supplied together.
+- **Fix**: Choose exactly one of:
+  - positional task file
+  - `--task-json`
+  - `--prompt-file`
+  - `--goal`
+  - `--stdin`
+
+### 2.5 "direct metadata flags are only supported..."
+**Symptoms**: `submit` rejects `--title`, `--context`, `--adapter`, `--timeout`, `--policy`, `--acceptance`, or `--validation`.
+- **Cause**: Those flags were combined with a canonical task source such as a positional task file or `--task-json`.
+- **Fix**: Put those fields in the YAML/JSON task itself, or switch to a direct source (`--prompt-file`, `--goal`, or `--stdin`).
+
+### 2.6 "direct input is empty"
+**Symptoms**: `submit --stdin` or another direct source exits with a usage/input error.
+- **Cause**: The prompt text was empty or whitespace-only.
+- **Fix**: Ensure the prompt file or stdin stream contains real task text before submitting.
+
+### 2.7 "failed to parse task spec json"
+**Symptoms**: `submit --task-json ...` fails before the request is sent.
+- **Cause**: `--task-json` is strict JSON mode and the payload is invalid JSON.
+- **Fix**: Validate the payload as JSON, or submit the file positionally if you want the YAML/JSON-compatible task-file parser.
+
+### 2.8 "task run_id ... does not match submit run ID ..."
+**Symptoms**: Canonical task submission fails locally.
+- **Cause**: The authored task payload includes a `run_id` that conflicts with the CLI `<RUN_ID>`.
+- **Fix**: Either remove `run_id` and let the CLI fill it, or make the authored `run_id` match the run you are submitting to.
+
+### 2.9 Wrapper exits because the run is missing
+**Symptoms**: An official wrapper example exits before the first task runs.
+- **Cause**: The wrapper checks `run state --json` first and only creates the run automatically when `--project` is provided.
+- **Fix**: Either start the run yourself first, or pass `--project <project>` to the wrapper.
+
+### 2.10 Bash wrapper says it needs `jq` or `python3`
+**Symptoms**: `examples/automation/run_tasks.sh` exits immediately.
+- **Cause**: The bash wrapper needs a JSON parser for machine-safe result handling.
+- **Fix**: Install `jq`, or ensure `python3` is available in `$PATH`.
+
+### 2.11 Wrapper stops after the first failure
+**Symptoms**: A sequential wrapper exits on a non-zero task result.
+- **Cause**: Stop-on-failure is the official default for v1.
+- **Fix**: Re-run with the wrapper’s explicit continue mode, or set `CODENCER_CONTINUE_ON_FAILURE=1` for automation.
+
+### 2.12 Wrapper continues when you expected it to stop
+**Symptoms**: The wrapper keeps iterating after a failed task.
+- **Cause**: `CODENCER_CONTINUE_ON_FAILURE=1` is set in the environment or the explicit continue flag was used.
+- **Fix**: Unset the environment variable or omit the continue flag.
+
 ---
 
 ## 3. Interpreting Step States
