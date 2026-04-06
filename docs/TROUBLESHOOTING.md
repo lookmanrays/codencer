@@ -100,3 +100,22 @@ make nuke
 make build
 ./bin/orchestratord
 ```
+
+---
+
+## 5. Antigravity Specifics
+
+### 5.1 No instances discovered
+**Symptoms**: `antigravity list` returns an empty list.
+- **Cause**: Codencer and Antigravity are on different OS sides (e.g. WSL vs Windows).
+- **Fix**: Run both Codencer and the Antigravity-supported IDE on the same side.
+
+### 5.2 Binding shows "STALE"
+**Symptoms**: `antigravity status` reports `STALE (Process not reachable)`.
+- **Cause**: The bound PID no longer exists or the LS instance has crashed/restarted on a different port.
+- **Fix**: Re-discover with `antigravity list` and re-bind with `antigravity bind <NEW_PID>`.
+
+### 5.3 Task fails with "Antigravity transport failure"
+**Symptoms**: Step state is `failed_adapter` with an RPC error.
+- **Cause**: Network interruption or invalid CSRF token.
+- **Fix**: Verify the instance is still active in the IDE and re-bind if necessary.

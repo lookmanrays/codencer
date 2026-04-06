@@ -1108,8 +1108,11 @@ func handleAntigravityCmd(args []string) {
 		}
 
 	case "bind":
-		if len(args) < 2 {
+		if len(args) < 2 || args[1] == "--help" || args[1] == "-h" {
 			fmt.Println("Usage: orchestratorctl antigravity bind <PID>")
+			fmt.Println("\nNote: Codencer currently supports direct-local Antigravity integration.")
+			fmt.Println("Both Codencer and Antigravity must be running on the same OS side.")
+			fmt.Println("WSL-to-Windows cross-side binding is not yet supported in this mode.")
 			os.Exit(1)
 		}
 		pid, err := strconv.Atoi(args[1])

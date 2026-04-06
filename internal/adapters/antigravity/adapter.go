@@ -60,7 +60,12 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 
 	req := &StartCascadeRequest{
 		UserPrompt:                 step.Goal,
-		WorkspaceFolderAbsoluteUri: fmt.Sprintf("file://%s", workspaceRoot),
+		WorkspaceFolderAbsoluteUri: func() string {
+			if inst.WorkspaceRoot != "" {
+				return inst.WorkspaceRoot
+			}
+			return fmt.Sprintf("file://%s", workspaceRoot)
+		}(),
 		Metadata: CascadeMetadata{
 			FileAccessGranted: true,
 		},

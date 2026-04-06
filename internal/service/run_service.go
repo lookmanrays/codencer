@@ -622,7 +622,7 @@ func (s *RunService) finalizeStep(
 	} else if finalResult != nil && (finalResult.State != domain.StepStateCompleted && finalResult.State != domain.StepStateCompletedWithWarnings) {
 		// Preserve granular failure states if reported by the adapter/system
 		switch finalResult.State {
-		case domain.StepStateFailedBridge, domain.StepStateFailedValidation, domain.StepStateTimeout, domain.StepStateNeedsManualAttention:
+		case domain.StepStateFailedBridge, domain.StepStateFailedValidation, domain.StepStateTimeout, domain.StepStateNeedsManualAttention, domain.StepStateFailedTerminal, domain.StepStateFailedAdapter:
 			step.State = finalResult.State
 		default:
 			step.State = domain.StepStateFailedAdapter

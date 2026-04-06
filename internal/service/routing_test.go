@@ -13,9 +13,10 @@ import (
 
 func TestRoutingService_BuildHeuristicChain(t *testing.T) {
 	adapters := map[string]domain.Adapter{
-		"qwen":   nil,
-		"claude": nil,
-		"codex":  nil,
+		"qwen":        nil,
+		"claude":      nil,
+		"codex":       nil,
+		"antigravity": nil,
 	}
 	rs := NewRoutingService(nil, adapters)
 

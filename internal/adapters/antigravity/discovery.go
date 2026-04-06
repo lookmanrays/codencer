@@ -37,46 +37,93 @@ func NewDiscovery() *Discovery {
 
 // Discover scans the daemon directory for active instance files.
 func (d *Discovery) Discover(ctx context.Context) ([]domain.AGInstance, error) {
-	home, err := os.UserHomeDir()
+	daemonDirs, err := d.getDaemonDirs()
 	if err != nil {
-		return nil, fmt.Errorf("Antigravity: failed to get home dir: %w", err)
+		return nil, err
 	}
 
-	daemonDir := filepath.Join(home, daemonDirRel)
-	files, err := os.ReadDir(daemonDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []domain.AGInstance{}, nil
+	return d.scanDirs(ctx, daemonDirs)
+}
+
+func (d *Discovery) scanDirs(ctx context.Context, dirs []string) ([]domain.AGInstance, error) {
+	instanceMap := make(map[int]domain.AGInstance)
+	for _, dir := range dirs {
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			// Log warning but continue with other directories
+			continue
 		}
-		return nil, fmt.Errorf("Antigravity: failed to read daemon dir %q: %w", daemonDir, err)
+
+		for _, file := range files {
+			if !strings.HasPrefix(file.Name(), "ls_") || !strings.HasSuffix(file.Name(), ".json") {
+				continue
+			}
+
+			path := filepath.Join(dir, file.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+
+			var inst domain.AGInstance
+			if err := json.Unmarshal(data, &inst); err != nil {
+				continue
+			}
+
+			if inst.PID == 0 || inst.HTTPSPort == 0 {
+				continue
+			}
+
+			// Deduplicate by PID
+			if _, exists := instanceMap[inst.PID]; exists {
+				continue
+			}
+
+			// Simple health probe + workspace enrichment
+			workspace, reachable := d.probeInstance(ctx, inst)
+			inst.IsReachable = reachable
+			inst.WorkspaceRoot = workspace
+
+			instanceMap[inst.PID] = inst
+		}
 	}
 
 	var instances []domain.AGInstance
-	for _, file := range files {
-		if !strings.HasPrefix(file.Name(), "ls_") || !strings.HasSuffix(file.Name(), ".json") {
-			continue
-		}
-
-		path := filepath.Join(daemonDir, file.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
-		var inst domain.AGInstance
-		if err := json.Unmarshal(data, &inst); err != nil {
-			continue
-		}
-
-		// Simple health probe + workspace enrichment
-		workspace, reachable := d.probeInstance(ctx, inst)
-		inst.IsReachable = reachable
-		inst.WorkspaceRoot = workspace
-
+	for _, inst := range instanceMap {
 		instances = append(instances, inst)
 	}
 
 	return instances, nil
+}
+
+func (d *Discovery) getDaemonDirs() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home dir: %w", err)
+	}
+
+	dirs := []string{filepath.Join(home, daemonDirRel)}
+
+	// WSL Detection & Cross-Side Discovery
+	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		if strings.Contains(strings.ToLower(string(content)), "microsoft") {
+			// In WSL, attempt to reach the Windows host home directory.
+			// Default path: /mnt/c/Users/<user>
+			user := os.Getenv("USER")
+			if user != "" {
+				winHome := filepath.Join("/mnt/c/Users", user)
+				winDaemonDir := filepath.Join(winHome, daemonDirRel)
+				if info, err := os.Stat(winDaemonDir); err == nil && info.IsDir() {
+					dirs = append(dirs, winDaemonDir)
+				}
+			}
+		}
+	}
+
+	return dirs, nil
 }
 
 func (d *Discovery) probeInstance(ctx context.Context, inst domain.AGInstance) (string, bool) {

@@ -28,12 +28,14 @@ func TestDiscovery_Discover(t *testing.T) {
 	os.WriteFile(filepath.Join(daemonDir, "ls_12345.json"), data, 0644)
 
 	// Point discovery to tmp home
-	// We need to modify Discovery to accept a base path or just set HOME
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", oldHome)
 
 	d := NewDiscovery()
+	// Mock probe to return instantly
+	// Note: In real test, probe will fail (no server), but Discovery handles that by returning reachable=false.
+
 	instances, err := d.Discover(context.Background())
 	if err != nil {
 		t.Fatalf("Discover failed: %v", err)
@@ -45,5 +47,39 @@ func TestDiscovery_Discover(t *testing.T) {
 
 	if instances[0].PID != 12345 {
 		t.Errorf("Expected PID 12345, got %d", instances[0].PID)
+	}
+}
+
+func TestDiscovery_Deduplication(t *testing.T) {
+	// Setup two mock directories
+	tmpDir, _ := os.MkdirTemp("", "ag-dedup")
+	defer os.RemoveAll(tmpDir)
+
+	dir1 := filepath.Join(tmpDir, "local", daemonDirRel)
+	dir2 := filepath.Join(tmpDir, "win", daemonDirRel)
+	os.MkdirAll(dir1, 0755)
+	os.MkdirAll(dir2, 0755)
+
+	inst := domain.AGInstance{
+		PID:       555,
+		HTTPSPort: 1234,
+		CSRFToken: "tok",
+	}
+	data, _ := json.Marshal(inst)
+	os.WriteFile(filepath.Join(dir1, "ls_555.json"), data, 0644)
+	os.WriteFile(filepath.Join(dir2, "ls_555.json"), data, 0644)
+
+	d := NewDiscovery()
+	instances, err := d.scanDirs(context.Background(), []string{dir1, dir2})
+	if err != nil {
+		t.Fatalf("scanDirs failed: %v", err)
+	}
+
+	if len(instances) != 1 {
+		t.Fatalf("Expected 1 instance after deduplication, got %d", len(instances))
+	}
+
+	if instances[0].PID != 555 {
+		t.Errorf("Expected PID 555, got %d", instances[0].PID)
 	}
 }

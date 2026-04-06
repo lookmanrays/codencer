@@ -42,7 +42,7 @@ func (rs *RoutingService) BuildHeuristicChain(ctx context.Context, requestedProf
 	}
 
 	// Heuristic preferences (Static Fallback)
-	fallbackPreferences := []string{"ide-chat", "antigravity", "qwen", "claude", "codex"}
+	fallbackPreferences := []string{"ide-chat", "qwen", "claude", "codex"}
 
 	for _, id := range fallbackPreferences {
 		if id != requestedProfile {

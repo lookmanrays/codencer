@@ -141,6 +141,33 @@ Codencer provides an identical local-first technical surface on macOS and Window
 - **WSL Users**: Run the daemon inside your WSL instance. Windows-side IDEs (like VS Code) can connect to the daemon over the local loopback `http://localhost:8085` transparently.
 - **Embedded DB Architecture**: The bridge embeds SQLite via Go's CGO. This means no external DB service (like Postgres or SQLite daemon) needs to be installed, though a standard local C compiler (`cc`/`gcc`) is briefly hit during the `go build` step.
 
+---
+
+## 🔍 Antigravity Direct-Local Setup
+The `antigravity` adapter allows Codencer to act as a bridge for active Antigravity Language Server instances.
+
+### 1. Prerequisites
+- **Active LS Instance**: An Antigravity-supported IDE or daemon must be running.
+- **Same-Side OS**: Both Codencer and the Antigravity process must be on the **same OS side** (e.g., both inside WSL or both in Windows). Cross-side PID discovery is not supported.
+
+### 2. Discovery & Binding
+Codencer automatically discovers active Antigravity instances by scanning `~/.gemini/antigravity/daemon`.
+
+```bash
+# 1. List discovered instances
+./bin/orchestratorctl antigravity list
+
+# 2. Bind the current repository to a specific PID
+./bin/orchestratorctl antigravity bind <PID>
+
+# 3. Verify the binding
+./bin/orchestratorctl antigravity status
+```
+
+Once bound, you can submit tasks using the `antigravity` adapter profile.
+
+---
+
 ## 📖 Further Reading
 - [Canonical Local Runbook](EXAMPLES.md)
 - [Architecture Overview](02_architecture.md)

@@ -23,8 +23,13 @@ func (m *mockProvider) GetBinding(ctx context.Context) (*domain.AGInstance, erro
 }
 
 func TestAdapter_Start(t *testing.T) {
+	var capturedURI string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "StartCascade") {
+			var req StartCascadeRequest
+			json.NewDecoder(r.Body).Decode(&req)
+			capturedURI = req.WorkspaceFolderAbsoluteUri
+			
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(StartCascadeResponse{CascadeId: "test-cascade"})
 			return
@@ -36,6 +41,7 @@ func TestAdapter_Start(t *testing.T) {
 	portStr := strings.Split(server.Listener.Addr().String(), ":")[1]
 	port, _ := strconv.Atoi(portStr)
 
+	// Case 1: No authoritative WorkspaceRoot
 	inst := &domain.AGInstance{
 		HTTPSPort: port,
 		CSRFToken: "test-token",
@@ -50,8 +56,19 @@ func TestAdapter_Start(t *testing.T) {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	if adapter.activeCascades["attempt-1"] != "test-cascade" {
-		t.Errorf("Expected cascadeId test-cascade, got %s", adapter.activeCascades["attempt-1"])
+	if capturedURI != "file:///tmp/ws" {
+		t.Errorf("Expected fallback URI file:///tmp/ws, got %s", capturedURI)
+	}
+
+	// Case 2: Authoritative WorkspaceRoot available
+	inst.WorkspaceRoot = "file:///authoritative/path"
+	err = adapter.Start(context.Background(), step, attempt, "/tmp/ws", "/tmp/artifacts")
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	if capturedURI != "file:///authoritative/path" {
+		t.Errorf("Expected authoritative URI file:///authoritative/path, got %s", capturedURI)
 	}
 }
 
