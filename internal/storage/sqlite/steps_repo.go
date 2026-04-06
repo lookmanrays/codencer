@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"agent-bridge/internal/domain"
@@ -21,9 +22,10 @@ func NewStepsRepo(db *sql.DB) *StepsRepo {
 // Create inserts a new step.
 func (r *StepsRepo) Create(ctx context.Context, step *domain.Step) error {
 	const q = `
-		INSERT INTO steps (id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO steps (id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, validations, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
+	valJSON, _ := json.Marshal(step.Validations)
 	_, err := r.db.ExecContext(ctx, q,
 		step.ID,
 		step.PhaseID,
@@ -34,6 +36,7 @@ func (r *StepsRepo) Create(ctx context.Context, step *domain.Step) error {
 		step.Adapter,
 		step.TimeoutSeconds,
 		step.StatusReason,
+		string(valJSON),
 		step.CreatedAt,
 		step.UpdatedAt,
 	)
@@ -46,13 +49,14 @@ func (r *StepsRepo) Create(ctx context.Context, step *domain.Step) error {
 // Get retrieves a step by ID.
 func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 	const q = `
-		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, created_at, updated_at
+		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, validations, created_at, updated_at
 		FROM steps WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
 	
 	var step domain.Step
 	var stateStr string
+	var valJSON sql.NullString
 	err := row.Scan(
 		&step.ID,
 		&step.PhaseID,
@@ -63,6 +67,7 @@ func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 		&step.Adapter,
 		&step.TimeoutSeconds,
 		&step.StatusReason,
+		&valJSON,
 		&step.CreatedAt,
 		&step.UpdatedAt,
 	)
@@ -74,6 +79,9 @@ func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 	}
 	
 	step.State = domain.StepState(stateStr)
+	if valJSON.Valid && valJSON.String != "" {
+		_ = json.Unmarshal([]byte(valJSON.String), &step.Validations)
+	}
 	return &step, nil
 }
 
@@ -92,7 +100,7 @@ func (r *StepsRepo) UpdateState(ctx context.Context, step *domain.Step) error {
 // ListByPhase returns all steps for a phase.
 func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.Step, error) {
 	const q = `
-		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, created_at, updated_at
+		SELECT id, phase_id, title, goal, state, policy, adapter, timeout_seconds, status_reason, validations, created_at, updated_at
 		FROM steps WHERE phase_id = ? ORDER BY created_at ASC
 	`
 	rows, err := r.db.QueryContext(ctx, q, phaseID)
@@ -100,19 +108,23 @@ func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.
 		return nil, fmt.Errorf("failed to list steps: %w", err)
 	}
 	defer rows.Close()
-
+ 
 	var steps []*domain.Step
 	for rows.Next() {
 		var step domain.Step
 		var stateStr string
+		var valJSON sql.NullString
 		if err := rows.Scan(
 			&step.ID, &step.PhaseID, &step.Title, &step.Goal,
 			&stateStr, &step.Policy, &step.Adapter, &step.TimeoutSeconds,
-			&step.StatusReason, &step.CreatedAt, &step.UpdatedAt,
+			&step.StatusReason, &valJSON, &step.CreatedAt, &step.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
 		step.State = domain.StepState(stateStr)
+		if valJSON.Valid && valJSON.String != "" {
+			_ = json.Unmarshal([]byte(valJSON.String), &step.Validations)
+		}
 		steps = append(steps, &step)
 	}
 	if err := rows.Err(); err != nil {
@@ -124,7 +136,7 @@ func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.
 // ListByRun returns all steps for a run, joining on phases to find them efficiently.
 func (r *StepsRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Step, error) {
 	const q = `
-		SELECT s.id, s.phase_id, s.title, s.goal, s.state, s.policy, s.adapter, s.timeout_seconds, s.status_reason, s.created_at, s.updated_at
+		SELECT s.id, s.phase_id, s.title, s.goal, s.state, s.policy, s.adapter, s.timeout_seconds, s.status_reason, s.validations, s.created_at, s.updated_at
 		FROM steps s
 		JOIN phases p ON s.phase_id = p.id
 		WHERE p.run_id = ? ORDER BY s.created_at ASC
@@ -134,19 +146,23 @@ func (r *StepsRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Step
 		return nil, fmt.Errorf("failed to list steps for run: %w", err)
 	}
 	defer rows.Close()
-
+ 
 	var steps []*domain.Step
 	for rows.Next() {
 		var step domain.Step
 		var stateStr string
+		var valJSON sql.NullString
 		if err := rows.Scan(
 			&step.ID, &step.PhaseID, &step.Title, &step.Goal,
 			&stateStr, &step.Policy, &step.Adapter, &step.TimeoutSeconds,
-			&step.StatusReason, &step.CreatedAt, &step.UpdatedAt,
+			&step.StatusReason, &valJSON, &step.CreatedAt, &step.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
 		step.State = domain.StepState(stateStr)
+		if valJSON.Valid && valJSON.String != "" {
+			_ = json.Unmarshal([]byte(valJSON.String), &step.Validations)
+		}
 		steps = append(steps, &step)
 	}
 	if err := rows.Err(); err != nil {

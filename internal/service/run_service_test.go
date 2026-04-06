@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ import (
 // MockAdapter specifically avoids network and os.exec calls.
 type MockAdapter struct{}
 
-func (m *MockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+func (m *MockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	return nil
 }
 
@@ -36,7 +37,7 @@ func (m *MockAdapter) Name() string {
 	return "mock-adapter"
 }
 
-func (m *MockAdapter) CollectArtifacts(ctx context.Context, attemptID, artifactRoot string) ([]*domain.Artifact, error) {
+func (m *MockAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
 	arts := []*domain.Artifact{
 		{
 			ID:        "art-1",
@@ -142,7 +143,7 @@ type FailingMockAdapter struct {
 	FailState domain.StepState
 }
 
-func (m *FailingMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+func (m *FailingMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	return nil
 }
 
@@ -162,7 +163,7 @@ func (m *FailingMockAdapter) Name() string {
 	return "failing-mock"
 }
 
-func (m *FailingMockAdapter) CollectArtifacts(ctx context.Context, attemptID, artifactRoot string) ([]*domain.Artifact, error) {
+func (m *FailingMockAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
 	return nil, nil
 }
 
@@ -247,5 +248,200 @@ func TestRunService_DispatchStep_GranularFailurePreservation(t *testing.T) {
 				t.Errorf("Expected status reason 'Simulated failure', got %s", s.StatusReason)
 			}
 		})
+	}
+}
+
+func TestRunService_DispatchStep_ImmutableNamespacing(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	// Custom MockAdapter that writes unique content to stdout.log
+	mockAdapter := &MockAdapter{} // We can reuse but we'll manually check paths
+	adapters := map[string]domain.Adapter{
+		"mock": mockAdapter,
+	}
+
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo,
+		gatesRepo, artifactsRepo, sqlite.NewValidationsRepo(db),
+		routingSvc, service.NewPolicyRegistry(), artifactRoot, workspaceRoot)
+
+	ctx := context.Background()
+	runID := "namespace-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+
+	step := &domain.Step{
+		ID:      "namespace-step",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Namespace Test",
+		Adapter: "mock",
+	}
+
+	// Dispatch Attempt 1
+	t.Log("Dispatching Attempt 1")
+	_ = runSvc.DispatchStep(ctx, runID, step)
+	t.Log("Attempt 1 finished")
+	attempts, _ := attemptsRepo.ListByStep(ctx, step.ID)
+	if len(attempts) != 1 {
+		t.Fatalf("Expected 1 attempt, got %d", len(attempts))
+	}
+	attempt1 := attempts[0]
+	path1 := filepath.Join(artifactRoot, runID, step.ID, attempt1.ID)
+	if _, err := os.Stat(path1); err != nil {
+		t.Errorf("Expected artifact dir for Attempt 1 to exist: %v", err)
+	}
+
+	// Dispatch Attempt 2 (simulate same step being picked up again or retry)
+	// Reset step state to pending for redispatch simulation
+	step.State = domain.StepStatePending
+	t.Log("Dispatching Attempt 2")
+	_ = runSvc.DispatchStep(ctx, runID, step)
+	t.Log("Attempt 2 finished")
+	
+	attempts, _ = attemptsRepo.ListByStep(ctx, step.ID)
+	if len(attempts) != 2 {
+		t.Fatalf("Expected 2 attempts, got %d", len(attempts))
+	}
+	attempt2 := attempts[1]
+	path2 := filepath.Join(artifactRoot, runID, step.ID, attempt2.ID)
+	
+	if _, err := os.Stat(path2); err != nil {
+		t.Errorf("Expected artifact dir for Attempt 2 to exist: %v", err)
+	}
+
+	if path1 == path2 {
+		t.Errorf("Artifact paths for Attempt 1 and 2 must be different, both got %s", path1)
+	}
+}
+
+// Local mock for validation tests
+type valMockAdapter struct {
+	res *domain.ResultSpec
+}
+
+func (m *valMockAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	return nil
+}
+func (m *valMockAdapter) Poll(ctx context.Context, attemptID string) (bool, error) {
+	return false, nil
+}
+func (m *valMockAdapter) Cancel(ctx context.Context, attemptID string) error {
+	return nil
+}
+func (m *valMockAdapter) Capabilities() []string {
+	return []string{"mock"}
+}
+func (m *valMockAdapter) Name() string {
+	return "val-mock"
+}
+func (m *valMockAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	return nil, nil
+}
+func (m *valMockAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
+	return m.res, nil
+}
+
+func TestRunService_DispatchStep_WithValidations(t *testing.T) {
+	ctx := context.Background()
+	db, _ := sql.Open("sqlite3", ":memory:")
+	sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+
+	artifactRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+
+	// Inject mock adapter via RoutingService
+	mock := &valMockAdapter{
+		res: &domain.ResultSpec{State: domain.StepStateCompleted, Summary: "Success"},
+	}
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+	routingSvc := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{
+		"mock": mock,
+	})
+
+	// Use service. prefix for package-level types and functions
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		routingSvc, &service.PolicyRegistry{}, artifactRoot, workspaceRoot,
+	)
+
+	runID := "run-val-1"
+	runSvc.StartRun(ctx, runID, "p1", "c1", "pl1", "ex1")
+
+	// Case 1: Multiple validations, all pass
+	step := &domain.Step{
+		ID:      "step-val-pass",
+		Adapter: "mock",
+		Validations: []domain.ValidationCommand{
+			{Name: "v1", Command: "true"},
+			{Name: "v2", Command: "ls"},
+		},
+	}
+
+	_ = runSvc.DispatchStep(ctx, runID, step)
+
+	if step.State != domain.StepStateCompleted {
+		t.Errorf("Expected StepStateCompleted, got %s", step.State)
+	}
+
+	res, _ := runSvc.GetResultByStep(ctx, step.ID)
+	if len(res.Validations) != 2 {
+		t.Errorf("Expected 2 validation results, got %d", len(res.Validations))
+	}
+
+	for _, v := range res.Validations {
+		if !v.Passed {
+			t.Errorf("Validation %s failed but should have passed", v.Name)
+		}
+	}
+
+	// Case 2: One validation fails
+	stepFail := &domain.Step{
+		ID:      "step-val-fail",
+		Adapter: "mock",
+		Validations: []domain.ValidationCommand{
+			{Name: "pass", Command: "true"},
+			{Name: "fail", Command: "false"},
+		},
+	}
+
+	_ = runSvc.DispatchStep(ctx, runID, stepFail)
+
+	if stepFail.State != domain.StepStateFailedValidation {
+		t.Errorf("Expected StepStateFailedValidation, got %s", stepFail.State)
+	}
+
+	resFail, _ := runSvc.GetResultByStep(ctx, stepFail.ID)
+	if resFail.State != domain.StepStateFailedValidation {
+		t.Errorf("ResultSpec.State should be failed_validation, got %s", resFail.State)
+	}
+
+	failedFound := false
+	for _, v := range resFail.Validations {
+		if v.Name == "fail" && !v.Passed {
+			failedFound = true
+		}
+	}
+	if !failedFound {
+		t.Error("Expected failing validation result in ResultSpec")
 	}
 }

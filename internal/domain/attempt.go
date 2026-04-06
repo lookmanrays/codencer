@@ -11,6 +11,7 @@ type Attempt struct {
 	StepID    string
 	Number    int
 	Adapter   string
+	State     StepState
 	Result    *ResultSpec
 	CreatedAt time.Time
 	UpdatedAt time.Time

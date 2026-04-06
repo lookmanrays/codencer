@@ -246,3 +246,60 @@ func (r *AttemptsRepo) ListByStep(ctx context.Context, stepID string) ([]*domain
 	}
 	return attempts, nil
 }
+
+// GetLatestByStep retrieves the latest attempt (highest number) for a specific step.
+func (r *AttemptsRepo) GetLatestByStep(ctx context.Context, stepID string) (*domain.Attempt, error) {
+	const q = `
+		SELECT id, step_id, number, adapter, state, summary, needs_human_decision, warnings, questions, files_changed, raw_output, raw_output_ref, is_simulation, retryable, version, artifacts, created_at, updated_at
+		FROM attempts WHERE step_id = ? ORDER BY number DESC LIMIT 1
+	`
+	row := r.db.QueryRowContext(ctx, q, stepID)
+	
+	var attempt domain.Attempt
+	var stateStr string
+	var resSummary string
+	var needsDecision bool
+	var warningsStr, questionsStr, filesStr, rawOutput, rawOutputRef, versionStr, artifactsStr sql.NullString
+	var isSim, retryable bool
+
+	err := row.Scan(
+		&attempt.ID, &attempt.StepID, &attempt.Number, &attempt.Adapter,
+		&stateStr, &resSummary, &needsDecision, &warningsStr, &questionsStr,
+		&filesStr, &rawOutput, &rawOutputRef, &isSim, &retryable,
+		&versionStr, &artifactsStr,
+		&attempt.CreatedAt, &attempt.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // not found
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest attempt: %w", err)
+	}
+
+	if stateStr != "" && stateStr != string(domain.StepStatePending) {
+		attempt.Result = &domain.ResultSpec{
+			State:              domain.StepState(stateStr),
+			Summary:            resSummary,
+			NeedsHumanDecision: needsDecision,
+			RawOutput:          rawOutput.String,
+			RawOutputRef:       rawOutputRef.String,
+			IsSimulation:       isSim,
+			Retryable:          retryable,
+			Version:            versionStr.String,
+		}
+		if artifactsStr.Valid && artifactsStr.String != "" {
+			_ = json.Unmarshal([]byte(artifactsStr.String), &attempt.Result.Artifacts)
+		}
+		if warningsStr.Valid && warningsStr.String != "" {
+			_ = json.Unmarshal([]byte(warningsStr.String), &attempt.Result.Warnings)
+		}
+		if questionsStr.Valid && questionsStr.String != "" {
+			_ = json.Unmarshal([]byte(questionsStr.String), &attempt.Result.Questions)
+		}
+		if filesStr.Valid && filesStr.String != "" {
+			_ = json.Unmarshal([]byte(filesStr.String), &attempt.Result.FilesChanged)
+		}
+	}
+
+	return &attempt, nil
+}

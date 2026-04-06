@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS steps (
 	adapter TEXT NOT NULL,
 	timeout_seconds INTEGER NOT NULL DEFAULT 0,
 	status_reason TEXT,
+	validations TEXT,
 	created_at DATETIME NOT NULL,
 	updated_at DATETIME NOT NULL,
 	FOREIGN KEY (phase_id) REFERENCES phases(id) ON DELETE CASCADE
@@ -161,6 +162,7 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 		"ALTER TABLE runs ADD COLUMN planner_id TEXT",
 		"ALTER TABLE runs ADD COLUMN executor_id TEXT",
 		"ALTER TABLE steps ADD COLUMN status_reason TEXT",
+		"ALTER TABLE steps ADD COLUMN validations TEXT",
 	}
 
 	for _, m := range extraMigrations {

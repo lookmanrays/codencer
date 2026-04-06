@@ -163,6 +163,7 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 				Adapter:        spec.AdapterProfile,
 				Policy:         spec.PolicyBundle,
 				TimeoutSeconds: spec.TimeoutSeconds,
+				Validations:    spec.Validations,
 			}
 
 			go func() {

@@ -82,21 +82,25 @@ func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run
 			continue
 		}
 
-		// Check for result footprint on disk
-		resultPath := fmt.Sprintf("%s/%s/result.json", s.artifactRoot, step.ID)
-		if _, err := os.Stat(resultPath); err == nil {
-			// Result exists but DB state is not terminal. Salvage it.
-			step.State = domain.StepStateNeedsApproval
-			step.UpdatedAt = time.Now().UTC()
-			_ = s.stepsRepo.UpdateState(ctx, step)
-			salvaged++
-		} else {
-			// No result found. Mark as failed-retryable.
-			step.State = domain.StepStateFailedRetryable
-			step.UpdatedAt = time.Now().UTC()
-			_ = s.stepsRepo.UpdateState(ctx, step)
-			failed++
+		// Check for result footprint on disk in the latest attempt's namespaced folder
+		latestAttempt, err := s.attemptsRepo.GetLatestByStep(ctx, step.ID)
+		if err == nil && latestAttempt != nil {
+			resultPath := filepath.Join(s.artifactRoot, run.ID, step.ID, latestAttempt.ID, "result.json")
+			if _, err := os.Stat(resultPath); err == nil {
+				// Result exists but DB state is not terminal. Salvage it.
+				step.State = domain.StepStateNeedsApproval
+				step.UpdatedAt = time.Now().UTC()
+				_ = s.stepsRepo.UpdateState(ctx, step)
+				salvaged++
+				continue
+			}
 		}
+
+		// No result found or no latest attempt. Mark as failed-retryable.
+		step.State = domain.StepStateFailedRetryable
+		step.UpdatedAt = time.Now().UTC()
+		_ = s.stepsRepo.UpdateState(ctx, step)
+		failed++
 	}
 
 	return fmt.Sprintf("Recovery sweep completed: salvaged %d steps, marked %d steps failed_retryable. Run paused for inspection.", salvaged, failed)

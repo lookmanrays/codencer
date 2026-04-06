@@ -32,7 +32,7 @@ func (a *Adapter) Capabilities() []string {
 	return []string{"local_cli", "filesystem_read", "filesystem_write"}
 }
 
-func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -60,9 +60,9 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 			AdapterName:  a.Name(),
 			BinaryName:   "codex-agent",
 			BinaryEnvVar: "CODEX_BINARY",
-			Args:         []string{"run", "--workspace", workspaceRoot, "--output", artifactRoot, "--title", step.Title, "--goal", step.Goal},
+			Args:         []string{"run", "--workspace", workspaceRoot, "--output", attemptArtifactRoot, "--title", step.Title, "--goal", step.Goal},
 			Workspace:    workspaceRoot,
-			ArtifactRoot: artifactRoot,
+			ArtifactRoot: attemptArtifactRoot,
 		}
 
 		if err := common.InvokeLocal(execCtx, step, attempt, opts); err != nil {
@@ -98,8 +98,8 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 	return nil
 }
 
-func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
-	return common.CollectStandardArtifacts(ctx, attemptID, artifactRoot)
+func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	return common.CollectStandardArtifacts(ctx, attemptID, attemptArtifactRoot)
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {

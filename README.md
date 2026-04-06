@@ -8,6 +8,11 @@ Codencer is a persistent orchestration daemon designed to securely manage, execu
 
 ---
 
+### Core Guarantees
+
+- **Step-Isolation**: Each step executes in its own git worktree, preventing cross-task interference.
+- **Immutable Evidence**: All logs, results, and artifacts are namespaced by Run, Step, and Attempt ID under `.codencer/artifacts/<run-id>/<step-id>/<attempt-id>/`, ensuring full auditability of repeated attempts.
+
 > **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
 
 ## 🏛 The Relay Model

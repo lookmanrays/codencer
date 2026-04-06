@@ -34,7 +34,7 @@ func (a *Adapter) Capabilities() []string {
 
 // Start performs a proxy-mediated handoff by writing the attempt payload to a shared file buffer. 
 // A companion VS Code Extension must watch this file to facilitate ingestion into the active IDE chat.
-func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
+func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	slog.Info("IDE Adapter: Starting chat bridge handoff", "attemptID", attempt.ID)
 
 	promptFile := filepath.Join(workspaceRoot, ".codencer", "chat_prompt.txt")
@@ -71,7 +71,7 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 	return nil
 }
 
-func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID, artifactRoot string) ([]*domain.Artifact, error) {
+func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
 	slog.Info("IDE Adapter: Collecting artifacts", "attemptID", attemptID)
 
 	var artifacts []*domain.Artifact
@@ -83,10 +83,10 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID, artifactRoot 
 			"summary": "IDE Chat simulation success",
 		}
 		data, _ := json.Marshal(simulatedResult)
-		_ = os.WriteFile(filepath.Join(artifactRoot, "result.json"), data, 0644)
+		_ = os.WriteFile(filepath.Join(attemptArtifactRoot, "result.json"), data, 0644)
 	}
 
-	resultPath := filepath.Join(artifactRoot, "result.json")
+	resultPath := filepath.Join(attemptArtifactRoot, "result.json")
 	if stat, err := os.Stat(resultPath); err == nil {
 		artifacts = append(artifacts, &domain.Artifact{
 			ID:        fmt.Sprintf("art-%s-result", attemptID),

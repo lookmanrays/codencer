@@ -16,15 +16,15 @@ import (
 )
 
 // CollectStandardArtifacts reads the artifact directory and populates domain artifacts.
-func CollectStandardArtifacts(ctx context.Context, attemptID string, artifactRoot string) ([]*domain.Artifact, error) {
+func CollectStandardArtifacts(ctx context.Context, attemptID string, attemptArtifactRoot string) ([]*domain.Artifact, error) {
 	var artifacts []*domain.Artifact
 	
-	entries, err := os.ReadDir(artifactRoot)
+	entries, err := os.ReadDir(attemptArtifactRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return artifacts, nil
 		}
-		return nil, fmt.Errorf("failed to read artifact root %s: %w", artifactRoot, err)
+		return nil, fmt.Errorf("failed to read artifact root %s: %w", attemptArtifactRoot, err)
 	}
 
 	for _, entry := range entries {
@@ -37,7 +37,7 @@ func CollectStandardArtifacts(ctx context.Context, attemptID string, artifactRoo
 			continue
 		}
 
-		path := filepath.Join(artifactRoot, entry.Name())
+		path := filepath.Join(attemptArtifactRoot, entry.Name())
 		
 		// 1. Calculate Hash and Detect MIME Type
 		hash, mimeType, err := calculateMetadata(path)

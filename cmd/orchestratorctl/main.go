@@ -642,12 +642,36 @@ func stepResult(stepID string) {
 	body, _ := io.ReadAll(resp.Body)
 	var result domain.ResultSpec
 	if err := json.Unmarshal(body, &result); err == nil {
+		// Fetch Run metadata for Bridge Context (Batch 2/3 Alignment)
+		var project, conversation string
+		if runResp, err := http.Get(orchestratordURL + "/api/v1/runs/" + result.RunID); err == nil {
+			defer runResp.Body.Close()
+			var run domain.Run
+			if runData, _ := io.ReadAll(runResp.Body); json.Unmarshal(runData, &run) == nil {
+				project = run.ProjectID
+				conversation = run.ConversationID
+			}
+		}
+
 		fmt.Printf("--- Authoritative Truth (Summary): %s ---\n", stepID)
+		if project != "" {
+			fmt.Printf("Bridge Context:  project=%s  conversation=%s\n", project, conversation)
+		}
 		fmt.Printf("State:   %s\n", result.State)
 		fmt.Printf("Summary: %s\n", result.Summary)
 		
-		// Note: ResultSpec doesn't have StatusReason, but the Step does. 
 		// For result command, Summary is usually the detailed "why" from the adapter.
+		
+		if len(result.Validations) > 0 {
+			fmt.Println("\n--- Validations ---")
+			for _, v := range result.Validations {
+				status := "[PASS]"
+				if !v.Passed {
+					status = "[FAIL]"
+				}
+				fmt.Printf("  %s %-20s %s\n", status, v.Name, v.State)
+			}
+		}
 		
 		fmt.Println("\n[GUIDE] Evidence Drill-down:")
 		if result.RawOutputRef != "" {
@@ -702,16 +726,32 @@ func stepArtifacts(stepID string) {
 	var artifacts []domain.Artifact
 	if err := json.Unmarshal(body, &artifacts); err == nil {
 		fmt.Printf("--- Artifacts for Step: %s ---\n", stepID)
-		if len(artifacts) > 0 {
-			fmt.Printf("Directory: %s\n\n", filepath.Dir(artifacts[0].Path))
-		}
 		if len(artifacts) == 0 {
 			fmt.Println("No artifacts recorded.")
+			return
 		}
+
+		// Group by AttemptID
+		byAttempt := make(map[string][]domain.Artifact)
+		var attempts []string
 		for _, a := range artifacts {
-			fmt.Printf("- [%s] %s (%s)\n", a.Type, a.Path, a.MimeType)
+			if _, ok := byAttempt[a.AttemptID]; !ok {
+				attempts = append(attempts, a.AttemptID)
+			}
+			byAttempt[a.AttemptID] = append(byAttempt[a.AttemptID], a)
 		}
-		fmt.Println("-------------------------------")
+
+		for _, attID := range attempts {
+			fmt.Printf("\nAttempt %s:\n", attID)
+			arts := byAttempt[attID]
+			if len(arts) > 0 {
+				fmt.Printf("  Directory: %s\n", filepath.Dir(arts[0].Path))
+			}
+			for _, a := range arts {
+				fmt.Printf("  - [%s] %-20s (%s)\n", a.Type, filepath.Base(a.Path), a.MimeType)
+			}
+		}
+		fmt.Println("\n-------------------------------")
 	} else {
 		printJSON(body)
 	}
@@ -744,11 +784,10 @@ func stepValidations(stepID string) {
 				if !v.Passed {
 					status = "[FAIL]"
 				}
-				msg := v.State
+				fmt.Printf("  %-6s %-16s %-12s\n", status, v.Name, v.State)
 				if v.Error != "" {
-					msg = domain.ValidationState(v.Error)
+					fmt.Printf("         Error: %s\n", v.Error)
 				}
-				fmt.Printf("  %s %s: %s\n", status, v.Name, msg)
 			}
 		}
 		fmt.Println("\n---------------------------------------")

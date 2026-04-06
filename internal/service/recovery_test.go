@@ -40,9 +40,18 @@ func TestRecovery_StaleAttempt_Salvage(t *testing.T) {
 	runsRepo.Create(ctx, &domain.Run{ID: runID, State: domain.RunStateRunning, CreatedAt: time.Now(), UpdatedAt: time.Now()})
 	phasesRepo.Create(ctx, &domain.Phase{ID: phaseID, RunID: runID})
 	stepsRepo.Create(ctx, &domain.Step{ID: stepID, PhaseID: phaseID, State: domain.StepStateRunning})
+	attemptsRepo.Create(ctx, &domain.Attempt{
+		ID:        "stale-attempt-1",
+		StepID:    stepID,
+		Number:    1,
+		State:     domain.StepStateRunning,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
 	
 	// Simulate process completion on disk but crash before DB update
-	stepArtDir := filepath.Join(artifactRoot, stepID)
+	// New namespaced path: <artifactRoot>/<runID>/<stepID>/<attemptID>
+	stepArtDir := filepath.Join(artifactRoot, runID, stepID, "stale-attempt-1")
 	os.MkdirAll(stepArtDir, 0755)
 	os.WriteFile(filepath.Join(stepArtDir, "result.json"), []byte("{}"), 0644)
 

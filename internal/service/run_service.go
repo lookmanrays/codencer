@@ -11,6 +11,8 @@ import (
 	"agent-bridge/internal/state"
 	"agent-bridge/internal/storage/sqlite"
 	"agent-bridge/internal/workspace"
+	"agent-bridge/internal/validation"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,6 +26,7 @@ type RunService struct {
 	validationsRepo *sqlite.ValidationsRepo
 	routingSvc    *RoutingService
 	policyRegistry *PolicyRegistry
+	validationRunner *validation.Runner
 	artifactRoot  string
 	workspaceRoot string
 }
@@ -52,6 +55,7 @@ func NewRunService(
 		validationsRepo: validationsRepo,
 		routingSvc:    routingSvc,
 		policyRegistry: policyReg,
+		validationRunner: validation.NewRunner(workspaceRoot),
 		artifactRoot:  artifactRoot,
 		workspaceRoot: workspaceRoot,
 	}
@@ -175,6 +179,15 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 			Summary: fmt.Sprintf("Latest attempt %s is still in progress or failed before result normalization.", latest.ID),
 		}, nil
 	}
+
+	// Fetch validations for this attempt
+	if vals, verr := s.validationsRepo.ListByAttempt(ctx, latest.ID); verr == nil {
+		latest.Result.Validations = make([]domain.ValidationResult, len(vals))
+		for i, v := range vals {
+			latest.Result.Validations[i] = *v
+		}
+	}
+ 
 	return latest.Result, nil
 }
 
@@ -232,12 +245,12 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 	step.State = domain.StepStateRunning
 	_ = s.stepsRepo.UpdateState(ctx, step)
 
-	finalResult, finalEval, err := s.runAttemptLoop(ctx, runID, step, fallbackChain)
+	finalResult, finalEval, finalAttemptID, err := s.runAttemptLoop(ctx, runID, step, fallbackChain)
 	if err != nil {
 		return err
 	}
 
-	if err := s.finalizeStep(ctx, runID, step, finalResult, finalEval); err != nil {
+	if err := s.finalizeStep(ctx, runID, step, finalResult, finalEval, finalAttemptID); err != nil {
 		return err
 	}
 	return nil
@@ -307,30 +320,31 @@ func (s *RunService) ensurePhaseExists(ctx context.Context, runID, phaseID strin
 	phase := &domain.Phase{
 		ID:        phaseID,
 		RunID:     runID,
-		Name:      "Submitted Phase",
-		SeqOrder:  99, // Tactical phases default to high sequence
+		Name:      "Tactical Phase",
+		SeqOrder:  99,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	return s.phasesRepo.Create(ctx, phase)
 }
 
-func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *domain.Step, fallbackChain []string) (*domain.ResultSpec, PolicyEvaluation, error) {
+func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *domain.Step, fallbackChain []string) (*domain.ResultSpec, PolicyEvaluation, string, error) {
 	const maxAttempts = 3
 	var finalResult *domain.ResultSpec
 	var finalEval PolicyEvaluation
+	var finalAttemptID string
 	policy := s.policyRegistry.Lookup(step.Policy)
 
 	for attemptNum := 1; attemptNum <= maxAttempts; attemptNum++ {
 		adapterProfile := s.selectAdapterProfile(fallbackChain, attemptNum)
 		adapter, ok := s.routingSvc.GetAdapter(adapterProfile)
 		if !ok {
-			return nil, PolicyEvaluation{}, s.failStep(ctx, step, fmt.Sprintf("adapter %s out of bounds", adapterProfile))
+			return nil, PolicyEvaluation{}, "", s.failStep(ctx, step, fmt.Sprintf("adapter %s out of bounds", adapterProfile))
 		}
 
 		attempt, err := s.createAttempt(ctx, step, attemptNum, adapterProfile)
 		if err != nil {
-			return nil, PolicyEvaluation{}, err
+			return nil, PolicyEvaluation{}, "", err
 		}
 
 		startTime := time.Now()
@@ -338,7 +352,7 @@ func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *dom
 		duration := time.Since(startTime).Milliseconds()
 
 		if err != nil {
-			return nil, PolicyEvaluation{}, fmt.Errorf("system error executing attempt %d: %w", attemptNum, err)
+			return nil, PolicyEvaluation{}, "", fmt.Errorf("system error executing attempt %d: %w", attemptNum, err)
 		}
 
 		isSim := os.Getenv(strings.ToUpper(adapterProfile)+"_SIMULATION_MODE") == "1" || os.Getenv("ALL_ADAPTERS_SIMULATION_MODE") == "1"
@@ -346,6 +360,7 @@ func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *dom
 
 		finalResult = res
 		finalEval = eval
+		finalAttemptID = attempt.ID
 
 		if eval.ShouldFail {
 			break
@@ -357,7 +372,7 @@ func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *dom
 		}
 		break
 	}
-	return finalResult, finalEval, nil
+	return finalResult, finalEval, finalAttemptID, nil
 }
 
 func (s *RunService) selectAdapterProfile(fallbackChain []string, attemptNum int) string {
@@ -369,7 +384,7 @@ func (s *RunService) selectAdapterProfile(fallbackChain []string, attemptNum int
 
 func (s *RunService) createAttempt(ctx context.Context, step *domain.Step, attemptNum int, adapterProfile string) (*domain.Attempt, error) {
 	attempt := &domain.Attempt{
-		ID:        fmt.Sprintf("%s-a%d", step.ID, attemptNum),
+		ID:        fmt.Sprintf("%s-a%d-%d", step.ID, attemptNum, time.Now().Unix()),
 		StepID:    step.ID,
 		Number:    attemptNum,
 		Adapter:   adapterProfile,
@@ -466,7 +481,10 @@ func (s *RunService) executeAttempt(
 	}()
 
 	// 2. Start Execution
-	if err := adapter.Start(ctx, step, attempt, workspaceRoot, s.artifactRoot); err != nil {
+	attemptArtifactRoot := filepath.Join(s.artifactRoot, runID, step.ID, attempt.ID)
+	_ = os.MkdirAll(attemptArtifactRoot, 0755)
+
+	if err := adapter.Start(ctx, step, attempt, workspaceRoot, attemptArtifactRoot); err != nil {
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedRetryable, Summary: "Adapter failed to start: " + err.Error()}
 		s.updateAttemptResult(ctx, attempt)
 		return attempt.Result, PolicyEvaluation{}, nil
@@ -482,7 +500,7 @@ func (s *RunService) executeAttempt(
 	s.stepsRepo.UpdateState(ctx, step)
 
 	// 4. Collect & Finalize
-	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, s.artifactRoot)
+	artifacts, err := adapter.CollectArtifacts(ctx, attempt.ID, attemptArtifactRoot)
 	if err != nil {
 		reason := "Failed to collect artifacts: " + err.Error()
 		attempt.Result = &domain.ResultSpec{State: domain.StepStateFailedBridge, Summary: reason}
@@ -512,7 +530,42 @@ func (s *RunService) executeAttempt(
 	attempt.Result.RequestedAdapter = step.Adapter
 	
 	s.updateAttemptResult(ctx, attempt)
-
+ 
+	// 4.5 Run Validations (3B)
+	if len(step.Validations) > 0 {
+		step.State = domain.StepStateValidating
+		s.stepsRepo.UpdateState(ctx, step)
+ 
+		passed := 0
+		failed := 0
+		anyFailed := false
+		for _, cmd := range step.Validations {
+			vres, verr := s.validationRunner.Run(ctx, cmd)
+			if verr != nil {
+				slog.Error("Validation runner system error", "error", verr, "cmd", cmd.Name)
+			}
+			if vres != nil {
+				if !vres.Passed {
+					failed++
+					anyFailed = true
+				} else {
+					passed++
+				}
+				_ = s.validationsRepo.Create(ctx, attempt.ID, vres)
+			}
+		}
+ 
+		if anyFailed {
+			attempt.Result.State = domain.StepStateFailedValidation
+			attempt.Result.Summary = fmt.Sprintf("Validation failed: %d passed, %d failed.", passed, failed)
+			s.updateAttemptResult(ctx, attempt)
+		} else {
+			// Even if passing, it's useful to know validations ran
+			attempt.Result.Summary += fmt.Sprintf(" (Validations: %d passed)", passed)
+			s.updateAttemptResult(ctx, attempt)
+		}
+	}
+ 
 	// 5. Evaluate Policy
 	var changedFiles []string
 	if os.Getenv("FORCE_GATE_FOR_TESTING") == "1" {
@@ -538,12 +591,13 @@ func (s *RunService) finalizeStep(
 	step *domain.Step,
 	finalResult *domain.ResultSpec,
 	eval PolicyEvaluation,
+	attemptID string,
 ) error {
 	
 	if eval.ShouldGate {
 		step.State = domain.StepStateNeedsApproval
 		gate := &domain.Gate{
-			ID:          "gate-" + step.ID,
+			ID:          "gate-" + attemptID,
 			RunID:       runID,
 			StepID:      step.ID,
 			Description: "Policy enforced gate: " + strings.Join(eval.GateReasons, ", "),

@@ -52,9 +52,10 @@ type Step struct {
 	Policy         string    `json:"policy"`
 	Adapter        string    `json:"adapter"`
 	TimeoutSeconds int       `json:"timeout_seconds"`
-	StatusReason   string    `json:"status_reason,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Validations    []ValidationCommand `json:"validations,omitempty"`
+	StatusReason   string              `json:"status_reason,omitempty"`
+	CreatedAt      time.Time           `json:"created_at"`
+	UpdatedAt      time.Time           `json:"updated_at"`
 }
 
 // IsTerminal returns true if the step has reached a final state.
