@@ -6,7 +6,8 @@ This guide provides configuration templates for common project types to ensure y
 1. [Node.js / TypeScript](#nodejs--typescript)
 2. [Advanced: Using Local Provisioning](#advanced-using-local-provisioning)
 3. [Broker-Backed Execution](#broker-backed-execution)
-4. [Audit Walkthrough: Inspecting Provisioning & Broker Context](#audit-walkthrough-inspecting-provisioning--broker-context)
+4. [OpenClaw ACPX (Experimental)](#openclaw-acpx-experimental)
+5. [Audit Walkthrough: Inspecting Provisioning & Broker Context](#audit-walkthrough-inspecting-provisioning--broker-context)
 
 ## Node.js / TypeScript
 
@@ -148,7 +149,7 @@ cat .codencer/task.json | ./bin/orchestratorctl submit my-first-run --task-json 
 ### JSON String via Stdin (Pipe)
 Ideal for machine-to-machine hand-offs:
 ```bash
-echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit my-first-run --task-json - --wait
+echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit my-first-run --task-json - --wait --json
 ```
 
 ### Prompt File Mode
@@ -192,7 +193,15 @@ Directly target an IDE-bound agent via the Antigravity Broker using convenience 
 ./bin/orchestratorctl submit my-first-run \
   --goal "Check UI" \
   --adapter antigravity-broker \
-  --wait
+  --wait --json
+```
+### OpenClaw ACPX (Experimental)
+Relay tasks to an OpenClaw-compatible agent via the standardized ACP bridge:
+```bash
+./bin/orchestratorctl submit my-first-run \
+  --goal "Refactor the Auth module" \
+  --adapter openclaw-acpx \
+  --wait --json
 ```
 
 ### Invalid Multi-Source Example
@@ -252,7 +261,8 @@ python3 examples/automation/run_tasks.py \
   --project codencer-demo \
   --input-mode goal \
   --tasks-file examples/automation/goals.txt \
-  --adapter codex
+  --adapter codex \
+  --json
 ```
 
 Default behavior is stop-on-failure. Use the wrapper’s explicit continue mode when you want to keep running after a non-zero task outcome.
@@ -307,14 +317,24 @@ Connect your local repository clone to an active Antigravity session.
 Binding only establishes the repo-scoped Antigravity target. Execution still depends on explicit adapter selection in the submitted TaskSpec.
 
 ### 3.3 Execute & Audit
-To execute via the broker, ensure your task uses the `antigravity-broker` adapter:
+To execute via the broker using direct input:
 
 ```bash
-# Via command line override
-./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml --adapter antigravity-broker --wait --json
+# Via command line override (Direct Input only)
+./bin/orchestratorctl submit <runID> --goal "Fix UI layout" --adapter antigravity-broker --wait --json
+```
 
-# Or ensuring the YAML itself specifies the adapter
-# adapter_profile: antigravity-broker
+To execute using a canonical task file, ensure the file specifies the adapter:
+```yaml
+# examples/tasks/broker_task.yaml
+version: v1
+title: "Broker Task"
+goal: "Check UI"
+adapter_profile: antigravity-broker
+```
+
+```bash
+# Submit the task file
 ./bin/orchestratorctl submit <runID> examples/tasks/broker_task.yaml --wait --json
 ```
 
@@ -337,11 +357,11 @@ In the result metadata, you will see both:
 - `broker_repo_root`: Your stable project path.
 - `workspace_root`: The specific worktree path for that run.
 
-### 3. Submission via Stdin (Multiline)
+### Submission via Stdin (Multiline)
 Excellent for human operators or AI assistants providing large prompt blocks without creating temporary files.
 
 ```bash
-cat <<EOF | ./bin/orchestratorctl submit my-run --stdin --title "Update README" --adapter codex --wait
+cat <<EOF | ./bin/orchestratorctl submit my-run --stdin --title "Update README" --adapter codex --wait --json
 Please update the README.md file to include the latest version number (v0.1.0-beta) 
 and ensure all links to the Operator Runbook are correct.
 EOF
@@ -351,7 +371,7 @@ EOF
 Used by automated planners that generate structured task objects.
 
 ```bash
-echo '{"version":"1.1","goal":"Fix typos in main.go","title":"Typos Fix"}' | \
+echo '{"version":"v1","goal":"Fix typos in main.go","title":"Typos Fix"}' | \
   ./bin/orchestratorctl submit my-run --task-json - --wait --json
 ```
 

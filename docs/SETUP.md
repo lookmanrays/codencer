@@ -63,9 +63,9 @@ make start
 Codencer follows a **One-Repo-One-Instance** model. Each repo clone manages its own database and worktrees.
 
 ### 4.1 Explicit Targeting
-To target a specific repository regardless of your current directory, use the `--repo-root` flag:
+To target a specific repository regardless of your current directory, use the `--repo-root` flag. The port is controlled via the `PORT` environment variable:
 ```bash
-./bin/orchestratord --repo-root /path/to/my-project --port 8086
+PORT=8086 ./bin/orchestratord --repo-root /path/to/my-project
 ```
 This anchors all relative paths (`.codencer/`, `workspace/`, `artifacts/`) to that project root.
 

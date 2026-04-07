@@ -178,8 +178,12 @@ for ($i = 0; $i -lt $taskItems.Count; $i++) {
     }
 
     $stepId = ""
-    if ($submit.Payload -and $submit.Payload.step_id) {
-        $stepId = [string]$submit.Payload.step_id
+    if ($submit.Payload) {
+        if ($submit.Payload.id) {
+            $stepId = [string]$submit.Payload.id
+        } elseif ($submit.Payload.step_id) {
+            $stepId = [string]$submit.Payload.step_id
+        }
     }
     if (-not $stepId) {
         $stepId = Get-LatestStepId

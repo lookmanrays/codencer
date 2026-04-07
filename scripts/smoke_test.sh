@@ -111,7 +111,7 @@ echo "1. Starting run mission: $RUN_ID"
 
 echo "2. Submitting task (Flow: submit --wait, input mode: $SMOKE_INPUT_MODE)..."
 cat <<EOF > .codencer/smoke_task.yaml
-version: "1.1"
+version: "v1"
 run_id: "$RUN_ID"
 title: "Smoke Test Validation"
 goal: "Verify the bridge relay loop"
@@ -130,7 +130,7 @@ elif [[ "$SMOKE_INPUT_MODE" == "stdin" ]]; then
 Verify the bridge relay loop via stdin.
 EOF
 elif [[ "$SMOKE_INPUT_MODE" == "task-json" ]]; then
-    echo '{"version":"1.1","goal":"Verify the bridge relay loop via task-json","title":"Smoke Test Validation","adapter_profile":"codex"}' | \
+    echo '{"version":"v1","goal":"Verify the bridge relay loop via task-json","title":"Smoke Test Validation","adapter_profile":"codex"}' | \
         ./bin/orchestratorctl submit "$RUN_ID" --task-json - --wait --json > .codencer/smoke_result.json
 else
     ./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml --wait --json > .codencer/smoke_result.json
@@ -140,7 +140,7 @@ fi
 # If jq or python isn't available, we'll try to find it via grep or similar, 
 # but the parse_json_file_field should handle it.
 STATE=$(parse_json_file_field .codencer/smoke_result.json state)
-STEP_ID=$(parse_json_file_field .codencer/smoke_result.json step_id)
+STEP_ID=$(parse_json_file_field .codencer/smoke_result.json id)
 if [[ -z "$STEP_ID" ]]; then
     ./bin/orchestratorctl step list "$RUN_ID" --json > .codencer/smoke_steps.json
     STEP_ID=$(parse_last_step_id_file .codencer/smoke_steps.json)

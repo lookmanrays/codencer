@@ -54,7 +54,7 @@ The standard sequence for performing an audited tactical task:
 3.  **Inspect Instance**: `./bin/orchestratorctl instance` (Verify port/repo).
 4.  **Start a Run**: `./bin/orchestratorctl run start <RUN_ID> <PROJECT>`.
 5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> <TASK_FILE>|--goal "<text>" --wait --json`.
-6.  **Audit the Result**: `./bin/orchestratorctl step result <UUID>` (The Summary).
+6.  **Audit the Result**: `./bin/orchestratorctl step result <UUID>`.
 7.  **Evidence Drill-down**: `./bin/orchestratorctl step logs/artifacts/validations <UUID>`.
 
 ### 📖 The Operator Runbook
@@ -123,13 +123,19 @@ EOF
 #### B. JSON Task String (Pipe)
 Ideal for machine-to-machine hand-offs:
 ```bash
-echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit run-01 --task-json - --wait
+echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit run-01 --task-json - --wait --json
 ```
 
 #### C. Broker-Backed Execution
-Directly target an IDE-bound agent via the Antigravity Broker:
+Directly target an IDE-bound agent via the Antigravity Broker using direct input:
 ```bash
-./bin/orchestratorctl submit run-01 --goal "Check UI" --adapter antigravity-broker --wait
+./bin/orchestratorctl submit run-01 --goal "Check UI" --adapter antigravity-broker --wait --json
+```
+
+#### D. OpenClaw ACPX (Experimental)
+Directly target an OpenClaw-compatible agent via the standardized ACP bridge:
+```bash
+./bin/orchestratorctl submit run-01 --goal "Fix Auth" --adapter openclaw-acpx --wait --json
 ```
 
 ---
@@ -256,6 +262,7 @@ Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs.
 | **Codex Adapter** | ✅ **Stable Beta** | Primary high-fidelity relay for `codex-agent`. |
 | **Antigravity Metadata** | ✅ **Ready (Beta)** | Broker-backed context, task IDs, and provenance. |
 | **Antigravity Broker** | 🟡 **Operational** | Cross-side (WSL/Windows) bridge for IDE instances. |
+| **OpenClaw ACPX** | 🧪 **Experimental** | Standardized ACP bridge to OpenClaw ecosystem. |
 | **Simulation Mode** | ✅ **Stable Beta** | Stub-based validation (Bridge-only smoke tests). |
 | **IDE Chat Bridge** | 🧪 **Experimental** | Proxy-mediated file access via VS Code (Prototype). |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
@@ -314,7 +321,7 @@ Codencer is designed around an explicit, repo-bound execution model:
   ./scripts/start_instance.sh ~/projects/project-a 8085
   ./scripts/start_instance.sh ~/projects/project-b 8086
   ```
-- **Identity Verification**: Always use `./bin/orchestratorctl instance` to verify which repository and port a daemon is serving before submitting tasks.
+- **Identity Verification**: Always use `./bin/orchestratorctl instance --json` to verify which repository and port a daemon is serving before submitting tasks.
 
 For more details, see **[Setup & Multi-Instance Workflows](docs/SETUP.md)**.
 

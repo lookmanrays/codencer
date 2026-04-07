@@ -94,7 +94,7 @@ PY
 json_get_last_step_id() {
   local json_text="$1"
   if [[ "$JSON_TOOL" == "jq" ]]; then
-    printf '%s\n' "$json_text" | jq -r 'if type == "array" and length > 0 then .[-1].id // "" else "" end'
+    printf '%s\n' "$json_text" | jq -r 'if type == "array" and length > 0 then (.[-1].id // .[-1].step_id // "") else "" end'
     return
   fi
   python3 <<'PY' <<<"$json_text"
@@ -109,7 +109,7 @@ except json.JSONDecodeError:
 if isinstance(value, list) and value:
     item = value[-1]
     if isinstance(item, dict):
-        print(item.get("id", ""))
+        print(item.get("id") or item.get("step_id") or "")
 PY
 }
 
@@ -450,7 +450,10 @@ for idx in "${!TASK_ITEMS[@]}"; do
     state="unknown"
   fi
 
-  step_id="$(json_get_field "$output" "step_id")"
+  step_id="$(json_get_field "$output" "id")"
+  if [[ -z "$step_id" ]]; then
+    step_id="$(json_get_field "$output" "step_id")"
+  fi
   if [[ -z "$step_id" ]]; then
     step_id="$(latest_step_id || true)"
   fi

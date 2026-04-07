@@ -44,10 +44,11 @@ Each Codencer daemon instance is anchored to a single `repo_root`.
 - **DB & Artifacts**: All state is stored in `.codencer/` relative to the `repo_root`.
 - **Worktrees**: All task attempts are executed in isolated git worktrees managed within the `repo_root`.
 
-### 2.2 Targeting Specific Roots
-If you are running the CLI from a different directory than the daemon's root, use the `--repo-root` flag:
+### 2.2 Global Identity Check
+The `orchestratorctl instance` command identifies which project and port a daemon is serving. Use it to ensure you are targeting the correct bridge instance.
+
 ```bash
-./bin/orchestratorctl instance --repo-root ~/projects/my-awesome-app
+ORCHESTRATORD_URL=http://localhost:8085 ./bin/orchestratorctl instance --json
 ```
 
 ---
@@ -65,22 +66,27 @@ Best for rich, structured tasks with constraints.
 ### 3.2 Direct Goal (Convenience)
 Best for quick, one-off instructions.
 ```bash
-./bin/orchestratorctl submit my-run --goal "Refactor the Auth module" --adapter codex --wait
+./bin/orchestratorctl submit my-run --goal "Refactor Auth" --adapter codex --wait --json
+
+# Or for OpenClaw agents:
+./bin/orchestratorctl submit my-run --goal "Refactor Auth" --adapter openclaw-acpx --wait --json
 ```
 
 ### 3.3 Stdin Prompt (Multiline)
 Best for large, human-readable prompts without temporary files.
 ```bash
-cat <<EOF | ./bin/orchestratorctl submit my-run --stdin --title "Update Docs" --wait
+cat <<EOF | ./bin/orchestratorctl submit my-run --stdin --title "Update Docs" --wait --json
 Please update the API documentation to reflect the new v1 endpoints. 
 Be sure to include examples for all JSON responses.
 EOF
+```
 ```
 
 ### 3.4 JSON Task String (Machine-to-Machine)
 Best for integrations where the planner generates a JSON task object.
 ```bash
-echo '{"version":"v1","goal":"Fix typos in README"}' | ./bin/orchestratorctl submit my-run --task-json - --wait
+echo '{"version":"v1","goal":"Fix typos in README"}' | ./bin/orchestratorctl submit my-run --task-json - --wait --json
+```
 ```
 
 ---

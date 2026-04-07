@@ -36,6 +36,12 @@ Why:
 - open/flexible path
 - useful hedge against vendor lock-in
 
+### 4. OpenClaw ACPX (Experimental)
+Why:
+- standardizes agent-to-agent communication via the **Agent Client Protocol (ACP)**
+- provides a structured, headless bridge (`acpx`)
+- aligns with the "Bridge, Not Brain" doctrine
+
 ## Adapter design rules
 
 - provider quirks stay isolated

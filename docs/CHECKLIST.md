@@ -16,11 +16,11 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
   TEMP_REPO=$(mktemp -d)
   scripts/start_instance.sh $TEMP_REPO 8086
   ```
-- [ ] Verify identity on the new port: `ORCHESTRATORD_URL=http://localhost:8086 ./bin/orchestratorctl instance`.
+- [ ] Verify identity on the new port: `ORCHESTRATORD_URL=http://localhost:8086 ./bin/orchestratorctl instance --json`.
 - [ ] Verify it reports the `$TEMP_REPO` path.
 
 ## 3. Simulation Run (The "Smoke Test")
-- [ ] Start a run: `./bin/orchestratorctl run start smoke-test local-verify`.
+- [ ] Start a run: `./bin/orchestratorctl run start smoke-test local-verify --json`.
 - [ ] Submit the example task: `./bin/orchestratorctl submit smoke-test examples/tasks/bug_fix.yaml --wait --json`.
 - [ ] Verify the state reaches `completed` (in simulation mode).
 

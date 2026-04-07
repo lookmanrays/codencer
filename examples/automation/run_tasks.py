@@ -184,7 +184,7 @@ def main() -> int:
         step_id = ""
         state = "unknown"
         if isinstance(payload, dict):
-            step_id = str(payload.get("step_id", "") or "")
+            step_id = str(payload.get("id") or payload.get("step_id") or "")
             state = str(payload.get("state") or payload.get("error") or "unknown")
         if not step_id:
             step_id = latest_step_id(args.orchestratorctl, args.run_id)

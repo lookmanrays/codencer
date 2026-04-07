@@ -110,7 +110,8 @@ examples/automation/run_tasks.sh \
   --project codencer-demo \
   --input-mode goal \
   --tasks-file examples/automation/goals.txt \
-  --adapter codex
+  --adapter codex \
+  --json
 ```
 
 Continue mode can be enabled explicitly:

@@ -15,6 +15,7 @@ import (
 	"agent-bridge/internal/adapters/claude"
 	"agent-bridge/internal/adapters/codex"
 	"agent-bridge/internal/adapters/ide"
+	"agent-bridge/internal/adapters/openclaw_acpx"
 	"agent-bridge/internal/adapters/qwen"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
@@ -143,11 +144,12 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 	agSvc := service.NewAntigravityService(settingsRepo, cfg.AntigravityBrokerURL, repoRoot)
 
 	adapters := map[string]domain.Adapter{
-		"codex":    codex.NewAdapter(),
-		"claude":   claude.NewAdapter(),
-		"qwen":     qwen.NewAdapter(),
-		"ide-chat": ide.NewAdapter(),
-		"antigravity": antigravity.NewAdapter(agSvc),
+		"codex":             codex.NewAdapter(),
+		"claude":            claude.NewAdapter(),
+		"qwen":              qwen.NewAdapter(),
+		"ide-chat":          ide.NewAdapter(),
+		"openclaw-acpx":     openclaw_acpx.NewAdapter(),
+		"antigravity":       antigravity.NewAdapter(agSvc),
 		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, repoRoot),
 	}
 
