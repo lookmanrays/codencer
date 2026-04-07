@@ -1,6 +1,6 @@
 # ADR 004: OpenClaw + ACPX Integration Strategy
 
-## Status: Proposed
+## Status: Decided
 ## Decided by: principal engineer
 
 ## Context

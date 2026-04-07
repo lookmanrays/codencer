@@ -22,9 +22,11 @@ Designed for **local-first, self-hosted developer toolchains**, Codencer provide
 
 ---
 
-## 🏛 The Relay Model
+---
 
-Codencer is a **bridge, not a brain**. It does not decide the high-level strategy; it executes tactical instructions and reports high-fidelity evidence.
+## 🏛 The Bridge Doctrine
+
+Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while the **Brain Layer** (human or LLM) handles strategy and decision-making.
 
 - **What it is**: A system of record, a workspace isolator, a validator, and a provider of immutable artifacts.
 - **What it is not**: A planner, a chat UI, a cloud service, or an AI "agent" that thinks about what to do next.
@@ -39,26 +41,27 @@ Codencer is a **bridge, not a brain**. It does not decide the high-level strateg
 ```
 
 ### Core Roles
-- **Planner**: You, a Chat UI, or an agentic planner. Decides **what** to do.
+- **Planner (Brain)**: You, a Chat UI, or an agentic planner. Decides **what** to do.
 - **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
-- **Coding Agent**: The underlying tactical tool performing the actual work (e.g., `codex-agent`, `claude-code`).
+- **Coding Agent (Worker)**: The tactical tool performing the actual work (e.g., `codex-agent`, `claude-code`).
 
 ---
 
-## 🚀 The Canonical Run Path (Local-First)
+## 🚀 The Canonical "Day 0" Path (Human-First)
 
 The standard sequence for performing an audited tactical task:
 
-1.  **Clone & Setup**: `git clone` the repo → `make setup build`.
+1.  **Clone & Build**: `git clone` the repo → `make setup build`.
 2.  **Start the Bridge**: `make start-sim` (for testing) or `make start` (for real agents).
-3.  **Inspect Instance**: `./bin/orchestratorctl instance` (Verify port/repo).
+3.  **Verify Instance**: `./bin/orchestratorctl instance --json` (Confirm repo and port).
 4.  **Start a Run**: `./bin/orchestratorctl run start <RUN_ID> <PROJECT>`.
-5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> <TASK_FILE>|--goal "<text>" --wait --json`.
-6.  **Audit the Result**: `./bin/orchestratorctl step result <UUID>`.
-7.  **Evidence Drill-down**: `./bin/orchestratorctl step logs/artifacts/validations <UUID>`.
+5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> --goal "<text>" --wait --json`.
+6.  **Audit the Result**: `./bin/orchestratorctl step result <HANDLE>`.
 
-### 📖 The Operator Runbook
-For a detailed, step-by-step guide on starting the daemon, targeting projects, and submitting tasks, see the **[v1 Operator Runbook](docs/OPERATOR_RUNBOOK.md)**.
+### 📖 Operator Reference
+- **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)**: Detailed step-by-step guidance for humans.
+- **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)**: Rules of Engagement for AI assistants and automated planners.
+- **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)**: JSON mode, exit codes, and sequential loops.
 
 ---
 
@@ -262,7 +265,7 @@ Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs.
 | **Codex Adapter** | ✅ **Stable Beta** | Primary high-fidelity relay for `codex-agent`. |
 | **Antigravity Metadata** | ✅ **Ready (Beta)** | Broker-backed context, task IDs, and provenance. |
 | **Antigravity Broker** | 🟡 **Operational** | Cross-side (WSL/Windows) bridge for IDE instances. |
-| **OpenClaw ACPX** | 🧪 **Experimental** | Standardized ACP bridge to OpenClaw ecosystem. |
+| **OpenClaw ACPX** | 🧪 **Experimental (Operational)** | Standardized ACP bridge to OpenClaw ecosystem. |
 | **Simulation Mode** | ✅ **Stable Beta** | Stub-based validation (Bridge-only smoke tests). |
 | **IDE Chat Bridge** | 🧪 **Experimental** | Proxy-mediated file access via VS Code (Prototype). |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
@@ -297,11 +300,12 @@ Codencer distinguishes between different failure modes to help you recover faste
 Review the following guides to get started with Codencer.
 
 ### ⚡️ User Guidance (Start Here)
-- **[Canonical Local Runbook](docs/EXAMPLES.md)** — The definitive Day-0 operator flow.
-- **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)** — Sequential wrapper loops, JSON mode, and shell-capable planner usage.
-- **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and agent setup.
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** — How to handle non-success states and recovery.
-- **[Architecture Overview](docs/02_architecture.md)** — High-level design and the "Bridge not Brain" model.
+- **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)** — The canonical "Day 0" flow for humans.
+- **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** — Canonical rules for AI planners and assistants.
+- **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)** — Machine-safe JSON mode and sequential loops.
+- **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and daemon management.
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** — Resolving infrastructure vs goal failures.
+- **[Architecture Overview](docs/02_architecture.md)** — Deep dive into the Bridge model.
 
 ### 🛠 Project Governance & Maintenance (Internal)
 - **[Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)** — Current V1 release blockers and debt.

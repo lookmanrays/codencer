@@ -1,28 +1,10 @@
 # CLI Automation Patterns
 
-## 🤖 AI Assistant / Shell & Tool Flows
+## 🤖 AI Assistant & Tool Flows
 
-Codencer v1 is designed to be operated by shell-capable AI assistants (like the one you are interacting with now) or automated shell planners.
+If you are an AI assistant or a developer building an agentic planner, please refer to the **[AI Operator Guide](AI_OPERATOR_GUIDE.md)** for the canonical "Rules of Engagement" and tool-calling patterns.
 
-### The Shell Planner Doctrine
-1. **Shell Access is Required**: The planner must be able to run `orchestratorctl`.
-2. **Bridge, Not Brain**: Codencer executes the task; the planner decides *which* task to run and *when* to retry or stop.
-3. **Machine-Safe IO**: Always use the `--json` flag when calling `orchestratorctl` in scripts or tool calls to get parseable results.
-
-### Example: Tool-Call Sequence for an AI Assistant
-
-1. **Discovery**:
-   ```bash
-   ./bin/orchestratorctl instance --json
-   ```
-2. **Submission**:
-   ```bash
-   cat <<'EOF' | ./bin/orchestratorctl submit my-run --stdin --adapter codex --wait --json
-   Refactor the data layer to use the new Repository pattern.
-   EOF
-   ```
-3. **Decision**:
-   The assistant parses the JSON output. If `state == "completed"`, proceed. If `state == "failed_validation"`, the assistant should read the validation logs and submit a follow-up task.
+This guide focuses on **Shell Scripting**, **Sequential Wrappers**, and **Machine-safe JSON/Exit Code contracts**.
 
 ---
 

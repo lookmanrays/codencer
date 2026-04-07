@@ -59,20 +59,30 @@ make start
 
 ---
 
-## 4. Multi-Instance & Repo-Root Targeting
+## 4. Daemon Management & Targeting
 Codencer follows a **One-Repo-One-Instance** model. Each repo clone manages its own database and worktrees.
 
-### 4.1 Explicit Targeting
-To target a specific repository regardless of your current directory, use the `--repo-root` flag. The port is controlled via the `PORT` environment variable:
-```bash
-PORT=8086 ./bin/orchestratord --repo-root /path/to/my-project
-```
-This anchors all relative paths (`.codencer/`, `workspace/`, `artifacts/`) to that project root.
+### 4.1 Explicit Repo Targeting
+To anchor a daemon to a specific repository regardless of your current directory, use the `--repo-root` flag.
 
-### 4.2 Startup Helper
-Use the provided script to start a daemon for a specific project:
 ```bash
-# Usage: ./scripts/start_instance.sh <repo_root> <port> [extra_flags]
+# Anchor the daemon to a specific repo root
+./bin/orchestratord --repo-root /path/to/my-project
+```
+
+### 4.2 Port Management
+The daemon listens on port `8085` by default. To run multiple instances on the same machine, use the `PORT` environment variable:
+
+```bash
+# Start an instance on a custom port
+PORT=8086 ./bin/orchestratord --repo-root /path/to/project-b
+```
+
+### 4.3 Startup Helper
+Use the provided script to start and build a daemon instance for a specific project:
+
+```bash
+# Usage: ./scripts/start_instance.sh <repo_root> [port] [extra_flags]
 ./scripts/start_instance.sh ~/projects/my-api 8085
 ```
 

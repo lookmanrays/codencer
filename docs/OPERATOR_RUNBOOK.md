@@ -73,38 +73,39 @@ Best for quick, one-off instructions.
 ```
 
 ### 3.3 Stdin Prompt (Multiline)
-Best for large, human-readable prompts without temporary files.
+Best for large, human-readable prompts without temporary files. Use heredocs to provide the goal:
+
 ```bash
-cat <<EOF | ./bin/orchestratorctl submit my-run --stdin --title "Update Docs" --wait --json
+cat <<'EOF' | ./bin/orchestratorctl submit my-run --stdin --title "Update Docs" --wait --json
 Please update the API documentation to reflect the new v1 endpoints. 
 Be sure to include examples for all JSON responses.
 EOF
 ```
-```
 
 ### 3.4 JSON Task String (Machine-to-Machine)
-Best for integrations where the planner generates a JSON task object.
+Best for integrations where the planner generates a structured JSON task object.
+
 ```bash
 echo '{"version":"v1","goal":"Fix typos in README"}' | ./bin/orchestratorctl submit my-run --task-json - --wait --json
-```
 ```
 
 ---
 
 ## Phase 4: Monitoring & Inspection
 
-### 4.1 Polling for Results
-If you didn't use `--wait`, you can check the authoritative evidence at any time.
+### 4.1 Inspecting the Authoritative Truth
+If you didn't use `--wait`, or once a task is complete, you can check the authoritative evidence at any time.
 
 ```bash
-# Get the high-level summary and state
-./bin/orchestratorctl step result <UUID>
+# Get the high-level summary and result spec
+./bin/orchestratorctl step result <HANDLE>
 
-# Drill down into the agent's brain (stdout)
-./bin/orchestratorctl step logs <UUID>
+# Drill down into the agent's brain (stdout/stderr)
+./bin/orchestratorctl step logs <HANDLE>
 
-# Inspect the proof (test/lint results)
-./bin/orchestratorctl step validations <UUID>
+# Inspect the artifacts and proof
+./bin/orchestratorctl step artifacts <HANDLE>
+./bin/orchestratorctl step validations <HANDLE>
 ```
 
 ### 4.2 Interpreting States

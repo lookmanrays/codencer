@@ -2,7 +2,11 @@ package openclaw_acpx
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
+	"sync"
 
 	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
@@ -16,12 +20,15 @@ const (
 type Adapter struct {
 	binaryName string
 	envVar     string
+	processes  map[string]*context.CancelFunc
+	mu         sync.Mutex
 }
 
 func NewAdapter() *Adapter {
 	return &Adapter{
 		binaryName: "acpx",
 		envVar:     "OPENCLAW_ACPX_BINARY",
+		processes:  make(map[string]*context.CancelFunc),
 	}
 }
 
@@ -38,47 +45,86 @@ func (a *Adapter) Capabilities() []string {
 }
 
 func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
-	// 1. Check for Simulation Mode
-	if common.IsSimulationEnabled(a.Name()) {
-		return common.RunSimulation(ctx, step, attempt, attemptArtifactRoot, workspaceRoot)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if _, exists := a.processes[attempt.ID]; exists {
+		return nil // Idempotent start
 	}
 
-	// 2. Prepare acpx command
-	// Conceptual: acpx prompt --session <attemptID> --wait-for-completion "<goal>"
-	args := []string{
-		"prompt",
-		"--session", attempt.ID,
-		"--wait-for-completion",
-		step.Goal,
+	// 1. Check for Simulation Mode (Sim is always ready)
+	isSim := common.IsSimulationEnabled(a.Name())
+
+	// Fail fast if binary is missing and NOT in simulation mode
+	if !isSim {
+		binary := os.Getenv(a.envVar)
+		if binary == "" {
+			binary = a.binaryName
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			return fmt.Errorf("openclaw acpx binary %q not found. Please install it or set %s to a valid path, or enable simulation with %s_SIMULATION_MODE=1", binary, a.envVar, a.Name())
+		}
 	}
 
-	opts := common.ExecutionOptions{
-		AdapterName:  a.Name(),
-		BinaryName:   a.binaryName,
-		BinaryEnvVar: a.envVar,
-		Args:         args,
-		Workspace:    workspaceRoot,
-		ArtifactRoot: attemptArtifactRoot,
-	}
+	execCtx, cancel := context.WithCancel(context.Background())
+	a.processes[attempt.ID] = &cancel
 
-	// 3. Initial implementation uses InvokeLocal (background) for consistency with Codex/Claude
+	// 2. Execution wrapper
 	go func() {
-		if err := common.InvokeLocal(context.Background(), step, attempt, opts); err != nil {
+		defer cancel()
+		var err error
+
+		if isSim {
+			err = common.RunSimulation(execCtx, step, attempt, attemptArtifactRoot, workspaceRoot)
+		} else {
+			// acpx prompt --session <attemptID> --wait-for-completion "<goal>"
+			args := []string{
+				"prompt",
+				"--session", attempt.ID,
+				"--wait-for-completion",
+				step.Goal,
+			}
+			opts := common.ExecutionOptions{
+				AdapterName:  a.Name(),
+				BinaryName:   a.binaryName,
+				BinaryEnvVar: a.envVar,
+				Args:         args,
+				Workspace:    workspaceRoot,
+				ArtifactRoot: attemptArtifactRoot,
+			}
+			err = common.InvokeLocal(execCtx, step, attempt, opts)
+		}
+
+		if err != nil {
 			slog.Error("OpenClaw Execution failed", "error", err, "attemptID", attempt.ID)
 		}
+
+		a.mu.Lock()
+		delete(a.processes, attempt.ID)
+		a.mu.Unlock()
 	}()
 
 	return nil
 }
 
 func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
-	// Initial implementation relies on process exit (InvokeLocal completes).
-	// Future optimization: call 'acpx status --session <attemptID>'
-	return false, nil
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, running := a.processes[attemptID]
+	return running, nil
 }
 
 func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
-	// Conceptual: acpx stop --session <attemptID>
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	cancelFunc, exists := a.processes[attemptID]
+	if !exists {
+		return nil
+	}
+
+	(*cancelFunc)()
+	delete(a.processes, attemptID)
 	slog.Info("OpenClaw Execution: Cancellation requested", "attemptID", attemptID)
 	return nil
 }

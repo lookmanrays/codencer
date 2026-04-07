@@ -134,12 +134,12 @@ Codencer uses specific states to distinguish between **instructional failure** a
 
 | State | Category | Meaning | Recovery |
 | :--- | :--- | :--- | :--- |
-| `completed` | Success | The agent reported success and validations passed. | None needed. |
-| `failed_terminal` | Goal Failure | The agent finished but reported the goal was NOT met. | Refine prompt/goal. |
-| `failed_validation` | Goal Failure | The agent finished (0), but post-tests/lint failed. | Fix code logic or tests. |
-| `failed_adapter` | Infrastructure | The agent process crashed (e.g., API error, SIGSEGV). | Check `step logs`. |
-| `failed_bridge` | Infrastructure | Codencer failed (e.g., Disk Full, Git Error). | Check `orchestratord` logs. |
-| `timeout` | Infrastructure | Task exceeded `timeout_seconds`. | Increase timeout or simplify. |
+| `completed` | **Success** | Goal met and all validations passed. | None. |
+| `failed_terminal` | **Goal Failure** | Agent finished but reported it could NOT meet the goal. | Refine prompt/intent. |
+| `failed_validation` | **Goal Failure** | Agent finished (0), but post-tests/lint failed. | Fix code logic or tests. |
+| `failed_adapter` | **Infrastructure** | The agent binary crashed (e.g. API error, OOM). | Check `step logs`. |
+| `failed_bridge` | **Infrastructure** | Codencer failed (e.g. Disk Full, Git Error, Provisioning). | Check daemon logs. |
+| `timeout` | **Infrastructure** | Task exceeded `timeout_seconds` and was killed. | Increase timeout. |
 
 ---
 

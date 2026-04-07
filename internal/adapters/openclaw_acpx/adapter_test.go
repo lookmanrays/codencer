@@ -27,27 +27,48 @@ func TestAdapter_Metadata(t *testing.T) {
 	}
 }
 
-func TestAdapter_SimulationMode(t *testing.T) {
-	// 1. Enable simulation mode via env
+func TestAdapter_Lifecycle(t *testing.T) {
+	// 1. Enable simulation mode
 	os.Setenv("OPENCLAW-ACPX_SIMULATION_MODE", "1")
 	defer os.Unsetenv("OPENCLAW-ACPX_SIMULATION_MODE")
 
 	a := NewAdapter()
-	step := &domain.Step{Goal: "Test simulation"}
-	attempt := &domain.Attempt{ID: "test-att-1", Adapter: a.Name()}
+	step := &domain.Step{ID: "step-1", Goal: "Test lifecycle"}
+	attempt := &domain.Attempt{ID: "att-1", Adapter: a.Name()}
 	
-	tmpDir, err := os.MkdirTemp("", "openclaw-test-*")
+	tmpDir, err := os.MkdirTemp("", "openclaw-lifecycle-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	artifactRoot := tmpDir
-	workspace := tmpDir
-
-	// 2. Start should return nil (success) in simulation mode even without acpx binary
-	err = a.Start(context.Background(), step, attempt, workspace, artifactRoot)
+	// 2. Start (Initiates background process)
+	err = a.Start(context.Background(), step, attempt, tmpDir, tmpDir)
 	if err != nil {
-		t.Errorf("expected no error in simulation mode, got %v", err)
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// 3. Poll - Should be true immediately after start (background goroutine running)
+	running, err := a.Poll(context.Background(), attempt.ID)
+	if err != nil {
+		t.Errorf("Poll failed: %v", err)
+	}
+	if !running {
+		t.Error("expected adapter to be running after Start")
+	}
+
+	// 4. Cancel
+	err = a.Cancel(context.Background(), attempt.ID)
+	if err != nil {
+		t.Errorf("Cancel failed: %v", err)
+	}
+
+	// 5. Poll - Should be false after Cancel
+	running, err = a.Poll(context.Background(), attempt.ID)
+	if err != nil {
+		t.Errorf("Poll after cancel failed: %v", err)
+	}
+	if running {
+		t.Error("expected adapter to stop running after Cancel")
 	}
 }
