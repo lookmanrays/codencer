@@ -59,21 +59,31 @@ make start
 
 ---
 
-## 4. Multi-Instance Workflows
+## 4. Multi-Instance & Repo-Root Targeting
 Codencer follows a **One-Repo-One-Instance** model. Each repo clone manages its own database and worktrees.
 
-To run multiple instances on one machine:
-1. Ensure each instance has a unique port.
-2. Set the `PORT` environment variable.
-
+### 4.1 Explicit Targeting
+To target a specific repository regardless of your current directory, use the `--repo-root` flag:
 ```bash
-# Start an instance on port 8086
-PORT=8086 ./bin/orchestratord
+./bin/orchestratord --repo-root /path/to/my-project --port 8086
+```
+This anchors all relative paths (`.codencer/`, `workspace/`, `artifacts/`) to that project root.
+
+### 4.2 Startup Helper
+Use the provided script to start a daemon for a specific project:
+```bash
+# Usage: ./scripts/start_instance.sh <repo_root> <port> [extra_flags]
+./scripts/start_instance.sh ~/projects/my-api 8085
 ```
 
-Check instance identity:
+### 4.3 Verify Identity
+Always verify which project a running daemon is bound to before starting a run:
 ```bash
-./bin/orchestratorctl instance
+# Set the target daemon URL
+export ORCHESTRATORD_URL=http://localhost:8085
+
+# Check Ground Truth
+./bin/orchestratorctl instance --json
 ```
 
 ---
@@ -125,3 +135,27 @@ Direct convenience input stays intentionally narrow. It deterministically normal
 For concrete submit examples, see **[EXAMPLES.md](EXAMPLES.md)**. For planner- and wrapper-oriented examples, see **[CLI_AUTOMATION.md](CLI_AUTOMATION.md)**.
 
 The official v1 ordered-task model is wrapper-based. Use the scripts in `examples/automation/` when you need to execute an explicit ordered list one item at a time.
+
+---
+
+## 7. Antigravity Broker (Cross-Side Execution)
+
+Use the Antigravity Broker for **cross-side execution** (e.g., Codencer in WSL controlling Antigravity in Windows).
+
+### 7.1 Broker Execution Model
+The broker uses a **dual-path model**:
+- **Repo Root (Identity)**: The stable path used to bind this repository to an active IDE instance.
+- **Workspace Root (Execution)**: The isolated worktree path where the task is actually executed.
+
+### 7.2 Setup & Binding
+1.  **Start the Broker**: Run `agent-broker.exe` on the host machine.
+2.  **Bind**: Link your local repository to a running IDE instance:
+    ```bash
+    ./bin/orchestratorctl antigravity bind <PID>
+    ```
+3.  **Execute**: Submit tasks using the `antigravity-broker` adapter:
+    ```bash
+    ./bin/orchestratorctl submit <runID> --goal "Check UI" --adapter antigravity-broker --wait
+    ```
+
+For detailed examples, see **[EXAMPLES.md](EXAMPLES.md)**.

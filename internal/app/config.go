@@ -13,6 +13,7 @@ type Config struct {
 	DBPath       string `json:"db_path"`
 	ArtifactRoot  string `json:"artifact_root"`
 	WorkspaceRoot string `json:"workspace_root"`
+	RepoRoot      string `json:"repo_root"`
 	Host                  string `json:"host"`
 	Port                  int    `json:"port"`
 	AntigravityBrokerURL  string `json:"antigravity_broker_url"`
@@ -71,6 +72,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if env := os.Getenv("CODENCER_ANTIGRAVITY_BROKER_URL"); env != "" {
 		config.AntigravityBrokerURL = env
+	}
+	if env := os.Getenv("REPO_ROOT"); env != "" {
+		config.RepoRoot = env
 	}
 
 	return config, nil

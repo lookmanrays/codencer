@@ -319,7 +319,12 @@ func main() {
 		if inst == nil { http.Error(w, "no instance bound for this repo", 400); return }
 
 		runWorkspace := b.WorkspaceRoot
-		if runWorkspace == "" { runWorkspace = inst.WorkspaceRoot }
+		if runWorkspace == "" {
+			runWorkspace = inst.WorkspaceRoot
+			log.Printf("[Broker] Using instance default workspace_root: %s", runWorkspace)
+		} else {
+			log.Printf("[Broker] Using attempt-specific workspace_root (worktree): %s", runWorkspace)
+		}
 
 		req := map[string]any{
 			"userPrompt": b.Prompt,

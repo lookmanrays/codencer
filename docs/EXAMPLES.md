@@ -145,6 +145,12 @@ Direct metadata flags are only supported with `--prompt-file`, `--goal`, and `--
 cat .codencer/task.json | ./bin/orchestratorctl submit my-first-run --task-json - --wait --json
 ```
 
+### JSON String via Stdin (Pipe)
+Ideal for machine-to-machine hand-offs:
+```bash
+echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit my-first-run --task-json - --wait
+```
+
 ### Prompt File Mode
 ```bash
 ./bin/orchestratorctl submit my-first-run \
@@ -167,13 +173,26 @@ cat .codencer/task.json | ./bin/orchestratorctl submit my-first-run --task-json 
   --wait --json
 ```
 
-### STDIN Mode
-```bash
-cat prompts/fix-tests.txt | ./bin/orchestratorctl submit my-first-run \
-  --stdin \
-  --title "Fix pkg/foo tests" \
-  --adapter codex \
   --wait --json
+```
+
+### Multiline Text via Stdin (Heredoc)
+Ideal for large, human-readable prompts without creating a file:
+```bash
+cat <<'EOF' | ./bin/orchestratorctl submit my-first-run --stdin --title "Fix Lints" --adapter codex --wait --json
+Fix all lint errors in the internal/app package. 
+Exclude the test files. 
+Use the 'go-lint' tool.
+EOF
+```
+
+### Broker-Backed Direct Input
+Directly target an IDE-bound agent via the Antigravity Broker using convenience flags:
+```bash
+./bin/orchestratorctl submit my-first-run \
+  --goal "Check UI" \
+  --adapter antigravity-broker \
+  --wait
 ```
 
 ### Invalid Multi-Source Example
@@ -285,10 +304,18 @@ Connect your local repository clone to an active Antigravity session.
 ./bin/orchestratorctl antigravity bind <PID>
 ```
 
-### 3.3 Execute & Audit
 Binding only establishes the repo-scoped Antigravity target. Execution still depends on explicit adapter selection in the submitted TaskSpec.
+
+### 3.3 Execute & Audit
+To execute via the broker, ensure your task uses the `antigravity-broker` adapter:
+
 ```bash
-./bin/orchestratorctl submit <runID> <file> --wait --json
+# Via command line override
+./bin/orchestratorctl submit <runID> examples/tasks/bug_fix.yaml --adapter antigravity-broker --wait --json
+
+# Or ensuring the YAML itself specifies the adapter
+# adapter_profile: antigravity-broker
+./bin/orchestratorctl submit <runID> examples/tasks/broker_task.yaml --wait --json
 ```
 
 Auditing a broker task includes extra **Provenance** metadata:
@@ -296,9 +323,41 @@ Auditing a broker task includes extra **Provenance** metadata:
 - **Bound Repo**: The stable repository path used for the session.
 - **Trajectory**: A `trajectory.json` artifact is automatically collected for deep auditing.
 
+### 3.4 Worktree-Aware Execution (Isolation vs. Identity)
+
+When Codencer runs a task via the broker, it distinguishes between two types of paths:
+
+1.  **Repo Root (Identity)**: The stable, long-lived path to your project. This is used by the broker to find the correct IDE instance to talk to.
+2.  **Workspace Root (Execution)**: The isolated worktree path where the actual agent execution happens. 
+
+Codencer automatically forwards the temporary worktree path to the broker. The agent will read/write ONLY within that isolated worktree, while the broker uses the repo root to maintain the session.
+
+**Example Inspection:**
+In the result metadata, you will see both:
+- `broker_repo_root`: Your stable project path.
+- `workspace_root`: The specific worktree path for that run.
+
+### 3. Submission via Stdin (Multiline)
+Excellent for human operators or AI assistants providing large prompt blocks without creating temporary files.
+
+```bash
+cat <<EOF | ./bin/orchestratorctl submit my-run --stdin --title "Update README" --adapter codex --wait
+Please update the README.md file to include the latest version number (v0.1.0-beta) 
+and ensure all links to the Operator Runbook are correct.
+EOF
+```
+
+### 4. Submission via JSON String (Piped)
+Used by automated planners that generate structured task objects.
+
+```bash
+echo '{"version":"1.1","goal":"Fix typos in main.go","title":"Typos Fix"}' | \
+  ./bin/orchestratorctl submit my-run --task-json - --wait --json
+```
+
 ---
 
-## 4. Advanced Provisioning Examples
+## 🛠 Advanced Developer Flows
 
 ### Node.js (Symlinked dependencies)
 **.codencer/workspace.json**

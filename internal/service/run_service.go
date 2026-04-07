@@ -193,6 +193,17 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 		}
 	}
 
+	// Enrichment for terminal consumers
+	phase, _ := s.phasesRepo.Get(ctx, step.PhaseID)
+	if phase != nil {
+		latest.Result.RunID = phase.RunID
+	}
+	latest.Result.PhaseID = step.PhaseID
+	latest.Result.StepID = step.ID
+	latest.Result.AttemptID = latest.ID
+	latest.Result.Adapter = latest.Adapter
+	latest.Result.RequestedAdapter = step.Adapter
+
 	return latest.Result, nil
 }
 
@@ -575,9 +586,16 @@ func (s *RunService) executeAttempt(
 			step.StatusReason = res.Summary
 		}
 	}
-	s.attachSubmissionArtifactRefs(attempt.Result, artifacts)
 
-	// Enrich with step-level requested context
+	// Always persist provenance as artifacts on the terminal path
+	_, _ = s.persistProvenanceArtifacts(ctx, attempt, attemptArtifactRoot)
+
+	// Enrich with step/attempt context for machine consumers
+	attempt.Result.RunID = runID
+	attempt.Result.PhaseID = step.PhaseID
+	attempt.Result.StepID = step.ID
+	attempt.Result.AttemptID = attempt.ID
+	attempt.Result.Adapter = attempt.Adapter
 	attempt.Result.RequestedAdapter = step.Adapter
 
 	s.updateAttemptResult(ctx, attempt)

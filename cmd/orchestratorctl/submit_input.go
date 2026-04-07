@@ -217,7 +217,7 @@ func loadAndNormalizeSubmitInput(opts *submitOptions) (*validation.NormalizedTas
 	case domain.SubmissionSourceStdin:
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return nil, fmt.Errorf("could not read stdin: %w", err)
+			return nil, fmt.Errorf("failed to read task input from stdin: %w", err)
 		}
 		content = b
 	default:

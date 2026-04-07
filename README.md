@@ -6,7 +6,7 @@ Designed for **local-first, self-hosted developer toolchains**, Codencer provide
 
 > [!IMPORTANT]
 > **Project Status: Public Beta (v0.1.0-beta)**.
-> Codencer is technically functional for local dev use, with a hardened execution path via the **Codex** adapter. While the core engine is stable, the API and protocols are subject to refinement as we gather community feedback.
+> Codencer is a hardened, production-oriented local orchestration bridge. While the core engine is stable and has been verified through rigorous internal audit paths, the API and protocols are still being refined for the v1.0 release.
 
 ---
 
@@ -57,7 +57,8 @@ The standard sequence for performing an audited tactical task:
 6.  **Audit the Result**: `./bin/orchestratorctl step result <UUID>` (The Summary).
 7.  **Evidence Drill-down**: `./bin/orchestratorctl step logs/artifacts/validations <UUID>`.
 
-For ordered task lists, the official v1 pattern is an external wrapper loop that calls Codencer one task at a time. Codencer does not include a native workflow engine or planner-like batch runner in v1.
+### 📖 The Operator Runbook
+For a detailed, step-by-step guide on starting the daemon, targeting projects, and submitting tasks, see the **[v1 Operator Runbook](docs/OPERATOR_RUNBOOK.md)**.
 
 ---
 
@@ -103,6 +104,32 @@ Submit a task and wait for the bridge to report results. For the full auditing s
 # 3. View the Authoritative Truth (The Summary)
 # Note: Use the Step UUID Handle printed after submission
 ./bin/orchestratorctl step result <UUID>
+```
+
+### 3.2 Standard Submission Flows
+
+Codencer supports both structured and convenience input via terminal:
+
+#### A. Multiline Text Prompt (Heredoc)
+Ideal for large, human-readable prompts without creating a file:
+```bash
+cat <<'EOF' | ./bin/orchestratorctl submit run-01 --stdin --title "Fix Lints" --adapter codex --wait --json
+Fix all lint errors in the internal/app package. 
+Exclude the test files. 
+Use the 'go-lint' tool.
+EOF
+```
+
+#### B. JSON Task String (Pipe)
+Ideal for machine-to-machine hand-offs:
+```bash
+echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit run-01 --task-json - --wait
+```
+
+#### C. Broker-Backed Execution
+Directly target an IDE-bound agent via the Antigravity Broker:
+```bash
+./bin/orchestratorctl submit run-01 --goal "Check UI" --adapter antigravity-broker --wait
 ```
 
 ---
@@ -170,11 +197,11 @@ For direct convenience input:
 
 ### Provenance and Auditability
 
-Every accepted submission keeps both:
-- the original input as `original-input.*`
-- the normalized canonical payload as `normalized-task.json`
+Codencer maintains a complete audit trail for every task attempt. Every accepted submission persists:
+- **`original-input.*`**: The exact content submitted from any source (file, STDIN, prompt).
+- **`normalized-task.json`**: The deterministic `TaskSpec` Codencer actually executed.
 
-Those files are written under the attempt artifact root so a later audit can answer what exact content was submitted and what normalized task Codencer actually executed.
+These are recorded as immutable artifacts under the attempt root (`.codencer/artifacts/...`) and are visible through normal artifact inspection, allowing auditors to verify both the intent and the execution of any automated task.
 
 ## 🔁 Ordered Task Lists
 
@@ -279,10 +306,15 @@ Review the following guides to get started with Codencer.
 
 ## ⚖ License
 ## 🏗 One-Repo-One-Instance Model
-Codencer is designed around a strictly local, repo-bound execution model:
+Codencer is designed around an explicit, repo-bound execution model:
 - **1 Git Clone = 1 Daemon Instance**: Each repository checkout manages its own ledger and workspaces.
-- **Multi-Instance Support**: To run multiple instances on the same machine, simply use different ports (e.g., `PORT=8086 make start`).
-- **Identity Verification**: Use `./bin/orchestratorctl instance` to verify which repository and port a daemon is serving.
+- **Explicit Targeting**: Start the daemon with `--repo-root <path>` to anchor all relative state (DB, artifacts) to that project, regardless of the startup directory.
+- **Multi-Instance Support**: To run multiple instances on the same machine, use different ports and repo roots:
+  ```bash
+  ./scripts/start_instance.sh ~/projects/project-a 8085
+  ./scripts/start_instance.sh ~/projects/project-b 8086
+  ```
+- **Identity Verification**: Always use `./bin/orchestratorctl instance` to verify which repository and port a daemon is serving before submitting tasks.
 
 For more details, see **[Setup & Multi-Instance Workflows](docs/SETUP.md)**.
 

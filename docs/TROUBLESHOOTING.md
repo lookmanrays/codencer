@@ -121,9 +121,29 @@ Every task result includes a `state`. Understanding the difference between **Inf
 - **Cause**: The IDE instance was closed or restarted.
 - **Fix**: Run `orchestratorctl antigravity list` and re-bind to the new PID.
 
+
+### 4.4 "Resource Busy" or "File Locked" during workspace creation
+- **Cause**: A previous git operation didn't clean up correctly, or multiple tasks are fighting for the same repo lock.
+- **Fix**: Run `git worktree prune`. If the issues persist, check if other instances are targeting the same `repo_root`.
+
 ---
 
-## 5. Resetting the Bridge
+## 5. Interpreting Step States (Authoritative Evidence)
+
+Codencer uses specific states to distinguish between **instructional failure** and **system failure**.
+
+| State | Category | Meaning | Recovery |
+| :--- | :--- | :--- | :--- |
+| `completed` | Success | The agent reported success and validations passed. | None needed. |
+| `failed_terminal` | Goal Failure | The agent finished but reported the goal was NOT met. | Refine prompt/goal. |
+| `failed_validation` | Goal Failure | The agent finished (0), but post-tests/lint failed. | Fix code logic or tests. |
+| `failed_adapter` | Infrastructure | The agent process crashed (e.g., API error, SIGSEGV). | Check `step logs`. |
+| `failed_bridge` | Infrastructure | Codencer failed (e.g., Disk Full, Git Error). | Check `orchestratord` logs. |
+| `timeout` | Infrastructure | Task exceeded `timeout_seconds`. | Increase timeout or simplify. |
+
+---
+
+## 6. Resetting the Bridge
 
 If the local state becomes corrupted or you want a fresh start:
 ```bash

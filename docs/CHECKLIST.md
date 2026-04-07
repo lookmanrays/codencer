@@ -7,10 +7,17 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
 - [ ] Verify `bin/orchestratord` and `bin/orchestratorctl` exist.
 - [ ] Run `./bin/orchestratorctl doctor` and ensure Git, Go, and CC are **[OK]**.
 
-## 2. Daemon & Connectivity
-- [ ] Start the daemon in simulation mode: `make start-sim`.
-- [ ] In a new terminal, run `./bin/orchestratorctl instance`.
-- [ ] Verify it reports the correct repository path and port (8085).
+## 2. Daemon & Explicit Targeting
+- [ ] Start the daemon with explicit repo root: `REPO_ROOT=$(pwd) make start-sim`.
+- [ ] In a new terminal, run `./bin/orchestratorctl instance --json`.
+- [ ] Verify `repo_root` is an absolute path to the current directory.
+- [ ] Start a second daemon for a different temp directory:
+  ```bash
+  TEMP_REPO=$(mktemp -d)
+  scripts/start_instance.sh $TEMP_REPO 8086
+  ```
+- [ ] Verify identity on the new port: `ORCHESTRATORD_URL=http://localhost:8086 ./bin/orchestratorctl instance`.
+- [ ] Verify it reports the `$TEMP_REPO` path.
 
 ## 3. Simulation Run (The "Smoke Test")
 - [ ] Start a run: `./bin/orchestratorctl run start smoke-test local-verify`.

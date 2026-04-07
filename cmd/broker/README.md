@@ -40,9 +40,12 @@ Binding is repo-specific. Each repository on the guest machine can be bound to a
 - `DELETE /binding?repo_root=<path>`: Clear the binding for the repo.
 
 ### Task Execution
-- `POST /tasks`: Starts a cascade (JSON: `{"prompt": "goal", "repo_root": "<path>"}`).
-- `GET /tasks/:id`: Polls status.
-- `GET /tasks/:id/result`: Retrieves raw trajectory.
+- **POST /tasks**: Starts a cascade with isolated workspace support.
+  - JSON: `{"prompt": "goal", "repo_root": "<stable_path>", "workspace_root": "<worktree_path>"}`
+  - If `workspace_root` is provided, it is used for the LS execution context.
+  - If omitted, it falls back to the instance default root discovered during bind.
+- **GET /tasks/:id**: Polls status.
+- **GET /tasks/:id/result**: Retrieves raw trajectory.
 
 ## Persistence
 Binding state is persisted to `~/.gemini/antigravity/broker_binding.json` on the host machine.

@@ -25,7 +25,7 @@ func TestBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	appCtx, err := Bootstrap(context.Background(), configFile)
+	appCtx, err := Bootstrap(context.Background(), configFile, "")
 	if err != nil {
 		t.Fatalf("failed to bootstrap: %v", err)
 	}
@@ -58,5 +58,42 @@ func TestBootstrap(t *testing.T) {
 	expected := `{"status":"ok"}`
 	if rr.Body.String() != expected {
 		t.Errorf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
+	}
+}
+
+func TestBootstrap_RepoRootOverride(t *testing.T) {
+	repoRoot := t.TempDir()
+	dbRelative := "subdir/codencer.db"
+	
+	content := `{
+		"db_path": "` + dbRelative + `",
+		"artifact_root": "arts",
+		"workspace_root": "ws",
+		"port": 0
+	}`
+	
+	configFile := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	appCtx, err := Bootstrap(context.Background(), configFile, repoRoot)
+	if err != nil {
+		t.Fatalf("failed to bootstrap: %v", err)
+	}
+	defer appCtx.Close()
+
+	expectedDB := filepath.Join(repoRoot, dbRelative)
+	if appCtx.Config.DBPath != expectedDB {
+		t.Errorf("expected DBPath %s, got %s", expectedDB, appCtx.Config.DBPath)
+	}
+
+	if appCtx.RepoRoot != repoRoot {
+		t.Errorf("expected RepoRoot %s, got %s", repoRoot, appCtx.RepoRoot)
+	}
+
+	// Verify directories were created relative to repoRoot
+	if _, err := os.Stat(filepath.Join(repoRoot, "arts")); err != nil {
+		t.Errorf("artifact root not created in repo root: %v", err)
 	}
 }

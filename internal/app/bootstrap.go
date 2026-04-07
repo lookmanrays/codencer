@@ -34,20 +34,42 @@ type AppContext struct {
 }
 
 // Bootstrap initializes configuration, logger, storage, artifact paths, and the HTTP server.
-func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
+func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppContext, error) {
 	startedAt := time.Now()
-	repoRoot, _ := os.Getwd()
-	repoRoot, _ = filepath.Abs(repoRoot)
+	
 	// 1. Load configuration
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
+
+	// 2. Resolve RepoRoot
+	repoRoot := cfg.RepoRoot
+	if repoRootOverride != "" {
+		repoRoot = repoRootOverride
+	}
+	if repoRoot == "" {
+		repoRoot, _ = os.Getwd()
+	}
+	repoRoot, _ = filepath.Abs(repoRoot)
+	cfg.RepoRoot = repoRoot
+
+	// 3. Resolve internal relative paths against RepoRoot
+	if !filepath.IsAbs(cfg.DBPath) {
+		cfg.DBPath = filepath.Join(repoRoot, cfg.DBPath)
+	}
+	if !filepath.IsAbs(cfg.ArtifactRoot) {
+		cfg.ArtifactRoot = filepath.Join(repoRoot, cfg.ArtifactRoot)
+	}
+	if !filepath.IsAbs(cfg.WorkspaceRoot) {
+		cfg.WorkspaceRoot = filepath.Join(repoRoot, cfg.WorkspaceRoot)
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// 2. Setup Structured Logger
+	// 4. Setup Structured Logger
 	level := slog.LevelInfo
 	if cfg.LogLevel == "debug" {
 		level = slog.LevelDebug
@@ -57,6 +79,9 @@ func Bootstrap(ctx context.Context, configPath string) (*AppContext, error) {
 	logger.Info("Starting orchestratord initialization", "version", Version)
 
 	// 3. Initialize SQL database
+	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %w", err)
+	}
 	db, err := sql.Open("sqlite3", cfg.DBPath+"?_journal=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)

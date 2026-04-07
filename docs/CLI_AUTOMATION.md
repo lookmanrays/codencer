@@ -1,17 +1,45 @@
 # CLI Automation Patterns
 
+## 🤖 AI Assistant / Shell & Tool Flows
+
+Codencer v1 is designed to be operated by shell-capable AI assistants (like the one you are interacting with now) or automated shell planners.
+
+### The Shell Planner Doctrine
+1. **Shell Access is Required**: The planner must be able to run `orchestratorctl`.
+2. **Bridge, Not Brain**: Codencer executes the task; the planner decides *which* task to run and *when* to retry or stop.
+3. **Machine-Safe IO**: Always use the `--json` flag when calling `orchestratorctl` in scripts or tool calls to get parseable results.
+
+### Example: Tool-Call Sequence for an AI Assistant
+
+1. **Discovery**:
+   ```bash
+   ./bin/orchestratorctl instance --json
+   ```
+2. **Submission**:
+   ```bash
+   cat <<'EOF' | ./bin/orchestratorctl submit my-run --stdin --adapter codex --wait --json
+   Refactor the data layer to use the new Repository pattern.
+   EOF
+   ```
+3. **Decision**:
+   The assistant parses the JSON output. If `state == "completed"`, proceed. If `state == "failed_validation"`, the assistant should read the validation logs and submit a follow-up task.
+
+---
+
+## 🔁 Sequential Execution (The Wrapper Pattern)
+
 Codencer v1 is a local CLI bridge for terminal-capable planners and operators. The planner decides what to do next; Codencer executes one submitted task, records evidence, and reports the result. It does not include a native workflow engine, hidden planning layer, or autonomous task graph execution in v1.
 
 ## Official v1 Automation Model
 
 The official v1 sequential model is an explicit wrapper loop outside Codencer:
 
-1. Ensure a run exists.
-2. Iterate an ordered list outside Codencer.
-3. Submit one task at a time with `submit --wait --json`.
-4. Inspect the exit code and terminal JSON payload.
-5. Decide whether to continue or stop outside Codencer.
-6. Inspect logs, artifacts, and validations later as needed.
+1. **Target the Project**: Start or verify a daemon instance for a specific `--repo-root` (and unique `--port` if needed).
+2. **Verify Identity**: Check `./bin/orchestratorctl instance --json` to ensure the bridge is anchored to the correct repo.
+3. **Ensure a Run Exists**: Reuse an existing run or start a new one.
+4. **Iterate Tasks**: Submit one task at a time with `submit --wait --json`.
+5. **Inspect & Decide**: Use the exit code and terminal JSON payload to decide whether to continue or stop.
+6. **Persistence**: All logs, artifacts, and validations are recorded as evidence for later human audit.
 
 That model works for humans, shell planners, PowerShell, Python subprocess wrappers, and any other tool that can launch commands and read stdout/stderr.
 
@@ -38,28 +66,27 @@ Wrappers should use both:
 
 `orchestratorctl submit` requires exactly one primary input source:
 - positional task file
-- `--task-json <path|->`
-- `--prompt-file <path>`
-- `--goal <text>`
-- `--stdin`
+- `--task-json <path|->` (supports piping JSON strings)
+- `--prompt-file <path>` (supports large text files)
+- `--goal <text>` (supports quoted multiline strings)
+- `--stdin` (supports multiline text via heredocs)
 
-Full canonical task definitions:
-- positional task files accept YAML or JSON
-- `--task-json` is strict JSON
-- `run_id` is auto-filled from the CLI run ID when omitted
-- conflicting authored `run_id` is rejected locally
+### Structured Hand-offs
+For machine-based planners, `--task-json -` is the recommended way to submit fully-specified task bundles without writing temporary files:
+```bash
+echo "$TASK_JSON" | ./bin/orchestratorctl submit <runID> --task-json - --wait --json
+```
 
-Direct convenience input:
-- is a deterministic normalization layer over the same canonical `TaskSpec`
-- does not plan, decompose work, merge sources, or invent strategy
-- supports a narrow metadata set: `--title`, `--context`, `--adapter`, `--timeout`, `--policy`, repeated `--acceptance`, repeated `--validation`
+### Antigravity Broker Execution
+Planners must explicitly specify the `antigravity-broker` adapter to use the cross-side path:
+- **Binding**: Is repository-scoped (Repo Root).
+- **Execution**: Is run-scoped (Isolated Workspace/Worktree). 
 
-Direct defaults:
-- `version` defaults to `v1`
-- `run_id` comes from the CLI run ID
-- `title` comes from `--title`, otherwise prompt filename basename, otherwise `Direct task`
-- `goal` is the exact submitted text
-- repeated `--validation` flags become `validation-1`, `validation-2`, and so on
+The broker automatically receives the worktree as the `workspaceFolderAbsoluteUri` for the LS.
+
+### Direct vs. Canonical Inputs
+- **Canonical Sources** (`task-file`, `--task-json`): Strict JSON/YAML parsing. Conflict if local `run_id` does not match the submitted `run_id`.
+- **Direct Sources** (`prompt-file`, `goal`, `stdin`): Deterministic normalization. Supports convenience metadata like `--adapter antigravity-broker`.
 
 `context` and `acceptance` are preserved in the normalized task and provenance, but they are currently retained metadata rather than separate executor-driving runtime fields.
 

@@ -125,11 +125,20 @@ if [[ "$SMOKE_INPUT_MODE" == "goal" ]]; then
         --title "Smoke Test Validation" \
         --adapter codex \
         --wait --json > .codencer/smoke_result.json
+elif [[ "$SMOKE_INPUT_MODE" == "stdin" ]]; then
+    cat <<'EOF' | ./bin/orchestratorctl submit "$RUN_ID" --stdin --title "Smoke Test Validation" --adapter codex --wait --json > .codencer/smoke_result.json
+Verify the bridge relay loop via stdin.
+EOF
+elif [[ "$SMOKE_INPUT_MODE" == "task-json" ]]; then
+    echo '{"version":"1.1","goal":"Verify the bridge relay loop via task-json","title":"Smoke Test Validation","adapter_profile":"codex"}' | \
+        ./bin/orchestratorctl submit "$RUN_ID" --task-json - --wait --json > .codencer/smoke_result.json
 else
     ./bin/orchestratorctl submit "$RUN_ID" .codencer/smoke_task.yaml --wait --json > .codencer/smoke_result.json
 fi
 
 # Extract terminal state and step ID from the single ResultSpec payload.
+# If jq or python isn't available, we'll try to find it via grep or similar, 
+# but the parse_json_file_field should handle it.
 STATE=$(parse_json_file_field .codencer/smoke_result.json state)
 STEP_ID=$(parse_json_file_field .codencer/smoke_result.json step_id)
 if [[ -z "$STEP_ID" ]]; then

@@ -412,11 +412,23 @@ func (h *APIHandler) handleInstance(w http.ResponseWriter, r *http.Request) {
 		execMode = "simulation"
 	}
 
+	stateDir := h.AppCtx.Config.DBPath
+	if !filepath.IsAbs(stateDir) {
+		stateDir = filepath.Join(h.AppCtx.RepoRoot, ".codencer")
+	} else {
+		stateDir = filepath.Dir(stateDir)
+	}
+
+	workspaceRoot := h.AppCtx.Config.WorkspaceRoot
+	if !filepath.IsAbs(workspaceRoot) {
+		workspaceRoot = filepath.Join(h.AppCtx.RepoRoot, workspaceRoot)
+	}
+
 	info := domain.InstanceInfo{
 		Version:       Version,
 		RepoRoot:      h.AppCtx.RepoRoot,
-		StateDir:      filepath.Join(h.AppCtx.RepoRoot, ".codencer"),
-		WorkspaceRoot: h.AppCtx.Config.WorkspaceRoot,
+		StateDir:      stateDir,
+		WorkspaceRoot: workspaceRoot,
 		Host:          h.AppCtx.Config.Host,
 		Port:          h.AppCtx.Config.Port,
 		BaseURL:       fmt.Sprintf("http://%s:%d", h.AppCtx.Config.Host, h.AppCtx.Config.Port),

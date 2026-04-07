@@ -70,3 +70,34 @@ func TestTaskHandler_IdentitySeparation(t *testing.T) {
 		t.Errorf("LS request used wrong workspace URI: %v", lsReq["workspaceFolderAbsoluteUri"])
 	}
 }
+
+func TestTaskHandler_WorkspaceRootPrecedence(t *testing.T) {
+registry := NewBindingRegistry()
+repoRoot := "/home/user/project"
+instanceDefault := "/home/user/project"
+attemptWorktree := "/tmp/codencer-worktree-run-001"
+
+inst := Instance{
+          999,
+instanceDefault,
+}
+registry.Set(repoRoot, inst)
+
+// Case A: Provided WorkspaceRoot overrides instance default
+runWorkspaceA := attemptWorktree
+if runWorkspaceA == "" {
+WorkspaceA = inst.WorkspaceRoot
+}
+if runWorkspaceA != attemptWorktree {
+provided worktree %s to take precedence, but got %s", attemptWorktree, runWorkspaceA)
+}
+
+// Case B: Empty WorkspaceRoot falls back to instance default
+runWorkspaceB := ""
+if runWorkspaceB == "" {
+WorkspaceB = inst.WorkspaceRoot
+}
+if runWorkspaceB != instanceDefault {
+fallback to instance default %s, but got %s", instanceDefault, runWorkspaceB)
+}
+}

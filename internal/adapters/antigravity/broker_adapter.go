@@ -26,7 +26,9 @@ type BrokerAdapter struct {
 	
 	// taskCache maps attemptID -> broker_task_id
 	taskCache map[string]string
-	mu        sync.RWMutex
+	// taskWorkspaceCache maps attemptID -> workspace_root (worktree)
+	taskWorkspaceCache map[string]string
+	mu                 sync.RWMutex
 }
 
 func NewBrokerAdapter(baseURL, baseRepoRoot string) *BrokerAdapter {
@@ -34,10 +36,11 @@ func NewBrokerAdapter(baseURL, baseRepoRoot string) *BrokerAdapter {
 		baseURL = "http://127.0.0.1:8088"
 	}
 	return &BrokerAdapter{
-		baseURL:      baseURL,
-		client:       &http.Client{Timeout: 10 * time.Second},
-		baseRepoRoot: baseRepoRoot,
-		taskCache:    make(map[string]string),
+		baseURL:            baseURL,
+		client:             &http.Client{Timeout: 10 * time.Second},
+		baseRepoRoot:       baseRepoRoot,
+		taskCache:          make(map[string]string),
+		taskWorkspaceCache: make(map[string]string),
 	}
 }
 
@@ -84,6 +87,7 @@ func (a *BrokerAdapter) Start(ctx context.Context, step *domain.Step, attempt *d
 
 	a.mu.Lock()
 	a.taskCache[attempt.ID] = task.ID
+	a.taskWorkspaceCache[attempt.ID] = workspaceRoot
 	a.mu.Unlock()
 
 	return nil
@@ -213,6 +217,7 @@ func (a *BrokerAdapter) NormalizeResult(ctx context.Context, attemptID string, a
 	}
 	res.Artifacts["broker_task_id"] = taskID
 	res.Artifacts["broker_repo_root"] = a.baseRepoRoot
+	res.Artifacts["broker_workspace_root"] = a.taskWorkspaceCache[attemptID] // Need to track this
 	res.Artifacts["broker_base_url"] = a.baseURL
 
 	// Deep Error Extraction from trajectory.json (if available)

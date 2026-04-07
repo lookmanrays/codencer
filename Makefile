@@ -31,7 +31,9 @@ start: build setup
 		echo "Daemon already running and healthy on $$HOST:$$PORT."; \
 		exit 0; \
 	fi; \
-	nohup ./bin/orchestratord > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid; \
+	REPO_ROOT_VAL=$${REPO_ROOT}; \
+	if [ -n "$$REPO_ROOT_VAL" ]; then REPO_ROOT_FLAG="--repo-root $$REPO_ROOT_VAL"; fi; \
+	nohup ./bin/orchestratord $$REPO_ROOT_FLAG > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid; \
 	echo "Waiting for health check..."; \
 	for i in $$(seq 1 10); do \
 		if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
@@ -68,7 +70,9 @@ start-sim: build setup
 		echo "Daemon already running and healthy on $$HOST:$$PORT."; \
 		exit 0; \
 	fi; \
-	nohup env ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid; \
+	REPO_ROOT_VAL=$${REPO_ROOT}; \
+	if [ -n "$$REPO_ROOT_VAL" ]; then REPO_ROOT_FLAG="--repo-root $$REPO_ROOT_VAL"; fi; \
+	nohup env ALL_ADAPTERS_SIMULATION_MODE=1 ./bin/orchestratord $$REPO_ROOT_FLAG > .codencer/daemon.log 2>&1 & echo $$! > .codencer/daemon.pid; \
 	echo "Waiting for health check..."; \
 	for i in $$(seq 1 10); do \
 		if curl -s http://$$HOST:$$PORT/api/v1/compatibility | grep -q '"tier"'; then \
