@@ -94,9 +94,9 @@ Codencer uses these variables to locate agent binaries and target the daemon:
 
 ---
 
-## 5. OpenClaw Setup (Experimental)
+## 5. OpenClaw Setup (ACPX Bridge)
 
-Codencer v1 supports an experimental path via the **Agent Client Protocol (ACP)** bridge.
+Codencer v1 provides first-class support for the **Agent Client Protocol (ACP)** via the OpenClaw adapter. 
 
 ### 5.1 Prerequisites
 - **acpx CLI**: You must have the `acpx` binary installed on your host machine.

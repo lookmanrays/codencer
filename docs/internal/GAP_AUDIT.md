@@ -9,20 +9,21 @@
 - **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and established the **Canonical Local Runbook** in `EXAMPLES.md`.
 - **Trust & Transparency**: [RESOLVED] Added "Known Limitations" and clarified the distinction between simulation and real-mode execution in README.
 - **Release Surface**: [RESOLVED] Performed a unified v1 Truth-Pass across all README, setup, examples, and guide documentation.
+- **OpenClaw Status**: [RESOLVED] Promoted to Stable Core following session-lifecycle and artifact-harvesting hardening.
 
 ## Feature Status Matrix
 
 | Component | Status | Implementation Type | Notes |
 | :--- | :--- | :--- | :--- |
-| **Orchestration Core** | ✅ **Ready (Beta)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
-| **CLI & MCP Layer** | ✅ **Ready (Beta)** | Native | Human-readable hints, logs, and structured JSON. |
-| **Codex Adapter** | ✅ **Ready (Beta)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
-| **OpenClaw Adapter** | ✅ **Ready** | ACPX Wrapper | Hardened ACPX adapter operational (Experimental). |
+| **Orchestration Core** | ✅ **Ready (Stable)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
+| **CLI & MCP Layer** | ✅ **Ready (Stable)** | Native | Human-readable hints, logs, and structured JSON. |
+| **Codex Adapter** | ✅ **Ready (Stable)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
+| **OpenClaw Adapter** | ✅ **Ready (Stable)** | ACPX Wrapper | Hardened lifecycle and evidence harvesting. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrappers; lacks deep extraction. |
-| **Simulation Mode** | ✅ **Ready (Beta)** | Native | Robust stubs for orchestrator validation. |
+| **Simulation Mode** | ✅ **Ready (Stable)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |
-| **Governance** | ✅ **Ready (Beta)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
-| **Diagnostics** | ✅ **Ready (Beta)** | CLI | `doctor` command verifies versions and environment. |
+| **Governance** | ✅ **Ready (Stable)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
+| **Diagnostics** | ✅ **Ready (Stable)** | CLI | `doctor` command verifies versions and environment. |
 
 ## Known Technical Debt & Limitations
 - **Adaptive Routing**: Routing is currently based on a static heuristic chain; benchmark-driven optimization is documented but not dynamic.
@@ -35,7 +36,7 @@
 1. **LICENSE**: ✅ RESOLVED (MIT).
 2. **CONTRIBUTING.md**: ✅ RESOLVED.
 3. **Repository Noise**: ✅ RESOLVED (`codencer.db` removed/ignored).
-4. **Makefile Version**: ✅ RESOLVED (`v0.1.0-beta`).
+4. **Makefile Version**: ✅ RESOLVED (`v1.0-release-candidate`).
 5. **Setup Reproducibility**: ✅ RESOLVED (`make setup build` verified).
 
 ### 🛡 Trust & Readability Gaps (Should Fix)
@@ -77,6 +78,6 @@
 - [x] Harden `doctor` with binary version checking (Batch V1.R1 Complete)
 - [x] Align Smoke Test with modern CLI ergonomics (Batch V1.R1 Complete)
 - [x] Batch R2: Final Metadata & Release Notes (Complete)
-    - [x] Update version strings to `v0.1.0-beta`
+    - [x] Update version strings to `v1.0-release-candidate`
     - [x] Create `CHANGELOG.md`
     - [x] Final Sanity Audit

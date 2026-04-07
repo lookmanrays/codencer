@@ -79,8 +79,12 @@ func NormalizeResult(attemptID string, artifacts []*domain.Artifact, isSimulatio
 	switch payload.Status {
 	case "completed", "success":
 		res.State = domain.StepStateCompleted
+	case "cancelled", "stopped":
+		res.State = domain.StepStateCancelled
 	case "failed", "error":
 		res.State = domain.StepStateFailedTerminal
+	case "timeout", "timed_out":
+		res.State = domain.StepStateTimeout
 	default:
 		res.State = domain.StepStateFailedTerminal
 		res.Summary = fmt.Sprintf("Unknown ACP status '%s'. %s", payload.Status, res.Summary)

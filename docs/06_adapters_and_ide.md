@@ -21,28 +21,19 @@ Why:
 - strong local CLI and IDE support
 - first-class fit for MVP
 
-### 2. Claude Code second
+### 3. Claude Code second
 Why:
 - mature terminal-native coding agent
 - strong second adapter
 - good contrast for adapter-neutral design
 
-### 3. Qwen Code third
-Why:
-- open/flexible path
-- useful hedge against vendor lock-in
-
-### OpenClaw ACPX
-- **Status**: 🧪 **Experimental (Operational)**
+### 4. OpenClaw ACPX
+- **Status**: ✅ **Stable (v1.0)**
 - **Description**: Standardized ACP (Agent Control Protocol) bridge to the OpenClaw ecosystem.
 - **Binary**: `acpx` (configurable via `OPENCLAW_ACPX_BINARY`)
 - **Key Capability**: Cross-platform agent communication using a standard protocol interface.
-- **Lifecycle**: Operational. `Poll()` uses `acpx status` for session-aware tracking; `Cancel()` uses `acpx stop` for reliable termination.
-- **Evidence**: Harvests `acp-status.json` and session logs for high-fidelity auditing.
-
-> [!WARNING]
-> **OpenClaw (acpx) Support is Experimental**: 
-> This adapter is currently in an experimental but operational state. It requires the `acpx` CLI to be installed on the host machine. While lifecycle management is hardened, it has not yet been verified for all production scenarios.
+- **Lifecycle**: Production-grade. `Poll()` matches authoritative `acpx status` and `Cancel()` ensures reliable termination.
+- **Evidence**: Harvests `acp-status.json`, `result.json` and session logs proactively for high-fidelity auditing.
 
 ## Adapter design rules
 

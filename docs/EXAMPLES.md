@@ -80,7 +80,7 @@ Exclude the test files.
 EOF
 ```
 
-### 🧪 OpenClaw ACPX (Experimental)
+### OpenClaw ACPX
 Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. Use `--wait --json` for synchronous machine-safe handoffs.
 ```bash
 ./bin/orchestratorctl submit my-run \

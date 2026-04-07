@@ -5,8 +5,8 @@ Codencer is a tactical orchestration bridge that manages execution, isolation, a
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
 > [!IMPORTANT]
-> **Project Status: Public Beta (v0.1.0-beta)**.
-> Codencer is a hardened, production-oriented local orchestration bridge. While the core engine is stable and has been verified through rigorous internal audit paths, the API and protocols are still being refined for the v1.0 release.
+> **Project Status: Public Beta (v1.0-release-candidate)**.
+> Codencer is a hardened, production-oriented local orchestration bridge. While the core engine is stable and has been verified through rigorous internal audit paths, the API and protocols are finalized for the v1.0 release.
 
 ---
 
@@ -45,9 +45,12 @@ The standard sequence for performing an audited tactical task:
 6.  **Audit the Truth**: `./bin/orchestratorctl step result <HANDLE>`.
 
 ### 📖 Operator Reference
-- **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)**: Detailed step-by-step guidance for humans.
-- **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)**: Rules of Engagement for AI assistants and automated planners.
-- **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)**: JSON mode, exit codes, and sequential loops.
+> This file is for **AI Assistants (like Antigravity)** currently working **ON** the Codencer codebase.
+> If you are a specialized **Planner** or **Machine-Operator** using the Codencer Bridge, you **MUST** refer to the **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** as your canonical source of truth for runtime operations.
+
+- **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)**: **Canonical Rules of Engagement** for AI assistants and automated planners (Runtime & Submission).
+- **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)**: Technical guide for JSON mode, exit codes, and sequential loops.
+- **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)**: Detailed step-by-step guidance for human operators.
 
 ---
 
@@ -131,10 +134,13 @@ Directly target an IDE-bound agent via the Antigravity Broker using direct input
 ./bin/orchestratorctl submit run-01 --goal "Check UI" --adapter antigravity-broker --wait --json
 ```
 
-#### D. OpenClaw ACPX (Experimental)
-Directly target an OpenClaw-compatible agent via the standardized ACP bridge:
+#### OpenClaw ACPX
+Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. Use `--wait --json` for synchronous machine-safe handoffs.
 ```bash
-./bin/orchestratorctl submit run-01 --goal "Fix Auth" --adapter openclaw-acpx --wait --json
+./bin/orchestratorctl submit my-run \
+  --goal "Fix UI layout issues in the landing page" \
+  --adapter openclaw-acpx \
+  --wait --json
 ```
 
 ---
@@ -252,22 +258,25 @@ As a local-first Beta/MVP, Codencer has the following constraints:
 
 ### 📊 Maturity & Capability Matrix
 
-Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs. experimental.
+Codencer is in **Public Beta (v1.0-release-candidate)**. Use this to understand the hard stability contract versus experimental value-adds.
 
+#### 🏗 v1 Stable Core (The Release Contract)
 | Feature Area | Status | Description |
 | :--- | :--- | :--- |
-| **Local Bridge Core** | ✅ **Stable Beta** | Persistence, state machine, Git Worktrees. |
-| **Provisioning Layer**| ✅ **Stable Beta** | Native copy/symlink layer; optional Grove subset. |
-| **Codex Adapter** | ✅ **Stable Beta** | Primary high-fidelity relay for `codex-agent`. |
-| **Antigravity Metadata** | ✅ **Ready (Beta)** | Broker-backed context, task IDs, and provenance. |
-| **Antigravity Broker** | 🟡 **Operational** | Cross-side (WSL/Windows) bridge for IDE instances. |
-| **OpenClaw ACPX** | 🧪 **Experimental (Operational)** | Standardized ACP bridge to OpenClaw ecosystem. |
-| **Simulation Mode** | ✅ **Stable Beta** | Stub-based validation (Bridge-only smoke tests). |
-| **IDE Chat Bridge** | 🧪 **Experimental** | Proxy-mediated file access via VS Code (Prototype). |
+| **Local Bridge Core** | ✅ **Stable** | Persistence, state machine, Git Worktrees. |
+| **Provisioning Layer**| ✅ **Stable** | Native copy/symlink layer; optional Grove subset. |
+| **Codex Adapter** | ✅ **Stable** | Primary high-fidelity relay for `codex-agent`. |
+| **Antigravity Metadata** | ✅ **Stable** | Broker-backed context, task IDs, and provenance. |
+| **Antigravity Broker** | ✅ **Stable** | Cross-side (WSL/Windows) bridge for IDE instances. |
+| **OpenClaw ACPX** | ✅ **Stable** | Standardized ACP bridge to OpenClaw ecosystem. |
+| **Simulation Mode** | ✅ **Stable** | Stub-based validation (Bridge-only smoke tests). |
+
+#### 🧪 Experimental Extensions (Outside v1 Contract)
+| Feature Area | Status | Description |
+| :--- | :--- | :--- |
+| **IDE Chat Bridge** | 🧪 **Prototype** | Proxy-mediated file access via VS Code. |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
 
-> [!WARNING]
-> **OpenClaw (acpx) Support is Experimental**: The OpenClaw adapter is currently in an experimental but operational state. It supports standard ACP session lifecycle (Poll/Cancel) but has not yet been verified for all production scenarios.
 
 ### 🔍 Direct-Local Antigravity Integration
 The `antigravity` adapter uses a **direct-local** model to control active Antigravity instances via RPC (Connect over HTTPS).

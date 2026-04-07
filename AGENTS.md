@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > This file is for **AI Assistants (like Antigravity)** currently working **ON** the Codencer codebase.
-> If you are a specialized **Planner** or **Machine-Operator** using the Codencer Bridge, please refer to the **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** instead.
+> If you are a specialized **Planner** or **Machine-Operator** using the Codencer Bridge, you **MUST** refer to the **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** as your canonical source of truth for runtime operations.
 
 ## Role
 You are a principal engineer implementing a production-oriented local orchestration bridge for coding agents.

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -121,7 +122,7 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 	}
 
 	// 2. Proactive check via acpx status if not in sim mode
-	// This helps if the daemon restarted but acpx is still running the session.
+	// This ensures we can recover state if the daemon restarts/crashes.
 	if !common.IsSimulationEnabled(a.Name()) {
 		binary := os.Getenv(a.envVar)
 		if binary == "" {
@@ -135,12 +136,16 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 		cmd := exec.CommandContext(statusCtx, binary, "status", "--session", attemptID, "--json")
 		output, err := cmd.Output()
 		if err == nil {
-			// If we can get a valid JSON status, we can determine truth
 			type acpStatus struct {
-				Running bool `json:"running"`
+				Running bool   `json:"running"`
+				Status  string `json:"status"`
 			}
 			var s acpStatus
 			if json.Unmarshal(output, &s) == nil {
+				// If status is terminal (success/failed), it's definitely not running anymore.
+				if s.Status == "success" || s.Status == "failed" || s.Status == "cancelled" {
+					return false, nil
+				}
 				return s.Running, nil
 			}
 		}
@@ -193,12 +198,24 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, attemp
 		return nil, err
 	}
 
-	// 2. Search for ACP session specific evidence in the worktree
-	// By protocol, these might be in .acp/sessions/<attemptID>/
-	
-	// For now, we rely on acpx redirected output for 'experimental but operational'.
-	// If acpx handles redirection via Start() args, they'll already be in attemptArtifactRoot.
-	
+	// 2. Proactive artifact harvesting from workspace-anchored session directories.
+	// Standard ACP evidence often lives in .acp/sessions/<attemptID>/
+	// Future: search for common ACP names directly in the attempt artifact root 
+	// because acpx is often called with redirection there by common.InvokeLocal.
+	evidenceNames := []string{"acp-status.json", "result.json", "session.log"}
+	for _, name := range evidenceNames {
+		path := filepath.Join(attemptArtifactRoot, name)
+		if _, err := os.Stat(path); err == nil {
+			artifacts = append(artifacts, &domain.Artifact{
+				AttemptID: attemptID,
+				Name:      name,
+				Path:      path,
+				Type:      domain.ArtifactTypeResultJSON,
+				MimeType:  "application/json",
+			})
+		}
+	}
+
 	return artifacts, nil
 }
 

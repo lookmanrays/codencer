@@ -32,11 +32,11 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
 - [ ] Run `./bin/orchestratorctl step artifacts <UUID>`.
 - [ ] Verify the artifact directory exists in `.codencer/artifacts/`.
 
-## 5. Antigravity Broker (Optional/Experimental)
+## 5. Antigravity Broker (Optional/Core)
 - [ ] If using WSL/Windows, start `agent-broker.exe` on Windows.
 - [ ] Run `./bin/orchestratorctl antigravity list`.
 - [ ] Verify that at least one IDE instance is discovered (or handle 'no instances' gracefully).
 
 ---
 
-**Status**: If steps 1-4 pass, your bridge is **Operational (Stable Beta)**.
+**Status**: If steps 1-4 pass, your bridge is **Operational (v1.0-release-candidate)**.

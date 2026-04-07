@@ -148,4 +148,34 @@ func TestAdapter_NormalizeResult(t *testing.T) {
 			t.Error("expected RawOutputRef to be linked")
 		}
 	})
+
+	t.Run("Cancelled and Timeout states", func(t *testing.T) {
+		states := map[string]domain.StepState{
+			"cancelled": domain.StepStateCancelled,
+			"stopped":   domain.StepStateCancelled,
+			"timeout":   domain.StepStateTimeout,
+			"timed_out": domain.StepStateTimeout,
+		}
+
+		for acpStatus, expectedState := range states {
+			resultPath := tmpDir + "/status-" + acpStatus + ".json"
+			resultContent := `{"status":"` + acpStatus + `","summary":"Task ended"}`
+			if err := os.WriteFile(resultPath, []byte(resultContent), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			artifacts := []*domain.Artifact{
+				{Name: "acp-status.json", Path: resultPath},
+			}
+
+			res, err := a.NormalizeResult(context.Background(), attemptID, artifacts)
+			if err != nil {
+				t.Fatalf("NormalizeResult failed for %s: %v", acpStatus, err)
+			}
+
+			if res.State != expectedState {
+				t.Errorf("status %s: expected state %s, got %s", acpStatus, expectedState, res.State)
+			}
+		}
+	})
 }

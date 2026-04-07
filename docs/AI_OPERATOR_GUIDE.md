@@ -10,8 +10,8 @@ This guide is the canonical instruction set for **AI Assistants**, **Agentic Pla
 Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while you handle the **Brain Layer** (planning, task decomposition, and decision-making).
 
 1.  **Bridge, Not Brain**: Do not expect the bridge to plan your next move or recursively fix its own failures. It executes precisely what you submit in a `TaskSpec`.
-2.  **Explicit Context**: Always verify the daemon's project and port before taking action.
-3.  **Atomic Evidence**: Every task attempt is isolated. Success or failure is reported as a terminal state with immutable artifacts.
+2.  **Rule of Discovery (MANDATORY)**: Always verify the daemon's identity and repository anchor before taking any action. Use `instance --json`.
+3.  **Atomic Evidence**: Every task attempt is isolated in a Git Worktree. Success or failure is reported as a terminal state with immutable artifacts.
 
 ---
 
@@ -76,21 +76,18 @@ Analyze the JSON payload from `submit` to decide your next move.
 
 ---
 
-## 🧪 Experimental Path: OpenClaw (ACPX)
+## ⚡️ ACP Execution Path: OpenClaw (ACPX)
 
-Codencer v1 supports an experimental path via the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to the OpenClaw ecosystem.
+Codencer v1 provides first-class support for the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to any ACP-compliant agent in the OpenClaw ecosystem.
 
-> [!WARNING]
-> **OpenClaw (acpx) is Experimental**: 
-> This path is currently in a public beta/experimental state. Use it when the primary `codex` adapter is unavailable or when you specifically need OpenClaw capabilities.
-
-### Pattern: Experimental OpenClaw Submission
+### Pattern: OpenClaw Submission
 ```bash
 ./bin/orchestratorctl submit my-run-id \
   --goal "Fix broken test case in auth_test.go" \
   --adapter openclaw-acpx \
   --wait --json
 ```
+
 ---
 
 ## 🔁 The Canonical Machine Loop
