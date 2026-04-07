@@ -22,8 +22,6 @@ Designed for **local-first, self-hosted developer toolchains**, Codencer provide
 
 ---
 
----
-
 ## 🏛 The Bridge Doctrine
 
 Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while the **Brain Layer** (human or LLM) handles strategy and decision-making.
@@ -54,16 +52,14 @@ The standard sequence for performing an audited tactical task:
 1.  **Clone & Build**: `git clone` the repo → `make setup build`.
 2.  **Start the Bridge**: `make start-sim` (for testing) or `make start` (for real agents).
 3.  **Verify Instance**: `./bin/orchestratorctl instance --json` (Confirm repo and port).
-4.  **Start a Run**: `./bin/orchestratorctl run start <RUN_ID> <PROJECT>`.
+4.  **Start a Mission**: `./bin/orchestratorctl run start <RUN_ID> <PROJECT>`.
 5.  **Submit & Wait**: `./bin/orchestratorctl submit <RUN_ID> --goal "<text>" --wait --json`.
-6.  **Audit the Result**: `./bin/orchestratorctl step result <HANDLE>`.
+6.  **Audit the Truth**: `./bin/orchestratorctl step result <HANDLE>`.
 
 ### 📖 Operator Reference
 - **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)**: Detailed step-by-step guidance for humans.
 - **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)**: Rules of Engagement for AI assistants and automated planners.
 - **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)**: JSON mode, exit codes, and sequential loops.
-
----
 
 ---
 
@@ -269,6 +265,9 @@ Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs.
 | **Simulation Mode** | ✅ **Stable Beta** | Stub-based validation (Bridge-only smoke tests). |
 | **IDE Chat Bridge** | 🧪 **Experimental** | Proxy-mediated file access via VS Code (Prototype). |
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
+
+> [!WARNING]
+> **OpenClaw (acpx) Support is Experimental**: The OpenClaw adapter is currently in an operational but experimental state. It requires the `acpx` CLI and has not yet been verified for all production scenarios. Use with caution.
 
 ### 🔍 Direct-Local Antigravity Integration
 The `antigravity` adapter uses a **direct-local** model to control active Antigravity instances via RPC (Connect over HTTPS).

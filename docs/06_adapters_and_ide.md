@@ -42,6 +42,10 @@ Why:
 - **Binary**: `acpx` (configurable via `OPENCLAW_ACPX_BINARY`)
 - **Key Capability**: Cross-platform agent communication using a standard protocol interface.
 
+> [!WARNING]
+> **OpenClaw (acpx) Support is Experimental**: 
+> This adapter is currently in an operational but experimental state. It requires the `acpx` CLI to be installed on the host machine. Lifecycle management (Poll/Cancel) relies on `acpx` session tracking.
+
 ## Adapter design rules
 
 - provider quirks stay isolated

@@ -33,16 +33,16 @@ For machine-facing automation, use `--json`:
 - `submit --wait --json` emits only the terminal payload
 
 Stable wait-related exit codes:
-- `0`: success
-- `1`: usage error, invalid input, not found
-- `2`: terminal task failure
-- `3`: timeout
-- `4`: cancelled, paused, rejected, intervention required
-- `5`: bridge, adapter, daemon, or infrastructure failure
+- `0`: success (`exitCodeSuccess`)
+- `1`: usage error, invalid input, not found (`exitCodeUsage`)
+- `2`: terminal task failure, goal not met, validation failed (`exitCodeTerminalFailed`)
+- `3`: timeout (`exitCodeTimeout`)
+- `4`: cancelled, paused for gate, manual intervention required (`exitCodeIntervention`)
+- `5`: bridge, adapter, or infrastructure failure (`exitCodeInfrastructure`)
 
 Wrappers should use both:
-- the exit code for control flow
-- the JSON payload for structured reporting
+- the exit code for binary control flow (continue/stop)
+- the JSON payload for detailed reporting and next-step context
 
 ## Submit Inputs
 

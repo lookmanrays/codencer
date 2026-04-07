@@ -86,13 +86,16 @@ Use the provided script to start and build a daemon instance for a specific proj
 ./scripts/start_instance.sh ~/projects/my-api 8085
 ```
 
-### 4.3 Verify Identity
-Always verify which project a running daemon is bound to before starting a run:
-```bash
-# Set the target daemon URL
-export ORCHESTRATORD_URL=http://localhost:8085
+### 4.4 Environment Variables
+Codencer uses these variables to locate agent binaries and target the daemon:
+- `CODEX_BINARY`: Path to the `codex-agent` binary.
+- `OPENCLAW_ACPX_BINARY`: Path to the `acpx` CLI (for OpenClaw support).
+- `ORCHESTRATORD_URL`: URL of the daemon (default: `http://localhost:8085`).
 
-# Check Ground Truth
+### 4.5 Identity Verification
+Always verify which repository and port a running daemon is serving before starting a run:
+```bash
+# Check the authoritative instance identity
 ./bin/orchestratorctl instance --json
 ```
 

@@ -9,17 +9,14 @@ Codencer is a **bridge, not a brain**. It handles execution, isolation, and audi
 
 ## Phase 1: Canonical Startup
 
-### 1.1 Choose Your Repository
-Codencer is **repo-bound**. You must target a specific git repository for each daemon instance.
-
+### 1.1 Project Anchoring
+Codencer is **repo-bound**. Every daemon instance is anchored to a specific git repository.
 ```bash
 # Navigate to your target project
 cd ~/projects/my-awesome-app
 ```
 
 ### 1.2 Start the Daemon
-You can start the daemon in **Simulation Mode** (to test the bridge) or **Real Mode** (to run actual agents).
-
 ```bash
 # Start in Simulation Mode (Default for initial testing)
 make start-sim
@@ -28,9 +25,8 @@ make start-sim
 make start
 ```
 
-### 1.3 Verify the Instance
+### 1.3 Identity Verification
 Always verify which repository and port the daemon is serving before proceeding.
-
 ```bash
 ./bin/orchestratorctl instance --json
 ```
@@ -97,7 +93,7 @@ echo '{"version":"v1","goal":"Fix typos in README"}' | ./bin/orchestratorctl sub
 If you didn't use `--wait`, or once a task is complete, you can check the authoritative evidence at any time.
 
 ```bash
-# Get the high-level summary and result spec
+# Get the high-level summary and result spec (The Truth)
 ./bin/orchestratorctl step result <HANDLE>
 
 # Drill down into the agent's brain (stdout/stderr)
@@ -109,11 +105,15 @@ If you didn't use `--wait`, or once a task is complete, you can check the author
 ```
 
 ### 4.2 Interpreting States
+Codencer distinguishes between categories of failure to help you recover:
+
 - **`completed`**: SUCCESS. All goals and validations met.
-- **`failed_validation`**: GOAL FAILURE. Agent finished, but tests/lint failed.
-- **`failed_adapter`**: CRASH. The agent binary failed (check `logs`).
-- **`failed_bridge`**: SYSTEM FAILURE. Check disk space or git locks.
-- **`timeout`**: KILLED. Execution exceeded time limits.
+- **`failed_validation`**: GOAL FAILURE. Agent finished fine, but your defined tests/lint failed.
+- **`failed_terminal`**: GOAL FAILURE. Agent finished but explicitly reported it could NOT meet the goal.
+- **`failed_adapter`**: AGENT CRASH. The agent binary itself failed (check `logs`).
+- **`failed_bridge`**: SYSTEM FAILURE. System error (Disk Full, Git Error, Provisioning).
+- **`timeout`**: KILLED. Execution exceeded `timeout_seconds`.
+- **`cancelled`**: STOPPED. Manually aborted by player/operator.
 
 ---
 

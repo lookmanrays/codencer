@@ -66,24 +66,53 @@ Analyze the JSON payload from `submit` to decide your next move.
 | State | Action Required by AI Planner |
 | :--- | :--- |
 | `completed` | **Success**. Move to the next task in your plan. |
-| `failed_validation` | **Goal Failure**. Read `step validations` and fix your instructions/logic. |
-| `failed_terminal` | **Goal Failure**. Read `step result` summary. The agent finished but did not meet the goal. |
-| `failed_adapter` | **Infrastructure**. The agent crashed. Check `step logs` for API errors or OOM. |
-| `failed_bridge` | **Infrastructure**. System error. check daemon/disk/git locks. |
-| `timeout` | **Infrastructure**. Task took too long. Increase `timeout_seconds` in follow-up. |
+| `failed_validation` | **Goal Failure (Audit Required)**. Read `step validations --json` and fix your instructions/logic. |
+| `failed_terminal` | **Goal Failure (Audit Required)**. Read `step result --json` summary. The agent finished but did not meet the goal. |
+| `failed_adapter` | **Infrastructure Failure**. The agent process crashed. Check `step logs` for API errors or OOM. |
+| `failed_bridge` | **Infrastructure Failure**. System error (Git, Disk, Locks). Inform the user. |
+| `timeout` | **Infrastructure Failure**. Task took too long. Increase `timeout_seconds` in follow-up or simplify goal. |
+| `cancelled` | **Intervention**. Task was manually stopped. Ask for user guidance. |
 
-### Drill-down Commands
-When a task fails, use these to gather evidence before retrying:
+---
+
+## 🧪 Experimental Path: OpenClaw (ACPX)
+
+Codencer v1 supports an experimental path via the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to the OpenClaw ecosystem.
+
+> [!WARNING]
+> **OpenClaw (acpx) is Experimental**: 
+> This path is currently in a public beta/experimental state. Use it when the primary `codex` adapter is unavailable or when you specifically need OpenClaw capabilities.
+
+### Pattern: Experimental OpenClaw Submission
 ```bash
-# 1. Why did it fail? (Summary)
-./bin/orchestratorctl step result <UUID>
-
-# 2. What were the specific test failures?
-./bin/orchestratorctl step validations <UUID>
-
-# 3. What was the agent's raw thought process?
-./bin/orchestratorctl step logs <UUID>
+./bin/orchestratorctl submit my-run-id \
+  --goal "Fix broken test case in auth_test.go" \
+  --adapter openclaw-acpx \
+  --wait --json
 ```
+---
+
+## 🔁 The Canonical Machine Loop
+
+Follow this sequence for every tactical mission:
+
+1. **Discover**: Identify the target repository and port.
+   ```bash
+   ./bin/orchestratorctl instance --json
+   ```
+2. **Setup**: Ensure the mission (`run`) exists.
+   ```bash
+   ./bin/orchestratorctl run start my-run --project my-repo --json
+   ```
+3. **Execution**: Submit your tactical task and block for the result.
+   ```bash
+   ./bin/orchestratorctl submit my-run --goal "Refactor pkg/auth" --wait --json
+   ```
+4. **Audit (Optional)**: If the result is not `completed`, gather additional context.
+   ```bash
+   ./bin/orchestratorctl step result <UUID> --json
+   ./bin/orchestratorctl step validations <UUID> --json
+   ```
 
 ---
 

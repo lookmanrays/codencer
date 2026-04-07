@@ -72,3 +72,43 @@ func TestAdapter_Lifecycle(t *testing.T) {
 		t.Error("expected adapter to stop running after Cancel")
 	}
 }
+
+func TestAdapter_NormalizeResult(t *testing.T) {
+	a := NewAdapter()
+	attemptID := "att-normalize"
+	
+	// 1. Create a dummy result.json
+	tmpDir, err := os.MkdirTemp("", "openclaw-normalize-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	resultPath := tmpDir + "/result.json"
+	resultContent := `{"state":"completed","summary":"Task finished successfully"}`
+	if err := os.WriteFile(resultPath, []byte(resultContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Mock artifacts
+	artifacts := []*domain.Artifact{
+		{
+			ID:   "art-1",
+			Type: domain.ArtifactTypeResultJSON,
+			Path: resultPath,
+		},
+	}
+
+	// 3. Normalize
+	res, err := a.NormalizeResult(context.Background(), attemptID, artifacts)
+	if err != nil {
+		t.Fatalf("NormalizeResult failed: %v", err)
+	}
+
+	if res.State != domain.StepStateCompleted {
+		t.Errorf("expected state completed, got %s", res.State)
+	}
+	if res.Summary != "Task finished successfully" {
+		t.Errorf("expected summary 'Task finished successfully', got %s", res.Summary)
+	}
+}

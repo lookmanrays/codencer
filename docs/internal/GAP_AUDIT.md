@@ -8,6 +8,7 @@
 - **Terminology Inconsistency**: [RESOLVED] Renamed all outcome indicators to `State` (RunState, StepState, Result.State) for uniform operator experience.
 - **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and established the **Canonical Local Runbook** in `EXAMPLES.md`.
 - **Trust & Transparency**: [RESOLVED] Added "Known Limitations" and clarified the distinction between simulation and real-mode execution in README.
+- **Release Surface**: [RESOLVED] Performed a unified v1 Truth-Pass across all README, setup, examples, and guide documentation.
 
 ## Feature Status Matrix
 
@@ -16,6 +17,7 @@
 | **Orchestration Core** | ✅ **Ready (Beta)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
 | **CLI & MCP Layer** | ✅ **Ready (Beta)** | Native | Human-readable hints, logs, and structured JSON. |
 | **Codex Adapter** | ✅ **Ready (Beta)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
+| **OpenClaw Adapter** | 🧪 **Experimental** | ACP Wrapper | Standardized ACP bridge for OpenClaw executors. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrappers; lacks deep extraction. |
 | **Simulation Mode** | ✅ **Ready (Beta)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |

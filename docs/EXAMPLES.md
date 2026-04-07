@@ -52,7 +52,7 @@ Efficiently share `node_modules` avoiding costly file copies.
 
 ## ⚡️ Specialized Submission Flows
 
-### Prompt File with Metadata
+### 5.2 Rich Submission with Metadata
 Targeting a specific adapter for a task saved in a markdown file.
 ```bash
 ./bin/orchestratorctl submit my-run \
@@ -61,10 +61,26 @@ Targeting a specific adapter for a task saved in a markdown file.
   --adapter codex \
   --timeout 300 \
   --validation "make test-auth" \
+  --acceptance "Login still works" \
   --wait --json
 ```
 
-### OpenClaw ACPX (Experimental)
+### 5.3 Piped Task Definitions
+Machine-to-machine handoff without temporary files.
+```bash
+echo '{"version":"v1","goal":"Fix typos","title":"Small Fix"}' | \
+  ./bin/orchestratorctl submit my-run --task-json - --wait --json
+```
+
+### 5.4 Multiline Stdin (Heredoc)
+```bash
+cat <<'EOF' | ./bin/orchestratorctl submit my-run --stdin --title "Fix Lints" --adapter codex --wait --json
+Fix all lint errors in the internal/app package. 
+Exclude the test files. 
+EOF
+```
+
+### 🧪 OpenClaw ACPX (Experimental)
 Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge.
 ```bash
 ./bin/orchestratorctl submit my-run \

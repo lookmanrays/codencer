@@ -203,8 +203,20 @@ PY
 
 ensure_run() {
   local output
-  output="$("$ORCHESTRATORCTL" run state "$RUN_ID" --json)"
+  # 1. Verify instance identity before starting
+  output="$("$ORCHESTRATORCTL" instance --json)"
   local exit_code=$?
+  if [[ "$exit_code" -ne 0 ]]; then
+    printf 'Bridge instance not reachable. Start the daemon first.\n' >&2
+    die "Failed to connect to orchestratord." "$exit_code"
+  fi
+  local repo_root
+  repo_root="$(json_get_field "$output" "repo_root")"
+  printf 'Bridge active for: %s\n' "$repo_root" >&2
+
+  # 2. Check/create run
+  output="$("$ORCHESTRATORCTL" run state "$RUN_ID" --json)"
+  exit_code=$?
   if [[ "$exit_code" -eq 0 ]]; then
     if [[ -z "$PROJECT" ]]; then
       PROJECT="$(json_get_field "$output" "project_id")"

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"time"
 
 	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
@@ -116,16 +117,40 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 
 func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	cancelFunc, exists := a.processes[attemptID]
+	a.mu.Unlock()
+
 	if !exists {
 		return nil
 	}
 
+	// 1. Context cancellation triggers local process SIGTERM
 	(*cancelFunc)()
+
+	// 2. Best-effort explicit ACP stop via acpx CLI
+	if !common.IsSimulationEnabled(a.Name()) {
+		binary := os.Getenv(a.envVar)
+		if binary == "" {
+			binary = a.binaryName
+		}
+		
+		// Run acpx stop in the background with its own timeout
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		
+		cmd := exec.CommandContext(stopCtx, binary, "stop", "--session", attemptID)
+		if err := cmd.Run(); err != nil {
+			slog.Warn("OpenClaw: Explicit acpx stop failed", "error", err, "attemptID", attemptID)
+		} else {
+			slog.Info("OpenClaw: Explicit acpx stop sent", "attemptID", attemptID)
+		}
+	}
+
+	a.mu.Lock()
 	delete(a.processes, attemptID)
-	slog.Info("OpenClaw Execution: Cancellation requested", "attemptID", attemptID)
+	a.mu.Unlock()
+
+	slog.Info("OpenClaw Execution: Cancellation processed", "attemptID", attemptID)
 	return nil
 }
 
