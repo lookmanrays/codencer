@@ -1,6 +1,9 @@
 # Codencer v1 Operator Runbook
 
-This runbook provides the canonical "Day 0" experience for operating Codencer v1. It is designed for both human operators and shell-capable AI assistants.
+This runbook provides the canonical "Day 0" experience for human operators using Codencer.
+
+> [!TIP]
+> If you are an **AI Assistant**, **Agentic Planner**, or **Automated Shell Tool**, please refer to the **[AI Operator Guide](AI_OPERATOR_GUIDE.md)** for canonical rules of engagement and machine-safe calling patterns.
 
 ## 0. Core Doctrine
 Codencer is a **bridge, not a brain**. It handles execution, isolation, and auditability. It does **not** perform its own planning or high-level decision-making.

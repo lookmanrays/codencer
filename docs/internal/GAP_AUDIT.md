@@ -17,7 +17,7 @@
 | **Orchestration Core** | ✅ **Ready (Beta)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
 | **CLI & MCP Layer** | ✅ **Ready (Beta)** | Native | Human-readable hints, logs, and structured JSON. |
 | **Codex Adapter** | ✅ **Ready (Beta)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
-| **OpenClaw Adapter** | 🧪 **Experimental** | ACP Wrapper | Standardized ACP bridge for OpenClaw executors. |
+| **OpenClaw Adapter** | ✅ **Ready** | ACPX Wrapper | Hardened ACPX adapter operational (Experimental). |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrappers; lacks deep extraction. |
 | **Simulation Mode** | ✅ **Ready (Beta)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |

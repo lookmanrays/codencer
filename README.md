@@ -10,18 +10,6 @@ Designed for **local-first, self-hosted developer toolchains**, Codencer provide
 
 ---
 
-### Core Guarantees
-
-- **Step-Isolation**: Each step executes in its own git worktree, preventing cross-task interference.
-- **Immutable Evidence**: All logs, results, and artifacts are namespaced by Run, Step, and Attempt ID under `.codencer/artifacts/<run-id>/<step-id>/<attempt-id>/`, ensuring full auditability of repeated attempts.
-- **Workspace Provisioning**: Automatically prepares attempt worktree environments (copying `.env`, symlinking `node_modules`, running `post_create` hooks). Codencer includes an **optional Grove-compatible subset** for environment preparation; it does not depend on the Grove CLI and is designed to coexist with existing `.groverc.json` or `grove.yaml` files.
-  - *Inspiration*: This layer was inspired in part by [Grove](https://github.com/verbaux/grove).
-  - *Thanks*: Special thanks to [@verbaux](https://github.com/verbaux) for the conceptual foundation of local workspace preparation.
-
-> **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
-
----
-
 ## 🏛 The Bridge Doctrine
 
 Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while the **Brain Layer** (human or LLM) handles strategy and decision-making.
@@ -60,6 +48,18 @@ The standard sequence for performing an audited tactical task:
 - **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)**: Detailed step-by-step guidance for humans.
 - **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)**: Rules of Engagement for AI assistants and automated planners.
 - **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)**: JSON mode, exit codes, and sequential loops.
+
+---
+
+### Core Guarantees
+
+- **Step-Isolation**: Each step executes in its own git worktree, preventing cross-task interference.
+- **Immutable Evidence**: All logs, results, and artifacts are namespaced by Run, Step, and Attempt ID under `.codencer/artifacts/<run-id>/<step-id>/<attempt-id>/`, ensuring full auditability of repeated attempts.
+- **Workspace Provisioning**: Automatically prepares attempt worktree environments (copying `.env`, symlinking `node_modules`, running `post_create` hooks). Codencer includes an **optional Grove-compatible subset** for environment preparation; it does not depend on the Grove CLI and is designed to coexist with existing `.groverc.json` or `grove.yaml` files.
+  - *Inspiration*: This layer was inspired in part by [Grove](https://github.com/verbaux/grove).
+  - *Thanks*: Special thanks to [@verbaux](https://github.com/verbaux) for the conceptual foundation of local workspace preparation.
+
+> **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
 
 ---
 
@@ -267,7 +267,7 @@ Codencer is in **Beta (v0.1.0-beta)**. Use this to understand what is stable vs.
 | **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
 
 > [!WARNING]
-> **OpenClaw (acpx) Support is Experimental**: The OpenClaw adapter is currently in an operational but experimental state. It requires the `acpx` CLI and has not yet been verified for all production scenarios. Use with caution.
+> **OpenClaw (acpx) Support is Experimental**: The OpenClaw adapter is currently in an experimental but operational state. It supports standard ACP session lifecycle (Poll/Cancel) but has not yet been verified for all production scenarios.
 
 ### 🔍 Direct-Local Antigravity Integration
 The `antigravity` adapter uses a **direct-local** model to control active Antigravity instances via RPC (Connect over HTTPS).

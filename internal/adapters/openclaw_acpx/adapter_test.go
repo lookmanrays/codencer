@@ -77,38 +77,75 @@ func TestAdapter_NormalizeResult(t *testing.T) {
 	a := NewAdapter()
 	attemptID := "att-normalize"
 	
-	// 1. Create a dummy result.json
 	tmpDir, err := os.MkdirTemp("", "openclaw-normalize-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	resultPath := tmpDir + "/result.json"
-	resultContent := `{"state":"completed","summary":"Task finished successfully"}`
-	if err := os.WriteFile(resultPath, []byte(resultContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("Standard result.json", func(t *testing.T) {
+		resultPath := tmpDir + "/result.json"
+		resultContent := `{"status":"completed","summary":"Task finished successfully"}`
+		if err := os.WriteFile(resultPath, []byte(resultContent), 0644); err != nil {
+			t.Fatal(err)
+		}
 
-	// 2. Mock artifacts
-	artifacts := []*domain.Artifact{
-		{
-			ID:   "art-1",
-			Type: domain.ArtifactTypeResultJSON,
-			Path: resultPath,
-		},
-	}
+		artifacts := []*domain.Artifact{
+			{Name: "result.json", Path: resultPath},
+		}
 
-	// 3. Normalize
-	res, err := a.NormalizeResult(context.Background(), attemptID, artifacts)
-	if err != nil {
-		t.Fatalf("NormalizeResult failed: %v", err)
-	}
+		res, err := a.NormalizeResult(context.Background(), attemptID, artifacts)
+		if err != nil {
+			t.Fatalf("NormalizeResult failed: %v", err)
+		}
 
-	if res.State != domain.StepStateCompleted {
-		t.Errorf("expected state completed, got %s", res.State)
-	}
-	if res.Summary != "Task finished successfully" {
-		t.Errorf("expected summary 'Task finished successfully', got %s", res.Summary)
-	}
+		if res.State != domain.StepStateCompleted {
+			t.Errorf("expected state completed, got %s", res.State)
+		}
+		if res.Summary != "Task finished successfully" {
+			t.Errorf("expected summary 'Task finished successfully', got %s", res.Summary)
+		}
+	})
+
+	t.Run("ACP-specific acp-status.json with error", func(t *testing.T) {
+		resultPath := tmpDir + "/acp-status.json"
+		resultContent := `{"status":"failed","summary":"Agent hit a wall","error":"Rate limit exceeded"}`
+		if err := os.WriteFile(resultPath, []byte(resultContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		artifacts := []*domain.Artifact{
+			{Name: "acp-status.json", Path: resultPath},
+		}
+
+		res, err := a.NormalizeResult(context.Background(), attemptID, artifacts)
+		if err != nil {
+			t.Fatalf("NormalizeResult failed: %v", err)
+		}
+
+		if res.State != domain.StepStateFailedTerminal {
+			t.Errorf("expected state failed_terminal, got %s", res.State)
+		}
+		if res.Summary != "Agent hit a wall (Error: Rate limit exceeded)" {
+			t.Errorf("expected detailed summary, got %s", res.Summary)
+		}
+	})
+
+	t.Run("No structured result fallback", func(t *testing.T) {
+		artifacts := []*domain.Artifact{
+			{Name: "stdout.log", Path: "/tmp/stdout.log", Type: domain.ArtifactTypeStdout},
+		}
+
+		res, err := a.NormalizeResult(context.Background(), attemptID, artifacts)
+		if err != nil {
+			t.Fatalf("NormalizeResult failed: %v", err)
+		}
+
+		if res.State != domain.StepStateCompleted {
+			t.Errorf("expected default success, got %s", res.State)
+		}
+		if res.RawOutputRef != "/tmp/stdout.log" {
+			t.Error("expected RawOutputRef to be linked")
+		}
+	})
 }

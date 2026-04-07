@@ -1,6 +1,7 @@
-# AI Operator Guide: Rules of Engagement
-
 This guide is the canonical instruction set for **AI Assistants**, **Agentic Planners**, and **Automated Shell Tools** operating the Codencer Bridge. It ensures high-fidelity execution, consistent state handling, and reliable audit trails.
+
+> [!TIP]
+> This guide focuses on **Rules of Engagement** (what to do). For technical guidance on **Sequential Wrappers** and **Exit Codes** (how to automate), see the **[CLI Automation Guide](CLI_AUTOMATION.md)**.
 
 ---
 

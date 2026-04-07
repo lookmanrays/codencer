@@ -98,13 +98,6 @@ Every task result includes a `state`. Understanding the difference between **Inf
 
 ### 3.2 Infrastructure & Bridge Failures (Fix the system)
 
-- **`failed_adapter`**: The agent process crashed or exited with a non-zero code before it could report its outcome.
-    - *Resolution*: Check `step logs` for agent-side crashes (e.g., API key errors, OOM).
-- **`failed_bridge`**: Codencer encountered an internal error during worktree creation or **provisioning**.
-    - *Resolution*: Check the `provisioning` telemetry in `step result` for copy/link errors.
-- **`timeout`**: The execution exceeded `timeout_seconds` and was killed by the bridge.
-    - *Resolution*: Increase the timeout in your TaskSpec or simplify the task.
-
 ---
 
 ## 4. Antigravity & Broker Issues (Experimental)
@@ -130,7 +123,7 @@ Every task result includes a `state`. Understanding the difference between **Inf
 
 ## 5. Interpreting Step States (Authoritative Evidence)
 
-Codencer uses specific states to distinguish between **instructional failure** and **system failure**.
+Codencer uses specific states to distinguish between **instructional failure** (Goal) and **system failure** (Infrastructure).
 
 | State | Category | Meaning | Recovery |
 | :--- | :--- | :--- | :--- |

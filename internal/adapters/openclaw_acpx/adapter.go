@@ -2,6 +2,7 @@ package openclaw_acpx
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -79,6 +80,7 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 			err = common.RunSimulation(execCtx, step, attempt, attemptArtifactRoot, workspaceRoot)
 		} else {
 			// acpx prompt --session <attemptID> --wait-for-completion "<goal>"
+			// We ensure we anchor to the workspaceRoot implicitly via common.InvokeLocal's Dir setting.
 			args := []string{
 				"prompt",
 				"--session", attempt.ID,
@@ -111,8 +113,40 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	// 1. Check in-memory process map (Primary for local session)
 	_, running := a.processes[attemptID]
-	return running, nil
+	if running {
+		return true, nil
+	}
+
+	// 2. Proactive check via acpx status if not in sim mode
+	// This helps if the daemon restarted but acpx is still running the session.
+	if !common.IsSimulationEnabled(a.Name()) {
+		binary := os.Getenv(a.envVar)
+		if binary == "" {
+			binary = a.binaryName
+		}
+
+		// Check 'acpx status --session <id> --json'
+		statusCtx, statusCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer statusCancel()
+
+		cmd := exec.CommandContext(statusCtx, binary, "status", "--session", attemptID, "--json")
+		output, err := cmd.Output()
+		if err == nil {
+			// If we can get a valid JSON status, we can determine truth
+			type acpStatus struct {
+				Running bool `json:"running"`
+			}
+			var s acpStatus
+			if json.Unmarshal(output, &s) == nil {
+				return s.Running, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
@@ -120,12 +154,10 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 	cancelFunc, exists := a.processes[attemptID]
 	a.mu.Unlock()
 
-	if !exists {
-		return nil
+	// 1. Context cancellation triggers local process SIGTERM (if we own it)
+	if exists {
+		(*cancelFunc)()
 	}
-
-	// 1. Context cancellation triggers local process SIGTERM
-	(*cancelFunc)()
 
 	// 2. Best-effort explicit ACP stop via acpx CLI
 	if !common.IsSimulationEnabled(a.Name()) {
@@ -134,7 +166,7 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 			binary = a.binaryName
 		}
 		
-		// Run acpx stop in the background with its own timeout
+		// Run acpx stop with short timeout
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stopCancel()
 		
@@ -155,9 +187,22 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 }
 
 func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, attemptArtifactRoot string) ([]*domain.Artifact, error) {
-	return common.CollectStandardArtifacts(ctx, attemptID, attemptArtifactRoot)
+	// 1. Gather files from standard artifact root (stdout.log etc)
+	artifacts, err := common.CollectStandardArtifacts(ctx, attemptID, attemptArtifactRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Search for ACP session specific evidence in the worktree
+	// By protocol, these might be in .acp/sessions/<attemptID>/
+	
+	// For now, we rely on acpx redirected output for 'experimental but operational'.
+	// If acpx handles redirection via Start() args, they'll already be in attemptArtifactRoot.
+	
+	return artifacts, nil
 }
 
 func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
-	return common.NormalizeStandardResult(attemptID, artifacts)
+	isSimulation := common.IsSimulationEnabled(a.Name())
+	return NormalizeResult(attemptID, artifacts, isSimulation)
 }

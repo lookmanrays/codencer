@@ -92,16 +92,29 @@ Codencer uses these variables to locate agent binaries and target the daemon:
 - `OPENCLAW_ACPX_BINARY`: Path to the `acpx` CLI (for OpenClaw support).
 - `ORCHESTRATORD_URL`: URL of the daemon (default: `http://localhost:8085`).
 
-### 4.5 Identity Verification
-Always verify which repository and port a running daemon is serving before starting a run:
+---
+
+## 5. OpenClaw Setup (Experimental)
+
+Codencer v1 supports an experimental path via the **Agent Client Protocol (ACP)** bridge.
+
+### 5.1 Prerequisites
+- **acpx CLI**: You must have the `acpx` binary installed on your host machine.
+- **Local Runtime**: A running OpenClaw-compatible backend or agent stack must be discoverable by `acpx`.
+
+### 5.2 Configuration
+By default, Codencer looks for `acpx` in your system `PATH`. If it is installed in a non-standard location, set the environment variable:
+
 ```bash
-# Check the authoritative instance identity
-./bin/orchestratorctl instance --json
+export OPENCLAW_ACPX_BINARY=/path/to/custom/acpx
 ```
+
+### 5.3 Operational Boundary
+Codencer acts strictly as a **bridge**. It manages the `acpx` process lifecycle and workspace isolation, but it does **not** manage model routing, API keys, or backend selection for OpenClaw. Configure those directly via the OpenClaw/acpx configuration on your host machine.
 
 ---
 
-## 5. Workspace Provisioning
+## 6. Workspace Provisioning
 Codencer isolates every task attempt in a dedicated Git worktree. You can configure how these worktrees are prepared using `.codencer/workspace.json`.
 
 ### Example `.codencer/workspace.json`

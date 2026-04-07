@@ -81,10 +81,10 @@ EOF
 ```
 
 ### 🧪 OpenClaw ACPX (Experimental)
-Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge.
+Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. Use `--wait --json` for synchronous machine-safe handoffs.
 ```bash
 ./bin/orchestratorctl submit my-run \
-  --goal "Fix UI layout issues" \
+  --goal "Fix UI layout issues in the landing page" \
   --adapter openclaw-acpx \
   --wait --json
 ```

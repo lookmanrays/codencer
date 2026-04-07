@@ -16,7 +16,7 @@ Codencer v1 is a local CLI bridge for terminal-capable planners and operators. T
 
 The official v1 sequential model is an explicit wrapper loop outside Codencer:
 
-1. **Target the Project**: Start or verify a daemon instance for a specific `--repo-root` (and unique `--port` if needed).
+1. **Target the Project**: Start or verify a daemon instance for a specific `--repo_root`.
 2. **Verify Identity**: Check `./bin/orchestratorctl instance --json` to ensure the bridge is anchored to the correct repo.
 3. **Ensure a Run Exists**: Reuse an existing run or start a new one.
 4. **Iterate Tasks**: Submit one task at a time with `submit --wait --json`.

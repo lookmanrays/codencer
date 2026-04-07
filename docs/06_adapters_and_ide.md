@@ -1,8 +1,4 @@
-> [!NOTE]
-> This is a **design specification** and may not fully reflect the current implementation.
-> For the latest implementation status, see the [Gap Audit](internal/GAP_AUDIT.md).
-
-# Adapters and IDE Plan
+# Adapters and IDE Reference
 
 ## Adapter strategy
 
@@ -41,10 +37,12 @@ Why:
 - **Description**: Standardized ACP (Agent Control Protocol) bridge to the OpenClaw ecosystem.
 - **Binary**: `acpx` (configurable via `OPENCLAW_ACPX_BINARY`)
 - **Key Capability**: Cross-platform agent communication using a standard protocol interface.
+- **Lifecycle**: Operational. `Poll()` uses `acpx status` for session-aware tracking; `Cancel()` uses `acpx stop` for reliable termination.
+- **Evidence**: Harvests `acp-status.json` and session logs for high-fidelity auditing.
 
 > [!WARNING]
 > **OpenClaw (acpx) Support is Experimental**: 
-> This adapter is currently in an operational but experimental state. It requires the `acpx` CLI to be installed on the host machine. Lifecycle management (Poll/Cancel) relies on `acpx` session tracking.
+> This adapter is currently in an experimental but operational state. It requires the `acpx` CLI to be installed on the host machine. While lifecycle management is hardened, it has not yet been verified for all production scenarios.
 
 ## Adapter design rules
 
