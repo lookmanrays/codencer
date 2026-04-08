@@ -28,12 +28,12 @@ Why:
 - good contrast for adapter-neutral design
 
 ### 4. OpenClaw ACPX
-- **Status**: ✅ **Stable (v1.0)**
+- **Status**: 🧪 **Experimental (Alpha)**
 - **Description**: Standardized ACP (Agent Control Protocol) bridge to the OpenClaw ecosystem.
 - **Binary**: `acpx` (configurable via `OPENCLAW_ACPX_BINARY`)
 - **Key Capability**: Cross-platform agent communication using a standard protocol interface.
-- **Lifecycle**: Production-grade. `Poll()` matches authoritative `acpx status` and `Cancel()` ensures reliable termination.
-- **Evidence**: Harvests `acp-status.json`, `result.json` and session logs proactively for high-fidelity auditing.
+- **Lifecycle**: Experimental. While basic polling and cancellation are implemented, this adapter is currently lower-maturity than the core Codex/Claude adapters and is considered an alpha-tier executor.
+- **Evidence**: Captures standard execution logs (`stdout.log`) and any ACP-compatible session artifacts (`acp-status.json`, `result.json`) present in the task artifact root.
 
 ## Adapter design rules
 

@@ -198,10 +198,9 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, attemp
 		return nil, err
 	}
 
-	// 2. Proactive artifact harvesting from workspace-anchored session directories.
-	// Standard ACP evidence often lives in .acp/sessions/<attemptID>/
-	// Future: search for common ACP names directly in the attempt artifact root 
-	// because acpx is often called with redirection there by common.InvokeLocal.
+	// 2. Opportunistic artifact collection from the task's artifact root.
+	// Standard ACP evidence (status.json, result.json, session.log) is only captured 
+	// if the acpx process has been configured to write/redirect outputs to this directory.
 	evidenceNames := []string{"acp-status.json", "result.json", "session.log"}
 	for _, name := range evidenceNames {
 		path := filepath.Join(attemptArtifactRoot, name)

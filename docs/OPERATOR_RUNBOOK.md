@@ -67,7 +67,7 @@ Best for quick, one-off instructions.
 ```bash
 ./bin/orchestratorctl submit my-run --goal "Refactor Auth" --adapter codex --wait --json
 
-# Or for OpenClaw agents:
+# Or for OpenClaw agents (Experimental / Alpha):
 ./bin/orchestratorctl submit my-run --goal "Refactor Auth" --adapter openclaw-acpx --wait --json
 ```
 

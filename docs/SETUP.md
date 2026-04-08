@@ -51,7 +51,7 @@ make start-sim
 ```
 
 ### 3.2 Real Mode (Tactical Execution)
-Use this mode for real-world tasks. It requires agents like `codex-agent` or `aider` to be installed.
+Use this mode for real-world tasks. It requires agents like `codex-agent` or `claude-code` to be installed.
 ```bash
 # Edit .env to set ALL_ADAPTERS_SIMULATION_MODE=0
 make start
@@ -94,23 +94,23 @@ Codencer uses these variables to locate agent binaries and target the daemon:
 
 ---
 
-## 5. OpenClaw Setup (ACPX Bridge)
+## 5. OpenClaw Setup (Experimental / Alpha)
 
-Codencer v1 provides first-class support for the **Agent Client Protocol (ACP)** via the OpenClaw adapter. 
+Codencer provides experimental support for the **Agent Client Protocol (ACP)** via the OpenClaw adapter. This integration is currently in **Alpha** and is intended for early-access testing of OpenClaw-compatible executors.
 
-### 5.1 Prerequisites
-- **acpx CLI**: You must have the `acpx` binary installed on your host machine.
+- **Adapter ID**: `openclaw-acpx`
+- **Binary**: `acpx` (Agent Client Protocol CLI).
 - **Local Runtime**: A running OpenClaw-compatible backend or agent stack must be discoverable by `acpx`.
 
-### 5.2 Configuration
-By default, Codencer looks for `acpx` in your system `PATH`. If it is installed in a non-standard location, set the environment variable:
-
+To configure a custom path for the ACPX binary:
 ```bash
+# Add to your .env or export directly
 export OPENCLAW_ACPX_BINARY=/path/to/custom/acpx
 ```
 
-### 5.3 Operational Boundary
-Codencer acts strictly as a **bridge**. It manages the `acpx` process lifecycle and workspace isolation, but it does **not** manage model routing, API keys, or backend selection for OpenClaw. Configure those directly via the OpenClaw/acpx configuration on your host machine.
+> [!WARNING]
+> **OpenClaw support is Experimental (Alpha)**.
+> Codencer acts strictly as a **bridge**. It manages the `acpx` process lifecycle and workspace isolation, but it does **not** manage model routing, API keys, or backend selection for OpenClaw. Configure those directly via the OpenClaw/acpx configuration on your host machine.
 
 ---
 

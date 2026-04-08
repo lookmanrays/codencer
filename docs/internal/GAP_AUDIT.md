@@ -9,7 +9,7 @@
 - **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and established the **Canonical Local Runbook** in `EXAMPLES.md`.
 - **Trust & Transparency**: [RESOLVED] Added "Known Limitations" and clarified the distinction between simulation and real-mode execution in README.
 - **Release Surface**: [RESOLVED] Performed a unified v1 Truth-Pass across all README, setup, examples, and guide documentation.
-- **OpenClaw Status**: [RESOLVED] Promoted to Stable Core following session-lifecycle and artifact-harvesting hardening.
+- **OpenClaw Status**: [ALIGNED] Maintained as Experimental Alpha-tier for v1.0. Future promotion to stable requires sustained user verification.
 
 ## Feature Status Matrix
 
@@ -18,7 +18,7 @@
 | **Orchestration Core** | ✅ **Ready (Stable)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
 | **CLI & MCP Layer** | ✅ **Ready (Stable)** | Native | Human-readable hints, logs, and structured JSON. |
 | **Codex Adapter** | ✅ **Ready (Stable)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
-| **OpenClaw Adapter** | ✅ **Ready (Stable)** | ACPX Wrapper | Hardened lifecycle and evidence harvesting. |
+| **OpenClaw Adapter** | 🧪 **Experimental (Alpha)** | ACPX Wrapper | Functional alpha; basic lifecycle tracking. |
 | **Claude/Qwen Adapters** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrappers; lacks deep extraction. |
 | **Simulation Mode** | ✅ **Ready (Stable)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |

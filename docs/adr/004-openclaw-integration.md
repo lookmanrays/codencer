@@ -1,6 +1,6 @@
 # ADR 004: OpenClaw + ACPX Integration Strategy
 
-## Status: Decided (Experimental Operational)
+## Status: Decided (Experimental Alpha-Tier)
 ## Decided by: principal engineer
 
 ## Context
@@ -36,7 +36,7 @@ We choose `acpx` (Option A) over a direct CLI invocation of the OpenClaw runtime
 - **`workspace_root`**: The tactical execution directory (worktree) where `acpx` is invoked.
 - **`adapter_id`**: `openclaw-acpx`.
 
-## Operational Status: Experimental (Operational)
+## Operational Status: Experimental (Alpha)
 The `openclaw-acpx` adapter is implemented and operational in an experimental capacity.
 - **Binary**: `acpx` CLI required.
 - **Environment**: `OPENCLAW_ACPX_BINARY` for custom pathing.

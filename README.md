@@ -1,6 +1,6 @@
 # Codencer: The Tactical Orchestration Bridge
 
-Codencer is a tactical orchestration bridge that manages execution, isolation, and high-fidelity audit trails for coding agents. It serves as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code, Aider). 
+Codencer is a tactical orchestration bridge that manages execution, isolation, and high-fidelity audit trails for coding agents. It serves as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code). 
 
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
@@ -268,7 +268,7 @@ Codencer is in **Public Beta (v1.0-release-candidate)**. Use this to understand 
 | **Codex Adapter** | ✅ **Stable** | Primary high-fidelity relay for `codex-agent`. |
 | **Antigravity Metadata** | ✅ **Stable** | Broker-backed context, task IDs, and provenance. |
 | **Antigravity Broker** | ✅ **Stable** | Cross-side (WSL/Windows) bridge for IDE instances. |
-| **OpenClaw ACPX** | ✅ **Stable** | Standardized ACP bridge to OpenClaw ecosystem. |
+| **OpenClaw ACPX** | 🧪 **Experimental (Alpha)** | Standardized ACP bridge to OpenClaw ecosystem. |
 | **Simulation Mode** | ✅ **Stable** | Stub-based validation (Bridge-only smoke tests). |
 
 #### 🧪 Experimental Extensions (Outside v1 Contract)

@@ -987,7 +987,8 @@ func runDoctor() {
 	}{
 		{"Codex", "codex-agent", "CODEX_BINARY"},
 		{"Claude", "claude-code", "CLAUDE_BINARY"},
-		{"Qwen/Aider", "aider", "AIDER_BINARY"},
+		{"Qwen", "qwen-local", "QWEN_BINARY"},
+		{"OpenClaw", "acpx", "OPENCLAW_ACPX_BINARY"},
 	}
 
 	for _, a := range adapters {
