@@ -80,6 +80,20 @@ Exclude the test files.
 EOF
 ```
 
+### 5.5 Claude Headless Execution
+Use the Claude adapter when the `claude` CLI is installed locally and reachable through `CLAUDE_BINARY` or `$PATH`.
+```bash
+cat <<'EOF' | ./bin/orchestratorctl submit my-run --stdin --title "Claude Audit" --adapter claude --wait --json
+Review the auth package, explain the failing behavior, and propose a minimal fix.
+EOF
+```
+
+For Claude attempts, the standard evidence set includes:
+- `prompt.txt`
+- `stdout.log`
+- `stderr.log`
+- `result.json`
+
 ### OpenClaw ACPX (Experimental / Alpha)
 Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. Use `--wait --json` for synchronous machine-safe handoffs.
 ```bash
@@ -116,4 +130,10 @@ See exactly how the workspace was prepared.
 ### Streaming Raw Logs
 ```bash
 ./bin/orchestratorctl step logs <HANDLE>
+```
+
+### Inspecting Claude-Specific Evidence
+```bash
+./bin/orchestratorctl step artifacts <HANDLE>
+./bin/orchestratorctl step result <HANDLE> --json | jq '.raw_output_ref, .artifacts["prompt.txt"], .artifacts["stderr.log"]'
 ```

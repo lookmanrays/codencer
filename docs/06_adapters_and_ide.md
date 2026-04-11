@@ -21,11 +21,22 @@ Why:
 - strong local CLI and IDE support
 - first-class fit for MVP
 
-### 3. Claude Code second
+### 3. Claude second
 Why:
 - mature terminal-native coding agent
 - strong second adapter
 - good contrast for adapter-neutral design
+
+Status:
+- **Supported (Beta)**: the v1 CLI wrapper contract is implemented and covered by fake-binary integration tests, prompt/normalization unit tests, lifecycle tests, and simulation conformance tests.
+- **Not covered in repo tests**: live authenticated Claude service calls.
+
+Current v1 contract:
+- binary: `claude` (configurable via `CLAUDE_BINARY`)
+- invocation: `claude -p --output-format json`
+- prompt path: `stdin`
+- workspace semantics: process `cwd` is the attempt workspace root
+- evidence model: `prompt.txt`, raw `stdout.log`, raw `stderr.log`, plus a synthesized `result.json`
 
 ### 4. OpenClaw ACPX
 - **Status**: 🧪 **Experimental (Alpha)**

@@ -23,10 +23,19 @@ Always start here to verify your environment:
 
 ### 2.2 "Agent Binary Not Found" (`failed_adapter`)
 **Symptoms**: Submitting a task fails immediately; `doctor` shows `MISSING` for an adapter.
-- **Cause**: The bridge cannot find the `codex-agent` or `claude-code` binary in your `$PATH`.
+- **Cause**: The bridge cannot find the `codex-agent` or `claude` binary in your `$PATH`.
 - **Fix**:
   - Export the specific path: `export CODEX_BINARY=/path/to/codex-agent`.
+  - Or export `CLAUDE_BINARY=/path/to/claude` if the Claude CLI is installed outside your default `$PATH`.
   - Or ensure the binary is in your global `$PATH`.
+
+### 2.2.1 "Malformed or Missing Claude Result Output" (`failed_terminal`)
+**Symptoms**: Claude starts, but the final result summary mentions malformed or missing Claude output.
+- **Cause**: The `claude` process did not emit a final JSON `result` object on stdout, or another tool/script polluted stdout.
+- **Fix**:
+  - Inspect `./bin/orchestratorctl step logs <UUID>` for the raw stdout payload.
+  - Inspect `./bin/orchestratorctl step artifacts <UUID>` and review `stderr.log` for CLI/auth/runtime errors.
+  - Re-run `claude -p --output-format json` directly in the repo if you suspect local CLI/environment issues.
 
 ### 2.3 "Workspace Creation Failed" (`failed_bridge`)
 **Symptoms**: `failed_bridge` reported during attempt.
@@ -133,6 +142,7 @@ Codencer uses specific states to distinguish between **instructional failure** (
 | `failed_adapter` | **Infrastructure** | The agent binary crashed (e.g. API error, OOM). | Check `step logs`. |
 | `failed_bridge` | **Infrastructure** | Codencer failed (e.g. Disk Full, Git Error, Provisioning). | Check daemon logs. |
 | `timeout` | **Infrastructure** | Task exceeded `timeout_seconds` and was killed. | Increase timeout. |
+| `cancelled` | **Infrastructure / Operator Action** | Task was explicitly interrupted before completion. | Re-run or submit a follow-up task. |
 
 ---
 

@@ -51,11 +51,13 @@ make start-sim
 ```
 
 ### 3.2 Real Mode (Tactical Execution)
-Use this mode for real-world tasks. It requires agents like `codex-agent` or `claude-code` to be installed.
+Use this mode for real-world tasks. It requires agents like `codex-agent` or `claude` to be installed.
 ```bash
 # Edit .env to set ALL_ADAPTERS_SIMULATION_MODE=0
 make start
 ```
+
+Claude is executed in headless print mode as `claude -p --output-format json`. Codencer builds the task prompt, writes it to `prompt.txt`, delivers it on `stdin`, and runs the process from the attempt workspace root.
 
 ---
 
@@ -89,8 +91,14 @@ Use the provided script to start and build a daemon instance for a specific proj
 ### 4.4 Environment Variables
 Codencer uses these variables to locate agent binaries and target the daemon:
 - `CODEX_BINARY`: Path to the `codex-agent` binary.
+- `CLAUDE_BINARY`: Path to the `claude` binary. Defaults to `claude`.
 - `OPENCLAW_ACPX_BINARY`: Path to the `acpx` CLI (for OpenClaw support).
 - `ORCHESTRATORD_URL`: URL of the daemon (default: `http://localhost:8085`).
+
+### 4.5 Claude Adapter Notes
+- Install the Claude CLI so the `claude` binary is available on your `$PATH`, or point `CLAUDE_BINARY` at the full path.
+- Codencer does not pass a workspace flag to Claude. The attempt workspace is supplied via process `cwd`.
+- Claude raw output is preserved in `stdout.log`; Codencer parses that JSON and synthesizes the normalized `result.json`.
 
 ---
 

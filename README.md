@@ -1,6 +1,6 @@
 # Codencer: The Tactical Orchestration Bridge
 
-Codencer is a tactical orchestration bridge that manages execution, isolation, and high-fidelity audit trails for coding agents. It serves as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude-code). 
+Codencer is a tactical orchestration bridge that manages execution, isolation, and high-fidelity audit trails for coding agents. It serves as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude).
 
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
@@ -29,7 +29,7 @@ Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It han
 ### Core Roles
 - **Planner (Brain)**: You, a Chat UI, or an agentic planner. Decides **what** to do.
 - **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
-- **Coding Agent (Worker)**: The tactical tool performing the actual work (e.g., `codex-agent`, `claude-code`).
+- **Coding Agent (Worker)**: The tactical tool performing the actual work (e.g., `codex-agent`, `claude`).
 
 ---
 
@@ -85,10 +85,14 @@ Choose your execution tier in `.env` (Simulation is enabled by default in `.env.
 # Start in Simulation Mode (Background)
 make start-sim
 
-# OR Start in Real Mode (Requires agent binaries like codex-agent)
+# OR Start in Real Mode (Requires agent binaries like codex-agent or claude)
 # Edit .env: ALL_ADAPTERS_SIMULATION_MODE=0
 make start
 ```
+
+For Claude, Codencer invokes the installed CLI as `claude -p --output-format json`, sends the step prompt on `stdin`, and runs from the isolated attempt workspace as the process `cwd`.
+
+Current support level for the Claude adapter is **Supported (Beta)**: the wrapper contract is implemented and covered by prompt, normalization, lifecycle, fake-binary integration, and simulation conformance tests, but the repo test suite does not run a live authenticated Claude service call.
 
 ### 3. Run Your First Tactical Task
 Submit a task and wait for the bridge to report results. For the full auditing sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
@@ -167,6 +171,12 @@ Every task execution leaves a permanent audit trail:
 2. **Logs**: Run `./bin/orchestratorctl step logs <id>` for the raw agent stdout.
 3. **Artifacts**: Every modified file and diff is stored in `.codencer/artifacts/`. Use `./bin/orchestratorctl step artifacts <id>` to see the exact paths and SHA-256 hashes.
 4. **Validations**: Run `./bin/orchestratorctl step validations <id>` to see specific test/lint results.
+
+For Claude attempts specifically, the standard evidence set is:
+- `prompt.txt`: the exact prompt Codencer built and sent to Claude
+- `stdout.log`: raw Claude JSON output
+- `stderr.log`: raw Claude stderr
+- `result.json`: synthesized normalized Codencer result
 
 ## 🧾 Submission Inputs
 

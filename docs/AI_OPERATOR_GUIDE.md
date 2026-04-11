@@ -40,6 +40,11 @@ Always verify the daemon's identity to ensure you are targeting the correct repo
 
 Use `submit --wait --json` for a synchronous hand-off. This simplifies your control flow by blocking until a terminal state is reached.
 
+Runtime note:
+- In real mode, Codencer expects the installed agent CLIs to be reachable through their configured binaries.
+- For Claude specifically, the bridge runs `claude -p --output-format json`, sends the submitted prompt on `stdin`, and executes from the isolated attempt workspace.
+- Claude evidence is file-backed: review `prompt.txt`, `stdout.log`, `stderr.log`, and the synthesized `result.json` through normal artifact inspection.
+
 ### Pattern: The Direct Input Loop
 Ideal for human-in-the-loop or iterative assistant tasks.
 
@@ -110,6 +115,7 @@ Follow this sequence for every tactical mission:
    ```bash
    ./bin/orchestratorctl step result <UUID> --json
    ./bin/orchestratorctl step validations <UUID> --json
+   ./bin/orchestratorctl step artifacts <UUID>
    ```
 
 ---

@@ -19,7 +19,8 @@
 | **CLI & MCP Layer** | ✅ **Ready (Stable)** | Native | Human-readable hints, logs, and structured JSON. |
 | **Codex Adapter** | ✅ **Ready (Stable)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
 | **OpenClaw Adapter** | 🧪 **Experimental (Alpha)** | ACPX Wrapper | Functional alpha; basic lifecycle tracking. |
-| **Claude/Qwen Adapters** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrappers; lacks deep extraction. |
+| **Claude Adapter** | 🟢 **Supported (Beta)** | CLI Wrapper | Uses `claude -p --output-format json` with stdin prompt delivery, cwd-based execution, synthesized result mapping, and fake-binary integration coverage. Live authenticated Claude service calls are not exercised in repo tests. |
+| **Qwen Adapter** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrapper; narrower evidence extraction than Codex/Claude. |
 | **Simulation Mode** | ✅ **Ready (Stable)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |
 | **Governance** | ✅ **Ready (Stable)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
