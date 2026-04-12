@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -129,7 +130,6 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 		Adapter: "mock-adapter",
 	}
 
-
 	err = runSvc.DispatchStep(ctx, runId, step)
 	if err != nil {
 		t.Fatalf("DispatchStep failed: %v", err)
@@ -151,6 +151,88 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 	if len(arts) == 0 {
 		t.Fatalf("Expected artifacts to be persisted")
 	}
+}
+
+func testRepoRoot(t *testing.T) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	return string(bytesTrimSpace(out))
+}
+
+func bytesTrimSpace(in []byte) []byte {
+	for len(in) > 0 && (in[len(in)-1] == '\n' || in[len(in)-1] == '\r' || in[len(in)-1] == ' ' || in[len(in)-1] == '\t') {
+		in = in[:len(in)-1]
+	}
+	return in
+}
+
+func createGitRepo(t *testing.T) string {
+	t.Helper()
+	repoRoot := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoRoot
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s failed: %v\n%s", args, err, string(out))
+		}
+	}
+
+	run("git", "init")
+	run("git", "config", "user.email", "tests@example.com")
+	run("git", "config", "user.name", "Codencer Tests")
+	if err := os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("repo"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("git", "add", "README.md")
+	run("git", "commit", "-m", "init")
+	return repoRoot
+}
+
+type cancelAwareAdapter struct {
+	running      bool
+	cancelCalled bool
+}
+
+func (a *cancelAwareAdapter) Name() string           { return "cancel-aware" }
+func (a *cancelAwareAdapter) Capabilities() []string { return []string{"mock"} }
+func (a *cancelAwareAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	a.running = true
+	return nil
+}
+func (a *cancelAwareAdapter) Poll(ctx context.Context, attemptID string) (bool, error) {
+	return a.running, nil
+}
+func (a *cancelAwareAdapter) Cancel(ctx context.Context, attemptID string) error {
+	a.cancelCalled = true
+	a.running = false
+	return nil
+}
+func (a *cancelAwareAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	return nil, nil
+}
+func (a *cancelAwareAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
+	return &domain.ResultSpec{State: domain.StepStateCompleted, Summary: "should not complete"}, nil
+}
+
+type stubbornAdapter struct{}
+
+func (a *stubbornAdapter) Name() string           { return "stubborn" }
+func (a *stubbornAdapter) Capabilities() []string { return []string{"mock"} }
+func (a *stubbornAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	return nil
+}
+func (a *stubbornAdapter) Poll(ctx context.Context, attemptID string) (bool, error) { return true, nil }
+func (a *stubbornAdapter) Cancel(ctx context.Context, attemptID string) error       { return nil }
+func (a *stubbornAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	return nil, nil
+}
+func (a *stubbornAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
+	return &domain.ResultSpec{State: domain.StepStateCompleted, Summary: "should not complete"}, nil
 }
 
 // FailingMockAdapter simulates various terminal failure states
@@ -276,8 +358,8 @@ func (m *PollErrorMockAdapter) Poll(ctx context.Context, attemptID string) (bool
 	return false, errors.New("Poll failed") // Just some error
 }
 func (m *PollErrorMockAdapter) Cancel(ctx context.Context, attemptID string) error { return nil }
-func (m *PollErrorMockAdapter) Capabilities() []string                           { return []string{"mock"} }
-func (m *PollErrorMockAdapter) Name() string                                     { return "poll-error-mock" }
+func (m *PollErrorMockAdapter) Capabilities() []string                             { return []string{"mock"} }
+func (m *PollErrorMockAdapter) Name() string                                       { return "poll-error-mock" }
 func (m *PollErrorMockAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
 	return nil, nil
 }
@@ -392,14 +474,14 @@ func TestRunService_DispatchStep_ImmutableNamespacing(t *testing.T) {
 		t.Fatalf("DispatchStep 2 failed: %v", err)
 	}
 	t.Log("Attempt 2 finished")
-	
+
 	attempts, _ = attemptsRepo.ListByStep(ctx, step.ID)
 	if len(attempts) != 2 {
 		t.Fatalf("Expected 2 attempts, got %d", len(attempts))
 	}
 	attempt2 := attempts[1]
 	path2 := filepath.Join(artifactRoot, runID, step.ID, attempt2.ID)
-	
+
 	if _, err := os.Stat(path2); err != nil {
 		t.Errorf("Expected artifact dir for Attempt 2 to exist: %v", err)
 	}
@@ -751,6 +833,248 @@ func TestRunService_Isolation_ProvisionedWorktree(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("Validation 'check-setup' failed or was not found, meaning it could not find 'setup.txt' in the worktree")
+	}
+}
+
+func TestRunService_DispatchStep_UsesConfiguredRepoRootOutsideCWD(t *testing.T) {
+	repoRoot := createGitRepo(t)
+	otherDir := t.TempDir()
+	prevWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(prevWD) }()
+	if err := os.Chdir(otherDir); err != nil {
+		t.Fatal(err)
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"mock-adapter": &MockAdapter{}}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "repo-root-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	step := &domain.Step{
+		ID:      "repo-root-step",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Repo Root Step",
+		Adapter: "mock-adapter",
+	}
+
+	if err := runSvc.DispatchStep(ctx, runID, step); err != nil {
+		t.Fatalf("DispatchStep failed outside repo cwd: %v", err)
+	}
+
+	result, err := runSvc.GetResultByStep(ctx, step.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RunID != runID {
+		t.Fatalf("expected result run ID %s, got %s", runID, result.RunID)
+	}
+}
+
+func TestRunService_AbortRunCancelsActiveAttempt(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	adapter := &cancelAwareAdapter{}
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"cancel-aware": adapter}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "abort-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	step := &domain.Step{
+		ID:      "abort-step",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Abort Step",
+		Adapter: "cancel-aware",
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- runSvc.DispatchStep(context.Background(), runID, step) }()
+
+	time.Sleep(500 * time.Millisecond)
+	if err := runSvc.AbortRun(ctx, runID); err != nil {
+		t.Fatalf("AbortRun failed: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("DispatchStep failed after abort: %v", err)
+	}
+	if !adapter.cancelCalled {
+		t.Fatal("expected adapter cancel to be invoked")
+	}
+
+	run, _ := runSvc.GetRun(ctx, runID)
+	if run.State != domain.RunStateCancelled {
+		t.Fatalf("expected run state cancelled, got %s", run.State)
+	}
+	stepState, _ := runSvc.GetStep(ctx, step.ID)
+	if stepState.State != domain.StepStateCancelled {
+		t.Fatalf("expected step state cancelled, got %s", stepState.State)
+	}
+}
+
+func TestRunService_AbortRunWithoutConfirmedStopFailsClosed(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"stubborn": &stubbornAdapter{}}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "stubborn-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	step := &domain.Step{
+		ID:      "stubborn-step",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Stubborn Step",
+		Adapter: "stubborn",
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- runSvc.DispatchStep(context.Background(), runID, step) }()
+
+	time.Sleep(500 * time.Millisecond)
+	if err := runSvc.AbortRun(ctx, runID); err != nil {
+		t.Fatalf("AbortRun failed: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("DispatchStep failed after stubborn abort: %v", err)
+	}
+
+	run, _ := runSvc.GetRun(ctx, runID)
+	if run.State == domain.RunStateCancelled {
+		t.Fatalf("expected stubborn abort to avoid reporting cancelled")
+	}
+	stepState, _ := runSvc.GetStep(ctx, step.ID)
+	if stepState.State != domain.StepStateNeedsManualAttention {
+		t.Fatalf("expected step state needs_manual_attention, got %s", stepState.State)
+	}
+}
+
+type warningAdapter struct{}
+
+func (a *warningAdapter) Name() string           { return "warning-adapter" }
+func (a *warningAdapter) Capabilities() []string { return []string{"mock"} }
+func (a *warningAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
+	return nil
+}
+func (a *warningAdapter) Poll(ctx context.Context, attemptID string) (bool, error) { return false, nil }
+func (a *warningAdapter) Cancel(ctx context.Context, attemptID string) error       { return nil }
+func (a *warningAdapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifactRoot string) ([]*domain.Artifact, error) {
+	return nil, nil
+}
+func (a *warningAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
+	return &domain.ResultSpec{Version: "v1", State: domain.StepStateCompletedWithWarnings, Summary: "completed with warnings"}, nil
+}
+
+func TestRunService_DispatchStep_PreservesCompletedWithWarningsAndCompletesRun(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"warning": &warningAdapter{}}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+	)
+
+	ctx := context.Background()
+	runID := "warning-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	step := &domain.Step{
+		ID:      "warning-step",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Warning Step",
+		Adapter: "warning",
+	}
+
+	if err := runSvc.DispatchStep(ctx, runID, step); err != nil {
+		t.Fatalf("DispatchStep failed: %v", err)
+	}
+
+	foundStep, _ := runSvc.GetStep(ctx, step.ID)
+	if foundStep.State != domain.StepStateCompletedWithWarnings {
+		t.Fatalf("expected step state completed_with_warnings, got %s", foundStep.State)
+	}
+
+	run, _ := runSvc.GetRun(ctx, runID)
+	if run.State != domain.RunStateCompleted {
+		t.Fatalf("expected run state completed, got %s", run.State)
 	}
 }
 

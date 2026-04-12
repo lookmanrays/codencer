@@ -1,192 +1,122 @@
-> [!NOTE]
-> This is a **design specification** and may not fully reflect the current implementation.
-> For the latest implementation status, see the [Gap Audit](internal/GAP_AUDIT.md).
-
 # Architecture
 
-## High-level architecture
+This document describes the current Codencer v2 runtime architecture.
+
+## High-Level Model
 
 ```text
-Planner Chat
+Planner / Chat
    |
-   | MCP tools / local CLI
+   | Relay HTTP API or Relay MCP
    v
-Local MCP Server
+Relay
    |
+   | Authenticated outbound websocket
    v
-Orchestrator Daemon
+Connector
    |
-   +--> Policy Engine
-   +--> SQLite Run Ledger
-   +--> Artifact Store (filesystem)
-   +--> Validation Runner
-   +--> Workspace / Git Manager
-   +--> Adapter Manager
-            |
-            +--> Codex Adapter
-            +--> Claude Adapter
-            +--> Qwen Adapter
-            +--> IDE Companion Adapter
-            +--> IDE Chat Adapter (later)
+   | Narrow allowlisted local API proxy
+   v
+Local Codencer Daemon
+   |
+   +--> SQLite state and settings
+   +--> Artifact store
+   +--> Workspace / git manager
+   +--> Validation runner
+   +--> Adapter dispatch
+   +--> Gate and recovery services
 ```
 
-## Core components
+Execution stays local. Planning stays outside Codencer.
 
-### Orchestrator daemon
-System of record.
+## Core Runtime Roles
+
+### Local daemon
+
+The daemon is the local system of record.
 
 Responsibilities:
-- manage run / phase / step lifecycle
-- dispatch steps
-- supervise processes
+- manage run, step, attempt, and gate lifecycle
 - persist state
-- enforce policy
-- collect artifacts
-- expose state
+- dispatch adapters
+- collect artifacts and validations
+- expose local `/api/v1` and local compatibility/admin `/mcp/call`
 
-Recommended implementation:
-- Go
-- local HTTP or Unix socket
-- SQLite
-- filesystem artifacts
+The daemon is not the public internet-facing MCP server.
 
-### MCP server
-Thin bridge exposing safe orchestrator operations:
-- start run
-- start step
-- get status
-- get result
-- approve gate
-- reject gate
-- retry step
-- abort run
+### Connector
 
-### Adapter manager
-Provider-neutral execution contract.
+The connector is the outbound bridge between relay and local daemon.
 
-Each adapter should support:
-- Start
-- Poll
-- Cancel
-- CollectArtifacts
-- NormalizeResult
-- Capabilities
+Responsibilities:
+- persist connector identity
+- enroll with relay
+- authenticate with signed challenge/response
+- advertise explicitly shared instances
+- proxy only a narrow local API surface
 
-### Policy engine
-Decides:
-- continue
-- retry
-- stop for approval
-- fail terminally
+The connector does not plan and does not execute work directly.
 
-Inputs:
-- validations
-- file changes
-- forbidden path touches
-- migrations
-- dependency changes
-- adapter-reported uncertainty
-- timeouts
+### Relay
 
-### Run ledger
-Persist:
+The relay is the remote control plane.
+
+Responsibilities:
+- authenticate planners
+- authenticate connectors
+- track online connectors and advertised instances
+- route planner requests to the correct shared local instance
+- persist audit events
+- expose relay HTTP API and relay MCP
+
+The relay is not a planner and not an executor.
+
+## Public Surfaces
+
+### Remote/public
+
+- relay HTTP API under `/api/v2`
+- relay MCP under `/mcp`
+- relay MCP compatibility path `/mcp/call`
+- connector websocket under `/ws/connectors`
+
+### Local/private by default
+
+- daemon HTTP API under `/api/v1`
+- daemon-local `/mcp/call` compatibility/admin bridge
+
+## State And Evidence
+
+The current authoritative state lives in the daemon:
 - runs
-- phases
 - steps
 - attempts
+- gates
 - artifacts
 - validations
-- gates
+
+The relay stores only the remote control-plane state it needs:
+- connector identity
+- instance advertisement records
+- resource routing hints
 - audit events
+- enrollment/challenge state
 
-### Artifact store
-Deterministic structure like:
+## Trust Boundaries
 
-```text
-.artifacts/
-  runs/
-    run-0001/
-      manifest.json
-      phase-execution/
-        step-01/
-          attempt-01/
-            input.json
-            stdout.log
-            stderr.log
-            result.json
-            diff.patch
-            changed-files.json
-            validations.json
-```
+- planner decides what to do
+- relay authenticates and routes
+- connector limits remote reach to a narrow allowlist
+- daemon executes and records truth locally
+- adapters do local work only
 
-### Validation runner
-Runs:
-- lint
-- tests
-- build
-- typecheck
-- formatting
-- custom commands from policy/task spec
+There is no raw shell or arbitrary filesystem browsing surface in the relay or connector.
 
-### Workspace / Git manager
-Responsibilities:
-- detect dirty repo
-- allocate isolated worktree when configured
-- capture diffs
-- cleanup safely
-- prevent overlapping writes
+## WSL / Windows Model
 
-## State machine
+The practical default is:
+- daemon, connector, repo, worktrees, and artifacts in WSL/Linux
+- IDE and Antigravity broker on Windows when needed
+- relay wherever the operator hosts the remote control plane
 
-### Run states
-- created
-- running
-- paused_for_gate
-- completed
-- failed
-- cancelled
-
-### Step states
-- pending
-- dispatching
-- running
-- collecting_artifacts
-- validating
-- completed
-- completed_with_warnings
-- needs_approval
-- failed_retryable
-- failed_terminal
-- cancelled
-
-## Design rules
-
-### Planner is not source of truth
-Planner suggests.
-Orchestrator owns actual state.
-
-### Adapter is not control plane
-Adapter executes.
-Orchestrator decides lifecycle.
-
-### IDE extension is not orchestrator
-Extension is only a control/visibility surface.
-
-## Why CLI-first
-
-CLI agents are easier for:
-- process supervision
-- stdout/stderr capture
-- timeouts
-- retries
-- cancellation
-- deterministic wrapping
-
-## Why IDE chat automation is later
-
-IDE AI chats are often implemented inside extension-owned webviews or custom panels.
-That makes generic automation brittle.
-So:
-- CLI path is primary
-- IDE companion comes later
-- IDE chat adapters are targeted and optional
+See [WSL / Windows / Antigravity Topology](WSL_WINDOWS_ANTIGRAVITY.md) for detailed placement guidance.

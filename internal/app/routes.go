@@ -3,16 +3,15 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/mcp"
 	"agent-bridge/internal/service"
-	"fmt"
-	"path/filepath"
-	"time"
 )
 
 // APIHandler holds dependencies for exposing REST routes.
@@ -28,6 +27,7 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/runs", h.handleRuns)
 	mux.HandleFunc("/api/v1/runs/", h.handleRunByID) // Also intercepts /runs/{id}/steps if matched manually
 	mux.HandleFunc("/api/v1/steps/", h.handleStepByID)
+	mux.HandleFunc("/api/v1/artifacts/", h.handleArtifactByID)
 	mux.HandleFunc("/api/v1/gates/", h.handleGateByID)
 	mux.HandleFunc("/api/v1/compatibility", h.handleCompatibility)
 	mux.HandleFunc("/api/v1/benchmarks", h.handleBenchmarks)
@@ -231,21 +231,17 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		isLogs := strings.HasSuffix(r.URL.Path, "/logs")
 
 		if isLogs {
-			result, err := h.RunSvc.GetResultByStep(r.Context(), stepID)
+			artifact, content, err := h.RunSvc.GetLogsByStep(r.Context(), stepID)
 			if err != nil {
-				http.Error(w, "Result not found: "+err.Error(), http.StatusNotFound)
+				http.Error(w, "Logs not found: "+err.Error(), http.StatusNotFound)
 				return
 			}
-			if result.RawOutputRef == "" {
-				w.WriteHeader(http.StatusNoContent)
-				return
+			if artifact.MimeType != "" {
+				w.Header().Set("Content-Type", artifact.MimeType)
+			} else {
+				w.Header().Set("Content-Type", "application/octet-stream")
 			}
-			content, err := os.ReadFile(result.RawOutputRef)
-			if err != nil {
-				http.Error(w, "Error reading logs: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 			w.Write(content)
 			return
 		}
@@ -308,6 +304,32 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
+func (h *APIHandler) handleArtifactByID(w http.ResponseWriter, r *http.Request) {
+	fullPath := strings.TrimPrefix(r.URL.Path, "/api/v1/artifacts/")
+	parts := strings.Split(strings.Trim(fullPath, "/"), "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] != "content" {
+		http.Error(w, "Artifact ID and /content suffix are required", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	artifact, content, err := h.RunSvc.GetArtifactContent(r.Context(), parts[0])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if artifact.MimeType != "" {
+		w.Header().Set("Content-Type", artifact.MimeType)
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.Write(content)
+}
+
 func (h *APIHandler) handleGateByID(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Path[len("/api/v1/gates/"):]
 	if id == "" {
@@ -353,21 +375,12 @@ func (h *APIHandler) handleCompatibility(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	// Dynamic detection of local IDE environment
-	matrix := map[string]interface{}{
-		"tier": 2, // Defaulting to Tier 2: Control features work via CLI/Daemon
-		"adapters": []map[string]interface{}{
-			{"id": "codex", "status": "active", "tier": 2},
-			{"id": "claude", "status": "active", "tier": 2},
-			{"id": "qwen", "status": "active", "tier": 2},
-			{"id": "ide-chat", "status": "active", "tier": 3},
-		},
-		"environment": map[string]interface{}{
-			"os":              os.Getenv("OS"),
-			"vscode_detected": false, // Simplified for MVP
-		},
+	if h.AppCtx == nil || h.AppCtx.InstanceSvc == nil {
+		http.Error(w, "instance service unavailable", http.StatusInternalServerError)
+		return
 	}
+
+	matrix := h.AppCtx.InstanceSvc.Compatibility(r.Context())
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(matrix)
@@ -405,36 +418,14 @@ func (h *APIHandler) handleInstance(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	simMode := os.Getenv("ALL_ADAPTERS_SIMULATION_MODE")
-	execMode := "real"
-	if simMode == "1" || simMode == "true" {
-		execMode = "simulation"
+	if h.AppCtx == nil || h.AppCtx.InstanceSvc == nil {
+		http.Error(w, "instance service unavailable", http.StatusInternalServerError)
+		return
 	}
-
-	stateDir := h.AppCtx.Config.DBPath
-	if !filepath.IsAbs(stateDir) {
-		stateDir = filepath.Join(h.AppCtx.RepoRoot, ".codencer")
-	} else {
-		stateDir = filepath.Dir(stateDir)
-	}
-
-	workspaceRoot := h.AppCtx.Config.WorkspaceRoot
-	if !filepath.IsAbs(workspaceRoot) {
-		workspaceRoot = filepath.Join(h.AppCtx.RepoRoot, workspaceRoot)
-	}
-
-	info := domain.InstanceInfo{
-		Version:       Version,
-		RepoRoot:      h.AppCtx.RepoRoot,
-		StateDir:      stateDir,
-		WorkspaceRoot: workspaceRoot,
-		Host:          h.AppCtx.Config.Host,
-		Port:          h.AppCtx.Config.Port,
-		BaseURL:       fmt.Sprintf("http://%s:%d", h.AppCtx.Config.Host, h.AppCtx.Config.Port),
-		ExecutionMode: execMode,
-		PID:           os.Getpid(),
-		StartedAt:     h.AppCtx.StartedAt,
+	info, err := h.AppCtx.InstanceSvc.Current(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -492,6 +483,7 @@ func (h *APIHandler) handleAGBind(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		h.syncInstanceManifest(r.Context())
 		w.WriteHeader(http.StatusOK)
 
 	case http.MethodDelete:
@@ -499,9 +491,19 @@ func (h *APIHandler) handleAGBind(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		h.syncInstanceManifest(r.Context())
 		w.WriteHeader(http.StatusOK)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *APIHandler) syncInstanceManifest(ctx context.Context) {
+	if h.AppCtx == nil || h.AppCtx.InstanceSvc == nil {
+		return
+	}
+	if _, err := h.AppCtx.InstanceSvc.WriteManifest(ctx); err != nil && h.AppCtx.Logger != nil {
+		h.AppCtx.Logger.Warn("Failed to refresh instance manifest", "error", err)
 	}
 }

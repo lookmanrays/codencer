@@ -57,6 +57,27 @@ func (s *AntigravityService) isBrokerEnabled() bool {
 	return s.brokerURL != ""
 }
 
+func (s *AntigravityService) BrokerEnabled() bool {
+	return s.isBrokerEnabled()
+}
+
+func (s *AntigravityService) BrokerInfo(ctx context.Context) (domain.InstanceBrokerInfo, error) {
+	info := domain.InstanceBrokerInfo{
+		Enabled: s.isBrokerEnabled(),
+		Mode:    "direct",
+		URL:     s.brokerURL,
+	}
+	if s.isBrokerEnabled() {
+		info.Mode = "broker"
+	}
+	bound, err := s.GetBinding(ctx)
+	if err != nil {
+		return info, err
+	}
+	info.BoundInstance = bound
+	return info, nil
+}
+
 // ListInstances returns all discovered Antigravity instances.
 func (s *AntigravityService) ListInstances(ctx context.Context) ([]domain.AGInstance, error) {
 	if s.isBrokerEnabled() {
@@ -123,7 +144,7 @@ func (s *AntigravityService) GetBinding(ctx context.Context) (*domain.AGInstance
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, nil
 		}
-		
+
 		var inst domain.AGInstance
 		if err := json.NewDecoder(resp.Body).Decode(&inst); err != nil {
 			return nil, nil // Assume unbound if JSON is malformed or "unbound" status
