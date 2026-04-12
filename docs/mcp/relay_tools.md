@@ -41,6 +41,7 @@ The relay MCP server currently supports:
 - `submit_task` accepts the real Codencer `TaskSpec` shape.
 - `wait_step` is bounded and takes explicit timeout input.
 - `get_artifact_content` reads by `artifact_id` and returns text or base64-safe content metadata.
+- `abort_run` returns a successful tool result only when the daemon confirms the active step reached `cancelled`.
 - There is no raw shell tool.
 - There is no arbitrary filesystem browsing tool.
 

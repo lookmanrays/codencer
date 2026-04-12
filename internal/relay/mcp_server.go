@@ -50,6 +50,7 @@ func newMCPServer(relayServer *Server) *mcpServer {
 }
 
 func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Codencer-MCP-Surface", "relay-public")
 	if r.Method != http.MethodPost {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return

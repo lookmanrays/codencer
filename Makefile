@@ -5,12 +5,8 @@ build:
 	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/orchestratord ./cmd/orchestratord
 	@echo "==> Building orchestratorctl..."
 	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/orchestratorctl ./cmd/orchestratorctl
-	@echo "==> Building connector..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/connector ./cmd/connector
 	@echo "==> Building codencer-connectord..."
 	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/codencer-connectord ./cmd/codencer-connectord
-	@echo "==> Building relayd..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/relayd ./cmd/relayd
 	@echo "==> Building codencer-relayd..."
 	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/codencer-relayd ./cmd/codencer-relayd
 

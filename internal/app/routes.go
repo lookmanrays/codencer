@@ -37,6 +37,8 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/antigravity/status", h.handleAGStatus)
 	mux.HandleFunc("/api/v1/antigravity/bind", h.handleAGBind)
 
+	// The daemon-local MCP path is a legacy compatibility/admin bridge.
+	// Remote planner integrations should use the relay MCP surface instead.
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
 }
@@ -176,11 +178,10 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 				SubmissionProvenance: snapshot.SubmissionProvenance,
 			}
 
-			go func() {
-				if err := h.RunSvc.DispatchStep(context.Background(), id, step); err != nil {
-					// Log omitted
-				}
-			}()
+			if err := h.RunSvc.DispatchStepAsync(r.Context(), id, step); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusAccepted)

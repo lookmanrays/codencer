@@ -5,8 +5,8 @@ Codencer is a tactical orchestration bridge that manages execution, isolation, a
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
 > [!IMPORTANT]
-> **Project Status: Public Beta (v1.0-release-candidate)**.
-> Codencer is a hardened, production-oriented local orchestration bridge. While the core engine is stable and has been verified through rigorous internal audit paths, the API and protocols are finalized for the v1.0 release.
+> **Project Status: Open-source alpha for the v2 local/self-host path**.
+> Codencer is coherent and buildable for disciplined local and self-host use, but the current relay, auth, artifact transport, and cancellation guarantees are still alpha-grade and documented honestly below.
 
 ---
 
@@ -53,8 +53,8 @@ Key constraints remain unchanged:
 
 ### New Binaries
 
-- `bin/connector` and `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
-- `bin/relayd` and `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
+- `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
+- `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
 
 ### Self-Host Quickstart
 
@@ -75,7 +75,7 @@ For the end-to-end self-host flow and operating notes, see [docs/SELF_HOST_REFER
 Daemon discovery and evidence notes:
 - `GET /api/v1/instance` now exposes stable repo-local daemon identity plus manifest-backed discovery metadata.
 - The daemon writes a repo-local instance manifest under `.codencer/instance.json` on startup and after Antigravity bind changes.
-- `PATCH /api/v1/runs/{id}` remains best-effort abort. Codencer does not claim hard process cancellation unless the adapter actually stops.
+- `PATCH /api/v1/runs/{id}` remains best-effort abort. It returns success only when the active step actually reaches `cancelled`; otherwise Codencer leaves an explicit non-cancelled outcome and returns an error instead of claiming a hard kill.
 
 ---
 

@@ -27,8 +27,8 @@ Verified current repo reality:
 | --- | --- | --- |
 | `cmd/orchestratord` | Local daemon. Starts HTTP API. Supports `--config` and `--repo-root`. | Reuse as the local control plane. |
 | `cmd/orchestratorctl` | Local operator CLI for `run`, `step`, `submit`, `gate`, `antigravity`, `doctor`, `instance`, `version`. | Reuse as local admin/debug surface. Do not make it the relay protocol. |
-| `cmd/connector` | `enroll` and `run`. Persists connector config locally. Opens outbound websocket to relay. | Reuse as the connector entrypoint. |
-| `cmd/relayd` | Self-hostable relay daemon with sqlite store. | Reuse as the relay entrypoint. |
+| `cmd/codencer-connectord` | `enroll` and `run`. Persists connector config locally. Opens outbound websocket to relay. | Canonical connector entrypoint. |
+| `cmd/codencer-relayd` | Self-hostable relay daemon with sqlite store. | Canonical relay entrypoint. |
 | `cmd/broker` | Optional Antigravity host-side broker for discovery/binding. | Reuse only for Antigravity topology; not part of relay protocol. |
 
 ### 1.2 Local Daemon REST API
@@ -156,9 +156,9 @@ Reuse decision:
 
 Verified current repo reality:
 
-- Local daemon exposes `/mcp/call` through `internal/mcp`.
-- Relay exposes `/mcp/call` through `internal/relay/mcp.go`.
-- Both are JSON-RPC-like call shims, not full MCP transport implementations.
+- Local daemon exposes `/mcp/call` through `internal/mcp` as a legacy compatibility/admin bridge.
+- Relay exposes `/mcp` and `/mcp/call` through `internal/relay/mcp_server.go`.
+- The relay MCP surface supports `initialize`, `tools/list`, and `tools/call`.
 - Local daemon tool names:
   - `orchestrator.start_run`
   - `orchestrator.list_runs`
@@ -173,21 +173,25 @@ Verified current repo reality:
   - `orchestrator.get_benchmarks`
   - `orchestrator.get_routing_config`
 - Relay tool names:
-  - `relay.list_instances`
-  - `relay.start_run`
-  - `relay.list_runs`
-  - `relay.submit_task`
-  - `relay.get_step`
-  - `relay.get_step_result`
-  - `relay.get_validations`
-  - `relay.list_artifacts`
-  - `relay.get_artifact_content`
-  - `relay.approve_gate`
-  - `relay.reject_gate`
+  - `codencer.list_instances`
+  - `codencer.get_instance`
+  - `codencer.start_run`
+  - `codencer.get_run`
+  - `codencer.submit_task`
+  - `codencer.get_step`
+  - `codencer.wait_step`
+  - `codencer.get_step_result`
+  - `codencer.list_step_artifacts`
+  - `codencer.get_artifact_content`
+  - `codencer.get_step_validations`
+  - `codencer.approve_gate`
+  - `codencer.reject_gate`
+  - `codencer.abort_run`
+  - `codencer.retry_step`
 
-Verified blocker:
+Verified remaining limitation:
 
-- Neither MCP surface currently supports `wait_step`, `abort_run`, or a standard MCP initialize/list-tools transport.
+- The daemon-local MCP surface remains legacy/local-only and should not be used as the public remote integration target.
 
 ## 2. Missing Pieces For Secure Remote Planner Callability
 
@@ -195,13 +199,13 @@ Verified gaps in the current repo:
 
 | Area | Verified current repo reality | Blocker |
 | --- | --- | --- |
-| Planner auth | Relay uses one static bearer token. | Good enough for first self-host cut; no scope separation or rotation yet. |
-| Connector auth | Enrollment uses shared secret. Relay stores hashed connector token. Websocket auth is header-based. | No challenge/nonce handshake yet. |
-| Presence/discovery | Relay persists instances and last seen time. | No explicit heartbeat contract, TTL, or offline state. |
-| Instance descriptor | Relay stores `instance_id`, `connector_id`, `repo_root`, `base_url`, raw compatibility JSON, `last_seen_at`. | No normalized planner-facing descriptor yet. |
-| Cancellation | Local daemon supports honest abort. | Relay has no planner abort route; connector allowlist does not permit `PATCH /api/v1/runs/{id}`. |
-| Wait semantics | `orchestratorctl` has wait logic. | No relay HTTP or MCP `wait_step` contract yet. |
-| Artifact content | Local daemon exposes `/api/v1/artifacts/{id}/content`. Relay proxies it. | Planner-facing relay response is raw passthrough today; no stable JSON content envelope. |
+| Planner auth | Relay uses static bearer tokens with scopes and optional instance restrictions. | Honest alpha-grade self-host auth; no rotation or enterprise IAM. |
+| Connector auth | Enrollment uses one-time tokens or legacy bootstrap secret, plus signed challenge/response for websocket sessions. | Revocation/disable flows are still operator-light. |
+| Presence/discovery | Relay persists advertised instances and tracks heartbeat-driven session presence. | Offline routing still depends on current relay state and TTL expiry. |
+| Instance descriptor | Relay stores `instance_id`, `connector_id`, `repo_root`, `base_url`, raw compatibility JSON, `last_seen_at`. | Planner-facing normalization is still lightweight. |
+| Cancellation | Local daemon supports honest abort and relay exposes abort passthrough. | Abort is still best-effort unless the adapter actually stops; success is only returned on a real `cancelled` outcome. |
+| Wait semantics | Relay HTTP and MCP both expose bounded `wait_step`. | No streaming/log-tail transport; wait remains poll-based. |
+| Artifact content | Local daemon exposes `/api/v1/artifacts/{id}/content`. Relay proxies it. | Large binary transport remains intentionally bounded. |
 | Artifact metadata by ID | Service can load artifact by ID. | No `GET /api/v1/artifacts/{id}` local endpoint; relay cannot build metadata-rich artifact responses from ID alone without cached context. |
 | Gate lifecycle | Local gate approval/rejection reconciles step and run state. | No local `GET /api/v1/gates/{id}` read surface; relay gate responses cannot return gate object without extra work. |
 | Resource routing | Relay learns `step`, `artifact`, and `gate` routes opportunistically by observing proxied responses. | Direct gate/artifact lookups can fail until the relay has seen those IDs in a prior response. |
@@ -609,18 +613,19 @@ Lock this list:
 | Method | Path | Contract |
 | --- | --- | --- |
 | `GET` | `/api/v2/instances` | Returns `[]InstanceDescriptor`. |
+| `GET` | `/api/v2/instances/{instance_id}` | Returns one `InstanceDescriptor`. |
 | `POST` | `/api/v2/instances/{instance_id}/runs` | `start_run` request. |
 | `GET` | `/api/v2/instances/{instance_id}/runs` | Returns runs. |
 | `GET` | `/api/v2/instances/{instance_id}/runs/{run_id}` | Returns run. |
-| `PATCH` | `/api/v2/instances/{instance_id}/runs/{run_id}` | Supports `{"action":"abort"}`. |
 | `POST` | `/api/v2/instances/{instance_id}/runs/{run_id}/steps` | `submit_task` request. |
+| `POST` | `/api/v2/instances/{instance_id}/runs/{run_id}/abort` | `abort_run` request. |
 | `GET` | `/api/v2/instances/{instance_id}/runs/{run_id}/gates` | Returns gates for run. |
 | `GET` | `/api/v2/steps/{step_id}` | Returns step. |
 | `GET` | `/api/v2/steps/{step_id}/result` | Returns result. |
 | `GET` | `/api/v2/steps/{step_id}/validations` | Returns validations. |
 | `GET` | `/api/v2/steps/{step_id}/artifacts` | Returns artifacts. |
-| `GET` | `/api/v2/steps/{step_id}/logs` | Returns log content or JSON-wrapped log content. |
 | `POST` | `/api/v2/steps/{step_id}/wait` | `wait_step` request/response. |
+| `POST` | `/api/v2/steps/{step_id}/retry` | `retry_step` request. |
 | `GET` | `/api/v2/artifacts/{artifact_id}/content` | `artifact content response`. |
 | `POST` | `/api/v2/gates/{gate_id}/approve` | `gate action response`. |
 | `POST` | `/api/v2/gates/{gate_id}/reject` | `gate action response`. |
@@ -639,21 +644,21 @@ Lock this list:
 
 Lock this list:
 
-- `relay.list_instances`
-- `relay.start_run`
-- `relay.list_runs`
-- `relay.get_run`
-- `relay.abort_run`
-- `relay.submit_task`
-- `relay.get_step`
-- `relay.wait_step`
-- `relay.get_step_result`
-- `relay.get_validations`
-- `relay.list_artifacts`
-- `relay.get_logs`
-- `relay.get_artifact_content`
-- `relay.approve_gate`
-- `relay.reject_gate`
+- `codencer.list_instances`
+- `codencer.get_instance`
+- `codencer.start_run`
+- `codencer.get_run`
+- `codencer.submit_task`
+- `codencer.get_step`
+- `codencer.wait_step`
+- `codencer.get_step_result`
+- `codencer.list_step_artifacts`
+- `codencer.get_artifact_content`
+- `codencer.get_step_validations`
+- `codencer.approve_gate`
+- `codencer.reject_gate`
+- `codencer.abort_run`
+- `codencer.retry_step`
 
 Rules:
 

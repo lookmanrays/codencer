@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -956,6 +957,69 @@ func TestRunService_AbortRunCancelsActiveAttempt(t *testing.T) {
 	}
 }
 
+func TestRunService_DispatchStepAsyncImmediateAbortCancelsBeforeAdapterStart(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	adapter := &cancelAwareAdapter{}
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"cancel-aware": adapter}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "async-abort-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	step := &domain.Step{
+		ID:      "async-abort-step",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Async Abort Step",
+		Adapter: "cancel-aware",
+	}
+
+	if err := runSvc.DispatchStepAsync(ctx, runID, step); err != nil {
+		t.Fatalf("DispatchStepAsync failed: %v", err)
+	}
+	if err := runSvc.AbortRun(ctx, runID); err != nil {
+		t.Fatalf("AbortRun failed: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		stepState, _ := runSvc.GetStep(ctx, step.ID)
+		if stepState != nil && stepState.State.IsTerminal() {
+			if stepState.State != domain.StepStateCancelled {
+				t.Fatalf("expected step state cancelled, got %s", stepState.State)
+			}
+			run, _ := runSvc.GetRun(ctx, runID)
+			if run.State != domain.RunStateCancelled {
+				t.Fatalf("expected run state cancelled, got %s", run.State)
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	t.Fatal("timed out waiting for async abort to reach a terminal state")
+}
+
 func TestRunService_AbortRunWithoutConfirmedStopFailsClosed(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -996,8 +1060,12 @@ func TestRunService_AbortRunWithoutConfirmedStopFailsClosed(t *testing.T) {
 	go func() { done <- runSvc.DispatchStep(context.Background(), runID, step) }()
 
 	time.Sleep(500 * time.Millisecond)
-	if err := runSvc.AbortRun(ctx, runID); err != nil {
-		t.Fatalf("AbortRun failed: %v", err)
+	err := runSvc.AbortRun(ctx, runID)
+	if err == nil {
+		t.Fatal("expected AbortRun to report an unconfirmed cancellation outcome")
+	}
+	if got := err.Error(); !strings.Contains(got, string(domain.StepStateNeedsManualAttention)) {
+		t.Fatalf("expected abort error to mention needs_manual_attention, got %q", got)
 	}
 	if err := <-done; err != nil {
 		t.Fatalf("DispatchStep failed after stubborn abort: %v", err)
@@ -1010,6 +1078,67 @@ func TestRunService_AbortRunWithoutConfirmedStopFailsClosed(t *testing.T) {
 	stepState, _ := runSvc.GetStep(ctx, step.ID)
 	if stepState.State != domain.StepStateNeedsManualAttention {
 		t.Fatalf("expected step state needs_manual_attention, got %s", stepState.State)
+	}
+}
+
+func TestRunService_AbortRunWithoutRegisteredExecutionMarksManualAttentionAndReturnsError(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"mock-adapter": &MockAdapter{}}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "manual-attention-run"
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	step := &domain.Step{
+		ID:        "manual-attention-step",
+		PhaseID:   "phase-execution-" + runID,
+		Title:     "Manual Attention Step",
+		Adapter:   "mock-adapter",
+		State:     domain.StepStateRunning,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := stepsRepo.Create(ctx, step); err != nil {
+		t.Fatalf("create step: %v", err)
+	}
+
+	err := runSvc.AbortRun(ctx, runID)
+	if err == nil {
+		t.Fatal("expected AbortRun to report missing execution registration")
+	}
+	if got := err.Error(); !strings.Contains(got, "no active execution was registered") {
+		t.Fatalf("unexpected abort error: %q", got)
+	}
+
+	stepState, _ := runSvc.GetStep(ctx, step.ID)
+	if stepState.State != domain.StepStateNeedsManualAttention {
+		t.Fatalf("expected step state needs_manual_attention, got %s", stepState.State)
+	}
+
+	run, _ := runSvc.GetRun(ctx, runID)
+	if run.State != domain.RunStateFailed {
+		t.Fatalf("expected run state failed after unresolved abort, got %s", run.State)
 	}
 }
 

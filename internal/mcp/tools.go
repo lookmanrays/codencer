@@ -14,7 +14,7 @@ func (s *Server) ToolStartRun(ctx context.Context, args map[string]interface{}) 
 	conversationID, _ := args["conversation_id"].(string)
 	plannerID, _ := args["planner_id"].(string)
 	executorID, _ := args["executor_id"].(string)
-	
+
 	if !ok1 || !ok2 {
 		return nil, fmt.Errorf("missing or invalid arguments: id, project_id")
 	}
@@ -31,9 +31,9 @@ func (s *Server) ToolStartRun(ctx context.Context, args map[string]interface{}) 
 				"text": fmt.Sprintf("Run %s created and started successfully.", run.ID),
 			},
 		},
-		"run_id":     run.ID,
-		"project_id": run.ProjectID,
-		"state":      run.State,
+		"run_id":         run.ID,
+		"project_id":     run.ProjectID,
+		"state":          run.State,
 		"recovery_notes": run.RecoveryNotes,
 	}, nil
 }
@@ -60,13 +60,13 @@ func (s *Server) ToolGetStatus(ctx context.Context, args map[string]interface{})
 				"text": fmt.Sprintf("Run %s is in state: %s", run.ID, run.State),
 			},
 		},
-		"run_id": run.ID,
-		"project_id": run.ProjectID,
+		"run_id":          run.ID,
+		"project_id":      run.ProjectID,
 		"conversation_id": run.ConversationID,
-		"planner_id": run.PlannerID,
-		"executor_id": run.ExecutorID,
-		"state":  run.State,
-		"recovery_notes": run.RecoveryNotes,
+		"planner_id":      run.PlannerID,
+		"executor_id":     run.ExecutorID,
+		"state":           run.State,
+		"recovery_notes":  run.RecoveryNotes,
 	}, nil
 }
 
@@ -158,7 +158,7 @@ func (s *Server) ToolStartStep(ctx context.Context, args map[string]interface{})
 	if !okAdapter {
 		adapter = "codex"
 	}
-	
+
 	step := &domain.Step{
 		ID:      stepID,
 		PhaseID: phaseID,
@@ -167,10 +167,10 @@ func (s *Server) ToolStartStep(ctx context.Context, args map[string]interface{})
 		Adapter: adapter,
 	}
 
-	go func() {
-		_ = s.runSvc.DispatchStep(context.Background(), runID, step)
-	}()
-    
+	if err := s.runSvc.DispatchStepAsync(ctx, runID, step); err != nil {
+		return nil, err
+	}
+
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
@@ -238,10 +238,9 @@ func (s *Server) ToolRetryStep(ctx context.Context, args map[string]interface{})
 		runID = placeholder
 	}
 
-	// Just route to DispatchStep to execute another attempt lifecycle
-	go func() {
-		_ = s.runSvc.DispatchStep(context.Background(), runID, step)
-	}()
+	if err := s.runSvc.DispatchStepAsync(ctx, runID, step); err != nil {
+		return nil, err
+	}
 
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
@@ -336,7 +335,7 @@ func (s *Server) ToolGetBenchmarks(ctx context.Context, args map[string]interfac
 // ToolGetRoutingConfig implements orchestrator.get_routing_config
 func (s *Server) ToolGetRoutingConfig(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 	config := s.runSvc.GetRoutingConfig(ctx)
-	
+
 	summary := fmt.Sprintf("Routing Mode: %s\nFallback Chain: %v", config["mode"], config["chain"])
 
 	return map[string]interface{}{

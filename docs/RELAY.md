@@ -28,9 +28,8 @@ The local daemon is not intended to be exposed directly.
 
 ## Startup
 
-Run either relay binary:
+Run the canonical relay binary:
 
-- `./bin/relayd`
 - `./bin/codencer-relayd`
 
 The relay config must include at least:
@@ -131,7 +130,7 @@ Current honest limitations:
 - planner auth is static-token based
 - relay step/gate/artifact routing is opportunistic and can miss unknown IDs until they were previously observed
 - artifact transfer is bounded and is not intended for bulk binary transport
-- abort semantics remain best-effort unless the local adapter confirms stop
+- abort semantics remain best-effort unless the local adapter confirms stop; planner callers only get a successful abort when the daemon actually reaches `cancelled`
 
 ## Audit Trail
 

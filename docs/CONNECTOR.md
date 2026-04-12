@@ -87,6 +87,11 @@ It does not expose:
 - arbitrary file reads
 - generic network tunneling
 
+Abort forwarding stays honest:
+- the connector can forward an abort request
+- it cannot guarantee a hard process kill on the local adapter side
+- a remote abort is only considered successful when the daemon confirms the active step reached `cancelled`
+
 ## Placement Guidance
 
 The default recommendation is:

@@ -34,6 +34,7 @@ Supported MCP methods:
 The relay MCP surface is JSON-RPC over HTTP.
 
 It is intentionally narrow and maps to relay behavior rather than exposing a second planner or execution protocol.
+The daemon-local `/mcp/call` endpoint is only a local compatibility/admin bridge and should not be used as the public remote integration target.
 
 ## Compatibility Note
 

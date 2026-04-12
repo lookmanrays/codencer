@@ -9,7 +9,8 @@ import (
 	"agent-bridge/internal/service"
 )
 
-// Server provides the MCP bridge over HTTP (mimicking MCP's basic transport).
+// Server provides a daemon-local MCP compatibility/admin bridge over HTTP.
+// The public remote MCP surface lives on the relay, not on the daemon.
 type Server struct {
 	runSvc  *service.RunService
 	gateSvc *service.GateService
@@ -25,6 +26,7 @@ func NewServer(runSvc *service.RunService, gateSvc *service.GateService) *Server
 
 // HandleCall mimics an MCP CallTool endpoint.
 func (s *Server) HandleCall(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Codencer-MCP-Surface", "local-compatibility")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

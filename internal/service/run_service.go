@@ -247,7 +247,8 @@ func (s *RunService) GetRoutingConfig(ctx context.Context) map[string]interface{
 
 const abortGracePeriod = 5 * time.Second
 
-// Abort transitions the run to cancelled only after the active execution actually stops.
+// AbortRun is a best-effort cancellation request.
+// It reports success only after the active step actually reaches the cancelled state.
 func (s *RunService) AbortRun(ctx context.Context, id string) error {
 	run, err := s.runsRepo.Get(ctx, id)
 	if err != nil {
@@ -281,7 +282,10 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 			}
 		}
 		if hasNonTerminal {
-			return s.reconcileRunState(ctx, id)
+			if err := s.reconcileRunState(ctx, id); err != nil {
+				return err
+			}
+			return fmt.Errorf("abort requested for run %s, but no active execution was registered; non-terminal steps were moved to needs_manual_attention", id)
 		}
 
 		run.State = domain.RunStateCancelled
@@ -299,10 +303,32 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 
 	select {
 	case <-execution.done:
-		return nil
+		return s.abortOutcome(ctx, id, execution.stepID)
 	case <-waitCtx.Done():
 		return fmt.Errorf("abort requested for run %s, but the active execution did not stop within %s", id, abortGracePeriod+2*time.Second)
 	}
+}
+
+// DispatchStepAsync persists dispatch state synchronously, then continues execution in the background.
+func (s *RunService) DispatchStepAsync(ctx context.Context, runID string, step *domain.Step) error {
+	if ctx != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err := s.initializeStep(context.Background(), runID, step); err != nil {
+		return err
+	}
+
+	dispatchCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	s.registerExecution(runID, step.ID, cancel, done)
+
+	go func() {
+		if err := s.dispatchPreparedStep(context.Background(), dispatchCtx, runID, step, done); err != nil {
+			slog.Error("Failed to dispatch step asynchronously", "runID", runID, "stepID", step.ID, "error", err)
+		}
+	}()
+
+	return nil
 }
 
 // DispatchStep handles the tactical execution of a planner-issued Step.
@@ -312,20 +338,47 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 		return err
 	}
 
-	dispatchCtx, cancel := context.WithCancel(ctx)
+	baseCtx := ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	dispatchCtx, cancel := context.WithCancel(baseCtx)
 	done := make(chan struct{})
 	s.registerExecution(runID, step.ID, cancel, done)
+
+	return s.dispatchPreparedStep(ctx, dispatchCtx, runID, step, done)
+}
+
+func (s *RunService) dispatchPreparedStep(persistCtx, dispatchCtx context.Context, runID string, step *domain.Step, done chan struct{}) error {
 	defer s.clearExecution(runID)
 	defer close(done)
 
+	finalizeEarlyAbort := func() error {
+		finalizationCtx := context.Background()
+		if err := s.finalizeStep(finalizationCtx, runID, step, nil, PolicyEvaluation{}, ""); err != nil {
+			return err
+		}
+		return s.reconcileRunState(finalizationCtx, runID)
+	}
+
+	if dispatchCtx.Err() != nil || s.isAbortRequested(runID) {
+		return finalizeEarlyAbort()
+	}
+
 	fallbackChain, err := s.routingSvc.BuildHeuristicChain(dispatchCtx, step.Adapter)
 	if err != nil || len(fallbackChain) == 0 {
+		if dispatchCtx.Err() != nil || s.isAbortRequested(runID) {
+			return finalizeEarlyAbort()
+		}
 		return s.failStep(dispatchCtx, step, fmt.Sprintf("no viable adapters found for profile '%s'", step.Adapter))
 	}
 
 	step.State = domain.StepStateRunning
 	step.UpdatedAt = time.Now().UTC()
 	if err := s.stepsRepo.UpdateState(dispatchCtx, step); err != nil {
+		if dispatchCtx.Err() != nil || s.isAbortRequested(runID) {
+			return finalizeEarlyAbort()
+		}
 		return err
 	}
 
@@ -334,14 +387,14 @@ func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domai
 		return err
 	}
 
-	persistCtx := ctx
-	if persistCtx == nil {
-		persistCtx = context.Background()
+	finalizationCtx := persistCtx
+	if finalizationCtx == nil || finalizationCtx.Err() != nil {
+		finalizationCtx = context.Background()
 	}
-	if err := s.finalizeStep(persistCtx, runID, step, finalResult, finalEval, finalAttemptID); err != nil {
+	if err := s.finalizeStep(finalizationCtx, runID, step, finalResult, finalEval, finalAttemptID); err != nil {
 		return err
 	}
-	return s.reconcileRunState(persistCtx, runID)
+	return s.reconcileRunState(finalizationCtx, runID)
 }
 
 // RetryStep re-dispatches an existing step.
@@ -362,14 +415,7 @@ func (s *RunService) RetryStep(ctx context.Context, stepID string) error {
 		return fmt.Errorf("phase %s for step %s not found", step.PhaseID, stepID)
 	}
 
-	// We dispatch asynchronously because DispatchStep blocks.
-	go func() {
-		if err := s.DispatchStep(context.Background(), phase.RunID, step); err != nil {
-			slog.Error("Failed to retry step", "stepID", stepID, "error", err)
-		}
-	}()
-
-	return nil
+	return s.DispatchStepAsync(ctx, phase.RunID, step)
 }
 
 func (s *RunService) initializeStep(ctx context.Context, runID string, step *domain.Step) error {
@@ -904,9 +950,14 @@ func (s *RunService) finalizeStep(
 	eval PolicyEvaluation,
 	attemptID string,
 ) error {
-	if s.isAbortRequested(runID) && finalResult != nil {
-		step.State = finalResult.State
-		step.StatusReason = finalResult.Summary
+	if s.isAbortRequested(runID) {
+		if finalResult == nil {
+			step.State = domain.StepStateCancelled
+			step.StatusReason = "Execution cancelled before adapter start."
+		} else {
+			step.State = finalResult.State
+			step.StatusReason = finalResult.Summary
+		}
 	} else if eval.ShouldGate {
 		step.State = domain.StepStateNeedsApproval
 		gate := &domain.Gate{
@@ -1058,6 +1109,24 @@ func (s *RunService) waitForAdapterStop(adapter domain.Adapter, attemptID string
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func (s *RunService) abortOutcome(ctx context.Context, runID, stepID string) error {
+	outcomeCtx := ctx
+	if outcomeCtx == nil || outcomeCtx.Err() != nil {
+		outcomeCtx = context.Background()
+	}
+	step, err := s.stepsRepo.Get(outcomeCtx, stepID)
+	if err != nil {
+		return fmt.Errorf("abort requested for run %s, but the final step outcome could not be loaded: %w", runID, err)
+	}
+	if step == nil {
+		return fmt.Errorf("abort requested for run %s, but step %s was not found after the execution stopped", runID, stepID)
+	}
+	if step.State == domain.StepStateCancelled {
+		return nil
+	}
+	return fmt.Errorf("abort requested for run %s, but step %s ended in state %s", runID, stepID, step.State)
 }
 
 func (s *RunService) ensureResultEnvelope(result *domain.ResultSpec, runID string, step *domain.Step, attempt *domain.Attempt) {

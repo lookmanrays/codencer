@@ -147,7 +147,7 @@ Supported remote actions include:
 - retry step
 
 Current limitations remain explicit:
-- abort is best-effort unless the adapter actually confirms stop
+- abort is best-effort unless the adapter actually confirms stop, and the caller only gets a successful abort when the active step reaches `cancelled`
 - relay step/gate/artifact routing is opportunistic and may require prior observation of those IDs
 
 ## Allowed Remote Surface
