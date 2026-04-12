@@ -13,7 +13,7 @@
     "adapter": { "type": "string" },
     "state": {
       "type": "string",
-      "description": "Terminal outcomes reported to the planner: completed (success), failed_terminal (failure), timeout (limit exceeded), cancelled (aborted), needs_manual_attention (blocked/review).",
+      "description": "Bridge-reported step state. Terminal states include completed, completed_with_warnings, needs_manual_attention, failed_retryable, failed_terminal, failed_validation, failed_adapter, failed_bridge, timeout, and cancelled.",
       "enum": [
         "pending",
         "dispatching",
@@ -26,6 +26,9 @@
         "needs_manual_attention",
         "failed_retryable",
         "failed_terminal",
+        "failed_validation",
+        "failed_adapter",
+        "failed_bridge",
         "timeout",
         "cancelled"
       ]

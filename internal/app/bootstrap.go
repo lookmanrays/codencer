@@ -26,18 +26,21 @@ import (
 
 // AppContext holds the core dependencies for the daemon.
 type AppContext struct {
-	Config    *Config
-	Logger    *slog.Logger
-	DB        *sql.DB
-	Server    *http.Server
-	StartedAt time.Time
-	RepoRoot  string
+	Config      *Config
+	Logger      *slog.Logger
+	DB          *sql.DB
+	Server      *http.Server
+	StartedAt   time.Time
+	RepoRoot    string
+	InstanceID  string
+	Adapters    map[string]domain.Adapter
+	InstanceSvc *service.InstanceService
 }
 
 // Bootstrap initializes configuration, logger, storage, artifact paths, and the HTTP server.
 func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppContext, error) {
 	startedAt := time.Now()
-	
+
 	// 1. Load configuration
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
@@ -128,7 +131,7 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
 	validationsRepo := sqlite.NewValidationsRepo(db)
 	settingsRepo := sqlite.NewSettingsRepo(db)
-	
+
 	policyReg := service.NewPolicyRegistry()
 	policyDir := filepath.Join(filepath.Dir(cfg.DBPath), "config", "policies")
 	if _, err := os.Stat(policyDir); os.IsNotExist(err) {
@@ -140,24 +143,24 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 		logger.Warn("Failed to load policies, using internal defaults", "dir", policyDir, "error", err)
 	}
 
-	gateSvc := service.NewGateService(gatesRepo, runsRepo)
+	gateSvc := service.NewGateService(gatesRepo, runsRepo, stepsRepo, attemptsRepo)
 	agSvc := service.NewAntigravityService(settingsRepo, cfg.AntigravityBrokerURL, repoRoot)
 
 	adapters := map[string]domain.Adapter{
-		"codex":             codex.NewAdapter(),
-		"claude":            claude.NewAdapter(),
-		"qwen":              qwen.NewAdapter(),
-		"ide-chat":          ide.NewAdapter(),
-		"openclaw-acpx":     openclaw_acpx.NewAdapter(),
-		"antigravity":       antigravity.NewAdapter(agSvc),
+		"codex":              codex.NewAdapter(),
+		"claude":             claude.NewAdapter(),
+		"qwen":               qwen.NewAdapter(),
+		"ide-chat":           ide.NewAdapter(),
+		"openclaw-acpx":      openclaw_acpx.NewAdapter(),
+		"antigravity":        antigravity.NewAdapter(agSvc),
 		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, repoRoot),
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
 	provisioner := workspace.NewLocalProvisioner()
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, provisioner, cfg.ArtifactRoot, cfg.WorkspaceRoot)
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo, routingSvc, policyReg, provisioner, cfg.ArtifactRoot, cfg.WorkspaceRoot, repoRoot)
 
-	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot)
+	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, gatesRepo, cfg.ArtifactRoot, cfg.WorkspaceRoot, repoRoot)
 	if err := recoverySvc.SweepStaleRuns(ctx); err != nil {
 		logger.Warn("Failed to sweep stale runs during bootstrap", "error", err)
 	}
@@ -169,13 +172,40 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 		WriteTimeout: 10 * time.Second,
 	}
 
-	appCtx := &AppContext{
-		Config:    cfg,
-		Logger:    logger,
-		DB:        db,
-		Server:    server,
-		StartedAt: startedAt,
-		RepoRoot:  repoRoot,
+	stateDir := filepath.Dir(cfg.DBPath)
+	var appCtx *AppContext
+	instanceSvc := service.NewInstanceService(
+		settingsRepo,
+		agSvc,
+		Version,
+		startedAt,
+		repoRoot,
+		stateDir,
+		cfg.WorkspaceRoot,
+		cfg.Host,
+		cfg.Port,
+		func() map[string]domain.Adapter {
+			if appCtx == nil {
+				return adapters
+			}
+			return appCtx.Adapters
+		},
+	)
+	instanceID, err := instanceSvc.EnsureStableInstanceID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize stable instance identity: %w", err)
+	}
+
+	appCtx = &AppContext{
+		Config:      cfg,
+		Logger:      logger,
+		DB:          db,
+		Server:      server,
+		StartedAt:   startedAt,
+		RepoRoot:    repoRoot,
+		InstanceID:  instanceID,
+		Adapters:    adapters,
+		InstanceSvc: instanceSvc,
 	}
 
 	apiHandler := &APIHandler{
@@ -185,9 +215,14 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 		AppCtx:  appCtx,
 	}
 	apiHandler.RegisterRoutes(mux)
+	if manifestPath, err := instanceSvc.WriteManifest(ctx); err != nil {
+		return nil, fmt.Errorf("failed to write instance manifest: %w", err)
+	} else {
+		appCtx.Logger.Info("Instance manifest ready", "path", manifestPath)
+	}
 
-	appCtx.Logger.Info("Codencer instance ready", 
-		"repo_root", repoRoot, 
+	appCtx.Logger.Info("Codencer instance ready",
+		"repo_root", repoRoot,
 		"base_url", fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port))
 
 	return appCtx, nil

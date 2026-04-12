@@ -1,78 +1,62 @@
-> [!NOTE]
-> This is a **design specification** and may not fully reflect the current implementation.
-> For the latest implementation status, see the [Gap Audit](internal/GAP_AUDIT.md).
-
 # Security and Operations
 
-## Security principles
+This document describes the current operational security model for Codencer v2.
 
-### Least privilege
-Planner side gets only safe MCP/orchestrator tools.
+## Security Principles
 
-### Explicit project root
-Every run is bound to a configured project root.
+- **Bridge Not Brain**: Codencer executes, waits, records, and reports. It does not plan.
+- **Local Execution**: adapters and artifacts stay local to the daemon side.
+- **Explicit Sharing**: connector discovery does not imply exposure; config is the allowlist.
+- **Narrow Remote Surface**: relay HTTP API and relay MCP expose only instance-scoped orchestration operations.
+- **Evidence First**: results, validations, and artifacts are recorded as local truth.
 
-### Deterministic artifacts
-All artifacts stored under controlled artifact root.
+## Remote Surfaces
 
-### Policy before power
-Destructive/risky changes require gates.
+The only intended remote control surfaces are:
+- relay planner API
+- relay MCP
+- connector outbound websocket
 
-## Gate triggers for MVP
+The daemon is not intended to be internet-facing.
 
-- migration file created/changed
-- dependency manifest or lockfile changed
-- forbidden path touched
-- too many files changed
-- deletes over threshold
-- validations fail
-- adapter reports unresolved ambiguity
+## What Is Not Exposed
 
-## Repo safety
+Codencer v2 does not expose:
+- raw shell execution through relay or MCP
+- arbitrary filesystem browsing through relay or MCP
+- generic network tunneling through the connector
+- implicit repo sharing
+- unauthenticated remote control
 
-- detect dirty repo before run
-- optional worktree isolation
-- run locks
-- diff capture before cleanup
-- safe cleanup path
+## Local Safety
 
-## Process safety
+The daemon preserves local safety by:
+- anchoring execution to an explicit repo root
+- isolating attempts with worktree and provisioning logic
+- persisting run, step, gate, and artifact truth locally
+- keeping abort semantics honest when cancellation is not confirmed
 
-- child process supervision
-- timeout handling
-- cancellation
-- retry limits
-- duplicate execution prevention
-- crash recovery
+## Remote Safety
 
-## Artifact safety
+The relay and connector preserve remote safety by:
+- authenticating planners with bearer tokens
+- authenticating connectors with enrollment plus signed challenge/response
+- allowing only explicitly shared instances to be advertised
+- routing only through the connector allowlist
+- persisting audit events for remote control actions
 
-Artifacts may contain code and logs.
+## Current Honest Limitations
 
-Recommendations:
-- local only by default
-- retention policy later
-- no automatic upload
-- clear directory ownership
+- planner auth is static-token based
+- connector and relay routing for step/gate/artifact IDs is opportunistic
+- large artifact transfer is intentionally bounded
+- abort remains best-effort unless the adapter actually stops
+- current self-host auth model is alpha-grade, not enterprise IAM
 
-## Required test strategy
+## Operator Guidance
 
-### Unit tests
-- state transitions
-- policy evaluation
-- schema validation
-- adapter normalization
-
-### Integration tests
-- SQLite storage
-- artifact store
-- daemon lifecycle
-- CLI behavior
-
-### E2E
-- run start
-- step execution
-- validation
-- gate creation
-- approve/retry
-- completion
+- keep the daemon on loopback or another trusted local boundary
+- expose the relay instead of exposing the daemon
+- keep the connector on the same side as the daemon when possible
+- inspect results, validations, and artifacts via CLI or API, not raw path assumptions
+- treat Antigravity broker and relay as separate trust domains

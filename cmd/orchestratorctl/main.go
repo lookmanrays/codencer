@@ -1235,6 +1235,7 @@ func handleInstanceCommand(args []string) {
 	}
 
 	fmt.Printf("--- Codencer Instance Identity ---\n")
+	fmt.Printf("Instance ID:   %s\n", info.ID)
 	fmt.Printf("Version:       %s\n", info.Version)
 	fmt.Printf("Repo Root:     %s\n", info.RepoRoot)
 	fmt.Printf("Base URL:      %s\n", info.BaseURL)

@@ -8,12 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Self-hostable v2 relay path with:
+  - stable daemon instance identity and manifest-backed discovery
+  - outbound authenticated connector sessions with explicit shared-instance allowlists
+  - self-host relay planner API, enrollment token flow, audit persistence, and relay-side MCP tools
 - **OpenClaw (acpx) Adapter**: 🧪 Experimental support for OpenClaw-compatible executors via the standardized ACP bridge.
 - Official sequential wrapper examples for bash/zsh, PowerShell, and Python under `examples/automation/`.
 - Wrapper-friendly sample task lists and prompt/task inputs for ordered execution.
 - New `scripts/smoke_test_v1.sh` for verifying all 6 primary submission modes.
 
 ### Changed
+- Rewrote operator-facing v2 docs to match the implemented local/self-host path and current runtime truth.
+- Clarified that the relay is the public remote HTTP/MCP surface and the daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface.
+- Documented current self-host alpha limitations explicitly: best-effort abort, opportunistic resource routing, bounded artifact transport, and static-token auth.
 - **Unified v1 Documentation Truth-Pass**: Cleaned and synchronized all public-facing docs (README, AI Guide, Runbook, Automation) for 100% alignment with the CLI contract.
 - Expanded automation documentation to make the shell-planner story explicit and machine-oriented.
 - Clarified that ordered task execution in v1 is wrapper-based and not a native workflow engine.

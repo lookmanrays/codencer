@@ -19,23 +19,33 @@ type RecoveryService struct {
 	runsRepo      *sqlite.RunsRepo
 	stepsRepo     *sqlite.StepsRepo
 	attemptsRepo  *sqlite.AttemptsRepo
+	gatesRepo     *sqlite.GatesRepo
 	artifactRoot  string
 	workspaceRoot string
+	repoRoot      string
 }
 
 func NewRecoveryService(
 	runsRepo *sqlite.RunsRepo,
 	stepsRepo *sqlite.StepsRepo,
 	attemptsRepo *sqlite.AttemptsRepo,
+	gatesRepo *sqlite.GatesRepo,
 	artifactRoot string,
 	workspaceRoot string,
+	repoRoot ...string,
 ) *RecoveryService {
+	baseRepoRoot := "."
+	if len(repoRoot) > 0 && repoRoot[0] != "" {
+		baseRepoRoot = repoRoot[0]
+	}
 	return &RecoveryService{
 		runsRepo:      runsRepo,
 		stepsRepo:     stepsRepo,
 		attemptsRepo:  attemptsRepo,
+		gatesRepo:     gatesRepo,
 		artifactRoot:  artifactRoot,
 		workspaceRoot: workspaceRoot,
+		repoRoot:      baseRepoRoot,
 	}
 }
 
@@ -52,15 +62,19 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	for _, r := range runs {
 		currentOwner := workspace.CheckLock(s.workspaceRoot)
 		if currentOwner == r.ID {
-			// Still locked by the current process? 
+			// Still locked by the current process?
 			// In a local bridge, if we are in Sweep, we usually assume we are the only orchestrator.
 			// If it's locked and we are here, it's either a concurrent orchestrator or a stale lock.
 			// For now, we assume if we are sweeping, we OWN the workspace root.
 		}
 
-		notes := s.reconcileRunSteps(ctx, r)
+		notes, recoveredGate := s.reconcileRunSteps(ctx, r)
 		r.RecoveryNotes = notes
-		r.State = domain.RunStatePausedForGate
+		if recoveredGate {
+			r.State = domain.RunStatePausedForGate
+		} else {
+			r.State = domain.RunStateFailed
+		}
 		r.UpdatedAt = time.Now().UTC()
 		_ = s.runsRepo.UpdateState(ctx, r)
 		slog.Info("Reconciled stale run", "runID", r.ID, "notes", notes)
@@ -72,7 +86,7 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	return nil
 }
 
-func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run) string {
+func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run) (string, bool) {
 	steps, _ := s.stepsRepo.ListByRun(ctx, run.ID)
 	salvaged := 0
 	failed := 0
@@ -89,8 +103,20 @@ func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run
 			if _, err := os.Stat(resultPath); err == nil {
 				// Result exists but DB state is not terminal. Salvage it.
 				step.State = domain.StepStateNeedsApproval
+				step.StatusReason = "Recovered stale step with result evidence; manual review required."
 				step.UpdatedAt = time.Now().UTC()
 				_ = s.stepsRepo.UpdateState(ctx, step)
+				gate := &domain.Gate{
+					ID:          fmt.Sprintf("gate-recovery-%s", step.ID),
+					RunID:       run.ID,
+					StepID:      step.ID,
+					Description: "Recovered stale step requires manual review before the run can continue.",
+					State:       domain.GateStatePending,
+					CreatedAt:   time.Now().UTC(),
+				}
+				if err := s.gatesRepo.Create(ctx, gate); err != nil {
+					slog.Warn("Failed to create recovery gate", "runID", run.ID, "stepID", step.ID, "error", err)
+				}
 				salvaged++
 				continue
 			}
@@ -103,11 +129,11 @@ func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run
 		failed++
 	}
 
-	return fmt.Sprintf("Recovery sweep completed: salvaged %d steps, marked %d steps failed_retryable. Run paused for inspection.", salvaged, failed)
+	return fmt.Sprintf("Recovery sweep completed: salvaged %d steps, marked %d steps failed_retryable.", salvaged, failed), salvaged > 0
 }
 
 func (s *RecoveryService) cleanupOrphans(ctx context.Context) {
-	worktrees, err := workspace.ListWorktrees(ctx, ".")
+	worktrees, err := workspace.ListWorktrees(ctx, s.repoRoot)
 	if err != nil {
 		slog.Warn("Failed to list worktrees for orphan cleanup", "error", err)
 		return
@@ -126,7 +152,7 @@ func (s *RecoveryService) cleanupOrphans(ctx context.Context) {
 		lockOwner := workspace.CheckLock(s.workspaceRoot)
 		if lockOwner != runID {
 			slog.Info("Cleaning up orphaned worktree", "path", wt, "runID", runID)
-			_ = workspace.RemoveWorktree(ctx, ".", wt)
+			_ = workspace.RemoveWorktree(ctx, s.repoRoot, wt)
 		}
 	}
 
@@ -148,7 +174,7 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if run.State != domain.RunStatePausedForGate && run.State != domain.RunStateCreated {
 		return fmt.Errorf("run %s is not in a resumable state (must be paused_for_gate or created)", runID)
 	}
@@ -158,9 +184,9 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 	if owner != "" && owner != runID {
 		return fmt.Errorf("cannot resume run %s: workspace is currently locked by run %s", runID, owner)
 	}
-	
+
 	slog.Info("Resuming run", "runID", runID)
-	
+
 	run.State = domain.RunStateRunning
 	run.UpdatedAt = time.Now().UTC()
 	return s.runsRepo.UpdateState(ctx, run)

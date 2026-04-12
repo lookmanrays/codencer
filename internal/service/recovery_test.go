@@ -19,7 +19,7 @@ func TestRecovery_StaleAttempt_Salvage(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 	db, _ := sql.Open("sqlite3", dbPath)
 	sqlite.RunMigrations(db)
-	
+
 	artifactRoot := filepath.Join(tmpDir, "artifacts")
 	workspaceRoot := filepath.Join(tmpDir, "workspace")
 	os.MkdirAll(artifactRoot, 0755)
@@ -29,8 +29,9 @@ func TestRecovery_StaleAttempt_Salvage(t *testing.T) {
 	stepsRepo := sqlite.NewStepsRepo(db)
 	attemptsRepo := sqlite.NewAttemptsRepo(db)
 	phasesRepo := sqlite.NewPhasesRepo(db)
-	
-	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, artifactRoot, workspaceRoot)
+	gatesRepo := sqlite.NewGatesRepo(db)
+
+	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, gatesRepo, artifactRoot, workspaceRoot)
 	ctx := context.Background()
 
 	// 1. Setup Stale State
@@ -48,7 +49,7 @@ func TestRecovery_StaleAttempt_Salvage(t *testing.T) {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	})
-	
+
 	// Simulate process completion on disk but crash before DB update
 	// New namespaced path: <artifactRoot>/<runID>/<stepID>/<attemptID>
 	stepArtDir := filepath.Join(artifactRoot, runID, stepID, "stale-attempt-1")
@@ -74,6 +75,13 @@ func TestRecovery_StaleAttempt_Salvage(t *testing.T) {
 	if step.State != domain.StepStateNeedsApproval {
 		t.Errorf("Expected step state NeedsApproval (salvaged), got %s", step.State)
 	}
+	gates, err := gatesRepo.ListByRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("list gates: %v", err)
+	}
+	if len(gates) != 1 || gates[0].State != domain.GateStatePending {
+		t.Fatalf("expected one pending recovery gate, got %+v", gates)
+	}
 }
 
 func TestRecovery_StaleAttempt_Fail(t *testing.T) {
@@ -81,7 +89,7 @@ func TestRecovery_StaleAttempt_Fail(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 	db, _ := sql.Open("sqlite3", dbPath)
 	sqlite.RunMigrations(db)
-	
+
 	artifactRoot := filepath.Join(tmpDir, "artifacts")
 	workspaceRoot := filepath.Join(tmpDir, "workspace")
 	os.MkdirAll(artifactRoot, 0755)
@@ -91,8 +99,9 @@ func TestRecovery_StaleAttempt_Fail(t *testing.T) {
 	stepsRepo := sqlite.NewStepsRepo(db)
 	attemptsRepo := sqlite.NewAttemptsRepo(db)
 	phasesRepo := sqlite.NewPhasesRepo(db)
-	
-	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, artifactRoot, workspaceRoot)
+	gatesRepo := sqlite.NewGatesRepo(db)
+
+	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, gatesRepo, artifactRoot, workspaceRoot)
 	ctx := context.Background()
 
 	// 1. Setup Stale State (no result on disk)
@@ -110,5 +119,9 @@ func TestRecovery_StaleAttempt_Fail(t *testing.T) {
 	step, _ := stepsRepo.Get(ctx, stepID)
 	if step.State != domain.StepStateFailedRetryable {
 		t.Errorf("Expected step state FailedRetryable, got %s", step.State)
+	}
+	run, _ := runsRepo.Get(ctx, runID)
+	if run.State != domain.RunStateFailed {
+		t.Errorf("Expected run state Failed, got %s", run.State)
 	}
 }

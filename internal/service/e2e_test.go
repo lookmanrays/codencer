@@ -62,7 +62,7 @@ func TestE2EFlow(t *testing.T) {
 		artifactRoot,
 		workspaceRoot,
 	)
-	gateSvc := service.NewGateService(gatesRepo, runsRepo)
+	gateSvc := service.NewGateService(gatesRepo, runsRepo, stepsRepo, attemptsRepo)
 
 	ctx := context.Background()
 
@@ -117,8 +117,8 @@ func TestE2EFlow(t *testing.T) {
 
 	// Recheck run state
 	run, _ := runSvc.GetRun(ctx, runId)
-	if run.State != domain.RunStateRunning {
-		t.Fatalf("Expected run state Running after approval, got %s", run.State)
+	if run.State != domain.RunStateCompleted {
+		t.Fatalf("Expected run state Completed after approval, got %s", run.State)
 	}
 
 	t.Log("Orchestrator Lifecycle Simulation Passed!")

@@ -23,6 +23,11 @@ func TestRunService_BrokerDispatch_WorkspaceWorktreePrecedence(t *testing.T) {
 	// 1. Setup Mock Broker
 	var receivedRepoRoot, receivedWorkspaceRoot string
 	mockBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/result") && r.Method == "GET" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"steps":[{"items":[{"message":{"text":"Success!"}}]}]}`))
+			return
+		}
 		if r.URL.Path == "/tasks" && r.Method == "POST" {
 			var b struct {
 				Prompt        string `json:"prompt"`
@@ -39,11 +44,6 @@ func TestRunService_BrokerDispatch_WorkspaceWorktreePrecedence(t *testing.T) {
 		if strings.HasPrefix(r.URL.Path, "/tasks/broker-task-123") && r.Method == "GET" {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"id":"broker-task-123", "state":"completed", "summary":"Mock success"}`))
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/result") && r.Method == "GET" {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"steps":[{"items":[{"message":{"text":"Success!"}}]}]}`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
