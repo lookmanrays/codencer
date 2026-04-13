@@ -1,5 +1,7 @@
 # Build artifacts
 bin/
+node_modules/
+extension/out/
 orchestratorctl
 !cmd/orchestratorctl/
 !cmd/orchestratorctl/*.go

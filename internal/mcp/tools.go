@@ -7,6 +7,9 @@ import (
 	"agent-bridge/internal/domain"
 )
 
+// These daemon-local tool names remain a local compatibility/admin surface.
+// Remote planner integrations should use the relay-side codencer.* MCP tools instead.
+
 // ToolStartRun implements `orchestrator.start_run` tool.
 func (s *Server) ToolStartRun(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 	id, ok1 := args["id"].(string)

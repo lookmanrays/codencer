@@ -3,7 +3,7 @@ run_id: "validation-run-01"
 step_id: "bump-version-01"
 # [OPTIONAL] phase_id: "phase-execution-$RUN_ID" (auto-generated if omitted)
 title: "Internal Version Bump"
-goal: "Update internal/app/version.go to set Version = \"v0.1.0-alpha\""
+goal: "Update internal/app/version.go to set Version = \"v0.2.0-alpha-validation\""
 adapter_profile: "codex"
 constraints:
   - "Do not change the package name"

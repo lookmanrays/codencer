@@ -18,12 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `scripts/smoke_test_v1.sh` for verifying all 6 primary submission modes.
 
 ### Changed
+- Adopted `v0.2.0-alpha` as the truthful build/version string for the current v2 self-host alpha repo state.
 - Rewrote operator-facing v2 docs to match the implemented local/self-host path and current runtime truth.
 - Clarified that the relay is the public remote HTTP/MCP surface and the daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface.
 - Documented current self-host alpha limitations explicitly: best-effort abort, opportunistic resource routing, bounded artifact transport, and static-token auth.
 - Removed duplicate public connector/relay binary surfaces in favor of the canonical `codencer-connectord` and `codencer-relayd` entrypoints.
 - Tightened abort reporting so Codencer only reports success when the active step really reaches `cancelled`.
-- **Unified v1 Documentation Truth-Pass**: Cleaned and synchronized all public-facing docs (README, AI Guide, Runbook, Automation) for 100% alignment with the CLI contract.
+- Removed committed extension dependency/build output directories and kept only the extension manifests plus source.
+- **Unified Documentation Truth-Pass**: Cleaned and synchronized current public-facing docs (README, AI Guide, Runbook, Automation) for alignment with the implemented CLI and relay surfaces.
 - Expanded automation documentation to make the shell-planner story explicit and machine-oriented.
 - Clarified that ordered task execution in v1 is wrapper-based and not a native workflow engine.
 - Hardened smoke/example guidance around strict JSON parsing and machine-safe CLI usage.

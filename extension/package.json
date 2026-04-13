@@ -1,8 +1,8 @@
 {
   "name": "codencer-bridge",
   "displayName": "Codencer Bridge",
-  "description": "Local MVP GUI for Codencer agent orchestration",
-  "version": "0.1.0",
+  "description": "Local alpha GUI for Codencer orchestration",
+  "version": "0.2.0-alpha",
   "engines": {
     "vscode": "^1.80.0"
   },

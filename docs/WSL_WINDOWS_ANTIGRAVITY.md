@@ -34,6 +34,7 @@ The trust model is intentionally narrow:
   - authenticates planners and connectors
   - routes requests to the correct shared instance
   - records audit events
+  - exposes the canonical remote MCP surface at `/mcp`
   - does not execute code and does not plan
 - **Connector**
   - opens outbound websocket session to relay
@@ -43,6 +44,7 @@ The trust model is intentionally narrow:
 - **Daemon**
   - owns run, step, gate, artifact, and state-machine truth
   - executes work locally through adapters
+  - exposes `/mcp/call` only as a local compatibility/admin bridge
   - must not be exposed directly to the internet
 - **Antigravity broker**
   - is separate from relay

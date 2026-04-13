@@ -22,7 +22,7 @@ This guide provides the technical baseline for running the Codencer Orchestratio
 
 ### 2.1 Clone & Build
 ```bash
-git clone https://github.com/verbaux/codencer
+git clone https://github.com/lookmanrays/codencer
 cd codencer
 
 # 1. Initialize environment and check requirements
@@ -45,7 +45,7 @@ The `doctor` tool verifies if your environment is ready for tactical execution.
 The `orchestratord` is the persistent system of record. It must be running to receive tasks.
 
 ### 3.1 Simulation Mode (Orchestrator Validation)
-Use this mode to test your local setup, CLI, and MCP layers without consuming LLM credits or requiring agent binaries.
+Use this mode to test your local setup, CLI, and local daemon surfaces without consuming LLM credits or requiring agent binaries.
 ```bash
 make start-sim
 ```
@@ -58,6 +58,9 @@ make start
 ```
 
 Claude is executed in headless print mode as `claude -p --output-format json`. Codencer builds the task prompt, writes it to `prompt.txt`, delivers it on `stdin`, and runs the process from the attempt workspace root.
+
+> [!IMPORTANT]
+> The daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface. The canonical remote MCP surface for planners lives on the relay at `/mcp`.
 
 ---
 

@@ -1,14 +1,17 @@
+VERSION ?= v0.2.0-alpha
+LDFLAGS := -X agent-bridge/internal/app.Version=$(VERSION)
+
 all: lint test build
 
 build:
 	@echo "==> Building orchestratord..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/orchestratord ./cmd/orchestratord
+	@go build -ldflags "$(LDFLAGS)" -o bin/orchestratord ./cmd/orchestratord
 	@echo "==> Building orchestratorctl..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/orchestratorctl ./cmd/orchestratorctl
+	@go build -ldflags "$(LDFLAGS)" -o bin/orchestratorctl ./cmd/orchestratorctl
 	@echo "==> Building codencer-connectord..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/codencer-connectord ./cmd/codencer-connectord
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-connectord ./cmd/codencer-connectord
 	@echo "==> Building codencer-relayd..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/codencer-relayd ./cmd/codencer-relayd
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-relayd ./cmd/codencer-relayd
 
 test:
 	@echo "==> Running tests..."

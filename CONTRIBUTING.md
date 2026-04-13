@@ -1,6 +1,6 @@
 # Contributing to Codencer
 
-Thank you for your interest in contributing to Codencer! As a **Public Beta (v0.1.0-beta)** project, we are actively looking for feedback on our orchestration protocols, CLI ergonomics, and adapter reliability.
+Thank you for your interest in contributing to Codencer! As an **open-source alpha (`v0.2.0-alpha`)** project, we are actively looking for feedback on the current local/self-host execution path, CLI ergonomics, and adapter reliability.
 
 ## 🏛 The Relay Philosophy
 Before contributing, please remember that Codencer is a **Defensive Relay**, not a "Brain." We prioritize:

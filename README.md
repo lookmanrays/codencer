@@ -5,7 +5,7 @@ Codencer is a tactical orchestration bridge that manages execution, isolation, a
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
 > [!IMPORTANT]
-> **Project Status: Open-source alpha for the v2 local/self-host path**.
+> **Project Status: Open-source alpha for the v2 local/self-host path (`v0.2.0-alpha`)**.
 > Codencer is coherent and buildable for disciplined local and self-host use, but the current relay, auth, artifact transport, and cancellation guarantees are still alpha-grade and documented honestly below.
 
 ---
@@ -138,7 +138,7 @@ make start
 
 For Claude, Codencer invokes the installed CLI as `claude -p --output-format json`, sends the step prompt on `stdin`, and runs from the isolated attempt workspace as the process `cwd`.
 
-Current support level for the Claude adapter is **Supported (Beta)**: the wrapper contract is implemented and covered by prompt, normalization, lifecycle, fake-binary integration, and simulation conformance tests, but the repo test suite does not run a live authenticated Claude service call.
+The Claude adapter wrapper path is implemented and test-covered in this repo: prompt shaping, normalization, lifecycle behavior, fake-binary integration, and simulation conformance are exercised, but the repo test suite does not run a live authenticated Claude service call. Treat `/api/v1/compatibility` plus your actual runtime environment as the source of truth for local adapter readiness.
 
 ### 3. Run Your First Tactical Task
 Submit a task and wait for the bridge to report results. For the full auditing sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
@@ -347,7 +347,7 @@ Codencer distinguishes between different failure modes to help you recover faste
 ## 🧪 Simulation vs. Real Execution
 
 1. **Simulation Mode** (`make start-sim`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
-2. **Real Mode**: Tests the full end-to-end loop with real agents. **Codex-agent** is the primary supported path; others are in early beta.
+2. **Real Mode**: Tests the full end-to-end loop with real agents. **Codex-agent** is the primary path exercised in this repo; other adapters are implementation-backed but should still be treated as alpha-grade unless your local runtime proves them ready.
 
 ---
 

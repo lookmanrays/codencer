@@ -39,4 +39,4 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
 
 ---
 
-**Status**: If steps 1-4 pass, your bridge is **Operational (v1.0-release-candidate)**.
+**Status**: If steps 1-4 pass, your local bridge baseline is **Operational (`v0.2.0-alpha`)**.

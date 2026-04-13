@@ -527,6 +527,7 @@ func (m *valMockAdapter) NormalizeResult(ctx context.Context, attemptID string, 
 
 func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	ctx := context.Background()
+	repoRoot := createGitRepo(t)
 	db, _ := sql.Open("sqlite3", ":memory:")
 	sqlite.RunMigrations(db)
 
@@ -553,7 +554,7 @@ func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	// Use service. prefix for package-level types and functions
 	runSvc := service.NewRunService(
 		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
-		routingSvc, service.NewPolicyRegistry(), workspace.NewNullProvisioner(), artifactRoot, workspaceRoot,
+		routingSvc, service.NewPolicyRegistry(), workspace.NewNullProvisioner(), artifactRoot, workspaceRoot, repoRoot,
 	)
 
 	runID := "run-val-1"
@@ -628,7 +629,7 @@ func TestRunService_DispatchStep_WithValidations(t *testing.T) {
 	routingSvcIso := service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"mock-iso": isoAdapter})
 	runSvcIso := service.NewRunService(
 		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
-		routingSvcIso, &service.PolicyRegistry{}, workspace.NewNullProvisioner(), artifactRoot, workspaceRoot,
+		routingSvcIso, &service.PolicyRegistry{}, workspace.NewNullProvisioner(), artifactRoot, workspaceRoot, repoRoot,
 	)
 
 	stepIso := &domain.Step{

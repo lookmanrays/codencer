@@ -27,7 +27,7 @@ Always verify the daemon's identity to ensure you are targeting the correct repo
 **Expected JSON Response:**
 ```json
 {
-  "version": "v0.1.0-beta",
+  "version": "v0.2.0-alpha",
   "repo_root": "/home/user/my-project",
   "execution_mode": "REAL",
   "port": 8085

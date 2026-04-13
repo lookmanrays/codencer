@@ -526,7 +526,7 @@ func (s *RunService) selectAdapterProfile(fallbackChain []string, attemptNum int
 
 func (s *RunService) createAttempt(ctx context.Context, step *domain.Step, attemptNum int, adapterProfile string) (*domain.Attempt, error) {
 	attempt := &domain.Attempt{
-		ID:        fmt.Sprintf("%s-a%d-%d", step.ID, attemptNum, time.Now().Unix()),
+		ID:        fmt.Sprintf("%s-a%d-%d", step.ID, attemptNum, time.Now().UnixNano()),
 		StepID:    step.ID,
 		Number:    attemptNum,
 		Adapter:   adapterProfile,
@@ -1126,7 +1126,7 @@ func (s *RunService) abortOutcome(ctx context.Context, runID, stepID string) err
 	if step.State == domain.StepStateCancelled {
 		return nil
 	}
-	return fmt.Errorf("abort requested for run %s, but step %s ended in state %s", runID, stepID, step.State)
+	return fmt.Errorf("abort requested for run %s, but cancellation was not confirmed; step %s ended in state %s", runID, stepID, step.State)
 }
 
 func (s *RunService) ensureResultEnvelope(result *domain.ResultSpec, runID string, step *domain.Step, attempt *domain.Attempt) {
