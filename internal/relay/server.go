@@ -18,6 +18,7 @@ type Server struct {
 	store      *Store
 	hub        *Hub
 	server     *http.Server
+	startedAt  time.Time
 	upgrader   websocket.Upgrader
 	enrollment *EnrollmentService
 	auditor    *Auditor
@@ -33,6 +34,7 @@ func NewServer(cfg *Config, store *Store) *Server {
 		cfg:        cfg,
 		store:      store,
 		hub:        NewHub(time.Duration(cfg.SessionTTLSeconds) * time.Second),
+		startedAt:  time.Now().UTC(),
 		enrollment: NewEnrollmentService(cfg, store),
 		auditor:    NewAuditor(store),
 		upgrader: websocket.Upgrader{
@@ -45,6 +47,9 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/api/v2/connectors/enroll", s.handleEnroll)
 	mux.HandleFunc("/api/v2/connectors/challenge", s.handleChallenge)
 	mux.HandleFunc("/api/v2/connectors/enrollment-tokens", s.withPlannerScope("connectors:enroll", nil, s.handleEnrollmentTokens))
+	mux.HandleFunc("/api/v2/status", s.withPlannerScope("admin:read", nil, s.handleStatus))
+	mux.HandleFunc("/api/v2/connectors", s.withPlannerScope("admin:read", nil, s.handleConnectors))
+	mux.HandleFunc("/api/v2/audit", s.withPlannerScope("admin:read", nil, s.handleAudit))
 	mux.HandleFunc("/api/v2/instances", s.withPlannerScope("instances:read", nil, s.handleInstances))
 	mux.HandleFunc("/api/v2/instances/", s.withPlannerScope("", relayInstanceIDFromRequest, s.handleInstanceScoped))
 	mux.HandleFunc("/api/v2/steps/", s.withPlannerScope("", nil, s.handleStepScoped))

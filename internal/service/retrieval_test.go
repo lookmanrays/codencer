@@ -207,4 +207,67 @@ func TestRunService_Retrieval(t *testing.T) {
 			t.Fatalf("unexpected logs content: %s", string(content))
 		}
 	})
+
+	t.Run("Log Retrieval deterministically prefers latest stdout", func(t *testing.T) {
+		logStepID := "deterministic-log-step"
+		logAttemptID := logStepID + "-a1"
+		logStep := &domain.Step{
+			ID:      logStepID,
+			PhaseID: "phase-01-" + runID,
+			Title:   "Deterministic Log Step",
+			Adapter: "mock",
+			State:   domain.StepStateCompleted,
+		}
+		if err := stepsRepo.Create(ctx, logStep); err != nil {
+			t.Fatal(err)
+		}
+		if err := attemptsRepo.Create(ctx, &domain.Attempt{
+			ID:        logAttemptID,
+			StepID:    logStepID,
+			Number:    1,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		baseTime := time.Now().Add(-3 * time.Minute)
+		for _, spec := range []struct {
+			id      string
+			kind    domain.ArtifactType
+			content string
+			when    time.Time
+		}{
+			{id: "stdout-old", kind: domain.ArtifactTypeStdout, content: "stdout-old", when: baseTime},
+			{id: "stderr-newer", kind: domain.ArtifactTypeStderr, content: "stderr-newer", when: baseTime.Add(1 * time.Minute)},
+			{id: "stdout-new", kind: domain.ArtifactTypeStdout, content: "stdout-new", when: baseTime.Add(2 * time.Minute)},
+		} {
+			logPath := filepath.Join(t.TempDir(), spec.id+".log")
+			if err := os.WriteFile(logPath, []byte(spec.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := artifactsRepo.Create(ctx, &domain.Artifact{
+				ID:        spec.id,
+				AttemptID: logAttemptID,
+				Type:      spec.kind,
+				Name:      spec.id + ".log",
+				Path:      logPath,
+				CreatedAt: spec.when,
+				UpdatedAt: spec.when,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		foundArtifact, content, err := svc.GetLogsByStep(ctx, logStepID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if foundArtifact.ID != "stdout-new" {
+			t.Fatalf("expected latest stdout artifact, got %s", foundArtifact.ID)
+		}
+		if string(content) != "stdout-new" {
+			t.Fatalf("unexpected logs content: %s", string(content))
+		}
+	})
 }

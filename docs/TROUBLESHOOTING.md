@@ -112,8 +112,8 @@ Every task result includes a `state`. Understanding the difference between **Inf
 ## 4. Antigravity & Broker Issues (Experimental)
 
 ### 4.1 "Broker bind error: connection refused"
-- **Cause**: The Windows-side `agent-broker.exe` is not running.
-- **Fix**: Start the broker on the host machine. Verify port 8088 is open.
+- **Cause**: The Windows-side broker is not running.
+- **Fix**: Run `make build-broker`, start the resulting broker binary on the host machine, and verify port 8088 is open.
 
 ### 4.2 "No instances discovered"
 - **Cause**: Antigravity is not active in your IDE or the `.gemini` daemon directory is hidden/unreachable.

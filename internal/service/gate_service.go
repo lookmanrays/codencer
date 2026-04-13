@@ -21,6 +21,11 @@ func NewGateService(repo *sqlite.GatesRepo, runsRepo *sqlite.RunsRepo, stepsRepo
 	return &GateService{repo: repo, runsRepo: runsRepo, stepsRepo: stepsRepo, attemptsRepo: attemptsRepo}
 }
 
+// Get returns a single gate by ID.
+func (s *GateService) Get(ctx context.Context, gateID string) (*domain.Gate, error) {
+	return s.repo.Get(ctx, gateID)
+}
+
 // Approve unlocks a paused run and transitions it back to running.
 func (s *GateService) Approve(ctx context.Context, gateID string) error {
 	return s.resolve(ctx, gateID, domain.GateStateApproved)

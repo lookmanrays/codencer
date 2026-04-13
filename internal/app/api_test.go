@@ -298,4 +298,78 @@ func TestAPI_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected artifact body %v", body)
 		}
 	})
+
+	t.Run("GET /api/v1/artifacts/{id} returns artifact metadata", func(t *testing.T) {
+		attempt := &domain.Attempt{
+			ID:        "attempt-meta-1",
+			StepID:    "step-meta",
+			Number:    1,
+			Adapter:   "mock",
+			State:     domain.StepStateCompleted,
+			Result:    &domain.ResultSpec{Version: "v1", State: domain.StepStateCompleted, Summary: "done"},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := attemptsRepo.Create(ctx, attempt); err != nil {
+			t.Fatal(err)
+		}
+		artifact := &domain.Artifact{
+			ID:        "artifact-meta-1",
+			AttemptID: attempt.ID,
+			Type:      domain.ArtifactTypeStdout,
+			Name:      "stdout.log",
+			Path:      "/tmp/stdout.log",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := artsRepo.Create(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/"+artifact.ID, nil)
+		w := httptest.NewRecorder()
+		handler.handleArtifactByID(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var found domain.Artifact
+		if err := json.NewDecoder(w.Body).Decode(&found); err != nil {
+			t.Fatal(err)
+		}
+		if found.ID != artifact.ID {
+			t.Fatalf("expected artifact %s, got %s", artifact.ID, found.ID)
+		}
+	})
+
+	t.Run("GET /api/v1/gates/{id} returns gate metadata", func(t *testing.T) {
+		gate := &domain.Gate{
+			ID:          "gate-api-1",
+			RunID:       runID,
+			StepID:      "step-api-gate",
+			Description: "approval required",
+			State:       domain.GateStatePending,
+			CreatedAt:   time.Now().UTC(),
+		}
+		if err := gatesRepo.Create(ctx, gate); err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/gates/"+gate.ID, nil)
+		w := httptest.NewRecorder()
+		handler.handleGateByID(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var found domain.Gate
+		if err := json.NewDecoder(w.Body).Decode(&found); err != nil {
+			t.Fatal(err)
+		}
+		if found.ID != gate.ID {
+			t.Fatalf("expected gate %s, got %s", gate.ID, found.ID)
+		}
+	})
 }

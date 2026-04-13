@@ -66,6 +66,11 @@ Run the relay with:
 
 The relay is the public remote control plane. Do not expose the daemon directly.
 
+Operator status/admin endpoints live on the relay too:
+- `GET /api/v2/status`
+- `GET /api/v2/connectors`
+- `GET /api/v2/audit?limit=N`
+
 ### 4. Create a one-time enrollment token
 
 ```bash
@@ -92,7 +97,7 @@ The connector persists:
 - `instances[]` allowlist entries
 
 Legacy bootstrap compatibility:
-- `enrollment_secret` is still accepted if configured on the relay
+- `enrollment_secret` is still accepted if configured on the relay as a bootstrap-only fallback
 - new self-host setups should prefer one-time enrollment tokens
 
 ### 6. Verify instance sharing
@@ -105,6 +110,12 @@ Important rules:
 - only `share: true` instances are advertised
 
 Inspect `.codencer/connector/config.json` and verify only intended instances are shared before running the connector.
+You can also inspect the relay-side view of shared instances with:
+
+```bash
+curl <relay>/api/v2/connectors \
+  -H 'Authorization: Bearer <planner-token>'
+```
 
 ### 7. Run the connector
 
@@ -113,6 +124,12 @@ Inspect `.codencer/connector/config.json` and verify only intended instances are
 ```
 
 The connector opens an outbound authenticated websocket session to the relay and advertises only the explicitly shared local instances.
+
+Check connector state locally at any time:
+
+```bash
+./bin/codencer-connectord status --json
+```
 
 ### 8. Connect the planner
 
@@ -148,7 +165,13 @@ Supported remote actions include:
 
 Current limitations remain explicit:
 - abort is best-effort unless the adapter actually confirms stop, and the caller only gets a successful abort when the active step reaches `cancelled`
-- relay step/gate/artifact routing is opportunistic and may require prior observation of those IDs
+- large binary artifact transfer is intentionally bounded
+
+Current routing behavior:
+- relay step/gate/artifact lookups first use stored route hints
+- if a hint is missing, the relay probes only authorized online shared instances
+- successful probes are persisted as route hints for later lookups
+- ambiguous matches still fail closed
 
 ## Allowed Remote Surface
 
@@ -166,6 +189,30 @@ The relay and connector do not expose:
 - raw shell
 - arbitrary filesystem browsing
 - generic network tunneling
+
+## Practical Smoke Path
+
+Once the daemon and relay are already running, use the repo smoke helper for the happy path:
+
+```bash
+PLANNER_TOKEN=<planner-token> make self-host-smoke
+```
+
+The smoke flow:
+1. reads the local daemon instance identity
+2. creates a one-time relay enrollment token
+3. enrolls and runs a temporary connector
+4. waits for instance advertisement
+5. starts a run through the relay
+6. submits a real `TaskSpec`-compatible task
+7. waits for the step
+8. fetches result and artifacts
+
+If you need the Windows-side broker binary too, build it separately with:
+
+```bash
+make build-broker
+```
 
 ## WSL / Windows / Antigravity
 

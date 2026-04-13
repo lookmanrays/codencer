@@ -424,14 +424,11 @@ func requiresExplicitInstance(scope string) bool {
 }
 
 func (s *mcpServer) requireRoutedInstance(ctx context.Context, resourceKind, resourceID, instanceID string) *apiError {
-	routedInstance, err := s.relay.store.LookupResourceRoute(ctx, resourceKind, resourceID)
-	if err != nil {
-		return &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	resolvedInstance, apiErr := s.relay.resolveResourceRoute(ctx, &plannerPrincipal{Scopes: []string{"*"}}, resourceKind, resourceID, "", instanceID)
+	if apiErr != nil {
+		return apiErr
 	}
-	if routedInstance == "" {
-		return &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: fmt.Sprintf("%s route not found", resourceKind)}
-	}
-	if routedInstance != instanceID {
+	if resolvedInstance != instanceID {
 		return &apiError{Status: http.StatusForbidden, Code: "instance_denied", Message: fmt.Sprintf("%s is not routed to the requested instance", resourceKind)}
 	}
 	return nil

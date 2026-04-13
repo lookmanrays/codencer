@@ -65,7 +65,7 @@ Connector auth uses:
 - heartbeat-driven presence
 
 Legacy bootstrap compatibility:
-- `enrollment_secret` can still be used directly if configured
+- `enrollment_secret` can still be used directly if configured, but it should be treated as bootstrap-only fallback
 - new deployments should prefer one-time enrollment tokens
 
 ## Persisted State
@@ -83,6 +83,9 @@ The relay persists in SQLite:
 Planner-facing HTTP routes live under `/api/v2`.
 
 Current routes include:
+- `GET /api/v2/status`
+- `GET /api/v2/connectors`
+- `GET /api/v2/audit?limit=N`
 - `GET /api/v2/instances`
 - `GET /api/v2/instances/{instance_id}`
 - `GET|POST /api/v2/instances/{instance_id}/runs`
@@ -100,6 +103,11 @@ Current routes include:
 - `POST /api/v2/gates/{gate_id}/reject`
 
 These routes stay narrow and instance-oriented.
+
+Operational notes:
+- `/api/v2/status` returns relay version, start time, connector and instance counts, auth mode, and whether bootstrap `enrollment_secret` mode is enabled
+- `/api/v2/connectors` returns connector identity, online/offline state, last seen, disabled state, and shared instance ids
+- `/api/v2/audit` returns recent persisted audit events newest first, default limit `100`, max `1000`
 
 ## MCP Surface
 
@@ -128,7 +136,7 @@ The relay does not widen privileges beyond planner token scopes or connector sha
 
 Current honest limitations:
 - planner auth is static-token based
-- relay step/gate/artifact routing is opportunistic and can miss unknown IDs until they were previously observed
+- relay resolves unknown `step`, `artifact`, and `gate` ids by probing only authorized online shared instances, then persists route hints; lookups still fail closed when no online match exists or multiple instances match
 - artifact transfer is bounded and is not intended for bulk binary transport
 - abort semantics remain best-effort unless the local adapter confirms stop; planner callers only get a successful abort when the daemon actually reaches `cancelled`
 

@@ -2,16 +2,17 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/storage/sqlite"
 	"agent-bridge/internal/workspace"
-	"path/filepath"
-	"strings"
 )
 
 // RecoveryService handles failure recovery, stale run sweeps, and resumability.
@@ -68,13 +69,13 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 			// For now, we assume if we are sweeping, we OWN the workspace root.
 		}
 
-		notes, recoveredGate := s.reconcileRunSteps(ctx, r)
+		notes := s.reconcileRunSteps(ctx, r)
 		r.RecoveryNotes = notes
-		if recoveredGate {
-			r.State = domain.RunStatePausedForGate
-		} else {
-			r.State = domain.RunStateFailed
+		steps, stepsErr := s.stepsRepo.ListByRun(ctx, r.ID)
+		if stepsErr != nil {
+			return fmt.Errorf("failed to reload reconciled run steps: %w", stepsErr)
 		}
+		r.State = deriveRunState(steps)
 		r.UpdatedAt = time.Now().UTC()
 		_ = s.runsRepo.UpdateState(ctx, r)
 		slog.Info("Reconciled stale run", "runID", r.ID, "notes", notes)
@@ -86,50 +87,85 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	return nil
 }
 
-func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run) (string, bool) {
+func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run) string {
 	steps, _ := s.stepsRepo.ListByRun(ctx, run.ID)
-	salvaged := 0
-	failed := 0
+	salvagedTerminal := 0
+	salvagedGate := 0
+	manualAttention := 0
 
 	for _, step := range steps {
 		if step.State.IsTerminal() || step.State == domain.StepStateNeedsApproval {
 			continue
 		}
 
-		// Check for result footprint on disk in the latest attempt's namespaced folder
+		if gate, err := s.findPendingGate(ctx, run.ID, step.ID); err == nil && gate != nil {
+			step.State = domain.StepStateNeedsApproval
+			step.StatusReason = "Recovered paused step with a pending gate."
+			step.UpdatedAt = time.Now().UTC()
+			_ = s.stepsRepo.UpdateState(ctx, step)
+			salvagedGate++
+			continue
+		}
+
 		latestAttempt, err := s.attemptsRepo.GetLatestByStep(ctx, step.ID)
 		if err == nil && latestAttempt != nil {
-			resultPath := filepath.Join(s.artifactRoot, run.ID, step.ID, latestAttempt.ID, "result.json")
-			if _, err := os.Stat(resultPath); err == nil {
-				// Result exists but DB state is not terminal. Salvage it.
-				step.State = domain.StepStateNeedsApproval
-				step.StatusReason = "Recovered stale step with result evidence; manual review required."
-				step.UpdatedAt = time.Now().UTC()
-				_ = s.stepsRepo.UpdateState(ctx, step)
-				gate := &domain.Gate{
-					ID:          fmt.Sprintf("gate-recovery-%s", step.ID),
-					RunID:       run.ID,
-					StepID:      step.ID,
-					Description: "Recovered stale step requires manual review before the run can continue.",
-					State:       domain.GateStatePending,
-					CreatedAt:   time.Now().UTC(),
+			if latestAttempt.Result != nil {
+				switch {
+				case latestAttempt.Result.State.IsTerminal():
+					step.State = latestAttempt.Result.State
+					step.StatusReason = latestAttempt.Result.Summary
+					step.UpdatedAt = time.Now().UTC()
+					_ = s.stepsRepo.UpdateState(ctx, step)
+					salvagedTerminal++
+					continue
+				case latestAttempt.Result.State == domain.StepStateNeedsApproval:
+					step.State = domain.StepStateNeedsApproval
+					step.StatusReason = latestAttempt.Result.Summary
+					step.UpdatedAt = time.Now().UTC()
+					_ = s.stepsRepo.UpdateState(ctx, step)
+					if err := s.ensureRecoveryGate(ctx, run.ID, step.ID); err != nil {
+						slog.Warn("Failed to ensure recovery gate", "runID", run.ID, "stepID", step.ID, "error", err)
+					}
+					salvagedGate++
+					continue
 				}
-				if err := s.gatesRepo.Create(ctx, gate); err != nil {
-					slog.Warn("Failed to create recovery gate", "runID", run.ID, "stepID", step.ID, "error", err)
+			}
+			if result, err := s.readResultEvidence(run.ID, step.ID, latestAttempt.ID); err == nil && result != nil {
+				switch {
+				case result.State.IsTerminal():
+					step.State = result.State
+					step.StatusReason = result.Summary
+					step.UpdatedAt = time.Now().UTC()
+					_ = s.stepsRepo.UpdateState(ctx, step)
+					salvagedTerminal++
+					continue
+				case result.State == domain.StepStateNeedsApproval:
+					step.State = domain.StepStateNeedsApproval
+					step.StatusReason = result.Summary
+					step.UpdatedAt = time.Now().UTC()
+					_ = s.stepsRepo.UpdateState(ctx, step)
+					if err := s.ensureRecoveryGate(ctx, run.ID, step.ID); err != nil {
+						slog.Warn("Failed to ensure recovery gate", "runID", run.ID, "stepID", step.ID, "error", err)
+					}
+					salvagedGate++
+					continue
 				}
-				salvaged++
-				continue
 			}
 		}
 
-		// No result found or no latest attempt. Mark as failed-retryable.
-		step.State = domain.StepStateFailedRetryable
+		step.State = domain.StepStateNeedsManualAttention
+		step.StatusReason = "Bridge restarted while this step was active and could not verify a safe terminal outcome."
 		step.UpdatedAt = time.Now().UTC()
 		_ = s.stepsRepo.UpdateState(ctx, step)
-		failed++
+		manualAttention++
 	}
 
-	return fmt.Sprintf("Recovery sweep completed: salvaged %d steps, marked %d steps failed_retryable.", salvaged, failed), salvaged > 0
+	return fmt.Sprintf(
+		"Recovery sweep completed: restored %d terminal steps, restored %d gated steps, marked %d steps needs_manual_attention.",
+		salvagedTerminal,
+		salvagedGate,
+		manualAttention,
+	)
 }
 
 func (s *RecoveryService) cleanupOrphans(ctx context.Context) {
@@ -166,6 +202,51 @@ func (s *RecoveryService) cleanupOrphans(ctx context.Context) {
 			_ = os.Remove(lockPath)
 		}
 	}
+}
+
+func (s *RecoveryService) findPendingGate(ctx context.Context, runID, stepID string) (*domain.Gate, error) {
+	gates, err := s.gatesRepo.ListByRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	for _, gate := range gates {
+		if gate.StepID == stepID && gate.State == domain.GateStatePending {
+			return gate, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *RecoveryService) ensureRecoveryGate(ctx context.Context, runID, stepID string) error {
+	gate, err := s.findPendingGate(ctx, runID, stepID)
+	if err != nil {
+		return err
+	}
+	if gate != nil {
+		return nil
+	}
+	recoveryGate := &domain.Gate{
+		ID:          fmt.Sprintf("gate-recovery-%s", stepID),
+		RunID:       runID,
+		StepID:      stepID,
+		Description: "Recovered stale step requires manual review before the run can continue.",
+		State:       domain.GateStatePending,
+		CreatedAt:   time.Now().UTC(),
+	}
+	return s.gatesRepo.Create(ctx, recoveryGate)
+}
+
+func (s *RecoveryService) readResultEvidence(runID, stepID, attemptID string) (*domain.ResultSpec, error) {
+	resultPath := filepath.Join(s.artifactRoot, runID, stepID, attemptID, "result.json")
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		return nil, err
+	}
+	var result domain.ResultSpec
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // Resume Run attempts to pick up a run that is in a valid resumable state (PausedForGate).

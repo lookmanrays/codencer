@@ -135,8 +135,8 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 	policyReg := service.NewPolicyRegistry()
 	policyDir := filepath.Join(filepath.Dir(cfg.DBPath), "config", "policies")
 	if _, err := os.Stat(policyDir); os.IsNotExist(err) {
-		// Fallback to project root config/policies for local development
-		policyDir = filepath.Join("config", "policies")
+		// Fall back to the configured repo root, never the caller's cwd.
+		policyDir = filepath.Join(repoRoot, "config", "policies")
 	}
 
 	if err := policyReg.LoadFromDir(policyDir); err != nil {

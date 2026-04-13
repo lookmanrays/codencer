@@ -308,12 +308,31 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) handleArtifactByID(w http.ResponseWriter, r *http.Request) {
 	fullPath := strings.TrimPrefix(r.URL.Path, "/api/v1/artifacts/")
 	parts := strings.Split(strings.Trim(fullPath, "/"), "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] != "content" {
-		http.Error(w, "Artifact ID and /content suffix are required", http.StatusBadRequest)
+	if len(parts) == 0 || parts[0] == "" {
+		http.Error(w, "Artifact ID is required", http.StatusBadRequest)
 		return
 	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if len(parts) == 1 {
+		artifact, err := h.RunSvc.GetArtifact(r.Context(), parts[0])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if artifact == nil {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(artifact)
+		return
+	}
+	if len(parts) < 2 || parts[1] != "content" {
+		http.Error(w, "Artifact ID and /content suffix are required", http.StatusBadRequest)
 		return
 	}
 
@@ -335,6 +354,21 @@ func (h *APIHandler) handleGateByID(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Path[len("/api/v1/gates/"):]
 	if id == "" {
 		http.Error(w, "ID required", http.StatusBadRequest)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		gate, err := h.GateSvc.Get(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if gate == nil {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(gate)
 		return
 	}
 

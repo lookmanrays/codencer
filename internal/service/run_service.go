@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -269,8 +270,13 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 			return serr
 		}
 		hasNonTerminal := false
+		hasPendingGate := false
 		for _, step := range steps {
-			if step.State.IsTerminal() || step.State == domain.StepStateNeedsApproval {
+			if step.State == domain.StepStateNeedsApproval {
+				hasPendingGate = true
+				continue
+			}
+			if step.State.IsTerminal() {
 				continue
 			}
 			hasNonTerminal = true
@@ -281,16 +287,17 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 				return err
 			}
 		}
-		if hasNonTerminal {
-			if err := s.reconcileRunState(ctx, id); err != nil {
-				return err
-			}
-			return fmt.Errorf("abort requested for run %s, but no active execution was registered; non-terminal steps were moved to needs_manual_attention", id)
+		if err := s.reconcileRunState(ctx, id); err != nil {
+			return err
 		}
-
-		run.State = domain.RunStateCancelled
-		run.UpdatedAt = time.Now().UTC()
-		return s.runsRepo.UpdateState(ctx, run)
+		switch {
+		case hasPendingGate:
+			return fmt.Errorf("abort requested for run %s, but the run is paused_for_gate; resolve the pending gate explicitly before retrying or abandoning the run", id)
+		case hasNonTerminal:
+			return fmt.Errorf("abort requested for run %s, but no active execution was registered; non-terminal steps were moved to needs_manual_attention", id)
+		default:
+			return fmt.Errorf("abort requested for run %s, but no active execution was registered", id)
+		}
 	}
 
 	s.requestAbort(id)
@@ -587,7 +594,7 @@ func (s *RunService) executeAttempt(
 	policy *domain.Policy,
 ) (*domain.ResultSpec, PolicyEvaluation, error) {
 	// 1. Setup Environment
-	workspaceRoot := fmt.Sprintf("%s/%s", s.workspaceRoot, runID)
+	workspaceRoot := filepath.Join(s.workspaceRoot, runID)
 	attemptArtifactRoot := filepath.Join(s.artifactRoot, runID, step.ID, attempt.ID)
 	baseRepo := s.repoRoot
 	branchName := "codencer-" + runID
@@ -1227,19 +1234,41 @@ func (s *RunService) GetLogsByStep(ctx context.Context, stepID string) (*domain.
 		return nil, nil, err
 	}
 
-	var selected *domain.Artifact
+	var candidates []*domain.Artifact
 	for _, artifact := range artifacts {
-		if artifact.Type == domain.ArtifactTypeStdout {
-			selected = artifact
-			break
-		}
-		if selected == nil && artifact.Type == domain.ArtifactTypeStderr {
-			selected = artifact
+		if artifact.Type == domain.ArtifactTypeStdout || artifact.Type == domain.ArtifactTypeStderr {
+			candidates = append(candidates, artifact)
 		}
 	}
-	if selected == nil {
+	if len(candidates) == 0 {
 		return nil, nil, fmt.Errorf("no log artifact found for step %s", stepID)
 	}
 
+	sort.Slice(candidates, func(i, j int) bool {
+		left, right := candidates[i], candidates[j]
+		if logArtifactPriority(left.Type) != logArtifactPriority(right.Type) {
+			return logArtifactPriority(left.Type) < logArtifactPriority(right.Type)
+		}
+		if !left.CreatedAt.Equal(right.CreatedAt) {
+			return left.CreatedAt.After(right.CreatedAt)
+		}
+		if !left.UpdatedAt.Equal(right.UpdatedAt) {
+			return left.UpdatedAt.After(right.UpdatedAt)
+		}
+		return left.ID > right.ID
+	})
+
+	selected := candidates[0]
 	return s.GetArtifactContent(ctx, selected.ID)
+}
+
+func logArtifactPriority(artifactType domain.ArtifactType) int {
+	switch artifactType {
+	case domain.ArtifactTypeStdout:
+		return 0
+	case domain.ArtifactTypeStderr:
+		return 1
+	default:
+		return 2
+	}
 }

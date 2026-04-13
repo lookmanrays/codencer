@@ -243,6 +243,44 @@ func (s *Store) GetConnector(ctx context.Context, connectorID string) (*Connecto
 	return record, nil
 }
 
+func (s *Store) ListConnectors(ctx context.Context) ([]ConnectorRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT connector_id, machine_id, public_key, label, machine_metadata_json, disabled, created_at, updated_at, last_seen_at
+		FROM connectors
+		ORDER BY connector_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []ConnectorRecord
+	for rows.Next() {
+		var record ConnectorRecord
+		var disabled int
+		var lastSeen sql.NullTime
+		if err := rows.Scan(
+			&record.ConnectorID,
+			&record.MachineID,
+			&record.PublicKey,
+			&record.Label,
+			&record.MachineMetadataJSON,
+			&disabled,
+			&record.CreatedAt,
+			&record.UpdatedAt,
+			&lastSeen,
+		); err != nil {
+			return nil, err
+		}
+		record.Disabled = disabled != 0
+		if lastSeen.Valid {
+			record.LastSeenAt = lastSeen.Time
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
 func (s *Store) MarkConnectorSeen(ctx context.Context, connectorID string, seenAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE connectors SET last_seen_at = ?, updated_at = ? WHERE connector_id = ?`, seenAt.UTC(), time.Now().UTC(), connectorID)
 	return err
@@ -435,6 +473,29 @@ func (s *Store) ListInstances(ctx context.Context) ([]InstanceRecord, error) {
 	return records, rows.Err()
 }
 
+func (s *Store) ListInstancesByConnector(ctx context.Context, connectorID string) ([]InstanceRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT instance_id, connector_id, repo_root, base_url, instance_json, last_seen_at
+		FROM instances
+		WHERE connector_id = ?
+		ORDER BY instance_id
+	`, connectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []InstanceRecord
+	for rows.Next() {
+		var record InstanceRecord
+		if err := rows.Scan(&record.InstanceID, &record.ConnectorID, &record.RepoRoot, &record.BaseURL, &record.InstanceJSON, &record.LastSeenAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
 func (s *Store) SaveResourceRoute(ctx context.Context, kind, id, instanceID string) error {
 	if kind == "" || id == "" || instanceID == "" {
 		return nil
@@ -475,12 +536,23 @@ func (s *Store) AppendAudit(ctx context.Context, event AuditEvent) error {
 }
 
 func (s *Store) ListAuditEvents(ctx context.Context) ([]AuditEvent, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	return s.ListAuditEventsLimit(ctx, 0)
+}
+
+func (s *Store) ListAuditEventsLimit(ctx context.Context, limit int) ([]AuditEvent, error) {
+	query := `
 		SELECT id, actor_type, actor_id, action, method, scope, resource_kind, resource_id,
 		       target_connector_id, target_instance_id, outcome, error_code, details, created_at
 		FROM audit_events
-		ORDER BY id
-	`)
+		ORDER BY id DESC
+	`
+	var rows *sql.Rows
+	var err error
+	if limit > 0 {
+		rows, err = s.db.QueryContext(ctx, query+` LIMIT ?`, limit)
+	} else {
+		rows, err = s.db.QueryContext(ctx, query)
+	}
 	if err != nil {
 		return nil, err
 	}

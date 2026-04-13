@@ -19,6 +19,7 @@ type Client struct {
 	cfg        *Config
 	httpClient *http.Client
 	registry   *Registry
+	status     *StatusStore
 	backoff    *Backoff
 	dialer     *websocket.Dialer
 }
@@ -28,6 +29,7 @@ func NewClient(cfg *Config) *Client {
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 		registry:   NewRegistry(cfg),
+		status:     NewStatusStore(cfg.ConfigPath),
 		backoff:    NewBackoff(500*time.Millisecond, 10*time.Second),
 		dialer:     websocket.DefaultDialer,
 	}
@@ -54,13 +56,37 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-func (c *Client) runOnce(ctx context.Context) error {
+func (c *Client) runOnce(ctx context.Context) (err error) {
+	if c.status != nil {
+		_ = c.status.MarkConnecting(c.cfg)
+	}
+	defer func() {
+		if c.status == nil {
+			return
+		}
+		now := time.Now().UTC()
+		switch {
+		case ctx.Err() != nil:
+			_ = c.status.MarkDisconnected(c.cfg, now)
+		case err != nil:
+			_ = c.status.MarkFailure(c.cfg, err.Error(), now)
+		default:
+			_ = c.status.MarkDisconnected(c.cfg, now)
+		}
+	}()
+
 	challenge, err := c.fetchChallenge(ctx)
 	if err != nil {
+		if c.status != nil {
+			_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+		}
 		return err
 	}
 	signature, err := SignChallenge(c.cfg, challenge.ChallengeID, challenge.Nonce)
 	if err != nil {
+		if c.status != nil {
+			_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+		}
 		return err
 	}
 
@@ -74,6 +100,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 
 	conn, _, err := c.dialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
+		if c.status != nil {
+			_ = c.status.MarkFailure(c.cfg, fmt.Errorf("relay unavailable: %w", err).Error(), time.Now().UTC())
+		}
 		return fmt.Errorf("relay unavailable: %w", err)
 	}
 	defer conn.Close()
@@ -89,10 +118,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 		ChallengeID: challenge.ChallengeID,
 		Signature:   signature,
 	}); err != nil {
+		if c.status != nil {
+			_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+		}
 		return err
 	}
 
 	if err := c.advertise(ctx, conn); err != nil {
+		if c.status != nil {
+			_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+		}
 		return err
 	}
 
@@ -103,6 +138,9 @@ func (c *Client) runOnce(ctx context.Context) error {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
+			if c.status != nil && ctx.Err() == nil {
+				_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+			}
 			return err
 		}
 		var envelope struct {
@@ -170,14 +208,20 @@ func (c *Client) fetchChallenge(ctx context.Context) (*relayproto.ChallengeRespo
 }
 
 func (c *Client) advertise(ctx context.Context, conn *websocket.Conn) error {
-	instances, _, err := c.registry.Advertisements(ctx)
+	instances, instanceIDs, err := c.registry.Advertisements(ctx)
 	if err != nil {
 		return err
 	}
-	return conn.WriteJSON(relayproto.AdvertiseMessage{
+	if err := conn.WriteJSON(relayproto.AdvertiseMessage{
 		Type:      "advertise",
 		Instances: instances,
-	})
+	}); err != nil {
+		return err
+	}
+	if c.status != nil {
+		_ = c.status.MarkConnected(c.cfg, instanceIDs, time.Now().UTC())
+	}
+	return nil
 }
 
 func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
@@ -195,15 +239,27 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
 		case <-ticker.C:
 			_, instanceIDs, err := c.registry.Advertisements(ctx)
 			if err != nil {
+				if c.status != nil {
+					_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+				}
 				continue
 			}
-			_ = conn.WriteJSON(relayproto.HeartbeatMessage{
+			if err := conn.WriteJSON(relayproto.HeartbeatMessage{
 				Type:        "heartbeat",
 				ConnectorID: c.cfg.ConnectorID,
 				MachineID:   c.cfg.MachineID,
 				InstanceIDs: instanceIDs,
 				SentAt:      time.Now().UTC().Format(time.RFC3339),
-			})
+			}); err != nil {
+				if c.status != nil {
+					_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+				}
+				_ = conn.Close()
+				return
+			}
+			if c.status != nil {
+				_ = c.status.MarkHeartbeat(c.cfg, instanceIDs, time.Now().UTC())
+			}
 		}
 	}
 }
@@ -211,6 +267,9 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
 func (c *Client) handleRequest(ctx context.Context, request relayproto.CommandRequest) relayproto.CommandResponse {
 	instance, err := c.registry.ResolveInstance(ctx, request.InstanceID)
 	if err != nil {
+		if c.status != nil {
+			_ = c.status.MarkFailure(c.cfg, err.Error(), time.Now().UTC())
+		}
 		return relayproto.CommandResponse{
 			Type:       "response",
 			RequestID:  request.RequestID,
@@ -218,7 +277,7 @@ func (c *Client) handleRequest(ctx context.Context, request relayproto.CommandRe
 			Error:      err.Error(),
 		}
 	}
-	client := NewCodencerClient(instance.DaemonURL)
+	client := NewCodencerClient(instance.DaemonURL).WithStatusStore(c.status, c.cfg)
 	return client.Proxy(ctx, request)
 }
 

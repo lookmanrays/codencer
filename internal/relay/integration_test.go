@@ -49,11 +49,17 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/result":
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-1","step_id":"step-1","state":"completed","summary":"done"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1":
+			_ = json.NewEncoder(w).Encode(artifact)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/artifacts":
 			_ = json.NewEncoder(w).Encode([]domain.Artifact{artifact})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/gates/gate-1":
+			_ = json.NewEncoder(w).Encode(domain.Gate{ID: "gate-1", RunID: "run-1", StepID: "step-1", Description: "pending", State: domain.GateStatePending})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1/content":
 			w.Header().Set("Content-Type", "text/plain")
 			_, _ = w.Write([]byte("artifact-content"))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/gates/gate-1":
+			w.WriteHeader(http.StatusOK)
 		default:
 			http.NotFound(w, r)
 		}
@@ -149,6 +155,17 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 		return body
 	}
 
+	statusBody := do(http.MethodGet, "/api/v2/status", nil)
+	if !bytes.Contains(statusBody, []byte(`"planner_auth_mode":"static_bearer_tokens"`)) {
+		t.Fatalf("unexpected relay status payload: %s", string(statusBody))
+	}
+	connectorsBody := do(http.MethodGet, "/api/v2/connectors", nil)
+	if !bytes.Contains(connectorsBody, []byte(`"connector_id":"`+cfg.ConnectorID+`"`)) {
+		t.Fatalf("unexpected connectors payload: %s", string(connectorsBody))
+	}
+	do(http.MethodGet, "/api/v2/steps/step-1", nil)
+	do(http.MethodGet, "/api/v2/artifacts/art-1/content", nil)
+	do(http.MethodPost, "/api/v2/gates/gate-1/approve", nil)
 	do(http.MethodPost, "/api/v2/instances/inst-1/runs", []byte(`{"id":"run-1","project_id":"proj"}`))
 	do(http.MethodGet, "/api/v2/instances/inst-1", nil)
 	do(http.MethodGet, "/api/v2/instances/inst-1/runs/run-1", nil)
@@ -168,6 +185,10 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 		t.Fatalf("unexpected artifact content: %s", string(content))
 	}
 	do(http.MethodPost, "/api/v2/instances/inst-1/runs/run-1/abort", nil)
+	auditBody := do(http.MethodGet, "/api/v2/audit?limit=5", nil)
+	if !bytes.Contains(auditBody, []byte(`"action":"abort_run"`)) {
+		t.Fatalf("unexpected audit payload: %s", string(auditBody))
+	}
 
 	cancel()
 	select {

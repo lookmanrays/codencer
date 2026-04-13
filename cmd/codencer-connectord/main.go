@@ -14,7 +14,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("usage: codencer-connectord <enroll|run> [flags]")
+		log.Fatal("usage: codencer-connectord <enroll|run|status> [flags]")
 	}
 
 	switch os.Args[1] {
@@ -22,6 +22,8 @@ func main() {
 		runEnroll(os.Args[2:])
 	case "run":
 		runConnector(os.Args[2:])
+	case "status":
+		runStatus(os.Args[2:])
 	default:
 		log.Fatalf("unknown connector command %s", os.Args[1])
 	}
@@ -60,4 +62,33 @@ func runConnector(args []string) {
 	if err := client.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatal(err)
 	}
+}
+
+func runStatus(args []string) {
+	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	configPath := fs.String("config", ".codencer/connector/config.json", "Connector config path")
+	jsonOutput := fs.Bool("json", false, "Print raw connector status JSON")
+	fs.Parse(args)
+
+	status, err := connector.LoadStatus(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if *jsonOutput {
+		data, err := os.ReadFile(connector.StatusPathForConfig(*configPath))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(string(data))
+		return
+	}
+
+	fmt.Printf("connector=%s machine=%s relay=%s state=%s shared=%d\n",
+		status.ConnectorID,
+		status.MachineID,
+		status.RelayURL,
+		status.SessionState,
+		len(status.SharedInstances),
+	)
 }

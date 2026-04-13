@@ -38,6 +38,7 @@ The relay MCP server currently supports:
 - Mutating tools require explicit `instance_id`.
 - Tool calls respect the same planner auth scopes as the relay HTTP API.
 - Tool calls do not bypass connector sharing or instance routing.
+- Direct `step`, `artifact`, and `gate` lookups do not require prior observation of those ids; the relay probes only authorized online shared instances and persists successful route hints.
 - `submit_task` accepts the real Codencer `TaskSpec` shape.
 - `wait_step` is bounded and takes explicit timeout input.
 - `get_artifact_content` reads by `artifact_id` and returns text or base64-safe content metadata.

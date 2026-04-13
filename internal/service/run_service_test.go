@@ -1143,6 +1143,82 @@ func TestRunService_AbortRunWithoutRegisteredExecutionMarksManualAttentionAndRet
 	}
 }
 
+func TestRunService_AbortRunPausedForGateFailsClosed(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"mock-adapter": &MockAdapter{}}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "paused-gate-run"
+	now := time.Now().UTC()
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	run := &domain.Run{ID: runID, State: domain.RunStatePausedForGate, CreatedAt: now, UpdatedAt: now}
+	if err := runsRepo.UpdateState(ctx, run); err != nil {
+		t.Fatalf("update run state: %v", err)
+	}
+	step := &domain.Step{
+		ID:        "paused-gate-step",
+		PhaseID:   "phase-execution-" + runID,
+		Title:     "Paused Gate Step",
+		Adapter:   "mock-adapter",
+		State:     domain.StepStateNeedsApproval,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := stepsRepo.Create(ctx, step); err != nil {
+		t.Fatalf("create step: %v", err)
+	}
+	if err := gatesRepo.Create(ctx, &domain.Gate{
+		ID:          "gate-paused",
+		RunID:       runID,
+		StepID:      step.ID,
+		Description: "pending approval",
+		State:       domain.GateStatePending,
+		CreatedAt:   now,
+	}); err != nil {
+		t.Fatalf("create gate: %v", err)
+	}
+
+	err := runSvc.AbortRun(ctx, runID)
+	if err == nil {
+		t.Fatal("expected AbortRun to fail closed for paused_for_gate")
+	}
+	if got := err.Error(); !strings.Contains(got, "paused_for_gate") {
+		t.Fatalf("expected abort error to mention paused_for_gate, got %q", got)
+	}
+
+	stepState, _ := runSvc.GetStep(ctx, step.ID)
+	if stepState.State != domain.StepStateNeedsApproval {
+		t.Fatalf("expected step to remain needs_approval, got %s", stepState.State)
+	}
+
+	currentRun, _ := runSvc.GetRun(ctx, runID)
+	if currentRun.State != domain.RunStatePausedForGate {
+		t.Fatalf("expected run to remain paused_for_gate, got %s", currentRun.State)
+	}
+}
+
 type warningAdapter struct{}
 
 func (a *warningAdapter) Name() string           { return "warning-adapter" }

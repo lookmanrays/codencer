@@ -30,6 +30,7 @@ type Config struct {
 	DiscoveryRoots           []string               `json:"discovery_roots,omitempty"`
 	Instances                []SharedInstanceConfig `json:"instances,omitempty"`
 	DaemonURL                string                 `json:"daemon_url,omitempty"` // compatibility/default single-instance seed
+	ConfigPath               string                 `json:"-"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -44,6 +45,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.HeartbeatIntervalSeconds <= 0 {
 		cfg.HeartbeatIntervalSeconds = DefaultHeartbeatIntervalSeconds
 	}
+	cfg.ConfigPath = path
 	return &cfg, nil
 }
 
@@ -51,6 +53,7 @@ func SaveConfig(path string, cfg *Config) error {
 	if cfg.HeartbeatIntervalSeconds <= 0 {
 		cfg.HeartbeatIntervalSeconds = DefaultHeartbeatIntervalSeconds
 	}
+	cfg.ConfigPath = path
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
@@ -59,6 +62,20 @@ func SaveConfig(path string, cfg *Config) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0600)
+}
+
+func StatusPathForConfig(configPath string) string {
+	if configPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(configPath), "status.json")
+}
+
+func (c *Config) StatusPath() string {
+	if c == nil {
+		return ""
+	}
+	return StatusPathForConfig(c.ConfigPath)
 }
 
 func (c *Config) UpsertSharedInstance(instance SharedInstanceConfig) {

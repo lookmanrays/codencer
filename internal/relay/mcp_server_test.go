@@ -62,8 +62,12 @@ func startMCPHarness(t *testing.T) *mcpHarness {
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-1","step_id":"step-1","state":"completed","summary":"done"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/validations":
 			_, _ = w.Write([]byte(`[{"name":"tests","status":"passed"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1":
+			_ = json.NewEncoder(w).Encode(artifact)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/artifacts":
 			_ = json.NewEncoder(w).Encode([]domain.Artifact{artifact})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/gates/gate-1":
+			_ = json.NewEncoder(w).Encode(domain.Gate{ID: "gate-1", RunID: "run-1", StepID: "step-1", Description: "pending", State: domain.GateStatePending})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1/content":
 			w.Header().Set("Content-Type", "text/plain")
 			_, _ = w.Write([]byte("artifact-content"))
@@ -235,17 +239,6 @@ func TestMCPWaitStepAndArtifactContent(t *testing.T) {
 	t.Parallel()
 
 	h := startMCPHarness(t)
-	h.call(t, h.auth, "tools/call", map[string]any{
-		"name": "codencer.submit_task",
-		"arguments": map[string]any{
-			"instance_id": "inst-1",
-			"run_id":      "run-1",
-			"task": map[string]any{
-				"version": "v1",
-				"goal":    "Prepare wait routing",
-			},
-		},
-	})
 	waitResponse := h.call(t, h.auth, "tools/call", map[string]any{
 		"name": "codencer.wait_step",
 		"arguments": map[string]any{
@@ -264,12 +257,6 @@ func TestMCPWaitStepAndArtifactContent(t *testing.T) {
 		t.Fatalf("expected terminal wait response, got %+v", waitStructured)
 	}
 
-	h.call(t, h.auth, "tools/call", map[string]any{
-		"name": "codencer.list_step_artifacts",
-		"arguments": map[string]any{
-			"step_id": "step-1",
-		},
-	})
 	artifactResponse := h.call(t, h.auth, "tools/call", map[string]any{
 		"name": "codencer.get_artifact_content",
 		"arguments": map[string]any{
@@ -382,7 +369,7 @@ func TestMCPRetryStepRejectsWrongInstance(t *testing.T) {
 	}
 	structured := result["structuredContent"].(map[string]any)
 	errPayload := structured["error"].(map[string]any)
-	if errPayload["code"] != "instance_denied" {
+	if errPayload["code"] != "instance_denied" && errPayload["code"] != "instance_not_found" {
 		t.Fatalf("expected instance_denied, got %+v", errPayload)
 	}
 }

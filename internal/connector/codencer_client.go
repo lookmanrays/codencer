@@ -20,8 +20,10 @@ import (
 const maxArtifactContentBytes = 8 << 20
 
 type CodencerClient struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL      string
+	httpClient   *http.Client
+	status       *StatusStore
+	connectorCfg *Config
 }
 
 func NewCodencerClient(baseURL string) *CodencerClient {
@@ -31,6 +33,12 @@ func NewCodencerClient(baseURL string) *CodencerClient {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+func (c *CodencerClient) WithStatusStore(status *StatusStore, cfg *Config) *CodencerClient {
+	c.status = status
+	c.connectorCfg = cfg
+	return c
 }
 
 func (c *CodencerClient) GetInstance(ctx context.Context) (*domain.InstanceInfo, error) {
@@ -62,6 +70,7 @@ func (c *CodencerClient) Proxy(ctx context.Context, request relayproto.CommandRe
 	if !AllowedLocalProxy(request.Method, request.Path) {
 		response.StatusCode = http.StatusForbidden
 		response.Error = "connector denied an unsafe proxy request"
+		c.recordStatusError(response.Error)
 		return response
 	}
 
@@ -82,6 +91,7 @@ func (c *CodencerClient) Proxy(ctx context.Context, request relayproto.CommandRe
 	if err != nil {
 		response.StatusCode = http.StatusInternalServerError
 		response.Error = err.Error()
+		c.recordStatusError(response.Error)
 		return response
 	}
 	if request.ContentType != "" {
@@ -93,6 +103,7 @@ func (c *CodencerClient) Proxy(ctx context.Context, request relayproto.CommandRe
 	if err != nil {
 		response.StatusCode = http.StatusBadGateway
 		response.Error = fmt.Sprintf("local daemon unavailable: %v", err)
+		c.recordStatusError(response.Error)
 		return response
 	}
 	defer resp.Body.Close()
@@ -101,11 +112,13 @@ func (c *CodencerClient) Proxy(ctx context.Context, request relayproto.CommandRe
 	if err != nil {
 		response.StatusCode = http.StatusBadGateway
 		response.Error = err.Error()
+		c.recordStatusError(response.Error)
 		return response
 	}
 	if len(body) > maxArtifactContentBytes {
 		response.StatusCode = http.StatusRequestEntityTooLarge
 		response.Error = "artifact too large for connector transport"
+		c.recordStatusError(response.Error)
 		return response
 	}
 
@@ -114,6 +127,7 @@ func (c *CodencerClient) Proxy(ctx context.Context, request relayproto.CommandRe
 	response.ContentEncoding, response.Body = encodeBody(response.ContentType, body)
 	if resp.StatusCode >= 400 {
 		response.Error = string(body)
+		c.recordStatusError(response.Error)
 	}
 	return response
 }
@@ -135,6 +149,7 @@ func (c *CodencerClient) waitStep(ctx context.Context, request relayproto.Comman
 		if err := json.Unmarshal(request.Body, &waitReq); err != nil {
 			response.StatusCode = http.StatusBadRequest
 			response.Error = err.Error()
+			c.recordStatusError(response.Error)
 			return response
 		}
 	}
@@ -172,6 +187,7 @@ func (c *CodencerClient) waitStep(ctx context.Context, request relayproto.Comman
 		if err != nil {
 			response.StatusCode = http.StatusBadGateway
 			response.Error = err.Error()
+			c.recordStatusError(response.Error)
 			return response
 		}
 		if step.State.IsTerminal() {
@@ -186,6 +202,7 @@ func (c *CodencerClient) waitStep(ctx context.Context, request relayproto.Comman
 		case <-ctx.Done():
 			response.StatusCode = http.StatusGatewayTimeout
 			response.Error = ctx.Err().Error()
+			c.recordStatusError(response.Error)
 			return response
 		case <-timeout.C:
 			return buildPayload(step, nil, true)
@@ -201,11 +218,13 @@ func (c *CodencerClient) fetchStep(ctx context.Context, stepID string) (*domain.
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.recordStatusError(fmt.Sprintf("local daemon unavailable: %v", err))
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
+		c.recordStatusError(fmt.Sprintf("get step failed: %s", string(body)))
 		return nil, fmt.Errorf("get step failed: %s", string(body))
 	}
 	var step domain.Step
@@ -222,11 +241,13 @@ func (c *CodencerClient) fetchResult(ctx context.Context, stepID string) (*domai
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.recordStatusError(fmt.Sprintf("local daemon unavailable: %v", err))
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
+		c.recordStatusError(fmt.Sprintf("get result failed: %s", string(body)))
 		return nil, fmt.Errorf("get result failed: %s", string(body))
 	}
 	var result domain.ResultSpec
@@ -234,6 +255,13 @@ func (c *CodencerClient) fetchResult(ctx context.Context, stepID string) (*domai
 		return nil, err
 	}
 	return &result, nil
+}
+
+func (c *CodencerClient) recordStatusError(message string) {
+	if c == nil || c.status == nil || message == "" {
+		return
+	}
+	_ = c.status.MarkFailure(c.connectorCfg, message, time.Now().UTC())
 }
 
 func encodeBody(contentType string, body []byte) (string, json.RawMessage) {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,6 +25,7 @@ func TestClientRun_HandshakeAdvertiseAndProxy(t *testing.T) {
 		MachineID:                "machine-1",
 		HeartbeatIntervalSeconds: 1,
 		Instances:                []SharedInstanceConfig{{InstanceID: "inst-1", DaemonURL: "", Share: true}},
+		ConfigPath:               filepath.Join(t.TempDir(), "connector.json"),
 	}
 	if err := EnsureKeypair(cfg); err != nil {
 		t.Fatal(err)
@@ -128,6 +130,17 @@ func TestClientRun_HandshakeAdvertiseAndProxy(t *testing.T) {
 	if heartbeats.Load() == 0 {
 		t.Fatal("expected connector heartbeat")
 	}
+
+	status, err := LoadStatus(cfg.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.ConnectorID != "connector-1" || status.MachineID != "machine-1" {
+		t.Fatalf("unexpected status identity: %+v", status)
+	}
+	if status.LastConnectAt == "" || status.LastHeartbeatAt == "" || len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-1" {
+		t.Fatalf("unexpected status after connect: %+v", status)
+	}
 }
 
 func TestClientRun_ReconnectsAndReAdvertises(t *testing.T) {
@@ -137,6 +150,7 @@ func TestClientRun_ReconnectsAndReAdvertises(t *testing.T) {
 		MachineID:                "machine-2",
 		HeartbeatIntervalSeconds: 1,
 		Instances:                []SharedInstanceConfig{{InstanceID: "inst-2", Share: true}},
+		ConfigPath:               filepath.Join(t.TempDir(), "connector.json"),
 	}
 	if err := EnsureKeypair(cfg); err != nil {
 		t.Fatal(err)
@@ -205,5 +219,13 @@ func TestClientRun_ReconnectsAndReAdvertises(t *testing.T) {
 
 	if connections.Load() < 2 {
 		t.Fatalf("expected connector to reconnect, got %d connections", connections.Load())
+	}
+
+	status, err := LoadStatus(cfg.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LastConnectAt == "" || len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-2" {
+		t.Fatalf("expected reconnect to refresh status and re-advertise, got %+v", status)
 	}
 }

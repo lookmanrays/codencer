@@ -28,6 +28,32 @@ The connector persists:
 - `connector_id`
 - `machine_id`
 - explicit shared-instance config
+- local status snapshot at `.codencer/connector/status.json`
+
+## Operator Status
+
+Use the local status file when you want to check connector state without contacting the relay:
+
+```bash
+./bin/codencer-connectord status --config .codencer/connector/config.json --json
+```
+
+The status file records:
+- `connector_id`
+- `machine_id`
+- `relay_url`
+- `session_state`
+- `last_connect_at`
+- `last_disconnect_at`
+- `last_heartbeat_at`
+- `last_error`
+- `shared_instances`
+
+Session states are intentionally small and honest:
+- `disconnected`
+- `connecting`
+- `connected`
+- `error`
 
 ## Enrollment
 

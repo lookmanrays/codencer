@@ -18,6 +18,7 @@ func Enroll(ctx context.Context, relayURL, daemonURL, enrollmentToken, label, co
 		DaemonURL:                strings.TrimRight(daemonURL, "/"),
 		Label:                    label,
 		HeartbeatIntervalSeconds: DefaultHeartbeatIntervalSeconds,
+		ConfigPath:               configPath,
 	}
 	if err := EnsureKeypair(cfg); err != nil {
 		return nil, err
@@ -83,6 +84,9 @@ func Enroll(ctx context.Context, relayURL, daemonURL, enrollmentToken, label, co
 	}
 
 	if err := SaveConfig(configPath, cfg); err != nil {
+		return nil, err
+	}
+	if err := NewStatusStore(configPath).Seed(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil

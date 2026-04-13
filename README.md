@@ -55,21 +55,29 @@ Key constraints remain unchanged:
 
 - `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
 - `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
+- `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side Antigravity broker; it lives under the nested `cmd/broker` module
 
 ### Self-Host Quickstart
 
 1. Build the binaries with `make build`.
-2. Start the local daemon with `make start` or `make start-sim`.
-3. Start the relay with a config that sets `planner_token` or `planner_tokens`.
-4. Create a one-time enrollment token:
+2. Build the broker separately with `make build-broker` if you need the Windows-side Antigravity bridge.
+3. Start the local daemon with `make start` or `make start-sim`.
+4. Start the relay with a config that sets `planner_token` or `planner_tokens`.
+5. Create a one-time enrollment token:
    `curl -X POST http://127.0.0.1:8090/api/v2/connectors/enrollment-tokens -H 'Authorization: Bearer <planner-token>' -H 'Content-Type: application/json' -d '{"label":"local-dev","expires_in_seconds":600}'`
-5. Enroll the connector:
+6. Enroll the connector:
    `./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>`
-6. Run the connector:
+7. Run the connector:
    `./bin/codencer-connectord run`
+8. Inspect local connector state without network access:
+   `./bin/codencer-connectord status --json`
+9. Inspect relay status and shared instances through `/api/v2/status`, `/api/v2/connectors`, and `/api/v2/instances`.
+10. Run the documented smoke path with `make self-host-smoke` once the daemon and relay are already running.
 
 Planner-facing relay routes live under `/api/v2`, and the relay-hosted MCP entrypoint is `/mcp` with `/mcp/call` kept as a compatibility path.
 The connector now persists a local Ed25519 identity, `connector_id`, `machine_id`, and an explicit shared-instance allowlist under `.codencer/connector/config.json`.
+The connector also persists a local `.codencer/connector/status.json` snapshot so operators can inspect session state, last heartbeat, and the currently shared instance set without contacting the relay.
+Direct relay lookups for steps, artifacts, and gates now probe only authorized online instances and persist the discovered route, so planner HTTP and MCP flows do not depend on prior observation of those IDs.
 For the end-to-end self-host flow and operating notes, see [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md), [docs/CONNECTOR.md](docs/CONNECTOR.md), [docs/RELAY.md](docs/RELAY.md), and [docs/mcp/relay_tools.md](docs/mcp/relay_tools.md).
 
 Daemon discovery and evidence notes:

@@ -61,6 +61,10 @@ When using WSL and Windows together:
 4. Run the relay wherever you want to terminate remote planner auth.
 5. If you use Antigravity, keep the broker on the Windows/IDE side and bind from the daemon when needed.
 
+Build note:
+- `make build` builds the daemon, CLI, connector, and relay binaries
+- `make build-broker` builds the Windows-side Antigravity broker from the nested `cmd/broker` module
+
 This avoids the most common problems:
 - daemon exposed beyond loopback
 - artifacts split across Windows and WSL unexpectedly

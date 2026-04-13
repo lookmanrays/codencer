@@ -86,7 +86,12 @@ func (r *ArtifactsRepo) ListByStep(ctx context.Context, stepID string) ([]*domai
 
 // ListByAttempt retrieves all artifacts associated with a specific attempt.
 func (r *ArtifactsRepo) ListByAttempt(ctx context.Context, attemptID string) ([]*domain.Artifact, error) {
-	q := `SELECT id, attempt_id, type, name, path, size, hash, mime_type, created_at, updated_at FROM artifacts WHERE attempt_id = ?`
+	q := `
+		SELECT id, attempt_id, type, name, path, size, hash, mime_type, created_at, updated_at
+		FROM artifacts
+		WHERE attempt_id = ?
+		ORDER BY created_at DESC, updated_at DESC, id DESC
+	`
 	rows, err := r.db.QueryContext(ctx, q, attemptID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list artifacts for attempt %s: %w", attemptID, err)

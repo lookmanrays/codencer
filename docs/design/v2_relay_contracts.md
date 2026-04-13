@@ -208,7 +208,7 @@ Verified gaps in the current repo:
 | Artifact content | Local daemon exposes `/api/v1/artifacts/{id}/content`. Relay proxies it. | Large binary transport remains intentionally bounded. |
 | Artifact metadata by ID | Service can load artifact by ID. | No `GET /api/v1/artifacts/{id}` local endpoint; relay cannot build metadata-rich artifact responses from ID alone without cached context. |
 | Gate lifecycle | Local gate approval/rejection reconciles step and run state. | No local `GET /api/v1/gates/{id}` read surface; relay gate responses cannot return gate object without extra work. |
-| Resource routing | Relay learns `step`, `artifact`, and `gate` routes opportunistically by observing proxied responses. | Direct gate/artifact lookups can fail until the relay has seen those IDs in a prior response. |
+| Resource routing | Relay persists observed route hints and probes authorized online shared instances when a `step`, `artifact`, or `gate` route is missing. | Direct lookups still fail closed when no online match exists or multiple instances match. |
 | Capability introspection | Daemon compatibility is runtime-derived and truthful. | Relay lists raw stored rows; planner-facing compatibility contract is not normalized. |
 | Contract drift | `schemas/result.schema.json` lagged behind `domain.StepState`. | Fixed in this change; keep schema and domain state sets aligned. |
 
@@ -792,8 +792,8 @@ Reason:
 
 ## 8. Unresolved Risks
 
-- Current relay routing for `step`, `artifact`, and `gate` IDs is still opportunistic and can miss resources not previously observed.
-- Without challenge/heartbeat, connector presence is weaker than the locked contract.
-- Without a local gate-read surface, gate action responses cannot be fully truthful.
-- Without an artifact-metadata-by-ID surface, planner-facing artifact-content JSON responses require relay-side caching assumptions.
+- Relay routing for `step`, `artifact`, and `gate` IDs now probes authorized online shared instances when stored route hints are missing, but still fails closed when no match is online or multiple matches exist.
+- Connector presence now uses signed challenge/response plus heartbeat-driven session state, but relay status is still alpha-grade operational metadata rather than enterprise fleet management.
+- Gate action responses can be routed directly through the local gate read surface, but richer planner-facing gate summaries are still lightweight.
+- Artifact lookup now has a local metadata-by-ID surface, but artifact transfer remains intentionally bounded and not designed for bulk binary delivery.
 - Local and relay MCP shims are still JSON-RPC-like compatibility layers, not a standard MCP server transport.

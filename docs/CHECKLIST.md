@@ -4,7 +4,7 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
 
 ## 1. Build Verification
 - [ ] Run `make build`.
-- [ ] Verify `bin/orchestratord` and `bin/orchestratorctl` exist.
+- [ ] Verify `bin/orchestratord`, `bin/orchestratorctl`, `bin/codencer-connectord`, and `bin/codencer-relayd` exist.
 - [ ] Run `./bin/orchestratorctl doctor` and ensure Git, Go, and CC are **[OK]**.
 
 ## 2. Daemon & Explicit Targeting
@@ -33,7 +33,7 @@ Follow these steps after a fresh `git clone` and `make setup` to verify that you
 - [ ] Verify the artifact directory exists in `.codencer/artifacts/`.
 
 ## 5. Antigravity Broker (Optional/Core)
-- [ ] If using WSL/Windows, start `agent-broker.exe` on Windows.
+- [ ] If using WSL/Windows, run `make build-broker` and start the resulting broker binary on Windows.
 - [ ] Run `./bin/orchestratorctl antigravity list`.
 - [ ] Verify that at least one IDE instance is discovered (or handle 'no instances' gracefully).
 

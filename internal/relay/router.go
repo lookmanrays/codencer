@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	appversion "agent-bridge/internal/app"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/relayproto"
 )
@@ -22,6 +25,28 @@ type plannerInstance struct {
 	Status      string          `json:"status"`
 	LastSeenAt  time.Time       `json:"last_seen_at"`
 	Instance    json.RawMessage `json:"instance,omitempty"`
+}
+
+type relayStatusResponse struct {
+	Version                   string    `json:"version"`
+	StartedAt                 time.Time `json:"started_at"`
+	PlannerAuthMode           string    `json:"planner_auth_mode"`
+	BootstrapEnrollmentSecret bool      `json:"bootstrap_enrollment_secret_enabled"`
+	ConnectorCount            int       `json:"connector_count"`
+	OnlineConnectorCount      int       `json:"online_connector_count"`
+	InstanceCount             int       `json:"instance_count"`
+	OnlineInstanceCount       int       `json:"online_instance_count"`
+}
+
+type plannerConnector struct {
+	ConnectorID       string    `json:"connector_id"`
+	MachineID         string    `json:"machine_id"`
+	Label             string    `json:"label,omitempty"`
+	Disabled          bool      `json:"disabled"`
+	Online            bool      `json:"online"`
+	Status            string    `json:"status"`
+	LastSeenAt        time.Time `json:"last_seen_at,omitempty"`
+	SharedInstanceIDs []string  `json:"shared_instance_ids,omitempty"`
 }
 
 func (s *Server) handleInstances(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +75,95 @@ func (s *Server) handleInstances(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	connectors, err := s.store.ListConnectors(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+		return
+	}
+	instances, err := s.store.ListInstances(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+		return
+	}
+	onlineConnectors := 0
+	for _, connector := range connectors {
+		if status := s.connectorStatus(&connector); status.Online {
+			onlineConnectors++
+		}
+	}
+	onlineInstances := 0
+	for _, instance := range instances {
+		if status := s.instanceStatus(&instance); status.Online {
+			onlineInstances++
+		}
+	}
+	writeJSON(w, http.StatusOK, relayStatusResponse{
+		Version:                   appversion.Version,
+		StartedAt:                 s.startedAt,
+		PlannerAuthMode:           "static_bearer_tokens",
+		BootstrapEnrollmentSecret: s.cfg.EnrollmentSecret != "",
+		ConnectorCount:            len(connectors),
+		OnlineConnectorCount:      onlineConnectors,
+		InstanceCount:             len(instances),
+		OnlineInstanceCount:       onlineInstances,
+	})
+}
+
+func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	connectors, err := s.store.ListConnectors(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+		return
+	}
+	response := make([]plannerConnector, 0, len(connectors))
+	for _, connector := range connectors {
+		instances, err := s.store.ListInstancesByConnector(r.Context(), connector.ConnectorID)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		sharedIDs := make([]string, 0, len(instances))
+		for _, instance := range instances {
+			sharedIDs = append(sharedIDs, instance.InstanceID)
+		}
+		status := s.connectorStatus(&connector)
+		response = append(response, plannerConnector{
+			ConnectorID:       connector.ConnectorID,
+			MachineID:         connector.MachineID,
+			Label:             connector.Label,
+			Disabled:          connector.Disabled,
+			Online:            status.Online,
+			Status:            status.Status,
+			LastSeenAt:        connector.LastSeenAt,
+			SharedInstanceIDs: sharedIDs,
+		})
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	limit := parseAuditLimit(r.URL.Query().Get("limit"))
+	events, err := s.store.ListAuditEventsLimit(r.Context(), limit)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
 }
 
 func (s *Server) handleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
@@ -166,15 +280,6 @@ func (s *Server) handleStepScoped(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "malformed_request", "step_id is required")
 		return
 	}
-	instanceID, err := s.store.LookupResourceRoute(r.Context(), "step", parts[0])
-	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
-		return
-	}
-	if instanceID == "" {
-		writeAPIError(w, http.StatusNotFound, "instance_not_found", "step route not found")
-		return
-	}
 	targetPath := fmt.Sprintf("/api/v1/steps/%s", parts[0])
 	action := "get_step"
 	scope := "steps:read"
@@ -209,6 +314,11 @@ func (s *Server) handleStepScoped(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil && (r.Method == http.MethodPost || r.Method == http.MethodPatch) {
 		body, _ = io.ReadAll(r.Body)
 	}
+	instanceID, apiErr := s.resolveResourceRoute(r.Context(), plannerFromContext(r.Context()), "step", parts[0], scope, "")
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
 	s.proxyAndWrite(w, r, instanceID, r.Method, targetPath, "", body, routeKind, routeIDField, action, scope)
 }
 
@@ -219,13 +329,9 @@ func (s *Server) handleArtifactScoped(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "malformed_request", "artifact_id/content path required")
 		return
 	}
-	instanceID, err := s.store.LookupResourceRoute(r.Context(), "artifact", parts[0])
-	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
-		return
-	}
-	if instanceID == "" {
-		writeAPIError(w, http.StatusNotFound, "instance_not_found", "artifact route not found")
+	instanceID, apiErr := s.resolveResourceRoute(r.Context(), plannerFromContext(r.Context()), "artifact", parts[0], "artifacts:read", "")
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
 	s.proxyAndWrite(w, r, instanceID, http.MethodGet, fmt.Sprintf("/api/v1/artifacts/%s/content", parts[0]), "", nil, "", "", "get_artifact_content", "artifacts:read")
@@ -238,15 +344,6 @@ func (s *Server) handleGateScoped(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "malformed_request", "gate_id/action path required")
 		return
 	}
-	instanceID, err := s.store.LookupResourceRoute(r.Context(), "gate", parts[0])
-	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
-		return
-	}
-	if instanceID == "" {
-		writeAPIError(w, http.StatusNotFound, "instance_not_found", "gate route not found")
-		return
-	}
 	var action string
 	switch parts[1] {
 	case "approve":
@@ -255,6 +352,11 @@ func (s *Server) handleGateScoped(w http.ResponseWriter, r *http.Request) {
 		action = "reject"
 	default:
 		writeAPIError(w, http.StatusBadRequest, "malformed_request", "unsupported gate action")
+		return
+	}
+	instanceID, apiErr := s.resolveResourceRoute(r.Context(), plannerFromContext(r.Context()), "gate", parts[0], "gates:write", "")
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
 	body, _ := json.Marshal(map[string]string{"action": action})
@@ -463,4 +565,156 @@ func parseInstanceInfo(raw string) (*domain.InstanceInfo, error) {
 		return nil, err
 	}
 	return &info, nil
+}
+
+func (s *Server) connectorStatus(record *ConnectorRecord) InstanceStatus {
+	if record == nil {
+		return InstanceStatus{Online: false, Status: "not_found"}
+	}
+	if record.Disabled {
+		return InstanceStatus{Online: false, Status: "disabled"}
+	}
+	if s.hub.Connector(record.ConnectorID) != nil {
+		return InstanceStatus{Online: true, Status: "online"}
+	}
+	return InstanceStatus{Online: false, Status: "offline"}
+}
+
+func parseAuditLimit(raw string) int {
+	const (
+		defaultLimit = 100
+		maxLimit     = 1000
+	)
+	if raw == "" {
+		return defaultLimit
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit <= 0 {
+		return defaultLimit
+	}
+	if limit > maxLimit {
+		return maxLimit
+	}
+	return limit
+}
+
+func (s *Server) resolveResourceRoute(ctx context.Context, principal *plannerPrincipal, resourceKind, resourceID, scope, expectedInstanceID string) (string, *apiError) {
+	routedInstance, err := s.store.LookupResourceRoute(ctx, resourceKind, resourceID)
+	if err != nil {
+		return "", &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	if routedInstance != "" {
+		switch {
+		case expectedInstanceID != "" && routedInstance == expectedInstanceID:
+			if apiErr := authorizePrincipal(principal, scope, routedInstance); apiErr == nil {
+				return routedInstance, nil
+			}
+		case expectedInstanceID == "":
+			if apiErr := authorizePrincipal(principal, scope, routedInstance); apiErr == nil {
+				return routedInstance, nil
+			}
+		}
+	}
+
+	candidates, apiErr := s.resourceProbeCandidates(ctx, principal, scope, expectedInstanceID)
+	if apiErr != nil {
+		return "", apiErr
+	}
+
+	matches := make([]string, 0, 1)
+	var lastErr *apiError
+	for _, candidate := range candidates {
+		found, probeErr := s.probeResourceRoute(ctx, candidate.InstanceID, resourceKind, resourceID)
+		if probeErr != nil {
+			if probeErr.Status == http.StatusNotFound {
+				continue
+			}
+			lastErr = probeErr
+			continue
+		}
+		if found {
+			matches = append(matches, candidate.InstanceID)
+		}
+	}
+
+	switch len(matches) {
+	case 1:
+		_ = s.store.SaveResourceRoute(ctx, resourceKind, resourceID, matches[0])
+		return matches[0], nil
+	case 0:
+		if lastErr != nil {
+			return "", lastErr
+		}
+		if expectedInstanceID != "" {
+			return "", &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: fmt.Sprintf("%s not found on instance %s", resourceKind, expectedInstanceID)}
+		}
+		return "", &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: fmt.Sprintf("%s route not found", resourceKind)}
+	default:
+		sort.Strings(matches)
+		return "", &apiError{Status: http.StatusConflict, Code: "instance_ambiguous", Message: fmt.Sprintf("%s %s matched multiple instances: %s", resourceKind, resourceID, strings.Join(matches, ", "))}
+	}
+}
+
+func (s *Server) resourceProbeCandidates(ctx context.Context, principal *plannerPrincipal, scope, expectedInstanceID string) ([]InstanceRecord, *apiError) {
+	if expectedInstanceID != "" {
+		if apiErr := authorizePrincipal(principal, scope, expectedInstanceID); apiErr != nil {
+			return nil, apiErr
+		}
+		record, err := s.store.GetInstance(ctx, expectedInstanceID)
+		if err != nil {
+			return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+		}
+		if record == nil {
+			return nil, &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: "instance not found"}
+		}
+		if s.hub.Get(expectedInstanceID) == nil {
+			return nil, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "connector for this instance is offline"}
+		}
+		return []InstanceRecord{*record}, nil
+	}
+
+	records, err := s.store.ListInstances(ctx)
+	if err != nil {
+		return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	candidates := make([]InstanceRecord, 0, len(records))
+	for _, record := range records {
+		if authorizePrincipal(principal, scope, record.InstanceID) != nil {
+			continue
+		}
+		if s.hub.Get(record.InstanceID) == nil {
+			continue
+		}
+		candidates = append(candidates, record)
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].InstanceID < candidates[j].InstanceID })
+	if len(candidates) == 0 {
+		return nil, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "no authorized online instances are available"}
+	}
+	return candidates, nil
+}
+
+func (s *Server) probeResourceRoute(ctx context.Context, instanceID, resourceKind, resourceID string) (bool, *apiError) {
+	path := resourceProbePath(resourceKind, resourceID)
+	response, _, apiErr := s.proxyRequest(ctx, instanceID, http.MethodGet, path, "", nil, "")
+	if apiErr != nil {
+		return false, apiErr
+	}
+	if response == nil || response.StatusCode >= 400 {
+		return false, &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: fmt.Sprintf("%s route not found", resourceKind)}
+	}
+	return true, nil
+}
+
+func resourceProbePath(resourceKind, resourceID string) string {
+	switch resourceKind {
+	case "step":
+		return fmt.Sprintf("/api/v1/steps/%s", resourceID)
+	case "artifact":
+		return fmt.Sprintf("/api/v1/artifacts/%s", resourceID)
+	case "gate":
+		return fmt.Sprintf("/api/v1/gates/%s", resourceID)
+	default:
+		return ""
+	}
 }

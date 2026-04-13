@@ -4,40 +4,41 @@
 > For the official **User Guide**, please refer to the [README.md](../../README.md).
 
 ## Current Reality
+- **Repo Status**: [ALIGNED] The current repository truth is **`v0.2.0-alpha`** and **open-source alpha for the v2 local/self-host path**.
 - **Lifecycle Meaning Cleanup**: [RESOLVED] Explicitly defined Run (Session), Step (Planner Unit), and Attempt (Execution Try) in domain code and README. Verified that no bridge-side decision logic is implied.
 - **Terminology Inconsistency**: [RESOLVED] Renamed all outcome indicators to `State` (RunState, StepState, Result.State) for uniform operator experience.
 - **Ergonomics**: [RESOLVED] Tightened the `submit` -> `wait` -> `result` sequence and established the **Canonical Local Runbook** in `EXAMPLES.md`.
 - **Trust & Transparency**: [RESOLVED] Added "Known Limitations" and clarified the distinction between simulation and real-mode execution in README.
-- **Release Surface**: [RESOLVED] Performed a unified v1 Truth-Pass across all README, setup, examples, and guide documentation.
-- **OpenClaw Status**: [ALIGNED] Maintained as Experimental Alpha-tier for v1.0. Future promotion to stable requires sustained user verification.
+- **Release Surface**: [RESOLVED] Performed a unified truth-pass across README, setup, examples, and guide documentation for the current v2 self-host alpha surface.
+- **OpenClaw Status**: [ALIGNED] Maintained as Experimental Alpha-tier for the current `v0.2.0-alpha` repo state. Any future promotion requires sustained user verification.
 
 ## Feature Status Matrix
 
 | Component | Status | Implementation Type | Notes |
 | :--- | :--- | :--- | :--- |
-| **Orchestration Core** | ✅ **Ready (Stable)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
-| **CLI & MCP Layer** | ✅ **Ready (Stable)** | Native | Human-readable hints, logs, and structured JSON. |
-| **Codex Adapter** | ✅ **Ready (Stable)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
+| **Orchestration Core** | ✅ **Implemented (Alpha)** | Native (SQLite) | Persistent ledger, state machine, and Git Worktrees. |
+| **CLI & MCP Layer** | ✅ **Implemented (Alpha)** | Native | Human-readable hints, logs, and structured JSON. |
+| **Codex Adapter** | ✅ **Implemented (Alpha)** | CLI Wrapper | High-fidelity relay with artifact harvesting. |
 | **OpenClaw Adapter** | 🧪 **Experimental (Alpha)** | ACPX Wrapper | Functional alpha; basic lifecycle tracking. |
-| **Claude Adapter** | 🟢 **Supported (Beta)** | CLI Wrapper | Uses `claude -p --output-format json` with stdin prompt delivery, cwd-based execution, synthesized result mapping, and fake-binary integration coverage. Live authenticated Claude service calls are not exercised in repo tests. |
-| **Qwen Adapter** | 🟡 **Functional** | CLI Wrapper | Basic subprocess wrapper; narrower evidence extraction than Codex/Claude. |
-| **Simulation Mode** | ✅ **Ready (Stable)** | Native | Robust stubs for orchestrator validation. |
+| **Claude Adapter** | 🟢 **Implemented Wrapper (Alpha)** | CLI Wrapper | Uses `claude -p --output-format json` with stdin prompt delivery, cwd-based execution, synthesized result mapping, and fake-binary integration coverage. Live authenticated Claude service calls are not exercised in repo tests. |
+| **Qwen Adapter** | 🟡 **Functional (Alpha)** | CLI Wrapper | Basic subprocess wrapper; narrower evidence extraction than Codex/Claude. |
+| **Simulation Mode** | ✅ **Implemented (Alpha)** | Native | Robust stubs for orchestrator validation. |
 | **Adaptive Routing** | 🧪 **Prototype** | Heuristic | Static fallback chain; not yet benchmark-driven. |
-| **Governance** | ✅ **Ready (Stable)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
-| **Diagnostics** | ✅ **Ready (Stable)** | CLI | `doctor` command verifies versions and environment. |
+| **Governance** | ✅ **Implemented (Alpha)** | Manual | MIT Licensed; `CONTRIBUTING.md` authored. |
+| **Diagnostics** | ✅ **Implemented (Alpha)** | CLI | `doctor` command verifies versions and environment. |
 
 ## Known Technical Debt & Limitations
 - **Adaptive Routing**: Routing is currently based on a static heuristic chain; benchmark-driven optimization is documented but not dynamic.
 - **Process Introspection**: CLI-wrapped adapters provide limited visibility beyond standard streams.
 - **Simulation Limits**: Simulation Mode stubs all actions; it validates the orchestrator's state-machine but does not test real agent logic.
 
-## V1 Publication Audit (Phase V1.F3)
+## Alpha Publication Audit (Historical V1.F3 Tracking)
 
 ### 🚨 Critical Publication Blockers (Must Fix)
 1. **LICENSE**: ✅ RESOLVED (MIT).
 2. **CONTRIBUTING.md**: ✅ RESOLVED.
 3. **Repository Noise**: ✅ RESOLVED (`codencer.db` removed/ignored).
-4. **Makefile Version**: ✅ RESOLVED (`v1.0-release-candidate`).
+4. **Makefile Version**: ✅ RESOLVED (`v0.2.0-alpha`).
 5. **Setup Reproducibility**: ✅ RESOLVED (`make setup build` verified).
 
 ### 🛡 Trust & Readability Gaps (Should Fix)
@@ -45,12 +46,12 @@
 2. **Internal Documentation Noise**: ✅ RESOLVED (Upgraded headers and README navigation).
 3. **Example Parity**: Ensure `examples/tasks/*.yaml` are 100% compliant with the latest schema.
 
-### 🛠 Ready for Release Finalization
+### 🛠 Ready for Alpha Publication Hardening
 1. **Governance**: ✅ RESOLVED (MIT & CONTRIBUTING.md).
 2. **Health**: Enhance `doctor` with version checks for `git` and `sqlite3`.
 3. **Documentation Quality Audit**: ✅ PASS (Rendering issues fixed; Quickstart aligned).
 
-## V1 Publication Readiness Audit (Batch V1.F5)
+## Alpha Publication Readiness Audit (Historical V1.F5 Tracking)
 
 ### 🕹 Current First-Run Path
 1. `make setup build`: Creates directories and compiles binaries.
@@ -75,10 +76,10 @@
 
 ---
 - [x] Audit Trust & Readiness Alignment (Final Alignment Complete)
-- [x] V1 Publication Readiness Audit (Batch V1.F5 Complete)
+- [x] Alpha Publication Readiness Audit (Historical Batch V1.F5 Complete)
 - [x] Harden `doctor` with binary version checking (Batch V1.R1 Complete)
 - [x] Align Smoke Test with modern CLI ergonomics (Batch V1.R1 Complete)
 - [x] Batch R2: Final Metadata & Release Notes (Complete)
-    - [x] Update version strings to `v1.0-release-candidate`
+    - [x] Update version strings to `v0.2.0-alpha`
     - [x] Create `CHANGELOG.md`
     - [x] Final Sanity Audit

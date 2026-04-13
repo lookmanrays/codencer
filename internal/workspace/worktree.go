@@ -105,16 +105,31 @@ func RemoveWorktree(ctx context.Context, baseRepoPath, destPath string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", destPath)
-	cmd.Dir = baseRepoPath
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if !os.IsNotExist(err) && !strings.Contains(string(out), "not a working tree") {
-			return fmt.Errorf("failed to remove worktree: %w. output: %s", err, string(out))
-		}
+	remove := func(args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = baseRepoPath
+		return cmd.CombinedOutput()
 	}
-	return nil
+
+	out, err := remove("worktree", "remove", "--force", destPath)
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) || strings.Contains(string(out), "not a working tree") {
+		return nil
+	}
+	if strings.Contains(string(out), "cannot remove a locked working tree") || strings.Contains(string(out), "use 'remove -f -f'") {
+		unlockCmd := exec.CommandContext(ctx, "git", "worktree", "unlock", destPath)
+		unlockCmd.Dir = baseRepoPath
+		_, _ = unlockCmd.CombinedOutput()
+
+		retryOut, retryErr := remove("worktree", "remove", "-f", "-f", destPath)
+		if retryErr == nil || os.IsNotExist(retryErr) || strings.Contains(string(retryOut), "not a working tree") {
+			return nil
+		}
+		return fmt.Errorf("failed to remove locked worktree: %w. output: %s", retryErr, string(retryOut))
+	}
+	return fmt.Errorf("failed to remove worktree: %w. output: %s", err, string(out))
 }
 
 // CaptureChangedFiles returns a list of files modified strictly within the given worktree.

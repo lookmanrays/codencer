@@ -65,4 +65,18 @@ func TestEnroll_PersistsIdentityAndSharedInstance(t *testing.T) {
 	if len(cfg.Instances) != 1 || !cfg.Instances[0].Share || cfg.Instances[0].InstanceID != "inst-1" {
 		t.Fatalf("expected enrolled config to contain one shared instance, got %+v", cfg.Instances)
 	}
+
+	status, err := LoadStatus(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.ConnectorID != "connector-1" || status.MachineID != "machine-1" || status.RelayURL != relay.URL {
+		t.Fatalf("unexpected status identity: %+v", status)
+	}
+	if status.SessionState != SessionStateDisconnected {
+		t.Fatalf("expected initial disconnected status, got %s", status.SessionState)
+	}
+	if len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-1" {
+		t.Fatalf("expected enrolled status to seed shared instance, got %+v", status.SharedInstances)
+	}
 }

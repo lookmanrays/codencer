@@ -28,8 +28,11 @@ cd codencer
 # 1. Initialize environment and check requirements
 make setup
 
-# 2. Build orchestratord and orchestratorctl binaries
+# 2. Build the canonical daemon, CLI, connector, and relay binaries
 make build
+
+# 3. Build the Windows-side Antigravity broker separately if you need it
+make build-broker
 ```
 
 ### 2.2 Verify Environment
@@ -61,6 +64,9 @@ Claude is executed in headless print mode as `claude -p --output-format json`. C
 
 > [!IMPORTANT]
 > The daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface. The canonical remote MCP surface for planners lives on the relay at `/mcp`.
+
+> [!IMPORTANT]
+> For the practical self-host relay path, the canonical public binaries are `codencer-connectord` and `codencer-relayd`. The broker binary is built separately with `make build-broker` because `cmd/broker` is a nested module.
 
 ---
 
@@ -185,7 +191,7 @@ The broker uses a **dual-path model**:
 - **Workspace Root (Execution)**: The isolated worktree path where the task is actually executed.
 
 ### 7.2 Setup & Binding
-1.  **Start the Broker**: Run `agent-broker.exe` on the host machine.
+1.  **Build and Start the Broker**: Run `make build-broker`, then start the resulting broker binary on the host machine.
 2.  **Bind**: Link your local repository to a running IDE instance:
     ```bash
     ./bin/orchestratorctl antigravity bind <PID>
@@ -196,3 +202,13 @@ The broker uses a **dual-path model**:
     ```
 
 For detailed examples, see **[EXAMPLES.md](EXAMPLES.md)**.
+
+## 8. Self-Host Smoke Path
+
+After the daemon and relay are running, you can exercise the current happy path with:
+
+```bash
+PLANNER_TOKEN=<planner-token> make self-host-smoke
+```
+
+This helper enrolls a temporary connector, waits for the shared instance to appear on the relay, starts a run, submits a task, waits for the step, and fetches the result and artifacts through the relay.

@@ -27,7 +27,11 @@ func AllowedLocalProxy(method, path string) bool {
 		return true
 	case strings.HasPrefix(path, "/api/v1/steps/") && strings.HasSuffix(path, "/wait") && method == http.MethodPost:
 		return true
+	case strings.HasPrefix(path, "/api/v1/artifacts/") && method == http.MethodGet:
+		return true
 	case strings.HasPrefix(path, "/api/v1/artifacts/") && strings.HasSuffix(path, "/content") && method == http.MethodGet:
+		return true
+	case strings.HasPrefix(path, "/api/v1/gates/") && method == http.MethodGet:
 		return true
 	case strings.HasPrefix(path, "/api/v1/gates/") && method == http.MethodPost:
 		return true

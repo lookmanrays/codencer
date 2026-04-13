@@ -13,6 +13,10 @@ build:
 	@echo "==> Building codencer-relayd..."
 	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-relayd ./cmd/codencer-relayd
 
+build-broker:
+	@echo "==> Building agent-broker (nested module)..."
+	@cd cmd/broker && go build -o ../../bin/agent-broker ./...
+
 test:
 	@echo "==> Running tests..."
 	@go test -v ./...
@@ -122,6 +126,10 @@ simulate: build
 smoke: build
 	@echo "==> Running automated smoke test..."
 	@./scripts/smoke_test.sh
+
+self-host-smoke: build
+	@echo "==> Running self-host relay/connector smoke test..."
+	@./scripts/self_host_smoke.sh
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."
