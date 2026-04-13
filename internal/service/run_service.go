@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	"agent-bridge/internal/storage/sqlite"
 	"agent-bridge/internal/validation"
 	"agent-bridge/internal/workspace"
+	sqlite3driver "github.com/mattn/go-sqlite3"
 )
 
 type activeExecution struct {
@@ -50,6 +52,12 @@ type RunService struct {
 	execMu           sync.Mutex
 	executions       map[string]*activeExecution
 }
+
+var (
+	ErrConflict             = errors.New("conflict")
+	ErrInvalidTaskSpec      = errors.New("invalid task spec")
+	ErrArtifactAccessDenied = errors.New("artifact access denied")
+)
 
 // NewRunService creates a new RunService.
 func NewRunService(
@@ -106,6 +114,9 @@ func (s *RunService) StartRun(ctx context.Context, id, projectID, conversationID
 	}
 
 	if err := s.runsRepo.Create(ctx, run); err != nil {
+		if isUniqueConstraint(err) {
+			return nil, fmt.Errorf("%w: run %s already exists", ErrConflict, id)
+		}
 		return nil, err
 	}
 
@@ -318,10 +329,14 @@ func (s *RunService) AbortRun(ctx context.Context, id string) error {
 
 // DispatchStepAsync persists dispatch state synchronously, then continues execution in the background.
 func (s *RunService) DispatchStepAsync(ctx context.Context, runID string, step *domain.Step) error {
+	return s.dispatchStepAsync(ctx, runID, step, false)
+}
+
+func (s *RunService) dispatchStepAsync(ctx context.Context, runID string, step *domain.Step, allowExisting bool) error {
 	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if err := s.initializeStep(context.Background(), runID, step); err != nil {
+	if err := s.initializeStep(context.Background(), runID, step, allowExisting); err != nil {
 		return err
 	}
 
@@ -341,7 +356,7 @@ func (s *RunService) DispatchStepAsync(ctx context.Context, runID string, step *
 // DispatchStep handles the tactical execution of a planner-issued Step.
 // It manages adapter selection, environment setup, and terminal state reporting.
 func (s *RunService) DispatchStep(ctx context.Context, runID string, step *domain.Step) error {
-	if err := s.initializeStep(ctx, runID, step); err != nil {
+	if err := s.initializeStep(ctx, runID, step, true); err != nil {
 		return err
 	}
 
@@ -422,18 +437,34 @@ func (s *RunService) RetryStep(ctx context.Context, stepID string) error {
 		return fmt.Errorf("phase %s for step %s not found", step.PhaseID, stepID)
 	}
 
-	return s.DispatchStepAsync(ctx, phase.RunID, step)
+	return s.dispatchStepAsync(ctx, phase.RunID, step, true)
 }
 
-func (s *RunService) initializeStep(ctx context.Context, runID string, step *domain.Step) error {
+func (s *RunService) initializeStep(ctx context.Context, runID string, step *domain.Step, allowExisting bool) error {
+	if step != nil && step.PhaseID == "" {
+		step.PhaseID = fmt.Sprintf("phase-execution-%s", runID)
+	}
+	if err := s.validateTaskSpecSnapshot(runID, step); err != nil {
+		return err
+	}
+
 	// Ensure the phase exists before creating the step to prevent orphan references
 	if err := s.ensurePhaseExists(ctx, runID, step.PhaseID); err != nil {
 		return fmt.Errorf("failed to ensure phase consistency: %w", err)
 	}
 
 	existing, err := s.stepsRepo.Get(ctx, step.ID)
-	if err == nil && existing != nil {
-		// Step already exists, just reset state for a new attempt cycle
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if err := s.ensureExistingStepBelongsToRun(ctx, runID, existing); err != nil {
+			return err
+		}
+		if !allowExisting {
+			return fmt.Errorf("%w: step %s already exists", ErrConflict, step.ID)
+		}
+		// Step already exists, just reset state for a new attempt cycle.
 		step.State = domain.StepStateDispatching
 		step.UpdatedAt = time.Now().UTC()
 		return s.stepsRepo.UpdateState(ctx, step)
@@ -445,6 +476,9 @@ func (s *RunService) initializeStep(ctx context.Context, runID string, step *dom
 	step.UpdatedAt = now
 
 	if err := s.stepsRepo.Create(ctx, step); err != nil {
+		if isUniqueConstraint(err) {
+			return fmt.Errorf("%w: step %s already exists", ErrConflict, step.ID)
+		}
 		return fmt.Errorf("failed to create step in store: %w", err)
 	}
 	return nil
@@ -452,7 +486,13 @@ func (s *RunService) initializeStep(ctx context.Context, runID string, step *dom
 
 func (s *RunService) ensurePhaseExists(ctx context.Context, runID, phaseID string) error {
 	existing, err := s.phasesRepo.Get(ctx, phaseID)
-	if err == nil && existing != nil {
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if existing.RunID != runID {
+			return fmt.Errorf("%w: phase %s belongs to run %s, not %s", ErrInvalidTaskSpec, phaseID, existing.RunID, runID)
+		}
 		return nil
 	}
 
@@ -466,7 +506,22 @@ func (s *RunService) ensurePhaseExists(ctx context.Context, runID, phaseID strin
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	return s.phasesRepo.Create(ctx, phase)
+	if err := s.phasesRepo.Create(ctx, phase); err != nil {
+		if !isUniqueConstraint(err) {
+			return err
+		}
+		existing, getErr := s.phasesRepo.Get(ctx, phaseID)
+		if getErr != nil {
+			return getErr
+		}
+		if existing == nil {
+			return err
+		}
+		if existing.RunID != runID {
+			return fmt.Errorf("%w: phase %s belongs to run %s, not %s", ErrInvalidTaskSpec, phaseID, existing.RunID, runID)
+		}
+	}
+	return nil
 }
 
 func (s *RunService) runAttemptLoop(ctx context.Context, runID string, step *domain.Step, fallbackChain []string) (*domain.ResultSpec, PolicyEvaluation, string, error) {
@@ -1209,9 +1264,9 @@ func (s *RunService) GetArtifactContent(ctx context.Context, artifactID string) 
 	if artifact == nil {
 		return nil, nil, fmt.Errorf("artifact %s not found", artifactID)
 	}
-	artifactPath := artifact.Path
-	if !filepath.IsAbs(artifactPath) {
-		artifactPath = filepath.Join(s.artifactRoot, artifactPath)
+	artifactPath, err := s.resolveArtifactPath(artifact.Path)
+	if err != nil {
+		return nil, nil, err
 	}
 	content, err := os.ReadFile(artifactPath)
 	if err != nil {
@@ -1271,4 +1326,83 @@ func logArtifactPriority(artifactType domain.ArtifactType) int {
 	default:
 		return 2
 	}
+}
+
+func (s *RunService) validateTaskSpecSnapshot(runID string, step *domain.Step) error {
+	if step == nil {
+		return fmt.Errorf("%w: step is required", ErrInvalidTaskSpec)
+	}
+	if step.ID == "" {
+		return fmt.Errorf("%w: step id is required", ErrInvalidTaskSpec)
+	}
+	if step.TaskSpecSnapshot == nil {
+		return nil
+	}
+	if step.TaskSpecSnapshot.RunID != "" && step.TaskSpecSnapshot.RunID != runID {
+		return fmt.Errorf("%w: task run_id %q does not match target run %q", ErrInvalidTaskSpec, step.TaskSpecSnapshot.RunID, runID)
+	}
+	if step.TaskSpecSnapshot.PhaseID != "" && step.TaskSpecSnapshot.PhaseID != step.PhaseID {
+		return fmt.Errorf("%w: task phase_id %q does not match target phase %q", ErrInvalidTaskSpec, step.TaskSpecSnapshot.PhaseID, step.PhaseID)
+	}
+	if step.TaskSpecSnapshot.StepID != "" && step.TaskSpecSnapshot.StepID != step.ID {
+		return fmt.Errorf("%w: task step_id %q does not match target step %q", ErrInvalidTaskSpec, step.TaskSpecSnapshot.StepID, step.ID)
+	}
+	return nil
+}
+
+func (s *RunService) ensureExistingStepBelongsToRun(ctx context.Context, runID string, step *domain.Step) error {
+	phase, err := s.phasesRepo.Get(ctx, step.PhaseID)
+	if err != nil {
+		return err
+	}
+	if phase == nil {
+		return fmt.Errorf("%w: existing step %s references missing phase %s", ErrConflict, step.ID, step.PhaseID)
+	}
+	if phase.RunID != runID {
+		return fmt.Errorf("%w: step %s already belongs to run %s", ErrConflict, step.ID, phase.RunID)
+	}
+	return nil
+}
+
+func (s *RunService) resolveArtifactPath(storedPath string) (string, error) {
+	rootAbs, err := filepath.Abs(s.artifactRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve artifact root: %w", err)
+	}
+	rootClean := filepath.Clean(rootAbs)
+	if rootResolved, err := filepath.EvalSymlinks(rootAbs); err == nil {
+		rootClean = filepath.Clean(rootResolved)
+	}
+
+	candidate := storedPath
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(rootClean, candidate)
+	}
+	candidateAbs, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", fmt.Errorf("resolve artifact path: %w", err)
+	}
+	resolved := filepath.Clean(candidateAbs)
+	if symlinkResolved, err := filepath.EvalSymlinks(candidateAbs); err == nil {
+		resolved = filepath.Clean(symlinkResolved)
+	}
+
+	rel, err := filepath.Rel(rootClean, resolved)
+	if err != nil {
+		return "", fmt.Errorf("check artifact path: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("%w: artifact path %q escapes artifact root", ErrArtifactAccessDenied, storedPath)
+	}
+	return resolved, nil
+}
+
+func isUniqueConstraint(err error) bool {
+	var sqliteErr sqlite3driver.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code == sqlite3driver.ErrConstraint ||
+			sqliteErr.ExtendedCode == sqlite3driver.ErrConstraintPrimaryKey ||
+			sqliteErr.ExtendedCode == sqlite3driver.ErrConstraintUnique
+	}
+	return false
 }

@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -134,8 +133,6 @@ func (s *session) proxy(ctx context.Context, request relayproto.CommandRequest) 
 		return &response, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(15 * time.Second):
-		return nil, fmt.Errorf("relay proxy timed out waiting for connector response")
 	}
 }
 

@@ -15,7 +15,7 @@ The broker is configured via environment variables:
 It is recommended to run the broker natively on the Windows host where the IDE is running.
 ```powershell
 # In PowerShell (Windows)
-go build -o agent-broker.exe main.go
+make build-broker
 .\agent-broker.exe
 ```
 
@@ -24,6 +24,11 @@ Point Codencer to the broker's endpoint:
 ```bash
 export CODENCER_ANTIGRAVITY_BROKER_URL=http://localhost:8088
 ```
+
+Practical placement:
+- keep the repo, daemon, connector, worktrees, and artifacts in WSL/Linux
+- keep the broker on the Windows/IDE side
+- keep the relay separate; it is not the broker
 
 ## API Reference
 

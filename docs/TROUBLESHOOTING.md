@@ -92,6 +92,48 @@ Always start here to verify your environment:
 - **Cause**: `CODENCER_CONTINUE_ON_FAILURE=1` is set in the environment or the explicit continue flag was used.
 - **Fix**: Unset the environment variable or omit the continue flag.
 
+### 2.13 "planner bearer token required" from `codencer-relayd`
+**Symptoms**: `codencer-relayd status`, `instances`, `connectors`, or `enrollment-token create` fails locally.
+- **Cause**: No planner token was supplied and the selected config file does not contain `planner_token` or `planner_tokens`.
+- **Fix**:
+  - Generate one locally: `./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'`
+  - Or pass `--token <planner-token>` explicitly.
+
+### 2.14 Connector is online but the instance never appears on the relay
+**Symptoms**: `codencer-connectord status` shows activity, but `/api/v2/instances` stays empty.
+- **Cause**: The instance is known locally but not marked `share=true`, or the connector is pointed at the wrong daemon URL.
+- **Fix**:
+  - Inspect local config: `./bin/codencer-connectord list`
+  - Share the intended daemon explicitly: `./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085`
+  - Re-check local status: `./bin/codencer-connectord status --json`
+  - Re-check relay view: `./bin/codencer-relayd instances --config .codencer/relay/config.json`
+
+### 2.15 Relay returns `connector_disabled`
+**Symptoms**: Step, gate, artifact, or result routes start failing with a `403` and `connector_disabled`.
+- **Cause**: The relay-side connector record was explicitly disabled.
+- **Fix**:
+  - Inspect connector state: `./bin/codencer-relayd connectors --config .codencer/relay/config.json`
+  - Re-enable it: `./bin/codencer-relayd connector enable <connector-id> --config .codencer/relay/config.json`
+
+### 2.16 MCP returns `origin_denied`, `session_not_found`, or `protocol_version_mismatch`
+**Symptoms**: Browser-style or session-based MCP callers fail on `/mcp`.
+- **Cause**:
+  - `origin_denied`: the request Origin is not allowed by relay config
+  - `session_not_found`: the caller reused an expired or deleted `MCP-Session-Id`
+  - `protocol_version_mismatch`: the caller changed `MCP-Protocol-Version` after initialization
+- **Fix**:
+  - Add the caller origin to `allowed_origins`, or omit the Origin header for non-browser clients
+  - Re-run `initialize` to get a fresh `MCP-Session-Id`
+  - Keep the same negotiated `MCP-Protocol-Version` for the session
+
+### 2.17 Relay evidence routes work for result but not logs/artifacts/validations
+**Symptoms**: `/api/v2/steps/{id}/result` works, but logs or evidence routes fail.
+- **Cause**: The step route may exist but the connector was enrolled against a different daemon, the instance is unshared, or the step lives on another shared instance that is currently offline.
+- **Fix**:
+  - Verify the instance is still advertised and online through `codencer-relayd instances`
+  - Check the connector config and `share=true` state with `codencer-connectord list`
+  - Re-run the connector and inspect `status.json`
+
 ---
 
 ## 3. Interpreting Step States

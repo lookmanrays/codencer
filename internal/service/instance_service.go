@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -138,10 +139,10 @@ func (s *InstanceService) Current(ctx context.Context) (domain.InstanceInfo, err
 	brokerInfo := domain.InstanceBrokerInfo{Mode: "direct"}
 	if s.agSvc != nil {
 		info, err := s.agSvc.BrokerInfo(ctx)
-		if err != nil {
-			return domain.InstanceInfo{}, err
-		}
 		brokerInfo = info
+		if err != nil {
+			slog.Warn("Instance reporting degraded: failed to refresh Antigravity broker info", "error", err, "repoRoot", s.repoRoot)
+		}
 	}
 
 	return domain.InstanceInfo{

@@ -14,12 +14,15 @@ Do not point ChatGPT, Claude, or another planner runtime at the local Codencer d
 ## Endpoint
 
 - `POST /mcp`
+- `GET /mcp`
+- `DELETE /mcp`
 
 Compatibility path:
 - `POST /mcp/call`
 
 Supported MCP methods:
 - `initialize`
+- `notifications/initialized`
 - `tools/list`
 - `tools/call`
 
@@ -31,9 +34,13 @@ Supported MCP methods:
 
 ## Transport Expectations
 
-The relay MCP surface is JSON-RPC over HTTP.
+The relay MCP surface is intentionally narrow and tool-oriented:
+- JSON-RPC over HTTP POST is supported for straightforward planner integrations
+- `/mcp` also supports Streamable HTTP-style `GET`, `POST`, and `DELETE`
+- `MCP-Protocol-Version` negotiation and `MCP-Session-Id` are supported
+- `allowed_origins` can be enforced for browser-style callers
 
-It is intentionally narrow and maps to relay behavior rather than exposing a second planner or execution protocol.
+The current implementation remains request/response-first. It is suitable for serious self-host personal use now, but it does not rely on unsolicited long-lived server notifications to expose Codencer functionality.
 The daemon-local `/mcp/call` endpoint is only a local compatibility/admin bridge and should not be used as the public remote integration target.
 
 ## Compatibility Note

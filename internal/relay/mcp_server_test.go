@@ -62,6 +62,9 @@ func startMCPHarness(t *testing.T) *mcpHarness {
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-1","step_id":"step-1","state":"completed","summary":"done"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/validations":
 			_, _ = w.Write([]byte(`[{"name":"tests","status":"passed"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/logs":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("step-log-output"))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1":
 			_ = json.NewEncoder(w).Encode(artifact)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/artifacts":
@@ -71,8 +74,8 @@ func startMCPHarness(t *testing.T) *mcpHarness {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1/content":
 			w.Header().Set("Content-Type", "text/plain")
 			_, _ = w.Write([]byte("artifact-content"))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-1/gates":
-			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/gates":
+			_ = json.NewEncoder(w).Encode([]domain.Gate{{ID: "gate-1", RunID: "run-1", StepID: "step-1", Description: "pending", State: domain.GateStatePending}})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/gates/gate-1":
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1":
@@ -145,29 +148,67 @@ func startMCPHarness(t *testing.T) *mcpHarness {
 
 func (h *mcpHarness) call(t *testing.T, auth string, method string, params any) map[string]any {
 	t.Helper()
-	body, _ := json.Marshal(map[string]any{
+	return h.callPath(t, auth, http.MethodPost, "/mcp", map[string]string{
+		"Content-Type": "application/json",
+	}, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "req-1",
 		"method":  method,
 		"params":  params,
 	})
-	req, _ := http.NewRequest(http.MethodPost, h.relayHTTP.URL+"/mcp", bytes.NewReader(body))
+}
+
+func (h *mcpHarness) callPath(t *testing.T, auth, httpMethod, path string, headers map[string]string, payload any) map[string]any {
+	t.Helper()
+
+	var body io.Reader
+	if payload != nil {
+		data, _ := json.Marshal(payload)
+		body = bytes.NewReader(data)
+	}
+	req, _ := http.NewRequest(httpMethod, h.relayHTTP.URL+path, body)
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var payload map[string]any
 	data, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatalf("invalid mcp response: %s", string(data))
+	payloadMap := map[string]any{
+		"http_status": float64(resp.StatusCode),
 	}
-	payload["http_status"] = float64(resp.StatusCode)
-	return payload
+	if sessionID := resp.Header.Get("MCP-Session-Id"); sessionID != "" {
+		payloadMap["session_id"] = sessionID
+	}
+	if protocolVersion := resp.Header.Get("MCP-Protocol-Version"); protocolVersion != "" {
+		payloadMap["protocol_version"] = protocolVersion
+	}
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
+		payloadMap["content_type"] = contentType
+	}
+	if len(data) == 0 {
+		return payloadMap
+	}
+	if err := json.Unmarshal(data, &payloadMap); err != nil {
+		payloadMap["raw_body"] = string(data)
+		return payloadMap
+	}
+	payloadMap["http_status"] = float64(resp.StatusCode)
+	if sessionID := resp.Header.Get("MCP-Session-Id"); sessionID != "" {
+		payloadMap["session_id"] = sessionID
+	}
+	if protocolVersion := resp.Header.Get("MCP-Protocol-Version"); protocolVersion != "" {
+		payloadMap["protocol_version"] = protocolVersion
+	}
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
+		payloadMap["content_type"] = contentType
+	}
+	return payloadMap
 }
 
 func TestMCPToolsListIncludesRequiredCodencerTools(t *testing.T) {
@@ -187,11 +228,13 @@ func TestMCPToolsListIncludesRequiredCodencerTools(t *testing.T) {
 		"codencer.get_instance",
 		"codencer.start_run",
 		"codencer.get_run",
+		"codencer.list_run_gates",
 		"codencer.submit_task",
 		"codencer.get_step",
 		"codencer.wait_step",
 		"codencer.get_step_result",
 		"codencer.list_step_artifacts",
+		"codencer.get_step_logs",
 		"codencer.get_artifact_content",
 		"codencer.get_step_validations",
 		"codencer.approve_gate",
@@ -270,6 +313,148 @@ func TestMCPWaitStepAndArtifactContent(t *testing.T) {
 	structured := artifactResult["structuredContent"].(map[string]any)
 	if structured["encoding"] != "utf-8" || structured["text"] != "artifact-content" {
 		t.Fatalf("unexpected artifact payload: %+v", structured)
+	}
+}
+
+func TestMCPRunGatesAndStepLogs(t *testing.T) {
+	t.Parallel()
+
+	h := startMCPHarness(t)
+	gatesResponse := h.call(t, h.auth, "tools/call", map[string]any{
+		"name": "codencer.list_run_gates",
+		"arguments": map[string]any{
+			"instance_id": "inst-1",
+			"run_id":      "run-1",
+		},
+	})
+	gatesResult := gatesResponse["result"].(map[string]any)
+	if isError, _ := gatesResult["isError"].(bool); isError {
+		t.Fatalf("unexpected list_run_gates error: %+v", gatesResult)
+	}
+	gates := gatesResult["structuredContent"].([]any)
+	if len(gates) != 1 {
+		t.Fatalf("expected one gate, got %+v", gates)
+	}
+
+	logsResponse := h.call(t, h.auth, "tools/call", map[string]any{
+		"name": "codencer.get_step_logs",
+		"arguments": map[string]any{
+			"step_id": "step-1",
+		},
+	})
+	logsResult := logsResponse["result"].(map[string]any)
+	if isError, _ := logsResult["isError"].(bool); isError {
+		t.Fatalf("unexpected get_step_logs error: %+v", logsResult)
+	}
+	logs := logsResult["structuredContent"].(map[string]any)
+	if logs["encoding"] != "utf-8" || logs["text"] != "step-log-output" {
+		t.Fatalf("unexpected step logs payload: %+v", logs)
+	}
+}
+
+func TestMCPInitializeStreamAndCompatibilityPath(t *testing.T) {
+	t.Parallel()
+
+	h := startMCPHarness(t)
+	initialize := h.callPath(t, h.auth, http.MethodPost, "/mcp", map[string]string{
+		"Content-Type":         "application/json",
+		"MCP-Protocol-Version": "2025-11-25",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "req-init",
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-11-25",
+		},
+	})
+	if initialize["protocol_version"] != "2025-11-25" {
+		t.Fatalf("expected negotiated protocol version, got %+v", initialize)
+	}
+	sessionID, _ := initialize["session_id"].(string)
+	if sessionID == "" {
+		t.Fatalf("expected initialize to return session id, got %+v", initialize)
+	}
+
+	stream := h.callPath(t, h.auth, http.MethodGet, "/mcp", map[string]string{
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, nil)
+	if status := int(stream["http_status"].(float64)); status != http.StatusOK {
+		t.Fatalf("expected GET /mcp success, got %+v", stream)
+	}
+	contentType, _ := stream["content_type"].(string)
+	if !strings.Contains(contentType, "text/event-stream") {
+		t.Fatalf("expected SSE content type, got %+v", stream)
+	}
+	rawBody, _ := stream["raw_body"].(string)
+	if !strings.Contains(rawBody, "codencer-relay-mcp-stream") {
+		t.Fatalf("expected SSE bootstrap payload, got %+v", stream)
+	}
+
+	compat := h.callPath(t, h.auth, http.MethodPost, "/mcp/call", map[string]string{
+		"Content-Type":         "application/json",
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "req-tools",
+		"method":  "tools/list",
+		"params":  map[string]any{},
+	})
+	if status := int(compat["http_status"].(float64)); status != http.StatusOK {
+		t.Fatalf("expected /mcp/call compatibility success, got %+v", compat)
+	}
+
+	deleted := h.callPath(t, h.auth, http.MethodDelete, "/mcp", map[string]string{
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, nil)
+	if status := int(deleted["http_status"].(float64)); status != http.StatusNoContent {
+		t.Fatalf("expected session delete success, got %+v", deleted)
+	}
+}
+
+func TestMCPOriginHandling(t *testing.T) {
+	t.Parallel()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := relay.NewServer(&relay.Config{
+		DBPath:         filepath.Join(t.TempDir(), "relay-auth.db"),
+		PlannerToken:   "planner-token",
+		AllowedOrigins: []string{"https://planner.example"},
+	}, store)
+	relayHTTP := httptest.NewServer(server.Handler())
+	defer relayHTTP.Close()
+
+	body := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "req-1",
+		"method":  "tools/list",
+		"params":  map[string]any{},
+	}
+	allowed := map[string]string{
+		"Authorization": "Bearer planner-token",
+		"Content-Type":  "application/json",
+		"Origin":        "https://planner.example",
+	}
+	allowedResp := (&mcpHarness{relayHTTP: relayHTTP}).callPath(t, "", http.MethodPost, "/mcp", allowed, body)
+	if status := int(allowedResp["http_status"].(float64)); status != http.StatusOK {
+		t.Fatalf("expected allowed origin success, got %+v", allowedResp)
+	}
+
+	blocked := map[string]string{
+		"Authorization": "Bearer planner-token",
+		"Content-Type":  "application/json",
+		"Origin":        "https://blocked.example",
+	}
+	blockedResp := (&mcpHarness{relayHTTP: relayHTTP}).callPath(t, "", http.MethodPost, "/mcp", blocked, body)
+	if status := int(blockedResp["http_status"].(float64)); status != http.StatusForbidden {
+		t.Fatalf("expected blocked origin failure, got %+v", blockedResp)
 	}
 }
 

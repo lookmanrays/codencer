@@ -61,6 +61,33 @@ When using WSL and Windows together:
 4. Run the relay wherever you want to terminate remote planner auth.
 5. If you use Antigravity, keep the broker on the Windows/IDE side and bind from the daemon when needed.
 
+Concrete command sketch:
+
+```bash
+# WSL
+make build
+mkdir -p .codencer/relay
+./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'
+./bin/codencer-relayd --config .codencer/relay/config.json
+./bin/orchestratord --repo-root /home/<user>/Projects/my-repo
+./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label wsl-dev --json
+./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>
+./bin/codencer-connectord run
+```
+
+```powershell
+# Windows
+make build-broker
+.\bin\agent-broker.exe
+```
+
+```bash
+# WSL, when the Windows broker is in use
+export CODENCER_ANTIGRAVITY_BROKER_URL=http://127.0.0.1:8088
+./bin/orchestratorctl antigravity list
+./bin/orchestratorctl antigravity bind <pid>
+```
+
 Build note:
 - `make build` builds the daemon, CLI, connector, and relay binaries
 - `make build-broker` builds the Windows-side Antigravity broker from the nested `cmd/broker` module
@@ -89,6 +116,12 @@ Antigravity remains local-side execution metadata and binding infrastructure:
 The broker and relay are different things:
 - **broker**: local/cross-side IDE bridge
 - **relay**: authenticated remote control plane for planner calls
+
+The most common stable arrangement for this repo is:
+- WSL: repo, worktrees, daemon, connector, artifacts
+- Windows: Antigravity IDE and broker
+- relay: WSL, local server, or VPS
+- planner client: relay HTTP/MCP only
 
 ## Operator Checklist
 

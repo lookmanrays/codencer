@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 	t.Parallel()
 
 	artifact := domain.Artifact{ID: "art-1", AttemptID: "attempt-1", Name: "stdout.log", Path: "/tmp/stdout.log"}
+	slowStepReadyAt := time.Now().Add(16 * time.Second)
 	var fakeDaemon *httptest.Server
 	fakeDaemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -37,10 +39,24 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":"run-1","project_id":"proj","state":"running"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1":
 			_, _ = w.Write([]byte(`{"id":"run-1","project_id":"proj","state":"running"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/gates":
+			_ = json.NewEncoder(w).Encode([]domain.Gate{{
+				ID:          "gate-1",
+				RunID:       "run-1",
+				StepID:      "step-1",
+				Description: "pending",
+				State:       domain.GateStatePending,
+			}})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-1/steps":
 			_, _ = w.Write([]byte(`{"id":"step-1","phase_id":"phase-1","state":"running"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1":
 			_, _ = w.Write([]byte(`{"id":"step-1","phase_id":"phase-1","state":"completed"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-slow":
+			state := "running"
+			if time.Now().After(slowStepReadyAt) {
+				state = "completed"
+			}
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"step-slow","phase_id":"phase-1","state":"%s"}`, state)))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/steps/step-1/wait":
 			_, _ = w.Write([]byte(`{"step_id":"step-1","state":"completed","terminal":true,"timed_out":false}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/steps/step-1/retry":
@@ -49,6 +65,9 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/result":
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-1","step_id":"step-1","state":"completed","summary":"done"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/logs":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("step-log-output"))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/artifacts/art-1":
 			_ = json.NewEncoder(w).Encode(artifact)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/artifacts":
@@ -73,16 +92,17 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 	defer store.Close()
 
 	server := relay.NewServer(&relay.Config{
-		Host:             "127.0.0.1",
-		Port:             0,
-		DBPath:           filepath.Join(t.TempDir(), "relay-unused.db"),
-		PlannerToken:     "planner-token",
-		EnrollmentSecret: "enroll-secret",
+		Host:                "127.0.0.1",
+		Port:                0,
+		DBPath:              filepath.Join(t.TempDir(), "relay-unused.db"),
+		PlannerToken:        "planner-token",
+		EnrollmentSecret:    "enroll-secret",
+		ProxyTimeoutSeconds: 20,
 	}, store)
 	relayHTTP := httptest.NewServer(server.Handler())
 	defer relayHTTP.Close()
 
-	plannerClient := &http.Client{Timeout: 5 * time.Second}
+	plannerClient := &http.Client{Timeout: 25 * time.Second}
 	auth := "Bearer planner-token"
 
 	var enrollSecret string
@@ -166,6 +186,10 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 	do(http.MethodGet, "/api/v2/steps/step-1", nil)
 	do(http.MethodGet, "/api/v2/artifacts/art-1/content", nil)
 	do(http.MethodPost, "/api/v2/gates/gate-1/approve", nil)
+	gatesBody := do(http.MethodGet, "/api/v2/instances/inst-1/runs/run-1/gates", nil)
+	if !bytes.Contains(gatesBody, []byte(`"id":"gate-1"`)) {
+		t.Fatalf("unexpected run gates payload: %s", string(gatesBody))
+	}
 	do(http.MethodPost, "/api/v2/instances/inst-1/runs", []byte(`{"id":"run-1","project_id":"proj"}`))
 	do(http.MethodGet, "/api/v2/instances/inst-1", nil)
 	do(http.MethodGet, "/api/v2/instances/inst-1/runs/run-1", nil)
@@ -174,9 +198,17 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 	if !bytes.Contains(resultBody, []byte(`"summary":"done"`)) {
 		t.Fatalf("unexpected result payload: %s", string(resultBody))
 	}
+	logsBody := do(http.MethodGet, "/api/v2/steps/step-1/logs", nil)
+	if string(logsBody) != "step-log-output" {
+		t.Fatalf("unexpected step logs payload: %s", string(logsBody))
+	}
 	waitBody := do(http.MethodPost, "/api/v2/steps/step-1/wait", []byte(`{"timeout_ms":500}`))
 	if !bytes.Contains(waitBody, []byte(`"terminal":true`)) {
 		t.Fatalf("unexpected wait payload: %s", string(waitBody))
+	}
+	longWaitBody := do(http.MethodPost, "/api/v2/steps/step-slow/wait", []byte(`{"timeout_ms":17000}`))
+	if !bytes.Contains(longWaitBody, []byte(`"terminal":true`)) {
+		t.Fatalf("unexpected long wait payload: %s", string(longWaitBody))
 	}
 	do(http.MethodPost, "/api/v2/steps/step-1/retry", nil)
 	do(http.MethodGet, "/api/v2/steps/step-1/artifacts", nil)
@@ -184,9 +216,32 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 	if string(content) != "artifact-content" {
 		t.Fatalf("unexpected artifact content: %s", string(content))
 	}
+	disabledBody := do(http.MethodPost, "/api/v2/connectors/"+cfg.ConnectorID+"/disable", nil)
+	if !bytes.Contains(disabledBody, []byte(`"disabled":true`)) {
+		t.Fatalf("unexpected connector disable payload: %s", string(disabledBody))
+	}
+	reqDisabled, _ := http.NewRequest(http.MethodGet, relayHTTP.URL+"/api/v2/steps/step-1/result", nil)
+	reqDisabled.Header.Set("Authorization", auth)
+	respDisabled, err := plannerClient.Do(reqDisabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabledResultBody, _ := io.ReadAll(respDisabled.Body)
+	_ = respDisabled.Body.Close()
+	if respDisabled.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected disabled connector to deny routing, got %d body=%s", respDisabled.StatusCode, string(disabledResultBody))
+	}
+	enabledBody := do(http.MethodPost, "/api/v2/connectors/"+cfg.ConnectorID+"/enable", nil)
+	if !bytes.Contains(enabledBody, []byte(`"disabled":false`)) {
+		t.Fatalf("unexpected connector enable payload: %s", string(enabledBody))
+	}
+	recoveredBody := do(http.MethodGet, "/api/v2/steps/step-1/result", nil)
+	if !bytes.Contains(recoveredBody, []byte(`"summary":"done"`)) {
+		t.Fatalf("unexpected recovered result payload: %s", string(recoveredBody))
+	}
 	do(http.MethodPost, "/api/v2/instances/inst-1/runs/run-1/abort", nil)
 	auditBody := do(http.MethodGet, "/api/v2/audit?limit=5", nil)
-	if !bytes.Contains(auditBody, []byte(`"action":"abort_run"`)) {
+	if !bytes.Contains(auditBody, []byte(`"action":"abort_run"`)) || !bytes.Contains(auditBody, []byte(`"action":"disable_connector"`)) {
 		t.Fatalf("unexpected audit payload: %s", string(auditBody))
 	}
 

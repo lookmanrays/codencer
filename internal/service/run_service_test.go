@@ -154,6 +154,165 @@ func TestRunService_DispatchStep_Isolated(t *testing.T) {
 	}
 }
 
+func TestRunService_StartRunDuplicateReturnsConflict(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "conflict.db")
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open DB: %v", err)
+	}
+	defer db.Close()
+
+	if err := sqlite.RunMigrations(db); err != nil {
+		t.Fatalf("migrations failed: %v", err)
+	}
+
+	runSvc := service.NewRunService(
+		sqlite.NewRunsRepo(db),
+		sqlite.NewPhasesRepo(db),
+		sqlite.NewStepsRepo(db),
+		sqlite.NewAttemptsRepo(db),
+		sqlite.NewGatesRepo(db),
+		sqlite.NewArtifactsRepo(db),
+		sqlite.NewValidationsRepo(db),
+		service.NewRoutingService(sqlite.NewBenchmarksRepo(db), nil),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		t.TempDir(),
+		t.TempDir(),
+	)
+
+	ctx := context.Background()
+	if _, err := runSvc.StartRun(ctx, "run-conflict", "project", "", "", ""); err != nil {
+		t.Fatalf("first StartRun failed: %v", err)
+	}
+
+	_, err = runSvc.StartRun(ctx, "run-conflict", "project", "", "", "")
+	if !errors.Is(err, service.ErrConflict) {
+		t.Fatalf("expected conflict on duplicate run id, got %v", err)
+	}
+}
+
+func TestRunService_DispatchStepAsyncRejectsMismatchedTaskSnapshot(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "mismatch.db")
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open DB: %v", err)
+	}
+	defer db.Close()
+
+	if err := sqlite.RunMigrations(db); err != nil {
+		t.Fatalf("migrations failed: %v", err)
+	}
+
+	routingSvc := service.NewRoutingService(sqlite.NewBenchmarksRepo(db), map[string]domain.Adapter{
+		"mock-adapter": &MockAdapter{},
+	})
+	runSvc := service.NewRunService(
+		sqlite.NewRunsRepo(db),
+		sqlite.NewPhasesRepo(db),
+		sqlite.NewStepsRepo(db),
+		sqlite.NewAttemptsRepo(db),
+		sqlite.NewGatesRepo(db),
+		sqlite.NewArtifactsRepo(db),
+		sqlite.NewValidationsRepo(db),
+		routingSvc,
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		t.TempDir(),
+		t.TempDir(),
+	)
+
+	ctx := context.Background()
+	if _, err := runSvc.StartRun(ctx, "run-submit", "project", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	err = runSvc.DispatchStepAsync(ctx, "run-submit", &domain.Step{
+		ID:      "step-submit",
+		PhaseID: "phase-execution-run-submit",
+		Title:   "Mismatched step",
+		Adapter: "mock-adapter",
+		TaskSpecSnapshot: &domain.TaskSpec{
+			RunID:   "different-run",
+			PhaseID: "phase-execution-run-submit",
+			StepID:  "step-submit",
+		},
+	})
+	if !errors.Is(err, service.ErrInvalidTaskSpec) {
+		t.Fatalf("expected invalid task spec, got %v", err)
+	}
+}
+
+func TestRunService_DispatchStepAsyncRejectsDuplicateStepID(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "step-conflict.db")
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open DB: %v", err)
+	}
+	defer db.Close()
+
+	if err := sqlite.RunMigrations(db); err != nil {
+		t.Fatalf("migrations failed: %v", err)
+	}
+
+	routingSvc := service.NewRoutingService(sqlite.NewBenchmarksRepo(db), map[string]domain.Adapter{
+		"mock-adapter": &MockAdapter{},
+	})
+	runSvc := service.NewRunService(
+		sqlite.NewRunsRepo(db),
+		sqlite.NewPhasesRepo(db),
+		sqlite.NewStepsRepo(db),
+		sqlite.NewAttemptsRepo(db),
+		sqlite.NewGatesRepo(db),
+		sqlite.NewArtifactsRepo(db),
+		sqlite.NewValidationsRepo(db),
+		routingSvc,
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		t.TempDir(),
+		t.TempDir(),
+	)
+
+	ctx := context.Background()
+	runID := "run-step-conflict"
+	if _, err := runSvc.StartRun(ctx, runID, "project", "", "", ""); err != nil {
+		t.Fatalf("StartRun failed: %v", err)
+	}
+
+	existing := &domain.Step{
+		ID:        "step-conflict",
+		PhaseID:   "phase-execution-" + runID,
+		Title:     "First submit",
+		Adapter:   "mock-adapter",
+		State:     domain.StepStateDispatching,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		TaskSpecSnapshot: &domain.TaskSpec{
+			RunID:   runID,
+			PhaseID: "phase-execution-" + runID,
+			StepID:  "step-conflict",
+		},
+	}
+	if err := sqlite.NewStepsRepo(db).Create(ctx, existing); err != nil {
+		t.Fatalf("failed to seed existing step: %v", err)
+	}
+
+	err = runSvc.DispatchStepAsync(ctx, runID, &domain.Step{
+		ID:      "step-conflict",
+		PhaseID: "phase-execution-" + runID,
+		Title:   "Duplicate submit",
+		Adapter: "mock-adapter",
+		TaskSpecSnapshot: &domain.TaskSpec{
+			RunID:   runID,
+			PhaseID: "phase-execution-" + runID,
+			StepID:  "step-conflict",
+		},
+	})
+	if !errors.Is(err, service.ErrConflict) {
+		t.Fatalf("expected step conflict, got %v", err)
+	}
+}
+
 func testRepoRoot(t *testing.T) string {
 	t.Helper()
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")

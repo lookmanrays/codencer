@@ -211,4 +211,29 @@ After the daemon and relay are running, you can exercise the current happy path 
 PLANNER_TOKEN=<planner-token> make self-host-smoke
 ```
 
-This helper enrolls a temporary connector, waits for the shared instance to appear on the relay, starts a run, submits a task, waits for the step, and fetches the result and artifacts through the relay.
+This helper enrolls a temporary connector, waits for the shared instance to appear on the relay, starts a run, submits a task, waits for the step, and fetches the result, validations, logs, gates, and artifacts through the relay.
+
+Optional scenario coverage:
+
+```bash
+PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp
+PLANNER_TOKEN=<planner-token> make self-host-smoke-all
+```
+
+## 9. Practical Self-Host Order Of Operations
+
+For a fresh self-host setup:
+
+```bash
+make build
+mkdir -p .codencer/relay
+./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'
+./bin/codencer-relayd --config .codencer/relay/config.json
+make start
+./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json
+./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>
+./bin/codencer-connectord run
+./bin/codencer-relayd instances --config .codencer/relay/config.json
+```
+
+For the practical WSL-first topology, keep the daemon and connector in WSL/Linux next to the repo and worktrees, keep the broker on Windows when Antigravity is in play, and expose the relay instead of the daemon.

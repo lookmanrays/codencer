@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -92,7 +93,7 @@ func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 
 	run, err := h.RunSvc.StartRun(r.Context(), req.ID, req.ProjectID, req.ConversationID, req.PlannerID, req.ExecutorID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), statusForRunServiceError(err, http.StatusInternalServerError))
 		return
 	}
 
@@ -153,6 +154,10 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			if spec.RunID != "" && spec.RunID != id {
+				http.Error(w, fmt.Sprintf("task run_id %q does not match target run %q", spec.RunID, id), http.StatusBadRequest)
+				return
+			}
 
 			if spec.StepID == "" {
 				spec.StepID = fmt.Sprintf("step-%d", time.Now().Unix())
@@ -179,7 +184,7 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := h.RunSvc.DispatchStepAsync(r.Context(), id, step); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, err.Error(), statusForRunServiceError(err, http.StatusInternalServerError))
 				return
 			}
 
@@ -234,7 +239,11 @@ func (h *APIHandler) handleStepByID(w http.ResponseWriter, r *http.Request) {
 		if isLogs {
 			artifact, content, err := h.RunSvc.GetLogsByStep(r.Context(), stepID)
 			if err != nil {
-				http.Error(w, "Logs not found: "+err.Error(), http.StatusNotFound)
+				status := http.StatusNotFound
+				if errors.Is(err, service.ErrArtifactAccessDenied) {
+					status = http.StatusForbidden
+				}
+				http.Error(w, "Logs not found: "+err.Error(), status)
 				return
 			}
 			if artifact.MimeType != "" {
@@ -338,7 +347,7 @@ func (h *APIHandler) handleArtifactByID(w http.ResponseWriter, r *http.Request) 
 
 	artifact, content, err := h.RunSvc.GetArtifactContent(r.Context(), parts[0])
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, err.Error(), statusForRunServiceError(err, http.StatusNotFound))
 		return
 	}
 	if artifact.MimeType != "" {
@@ -465,6 +474,19 @@ func (h *APIHandler) handleInstance(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
+}
+
+func statusForRunServiceError(err error, fallback int) int {
+	switch {
+	case errors.Is(err, service.ErrInvalidTaskSpec):
+		return http.StatusBadRequest
+	case errors.Is(err, service.ErrConflict):
+		return http.StatusConflict
+	case errors.Is(err, service.ErrArtifactAccessDenied):
+		return http.StatusForbidden
+	default:
+		return fallback
+	}
 }
 
 func (h *APIHandler) handleAGInstances(w http.ResponseWriter, r *http.Request) {

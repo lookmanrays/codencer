@@ -36,7 +36,15 @@ func (a apiTestAdapter) NormalizeResult(ctx context.Context, attemptID string, a
 }
 
 func TestAPI_Endpoints(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "api-test.db")
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "api-test.db")
+	repoRoot := filepath.Join(tmpDir, "repo")
+	stateDir := filepath.Join(tmpDir, ".codencer")
+	workspaceRoot := filepath.Join(tmpDir, "workspace")
+	artifactRoot := filepath.Join(tmpDir, "artifacts")
+	if err := os.MkdirAll(repoRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -58,14 +66,14 @@ func TestAPI_Endpoints(t *testing.T) {
 	settingsRepo := sqlite.NewSettingsRepo(db)
 	routingSvc := service.NewRoutingService(benchRepo, nil)
 	policyReg := service.NewPolicyRegistry()
-	agSvc := service.NewAntigravityService(settingsRepo, "", "/tmp/repo")
+	agSvc := service.NewAntigravityService(settingsRepo, "", repoRoot)
 
-	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artsRepo, valsRepo, routingSvc, policyReg, workspace.NewNullProvisioner(), "/tmp/codencer-artifacts", "/tmp/codencer-workspace")
+	runSvc := service.NewRunService(runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artsRepo, valsRepo, routingSvc, policyReg, workspace.NewNullProvisioner(), artifactRoot, workspaceRoot)
 	gateSvc := service.NewGateService(gatesRepo, runsRepo, stepsRepo, attemptsRepo)
 
 	appCtx := &AppContext{
-		Config:     &Config{Host: "127.0.0.1", Port: 8085, DBPath: "/tmp/.codencer/test.db", WorkspaceRoot: "/tmp/codencer-workspace"},
-		RepoRoot:   "/tmp/repo",
+		Config:     &Config{Host: "127.0.0.1", Port: 8085, DBPath: dbPath, WorkspaceRoot: workspaceRoot},
+		RepoRoot:   repoRoot,
 		InstanceID: "inst-test",
 		Adapters: map[string]domain.Adapter{
 			"mock": apiTestAdapter{},
@@ -78,7 +86,7 @@ func TestAPI_Endpoints(t *testing.T) {
 		Version,
 		appCtx.StartedAt,
 		appCtx.RepoRoot,
-		"/tmp/.codencer",
+		stateDir,
 		appCtx.Config.WorkspaceRoot,
 		appCtx.Config.Host,
 		appCtx.Config.Port,
@@ -195,6 +203,65 @@ func TestAPI_Endpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("POST /api/v1/runs/{id}/steps rejects mismatched run_id", func(t *testing.T) {
+		payload := strings.NewReader(`{
+			"version":"1.1",
+			"run_id":"different-run",
+			"step_id":"step-mismatch",
+			"title":"Mismatch",
+			"goal":"Verify clean rejection",
+			"adapter_profile":"codex"
+		}`)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", payload)
+		w := httptest.NewRecorder()
+		handler.handleRunByID(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("POST /api/v1/runs conflicts on duplicate run id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", strings.NewReader(`{
+			"id":"`+runID+`",
+			"project_id":"api-project"
+		}`))
+		w := httptest.NewRecorder()
+		handler.handleRuns(w, req)
+
+		if w.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("POST /api/v1/runs/{id}/steps conflicts on duplicate step id", func(t *testing.T) {
+		stepID := "step-duplicate"
+		payload := `{
+			"version":"1.1",
+			"run_id":"` + runID + `",
+			"step_id":"` + stepID + `",
+			"title":"Duplicate step",
+			"goal":"Create once",
+			"adapter_profile":"codex"
+		}`
+
+		firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", strings.NewReader(payload))
+		firstW := httptest.NewRecorder()
+		handler.handleRunByID(firstW, firstReq)
+		if firstW.Code != http.StatusAccepted {
+			t.Fatalf("expected first request to succeed, got %d body=%s", firstW.Code, firstW.Body.String())
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", strings.NewReader(payload))
+		w := httptest.NewRecorder()
+		handler.handleRunByID(w, req)
+
+		if w.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d body=%s", w.Code, w.Body.String())
+		}
+	})
+
 	t.Run("GET /api/v1/instance includes stable identity", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", nil)
 		w := httptest.NewRecorder()
@@ -214,11 +281,50 @@ func TestAPI_Endpoints(t *testing.T) {
 		if info.RepoName != "repo" {
 			t.Fatalf("expected repo name repo, got %s", info.RepoName)
 		}
-		if info.ManifestPath != "/tmp/.codencer/instance.json" {
+		if info.ManifestPath != filepath.Join(stateDir, "instance.json") {
 			t.Fatalf("expected manifest path to be set, got %s", info.ManifestPath)
 		}
 		if len(info.Adapters) != 1 || info.Adapters[0].ID != "mock" {
 			t.Fatalf("expected instance adapters to be included, got %+v", info.Adapters)
+		}
+	})
+
+	t.Run("GET /api/v1/instance degrades broker lookup failures", func(t *testing.T) {
+		prev := handler.AppCtx.InstanceSvc
+		brokerSvc := service.NewInstanceService(
+			settingsRepo,
+			service.NewAntigravityService(settingsRepo, "http://127.0.0.1:1", repoRoot),
+			Version,
+			appCtx.StartedAt,
+			repoRoot,
+			stateDir,
+			workspaceRoot,
+			appCtx.Config.Host,
+			appCtx.Config.Port,
+			func() map[string]domain.Adapter { return appCtx.Adapters },
+		)
+		handler.AppCtx.InstanceSvc = brokerSvc
+		t.Cleanup(func() {
+			handler.AppCtx.InstanceSvc = prev
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/instance", nil)
+		w := httptest.NewRecorder()
+		handler.handleInstance(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+		}
+
+		var info domain.InstanceInfo
+		if err := json.NewDecoder(w.Body).Decode(&info); err != nil {
+			t.Fatal(err)
+		}
+		if !info.Broker.Enabled || info.Broker.Mode != "broker" {
+			t.Fatalf("expected degraded broker info to preserve broker mode, got %+v", info.Broker)
+		}
+		if info.Broker.BoundInstance != nil {
+			t.Fatalf("expected degraded broker info to omit bound instance, got %+v", info.Broker.BoundInstance)
 		}
 	})
 
@@ -247,9 +353,11 @@ func TestAPI_Endpoints(t *testing.T) {
 	})
 
 	t.Run("GET /api/v1/artifacts/{id}/content returns binary-safe bytes", func(t *testing.T) {
-		dir := t.TempDir()
-		contentPath := filepath.Join(dir, "artifact.bin")
+		contentPath := filepath.Join(artifactRoot, "artifact.bin")
 		payload := []byte{0x00, 0x01, 0x02, 0x03}
+		if err := os.MkdirAll(filepath.Dir(contentPath), 0755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(contentPath, payload, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -296,6 +404,48 @@ func TestAPI_Endpoints(t *testing.T) {
 		}
 		if body := w.Body.Bytes(); string(body) != string(payload) {
 			t.Fatalf("unexpected artifact body %v", body)
+		}
+	})
+
+	t.Run("GET /api/v1/artifacts/{id}/content rejects paths outside artifact root", func(t *testing.T) {
+		outsidePath := filepath.Join(t.TempDir(), "outside.bin")
+		if err := os.WriteFile(outsidePath, []byte("nope"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		attempt := &domain.Attempt{
+			ID:        "attempt-escape-1",
+			StepID:    "step-escape",
+			Number:    1,
+			Adapter:   "mock",
+			State:     domain.StepStateCompleted,
+			Result:    &domain.ResultSpec{Version: "v1", State: domain.StepStateCompleted, Summary: "done"},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := attemptsRepo.Create(ctx, attempt); err != nil {
+			t.Fatal(err)
+		}
+		artifact := &domain.Artifact{
+			ID:        "artifact-escape-1",
+			AttemptID: attempt.ID,
+			Type:      domain.ArtifactTypeStdout,
+			Name:      "outside.bin",
+			Path:      outsidePath,
+			Size:      4,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := artsRepo.Create(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/"+artifact.ID+"/content", nil)
+		w := httptest.NewRecorder()
+		handler.handleArtifactByID(w, req)
+
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d body=%s", w.Code, w.Body.String())
 		}
 	})
 

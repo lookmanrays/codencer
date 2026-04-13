@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -127,7 +128,10 @@ func TestRunService_Retrieval(t *testing.T) {
 	})
 
 	t.Run("Artifact Content Retrieval", func(t *testing.T) {
-		contentPath := filepath.Join(t.TempDir(), "stdout.log")
+		contentPath := filepath.Join(artifactRoot, "stdout.log")
+		if err := os.MkdirAll(filepath.Dir(contentPath), 0755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(contentPath, []byte("hello world"), 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -156,6 +160,30 @@ func TestRunService_Retrieval(t *testing.T) {
 		}
 	})
 
+	t.Run("Artifact Content Retrieval Rejects Escapes", func(t *testing.T) {
+		outsidePath := filepath.Join(t.TempDir(), "outside.log")
+		if err := os.WriteFile(outsidePath, []byte("secret"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		artifact := &domain.Artifact{
+			ID:        "art-escape",
+			AttemptID: stepID + "-a1",
+			Type:      domain.ArtifactTypeStdout,
+			Name:      "outside.log",
+			Path:      outsidePath,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := artifactsRepo.Create(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err := svc.GetArtifactContent(ctx, artifact.ID)
+		if !errors.Is(err, service.ErrArtifactAccessDenied) {
+			t.Fatalf("expected artifact access denial, got %v", err)
+		}
+	})
+
 	t.Run("Log Retrieval Uses Artifact Lookup", func(t *testing.T) {
 		logStepID := "log-step"
 		logAttemptID := logStepID + "-a1"
@@ -179,7 +207,10 @@ func TestRunService_Retrieval(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		logPath := filepath.Join(t.TempDir(), "latest.log")
+		logPath := filepath.Join(artifactRoot, "latest.log")
+		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(logPath, []byte("latest logs"), 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -242,7 +273,10 @@ func TestRunService_Retrieval(t *testing.T) {
 			{id: "stderr-newer", kind: domain.ArtifactTypeStderr, content: "stderr-newer", when: baseTime.Add(1 * time.Minute)},
 			{id: "stdout-new", kind: domain.ArtifactTypeStdout, content: "stdout-new", when: baseTime.Add(2 * time.Minute)},
 		} {
-			logPath := filepath.Join(t.TempDir(), spec.id+".log")
+			logPath := filepath.Join(artifactRoot, spec.id+".log")
+			if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+				t.Fatal(err)
+			}
 			if err := os.WriteFile(logPath, []byte(spec.content), 0644); err != nil {
 				t.Fatal(err)
 			}

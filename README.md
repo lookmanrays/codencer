@@ -59,25 +59,34 @@ Key constraints remain unchanged:
 
 ### Self-Host Quickstart
 
-1. Build the binaries with `make build`.
-2. Build the broker separately with `make build-broker` if you need the Windows-side Antigravity bridge.
-3. Start the local daemon with `make start` or `make start-sim`.
-4. Start the relay with a config that sets `planner_token` or `planner_tokens`.
-5. Create a one-time enrollment token:
-   `curl -X POST http://127.0.0.1:8090/api/v2/connectors/enrollment-tokens -H 'Authorization: Bearer <planner-token>' -H 'Content-Type: application/json' -d '{"label":"local-dev","expires_in_seconds":600}'`
-6. Enroll the connector:
+1. Build the main binaries with `make build`.
+2. Build the Windows-side broker separately with `make build-broker` if you need the Antigravity bridge on Windows.
+3. Create a relay config and local planner token:
+   `./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'`
+4. Start the relay:
+   `./bin/codencer-relayd --config .codencer/relay/config.json`
+5. Start the local daemon near the repo with `make start` or `make start-sim`.
+6. Mint a one-time enrollment token from the running relay:
+   `./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json`
+7. Enroll and run the connector in WSL/Linux next to the daemon:
    `./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>`
-7. Run the connector:
    `./bin/codencer-connectord run`
-8. Inspect local connector state without network access:
-   `./bin/codencer-connectord status --json`
-9. Inspect relay status and shared instances through `/api/v2/status`, `/api/v2/connectors`, and `/api/v2/instances`.
-10. Run the documented smoke path with `make self-host-smoke` once the daemon and relay are already running.
+8. Inspect and control sharing explicitly:
+   `./bin/codencer-connectord list`
+   `./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085`
+   `./bin/codencer-connectord unshare --instance-id <instance-id>`
+   `./bin/codencer-connectord config`
+9. Inspect relay status, connectors, and advertised instances:
+   `./bin/codencer-relayd status --config .codencer/relay/config.json`
+   `./bin/codencer-relayd connectors --config .codencer/relay/config.json`
+   `./bin/codencer-relayd instances --config .codencer/relay/config.json`
+10. Run the documented smoke path with `make self-host-smoke` or `make self-host-smoke-mcp` once the daemon and relay are already running.
 
 Planner-facing relay routes live under `/api/v2`, and the relay-hosted MCP entrypoint is `/mcp` with `/mcp/call` kept as a compatibility path.
 The connector now persists a local Ed25519 identity, `connector_id`, `machine_id`, and an explicit shared-instance allowlist under `.codencer/connector/config.json`.
 The connector also persists a local `.codencer/connector/status.json` snapshot so operators can inspect session state, last heartbeat, and the currently shared instance set without contacting the relay.
 Direct relay lookups for steps, artifacts, and gates now probe only authorized online instances and persist the discovered route, so planner HTTP and MCP flows do not depend on prior observation of those IDs.
+Planner evidence retrieval through the relay now covers result, validations, logs, artifact lists, and artifact content.
 For the end-to-end self-host flow and operating notes, see [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md), [docs/CONNECTOR.md](docs/CONNECTOR.md), [docs/RELAY.md](docs/RELAY.md), and [docs/mcp/relay_tools.md](docs/mcp/relay_tools.md).
 
 Daemon discovery and evidence notes:

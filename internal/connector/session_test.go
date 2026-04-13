@@ -39,6 +39,15 @@ func TestClientRun_HandshakeAdvertiseAndProxy(t *testing.T) {
 		case "/api/v1/steps/step-1/result":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-1","step_id":"step-1","state":"completed","summary":"done"}`))
+		case "/api/v1/steps/step-1/validations":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"name":"tests","status":"passed"}]`))
+		case "/api/v1/steps/step-1/artifacts":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"artifact_id":"art-1","label":"report"}]`))
+		case "/api/v1/steps/step-1/logs":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"stream":"stdout","chunk":"done"}]`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -88,22 +97,34 @@ func TestClientRun_HandshakeAdvertiseAndProxy(t *testing.T) {
 			}
 			advertised.Store(true)
 
-			if err := conn.WriteJSON(relayproto.CommandRequest{
-				Type:       "request",
-				RequestID:  "req-1",
-				InstanceID: "inst-1",
-				Method:     http.MethodGet,
-				Path:       "/api/v1/steps/step-1/result",
-			}); err != nil {
-				t.Fatal(err)
+			requests := []struct {
+				id       string
+				path     string
+				contains string
+			}{
+				{id: "req-1", path: "/api/v1/steps/step-1/result", contains: `"summary":"done"`},
+				{id: "req-2", path: "/api/v1/steps/step-1/validations", contains: `"status":"passed"`},
+				{id: "req-3", path: "/api/v1/steps/step-1/artifacts", contains: `"artifact_id":"art-1"`},
+				{id: "req-4", path: "/api/v1/steps/step-1/logs", contains: `"chunk":"done"`},
 			}
+			for _, req := range requests {
+				if err := conn.WriteJSON(relayproto.CommandRequest{
+					Type:       "request",
+					RequestID:  req.id,
+					InstanceID: "inst-1",
+					Method:     http.MethodGet,
+					Path:       req.path,
+				}); err != nil {
+					t.Fatal(err)
+				}
 
-			var response relayproto.CommandResponse
-			if err := conn.ReadJSON(&response); err != nil {
-				t.Fatal(err)
-			}
-			if response.StatusCode != http.StatusOK || !strings.Contains(string(response.Body), `"summary":"done"`) {
-				t.Fatalf("unexpected proxy response: %+v", response)
+				var response relayproto.CommandResponse
+				if err := conn.ReadJSON(&response); err != nil {
+					t.Fatal(err)
+				}
+				if response.StatusCode != http.StatusOK || !strings.Contains(string(response.Body), req.contains) {
+					t.Fatalf("unexpected proxy response for %s: %+v", req.path, response)
+				}
 			}
 
 			var heartbeat relayproto.HeartbeatMessage
@@ -140,6 +161,35 @@ func TestClientRun_HandshakeAdvertiseAndProxy(t *testing.T) {
 	}
 	if status.LastConnectAt == "" || status.LastHeartbeatAt == "" || len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-1" {
 		t.Fatalf("unexpected status after connect: %+v", status)
+	}
+}
+
+func TestClientHandleRequestRejectsUnsafeStepPath(t *testing.T) {
+	var daemon *httptest.Server
+	daemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/instance" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(domain.InstanceInfo{ID: "inst-1", BaseURL: daemon.URL, RepoRoot: "/repo"})
+	}))
+	defer daemon.Close()
+
+	client := NewClient(&Config{
+		Instances: []SharedInstanceConfig{{InstanceID: "inst-1", DaemonURL: daemon.URL, Share: true}},
+	})
+
+	response := client.handleRequest(context.Background(), relayproto.CommandRequest{
+		RequestID:  "req-unsafe",
+		Method:     http.MethodGet,
+		Path:       "/api/v1/steps/step-1/private",
+		InstanceID: "inst-1",
+	})
+	if response.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected forbidden response, got %+v", response)
+	}
+	if !strings.Contains(response.Error, "connector denied") {
+		t.Fatalf("expected deny message, got %+v", response)
 	}
 }
 

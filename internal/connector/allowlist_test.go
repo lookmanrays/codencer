@@ -12,9 +12,15 @@ func TestAllowedLocalProxy(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/v1/instance"},
 		{http.MethodPost, "/api/v1/runs"},
+		{http.MethodGet, "/api/v1/runs/run-1"},
 		{http.MethodPatch, "/api/v1/runs/run-1"},
 		{http.MethodPost, "/api/v1/runs/run-1/steps"},
+		{http.MethodGet, "/api/v1/runs/run-1/gates"},
+		{http.MethodGet, "/api/v1/steps/step-1"},
 		{http.MethodGet, "/api/v1/steps/step-1/result"},
+		{http.MethodGet, "/api/v1/steps/step-1/validations"},
+		{http.MethodGet, "/api/v1/steps/step-1/artifacts"},
+		{http.MethodGet, "/api/v1/steps/step-1/logs"},
 		{http.MethodPost, "/api/v1/steps/step-1/wait"},
 		{http.MethodPost, "/api/v1/steps/step-1/retry"},
 		{http.MethodGet, "/api/v1/artifacts/art-1"},
@@ -35,6 +41,9 @@ func TestAllowedLocalProxy(t *testing.T) {
 		{http.MethodGet, "/etc/passwd"},
 		{http.MethodPost, "/api/v1/admin/shell"},
 		{http.MethodDelete, "/api/v1/runs/run-1"},
+		{http.MethodGet, "/api/v1/runs/run-1/steps"},
+		{http.MethodGet, "/api/v1/steps/step-1/private"},
+		{http.MethodPost, "/api/v1/steps/step-1/result"},
 	}
 	for _, tc := range denied {
 		if AllowedLocalProxy(tc.method, tc.path) {

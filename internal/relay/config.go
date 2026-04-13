@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Config controls the self-hosted relay server.
@@ -18,6 +20,8 @@ type Config struct {
 	HeartbeatIntervalSeconds int                  `json:"heartbeat_interval_seconds,omitempty"`
 	SessionTTLSeconds        int                  `json:"session_ttl_seconds,omitempty"`
 	ChallengeTTLSeconds      int                  `json:"challenge_ttl_seconds,omitempty"`
+	ProxyTimeoutSeconds      int                  `json:"proxy_timeout_seconds,omitempty"`
+	AllowedOrigins           []string             `json:"allowed_origins,omitempty"`
 }
 
 type PlannerTokenConfig struct {
@@ -35,6 +39,7 @@ func DefaultConfig() *Config {
 		HeartbeatIntervalSeconds: 15,
 		SessionTTLSeconds:        45,
 		ChallengeTTLSeconds:      30,
+		ProxyTimeoutSeconds:      300,
 	}
 }
 
@@ -53,9 +58,11 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Host = value
 	}
 	if value := os.Getenv("RELAY_PORT"); value != "" {
-		if port, err := strconv.Atoi(value); err == nil {
-			cfg.Port = port
+		port, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid RELAY_PORT %q: %w", value, err)
 		}
+		cfg.Port = port
 	}
 	if value := os.Getenv("RELAY_DB_PATH"); value != "" {
 		cfg.DBPath = value
@@ -65,6 +72,16 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if value := os.Getenv("RELAY_ENROLLMENT_SECRET"); value != "" {
 		cfg.EnrollmentSecret = value
+	}
+	if value := os.Getenv("RELAY_PROXY_TIMEOUT_SECONDS"); value != "" {
+		timeout, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid RELAY_PROXY_TIMEOUT_SECONDS %q: %w", value, err)
+		}
+		cfg.ProxyTimeoutSeconds = timeout
+	}
+	if value := os.Getenv("RELAY_ALLOWED_ORIGINS"); value != "" {
+		cfg.AllowedOrigins = splitCSV(value)
 	}
 	return cfg, cfg.Validate()
 }
@@ -97,5 +114,41 @@ func (c *Config) Validate() error {
 	if c.ChallengeTTLSeconds <= 0 {
 		c.ChallengeTTLSeconds = 30
 	}
+	if c.ProxyTimeoutSeconds <= 0 {
+		c.ProxyTimeoutSeconds = 300
+	}
 	return nil
+}
+
+func SaveConfig(path string, cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("relay config is required")
+	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+func splitCSV(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
 }

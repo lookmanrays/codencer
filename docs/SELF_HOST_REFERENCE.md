@@ -28,6 +28,40 @@ The local daemon is not the public remote MCP server.
 
 ## Operator Flow
 
+### 0. Create a relay config and planner token
+
+The practical cold-start flow is:
+
+```bash
+mkdir -p .codencer/relay
+./bin/codencer-relayd planner-token create \
+  --config .codencer/relay/config.json \
+  --write-config \
+  --name operator \
+  --scope '*'
+```
+
+That command creates or updates a local relay config file with a high-entropy static planner bearer token.
+
+Minimal relay config example:
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 8090,
+  "db_path": ".codencer/relay/relay.db",
+  "planner_tokens": [
+    {
+      "name": "operator",
+      "token": "<generated-by-planner-token-create>",
+      "scopes": ["*"]
+    }
+  ],
+  "proxy_timeout_seconds": 300,
+  "allowed_origins": ["http://127.0.0.1:8090"]
+}
+```
+
 ### 1. Start the local daemon
 
 Run the daemon near the repo you want to serve:
@@ -60,9 +94,11 @@ The daemon writes a repo-local manifest under `.codencer/instance.json`.
 
 ### 3. Start the relay
 
-Run the relay with:
-- `db_path`
-- `planner_token` or `planner_tokens`
+Run the relay with the config you created:
+
+```bash
+./bin/codencer-relayd --config .codencer/relay/config.json
+```
 
 The relay is the public remote control plane. Do not expose the daemon directly.
 
@@ -71,13 +107,22 @@ Operator status/admin endpoints live on the relay too:
 - `GET /api/v2/connectors`
 - `GET /api/v2/audit?limit=N`
 
+Local helper commands are available too:
+
+```bash
+./bin/codencer-relayd status --config .codencer/relay/config.json
+./bin/codencer-relayd connectors --config .codencer/relay/config.json
+./bin/codencer-relayd instances --config .codencer/relay/config.json
+```
+
 ### 4. Create a one-time enrollment token
 
 ```bash
-curl -X POST <relay>/api/v2/connectors/enrollment-tokens \
-  -H 'Authorization: Bearer <planner-token>' \
-  -H 'Content-Type: application/json' \
-  -d '{"label":"local-dev","expires_in_seconds":600}'
+./bin/codencer-relayd enrollment-token create \
+  --config .codencer/relay/config.json \
+  --label local-dev \
+  --expires-in-seconds 600 \
+  --json
 ```
 
 ### 5. Enroll the connector
@@ -95,6 +140,7 @@ The connector persists:
 - `machine_id`
 - `private_key`
 - `instances[]` allowlist entries
+- `status.json` session snapshot
 
 Legacy bootstrap compatibility:
 - `enrollment_secret` is still accepted if configured on the relay as a bootstrap-only fallback
@@ -109,12 +155,21 @@ Important rules:
 - connector config is the allowlist
 - only `share: true` instances are advertised
 
-Inspect `.codencer/connector/config.json` and verify only intended instances are shared before running the connector.
+Inspect and manage the allowlist explicitly before running the connector:
+
+```bash
+./bin/codencer-connectord list
+./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085
+./bin/codencer-connectord unshare --instance-id <instance-id>
+./bin/codencer-connectord config
+```
+
+`unshare` marks an instance as `share=false` and keeps the record in local config, so operators can see both known-shared and known-unshared repos.
+
 You can also inspect the relay-side view of shared instances with:
 
 ```bash
-curl <relay>/api/v2/connectors \
-  -H 'Authorization: Bearer <planner-token>'
+./bin/codencer-relayd connectors --config .codencer/relay/config.json
 ```
 
 ### 7. Run the connector
@@ -139,6 +194,13 @@ Use either:
 
 The relay is the remote planner surface. The daemon-local `/mcp/call` endpoint is only a local compatibility/admin bridge.
 
+Current MCP transport posture:
+- canonical endpoint: `/mcp`
+- compatibility alias: `/mcp/call`
+- POST JSON-RPC is supported for straightforward planner integrations
+- Streamable HTTP compatibility is implemented on `/mcp` with `GET`, `POST`, and `DELETE`, `MCP-Protocol-Version`, and `MCP-Session-Id`
+- the current relay is still request/response-first and does not emit long-lived unsolicited server notifications
+
 ### 9. Start work and inspect evidence
 
 Typical remote sequence:
@@ -148,7 +210,8 @@ Typical remote sequence:
 4. wait for step or poll step/result
 5. inspect result
 6. inspect validations
-7. inspect artifacts
+7. inspect logs
+8. inspect artifacts
 
 Remote artifact access is ID-based:
 - artifact content is fetched by `artifact_id`
@@ -162,6 +225,7 @@ Supported remote actions include:
 - reject gate
 - abort run
 - retry step
+- disable or enable a connector from the relay admin surface
 
 Current limitations remain explicit:
 - abort is best-effort unless the adapter actually confirms stop, and the caller only gets a successful abort when the active step reaches `cancelled`
@@ -178,6 +242,7 @@ Current routing behavior:
 The connector only proxies a narrow allowlist:
 - run create/list/read
 - run abort
+- run gate listing
 - step submit/read/result/validations/artifacts/logs
 - step retry
 - step wait
@@ -200,13 +265,20 @@ PLANNER_TOKEN=<planner-token> make self-host-smoke
 
 The smoke flow:
 1. reads the local daemon instance identity
-2. creates a one-time relay enrollment token
+2. creates a one-time relay enrollment token through `codencer-relayd enrollment-token create`
 3. enrolls and runs a temporary connector
 4. waits for instance advertisement
 5. starts a run through the relay
 6. submits a real `TaskSpec`-compatible task
 7. waits for the step
-8. fetches result and artifacts
+8. fetches result, validations, logs, gates, and artifacts
+
+Optional smoke scenario coverage:
+
+```bash
+PLANNER_TOKEN=<planner-token> SMOKE_SCENARIOS=status,audit,mcp make self-host-smoke
+PLANNER_TOKEN=<planner-token> make self-host-smoke-all
+```
 
 If you need the Windows-side broker binary too, build it separately with:
 

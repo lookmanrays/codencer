@@ -6,12 +6,15 @@ Codencer exposes the remote MCP surface from the relay, not from the local daemo
 
 Use the relay MCP endpoint:
 - `POST /mcp`
+- `GET /mcp`
+- `DELETE /mcp`
 
 Compatibility path:
 - `POST /mcp/call`
 
 The relay MCP server currently supports:
 - `initialize`
+- `notifications/initialized`
 - `tools/list`
 - `tools/call`
 
@@ -21,11 +24,13 @@ The relay MCP server currently supports:
 - `codencer.get_instance`
 - `codencer.start_run`
 - `codencer.get_run`
+- `codencer.list_run_gates`
 - `codencer.submit_task`
 - `codencer.get_step`
 - `codencer.wait_step`
 - `codencer.get_step_result`
 - `codencer.list_step_artifacts`
+- `codencer.get_step_logs`
 - `codencer.get_artifact_content`
 - `codencer.get_step_validations`
 - `codencer.approve_gate`
@@ -41,10 +46,20 @@ The relay MCP server currently supports:
 - Direct `step`, `artifact`, and `gate` lookups do not require prior observation of those ids; the relay probes only authorized online shared instances and persists successful route hints.
 - `submit_task` accepts the real Codencer `TaskSpec` shape.
 - `wait_step` is bounded and takes explicit timeout input.
+- `list_run_gates` is the canonical gate-discovery tool for a known run and instance.
+- `get_step_logs` returns the collected step logs as explicit text or base64-safe content metadata.
 - `get_artifact_content` reads by `artifact_id` and returns text or base64-safe content metadata.
 - `abort_run` returns a successful tool result only when the daemon confirms the active step reached `cancelled`.
 - There is no raw shell tool.
 - There is no arbitrary filesystem browsing tool.
+
+## Transport Notes
+
+- `/mcp` supports Streamable HTTP-style `GET`, `POST`, and `DELETE`
+- the relay returns `MCP-Protocol-Version`
+- the relay can return `MCP-Session-Id` on `initialize`
+- `/mcp/call` remains as a compatibility alias for simple POST callers
+- the current relay is still request/response-first; it does not rely on unsolicited long-lived server notifications for planner functionality
 
 ## Local MCP Distinction
 

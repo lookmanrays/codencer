@@ -131,6 +131,14 @@ self-host-smoke: build
 	@echo "==> Running self-host relay/connector smoke test..."
 	@./scripts/self_host_smoke.sh
 
+self-host-smoke-all: build
+	@echo "==> Running self-host relay/connector smoke test with all optional scenarios..."
+	@SMOKE_SCENARIOS=all ./scripts/self_host_smoke.sh
+
+self-host-smoke-mcp: build
+	@echo "==> Running self-host relay/connector smoke test with MCP coverage..."
+	@SMOKE_SCENARIOS=status,audit,mcp ./scripts/self_host_smoke.sh
+
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."
 	@./bin/orchestratorctl run start validation-run-01 validation-project || true

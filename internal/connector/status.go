@@ -105,6 +105,15 @@ func (s *StatusStore) MarkFailure(cfg *Config, err string, now time.Time) error 
 	})
 }
 
+func (s *StatusStore) SyncConfig(cfg *Config) error {
+	return s.update(func(status *Status) {
+		seedStatus(status, cfg)
+		if status.SessionState == "" {
+			status.SessionState = SessionStateDisconnected
+		}
+	})
+}
+
 func (s *StatusStore) update(mutator func(*Status)) error {
 	if s == nil || s.path == "" {
 		return nil

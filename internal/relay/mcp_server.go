@@ -3,16 +3,44 @@ package relay
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
+	"time"
 )
 
+const (
+	mcpHeaderProtocolVersion = "MCP-Protocol-Version"
+	mcpHeaderSessionID       = "MCP-Session-Id"
+
+	mcpDefaultProtocolVersion = "2025-03-26"
+	mcpLatestProtocolVersion  = "2025-11-25"
+)
+
+var supportedMCPProtocolVersions = []string{
+	"2025-11-25",
+	"2025-06-18",
+	"2025-03-26",
+}
+
 type mcpServer struct {
-	relay *Server
-	tools map[string]mcpTool
+	relay    *Server
+	tools    map[string]mcpTool
+	mu       sync.Mutex
+	sessions map[string]*mcpSession
+}
+
+type mcpSession struct {
+	ID              string
+	ProtocolVersion string
+	CreatedAt       time.Time
+	LastSeenAt      time.Time
 }
 
 type mcpRequest struct {
@@ -22,6 +50,8 @@ type mcpRequest struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 	Name    string          `json:"name,omitempty"`
 	Args    json.RawMessage `json:"arguments,omitempty"`
+	Result  any             `json:"result,omitempty"`
+	Error   any             `json:"error,omitempty"`
 }
 
 type mcpResponse struct {
@@ -44,15 +74,88 @@ type mcpToolResult struct {
 }
 
 func newMCPServer(relayServer *Server) *mcpServer {
-	server := &mcpServer{relay: relayServer}
+	server := &mcpServer{
+		relay:    relayServer,
+		sessions: make(map[string]*mcpSession),
+	}
 	server.tools = buildMCPTools(server)
 	return server
 }
 
 func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Codencer-MCP-Surface", "relay-public")
-	if r.Method != http.MethodPost {
+
+	if apiErr := s.applyOriginHeaders(w, r); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	principal, err := s.relay.authenticatePlanner(r, "", "")
+	if err != nil {
+		writeAPIError(w, err.Status, err.Code, err.Message)
+		return
+	}
+	r = r.WithContext(context.WithValue(r.Context(), plannerPrincipalKey{}, principal))
+
+	session, apiErr := s.sessionFromRequest(r)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		s.handleStream(w, r, session)
+	case http.MethodDelete:
+		s.handleSessionDelete(w, session)
+	case http.MethodPost:
+		s.handlePost(w, r, session)
+	}
+}
+
+func (s *mcpServer) handleStream(w http.ResponseWriter, r *http.Request, session *mcpSession) {
+	protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+
+	if session != nil {
+		s.applySessionHeaders(w, session, protocolVersion)
+	} else {
+		w.Header().Set(mcpHeaderProtocolVersion, protocolVersion)
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	_, _ = w.Write([]byte(": codencer-relay-mcp-stream\n\n"))
+}
+
+func (s *mcpServer) handleSessionDelete(w http.ResponseWriter, session *mcpSession) {
+	if session == nil {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", "MCP-Session-Id header is required")
+		return
+	}
+	s.mu.Lock()
+	delete(s.sessions, session.ID)
+	s.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *mcpServer) handlePost(w http.ResponseWriter, r *http.Request, session *mcpSession) {
+	headerProtocolVersion := strings.TrimSpace(r.Header.Get(mcpHeaderProtocolVersion))
+	if headerProtocolVersion != "" && !isSupportedMCPProtocolVersion(headerProtocolVersion) {
+		writeAPIError(w, http.StatusBadRequest, "unsupported_protocol_version", "unsupported MCP protocol version")
 		return
 	}
 
@@ -66,7 +169,7 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 				Message: "parse error",
 				Data:    err.Error(),
 			},
-		})
+		}, session, protocolVersionOrDefault(headerProtocolVersion))
 		return
 	}
 	if req.JSONRPC == "" {
@@ -81,35 +184,47 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 		req.Params = params
 	}
 
+	if req.Method == "" {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
 	switch req.Method {
 	case "initialize":
-		s.writeRPC(w, mcpResponse{
-			JSONRPC: "2.0",
-			ID:      req.ID,
-			Result: map[string]any{
-				"protocolVersion": "2025-03-26",
-				"capabilities": map[string]any{
-					"tools": map[string]any{"listChanged": false},
-				},
-				"serverInfo": map[string]any{
-					"name":    "codencer-relay",
-					"version": "v2",
-				},
-			},
-		})
+		s.handleInitialize(w, req, session, headerProtocolVersion)
 	case "notifications/initialized":
+		protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
+		if apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
+		if session != nil {
+			s.applySessionHeaders(w, session, protocolVersion)
+		} else {
+			w.Header().Set(mcpHeaderProtocolVersion, protocolVersion)
+		}
 		w.WriteHeader(http.StatusAccepted)
 	case "tools/list":
+		protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
+		if apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
 		s.writeRPC(w, mcpResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Result: map[string]any{
 				"tools": s.listTools(),
 			},
-		})
+		}, session, protocolVersion)
 	case "tools/call":
-		s.handleToolCall(w, r, req)
+		s.handleToolCall(w, r, req, session)
 	default:
+		protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
+		if apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
 		s.writeRPC(w, mcpResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
@@ -118,11 +233,41 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 				Message: "method not found",
 				Data:    req.Method,
 			},
-		})
+		}, session, protocolVersion)
 	}
 }
 
-func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req mcpRequest) {
+func (s *mcpServer) handleInitialize(w http.ResponseWriter, req mcpRequest, session *mcpSession, headerProtocolVersion string) {
+	var params struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	_ = json.Unmarshal(req.Params, &params)
+
+	protocolVersion := negotiateProtocolVersion(params.ProtocolVersion, headerProtocolVersion)
+	session = s.ensureSession(session, protocolVersion)
+	s.writeRPC(w, mcpResponse{
+		JSONRPC: "2.0",
+		ID:      req.ID,
+		Result: map[string]any{
+			"protocolVersion": protocolVersion,
+			"capabilities": map[string]any{
+				"tools": map[string]any{"listChanged": false},
+			},
+			"serverInfo": map[string]any{
+				"name":    "codencer-relay",
+				"version": "v2",
+			},
+		},
+	}, session, protocolVersion)
+}
+
+func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req mcpRequest, session *mcpSession) {
+	protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+
 	var params struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -136,7 +281,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 				Message: "invalid params",
 				Data:    err.Error(),
 			},
-		})
+		}, session, protocolVersion)
 		return
 	}
 	tool, ok := s.tools[params.Name]
@@ -145,7 +290,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Result:  errorToolResult("tool_not_found", fmt.Sprintf("unknown tool: %s", params.Name)),
-		})
+		}, session, protocolVersion)
 		return
 	}
 	if params.Arguments == nil {
@@ -158,7 +303,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Result:  errorToolResult(err.Code, err.Message),
-		})
+		}, session, protocolVersion)
 		return
 	}
 
@@ -168,14 +313,14 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Result:  errorToolResult(apiErr.Code, apiErr.Message),
-		})
+		}, session, protocolVersion)
 		return
 	}
 	s.writeRPC(w, mcpResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
 		Result:  result,
-	})
+	}, session, protocolVersion)
 }
 
 func (s *mcpServer) listTools() []map[string]any {
@@ -190,7 +335,116 @@ func (s *mcpServer) listTools() []map[string]any {
 	return tools
 }
 
-func (s *mcpServer) writeRPC(w http.ResponseWriter, response mcpResponse) {
+func (s *mcpServer) applyOriginHeaders(w http.ResponseWriter, r *http.Request) *apiError {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return nil
+	}
+	if !s.originAllowed(origin, r.Host) {
+		return &apiError{Status: http.StatusForbidden, Code: "origin_denied", Message: "origin is not allowed for the relay MCP surface"}
+	}
+	w.Header().Set("Vary", "Origin")
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, "+mcpHeaderProtocolVersion+", "+mcpHeaderSessionID+", Last-Event-ID")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", mcpHeaderProtocolVersion+", "+mcpHeaderSessionID)
+	return nil
+}
+
+func (s *mcpServer) originAllowed(origin, requestHost string) bool {
+	if origin == "" {
+		return true
+	}
+	if len(s.relay.cfg.AllowedOrigins) > 0 {
+		for _, allowed := range s.relay.cfg.AllowedOrigins {
+			if allowed == "*" || strings.EqualFold(strings.TrimSpace(allowed), origin) {
+				return true
+			}
+		}
+		return false
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	originHost := normalizeHost(parsed.Host)
+	requestHost = normalizeHost(requestHost)
+	cfgHost := normalizeHost(s.relay.cfg.Host)
+	if originHost == "" {
+		return false
+	}
+	if originHost == requestHost || (cfgHost != "" && originHost == cfgHost) {
+		return true
+	}
+	return isLoopbackHost(originHost) && (isLoopbackHost(requestHost) || isLoopbackHost(cfgHost))
+}
+
+func (s *mcpServer) sessionFromRequest(r *http.Request) (*mcpSession, *apiError) {
+	sessionID := strings.TrimSpace(r.Header.Get(mcpHeaderSessionID))
+	if sessionID == "" {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
+	}
+	session.LastSeenAt = time.Now().UTC()
+	return cloneMCPSession(session), nil
+}
+
+func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) *mcpSession {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing != nil {
+		session := s.sessions[existing.ID]
+		if session == nil {
+			session = &mcpSession{ID: existing.ID, CreatedAt: existing.CreatedAt}
+		}
+		session.ProtocolVersion = protocolVersion
+		if session.CreatedAt.IsZero() {
+			session.CreatedAt = now
+		}
+		session.LastSeenAt = now
+		s.sessions[session.ID] = session
+		return cloneMCPSession(session)
+	}
+	session := &mcpSession{
+		ID:              newMCPSessionID(),
+		ProtocolVersion: protocolVersion,
+		CreatedAt:       now,
+		LastSeenAt:      now,
+	}
+	s.sessions[session.ID] = session
+	return cloneMCPSession(session)
+}
+
+func (s *mcpServer) resolveProtocolVersion(r *http.Request, session *mcpSession) (string, *apiError) {
+	headerVersion := strings.TrimSpace(r.Header.Get(mcpHeaderProtocolVersion))
+	if headerVersion != "" && !isSupportedMCPProtocolVersion(headerVersion) {
+		return "", &apiError{Status: http.StatusBadRequest, Code: "unsupported_protocol_version", Message: "unsupported MCP protocol version"}
+	}
+	if session != nil {
+		if headerVersion != "" && headerVersion != session.ProtocolVersion {
+			return "", &apiError{Status: http.StatusBadRequest, Code: "protocol_version_mismatch", Message: "MCP-Protocol-Version does not match the negotiated session protocol"}
+		}
+		return session.ProtocolVersion, nil
+	}
+	return protocolVersionOrDefault(headerVersion), nil
+}
+
+func (s *mcpServer) applySessionHeaders(w http.ResponseWriter, session *mcpSession, protocolVersion string) {
+	if session != nil {
+		w.Header().Set(mcpHeaderSessionID, session.ID)
+	}
+	w.Header().Set(mcpHeaderProtocolVersion, protocolVersion)
+}
+
+func (s *mcpServer) writeRPC(w http.ResponseWriter, response mcpResponse, session *mcpSession, protocolVersion string) {
+	s.applySessionHeaders(w, session, protocolVersion)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(response)
@@ -281,4 +535,81 @@ func artifactContentPayload(contentType string, body []byte) map[string]any {
 	payload["encoding"] = "base64"
 	payload["base64"] = base64.StdEncoding.EncodeToString(body)
 	return payload
+}
+
+func negotiateProtocolVersion(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if isSupportedMCPProtocolVersion(value) {
+			return value
+		}
+	}
+	return mcpLatestProtocolVersion
+}
+
+func protocolVersionOrDefault(value string) string {
+	value = strings.TrimSpace(value)
+	if value != "" && isSupportedMCPProtocolVersion(value) {
+		return value
+	}
+	return mcpDefaultProtocolVersion
+}
+
+func isSupportedMCPProtocolVersion(value string) bool {
+	for _, supported := range supportedMCPProtocolVersions {
+		if value == supported {
+			return true
+		}
+	}
+	return false
+}
+
+func newMCPSessionID() string {
+	buf := make([]byte, 18)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("mcp-%d", time.Now().UnixNano())
+	}
+	return "mcp-" + base64.RawURLEncoding.EncodeToString(buf)
+}
+
+func cloneMCPSession(session *mcpSession) *mcpSession {
+	if session == nil {
+		return nil
+	}
+	clone := *session
+	return &clone
+}
+
+func normalizeHost(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, "://") {
+		parsed, err := url.Parse(value)
+		if err == nil {
+			return normalizeHost(parsed.Host)
+		}
+	}
+	if host, _, err := net.SplitHostPort(value); err == nil && host != "" {
+		return strings.Trim(host, "[]")
+	}
+	if strings.Count(value, ":") == 1 {
+		if host, _, found := strings.Cut(value, ":"); found && host != "" {
+			return strings.Trim(host, "[]")
+		}
+	}
+	return strings.Trim(value, "[]")
+}
+
+func isLoopbackHost(value string) bool {
+	switch strings.TrimSpace(strings.Trim(value, "[]")) {
+	case "127.0.0.1", "localhost", "::1":
+		return true
+	default:
+		return false
+	}
 }

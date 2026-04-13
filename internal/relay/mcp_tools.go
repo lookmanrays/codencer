@@ -100,6 +100,21 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 				}
 				return instanceID, fmt.Sprintf("/api/v2/instances/%s/runs/%s", instanceID, runID), nil, nil
 			}),
+		"codencer.list_run_gates": plannerProxyTool(server, "codencer.list_run_gates", "List gates for a run on a shared instance.", "gates:read",
+			objectSchema([]string{"instance_id", "run_id"}, map[string]any{
+				"instance_id": stringSchema("Target shared instance identifier."),
+				"run_id":      stringSchema("Run identifier."),
+			}), func(args map[string]any) (string, string, []byte, *apiError) {
+				instanceID, apiErr := requiredString(args, "instance_id")
+				if apiErr != nil {
+					return "", "", nil, apiErr
+				}
+				runID, apiErr := requiredString(args, "run_id")
+				if apiErr != nil {
+					return "", "", nil, apiErr
+				}
+				return instanceID, fmt.Sprintf("/api/v2/instances/%s/runs/%s/gates", instanceID, runID), nil, nil
+			}),
 		"codencer.submit_task": plannerProxyTool(server, "codencer.submit_task", "Submit a Codencer task to a run.", "steps:write",
 			objectSchema([]string{"instance_id", "run_id", "task"}, map[string]any{
 				"instance_id": stringSchema("Target shared instance identifier."),
@@ -166,6 +181,28 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 				}
 				return "", fmt.Sprintf("/api/v2/steps/%s/artifacts", stepID), nil, nil
 			}),
+		"codencer.get_step_logs": {
+			Name:        "codencer.get_step_logs",
+			Description: "Fetch the collected step logs as text or base64 content.",
+			Scope:       "steps:read",
+			InputSchema: objectSchema([]string{"step_id"}, map[string]any{
+				"step_id": stringSchema("Step identifier."),
+			}),
+			Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
+				stepID, apiErr := requiredString(args, "step_id")
+				if apiErr != nil {
+					return mcpToolResult{}, apiErr
+				}
+				_, headers, body, err := server.callPlannerRoute(ctx, authHeaderForPrincipal(principal, server.relay.cfg), http.MethodGet, fmt.Sprintf("/api/v2/steps/%s/logs", stepID), nil)
+				if err != nil {
+					return mcpToolResult{}, err
+				}
+				contentType := headers.Get("Content-Type")
+				payload := artifactContentPayload(contentType, body)
+				payload["step_id"] = stepID
+				return successToolResult("Fetched step logs.", payload), nil
+			},
+		},
 		"codencer.get_artifact_content": {
 			Name:        "codencer.get_artifact_content",
 			Description: "Fetch artifact content by artifact identifier with explicit text or base64 encoding.",
@@ -383,25 +420,37 @@ func taskSpecSchema() map[string]any {
 		"description": "Canonical Codencer TaskSpec payload.",
 		"required":    []string{"version", "goal"},
 		"properties": map[string]any{
-			"version":               stringSchema("Task contract version."),
-			"project_id":            stringSchema("Project identifier."),
-			"run_id":                stringSchema("Optional run identifier."),
-			"phase_id":              stringSchema("Optional phase identifier."),
-			"step_id":               stringSchema("Optional step identifier."),
-			"title":                 stringSchema("Optional human-readable title."),
-			"goal":                  stringSchema("Primary instruction for the adapter."),
-			"context":               objectSchema(nil, map[string]any{"summary": stringSchema("Optional contextual summary.")}),
-			"constraints":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"allowed_paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"forbidden_paths":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"validations":           map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"acceptance":            map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"stop_conditions":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"policy_bundle":         stringSchema("Optional policy bundle."),
-			"adapter_profile":       stringSchema("Preferred adapter profile."),
-			"timeout_seconds":       intSchema("Optional task timeout in seconds."),
-			"is_simulation":         boolSchema("Simulation flag."),
-			"submission_provenance": map[string]any{"type": "object"},
+			"version":         stringSchema("Task contract version."),
+			"project_id":      stringSchema("Project identifier."),
+			"run_id":          stringSchema("Optional run identifier."),
+			"phase_id":        stringSchema("Optional phase identifier."),
+			"step_id":         stringSchema("Optional step identifier."),
+			"title":           stringSchema("Optional human-readable title."),
+			"goal":            stringSchema("Primary instruction for the adapter."),
+			"context":         objectSchema(nil, map[string]any{"summary": stringSchema("Optional contextual summary.")}),
+			"constraints":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"allowed_paths":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"forbidden_paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"validations": map[string]any{
+				"type": "array",
+				"items": objectSchema([]string{"name", "command"}, map[string]any{
+					"name":    stringSchema("Validation name."),
+					"command": stringSchema("Shell command executed by the daemon validation phase."),
+				}),
+			},
+			"acceptance":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"stop_conditions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"policy_bundle":   stringSchema("Optional policy bundle."),
+			"adapter_profile": stringSchema("Preferred adapter profile."),
+			"timeout_seconds": intSchema("Optional task timeout in seconds."),
+			"is_simulation":   boolSchema("Simulation flag."),
+			"submission_provenance": objectSchema(nil, map[string]any{
+				"source_kind":      stringSchema("Normalized submit source kind."),
+				"source_name":      stringSchema("Optional submit source name."),
+				"original_format":  stringSchema("Original submit payload format."),
+				"original_input":   stringSchema("Original submit payload reference or excerpt."),
+				"defaults_applied": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			}),
 		},
 	}
 }

@@ -59,7 +59,11 @@ func (s *Server) handleInstances(w http.ResponseWriter, r *http.Request) {
 		}
 		response := make([]plannerInstance, 0, len(records))
 		for _, record := range records {
-			status := s.instanceStatus(&record)
+			status, err := s.instanceStatus(r.Context(), &record)
+			if err != nil {
+				writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+				return
+			}
 			response = append(response, plannerInstance{
 				InstanceID:  record.InstanceID,
 				ConnectorID: record.ConnectorID,
@@ -100,7 +104,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	onlineInstances := 0
 	for _, instance := range instances {
-		if status := s.instanceStatus(&instance); status.Online {
+		status, err := s.instanceStatus(r.Context(), &instance)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		if status.Online {
 			onlineInstances++
 		}
 	}
@@ -128,28 +137,119 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 	}
 	response := make([]plannerConnector, 0, len(connectors))
 	for _, connector := range connectors {
-		instances, err := s.store.ListInstancesByConnector(r.Context(), connector.ConnectorID)
+		payload, err := s.connectorPayload(r.Context(), connector)
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
 			return
 		}
-		sharedIDs := make([]string, 0, len(instances))
-		for _, instance := range instances {
-			sharedIDs = append(sharedIDs, instance.InstanceID)
-		}
-		status := s.connectorStatus(&connector)
-		response = append(response, plannerConnector{
-			ConnectorID:       connector.ConnectorID,
-			MachineID:         connector.MachineID,
-			Label:             connector.Label,
-			Disabled:          connector.Disabled,
-			Online:            status.Online,
-			Status:            status.Status,
-			LastSeenAt:        connector.LastSeenAt,
-			SharedInstanceIDs: sharedIDs,
-		})
+		response = append(response, payload)
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleConnectorScoped(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v2/connectors/")
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", "connector_id is required")
+		return
+	}
+
+	connectorID := parts[0]
+	principal := plannerFromContext(r.Context())
+	switch {
+	case len(parts) == 1 && r.Method == http.MethodGet:
+		if apiErr := authorizePrincipal(principal, "admin:read", ""); apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
+		record, err := s.store.GetConnector(r.Context(), connectorID)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		if record == nil {
+			writeAPIError(w, http.StatusNotFound, "connector_not_found", "connector not found")
+			return
+		}
+		payload, err := s.connectorPayload(r.Context(), *record)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+		return
+	case len(parts) == 2 && r.Method == http.MethodPost && (parts[1] == "disable" || parts[1] == "enable"):
+		if apiErr := authorizePrincipal(principal, "admin:write", ""); apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
+		record, err := s.store.GetConnector(r.Context(), connectorID)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		if record == nil {
+			writeAPIError(w, http.StatusNotFound, "connector_not_found", "connector not found")
+			return
+		}
+
+		disabled := parts[1] == "disable"
+		if err := s.store.SetConnectorDisabled(r.Context(), connectorID, disabled); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		record.Disabled = disabled
+		payload, err := s.connectorPayload(r.Context(), *record)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		action := "enable_connector"
+		if disabled {
+			action = "disable_connector"
+		}
+		actorID := ""
+		if principal != nil {
+			actorID = principal.Name
+		}
+		s.auditor.Record(r.Context(), AuditEvent{
+			ActorType:         "planner",
+			ActorID:           actorID,
+			Action:            action,
+			ResourceKind:      "connector",
+			ResourceID:        connectorID,
+			TargetConnectorID: connectorID,
+			Outcome:           "ok",
+		})
+		writeJSON(w, http.StatusOK, payload)
+		return
+	default:
+		writeAPIError(w, http.StatusNotFound, "malformed_request", "unsupported connector route")
+		return
+	}
+}
+
+func (s *Server) connectorPayload(ctx context.Context, connector ConnectorRecord) (plannerConnector, error) {
+	instances, err := s.store.ListInstancesByConnector(ctx, connector.ConnectorID)
+	if err != nil {
+		return plannerConnector{}, err
+	}
+	sharedIDs := make([]string, 0, len(instances))
+	for _, instance := range instances {
+		sharedIDs = append(sharedIDs, instance.InstanceID)
+	}
+	status := s.connectorStatus(&connector)
+	return plannerConnector{
+		ConnectorID:       connector.ConnectorID,
+		MachineID:         connector.MachineID,
+		Label:             connector.Label,
+		Disabled:          connector.Disabled,
+		Online:            status.Online,
+		Status:            status.Status,
+		LastSeenAt:        connector.LastSeenAt,
+		SharedInstanceIDs: sharedIDs,
+	}, nil
 }
 
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +326,11 @@ func (s *Server) handleInstanceScoped(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusNotFound, "instance_not_found", "instance not found")
 			return
 		}
-		status := s.instanceStatus(record)
+		status, err := s.instanceStatus(r.Context(), record)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
 		writeJSON(w, http.StatusOK, plannerInstance{
 			InstanceID:  record.InstanceID,
 			ConnectorID: record.ConnectorID,
@@ -296,6 +400,9 @@ func (s *Server) handleStepScoped(w http.ResponseWriter, r *http.Request) {
 		scope = "artifacts:read"
 		routeKind = "artifact"
 		routeIDField = "id"
+	case len(parts) == 2 && parts[1] == "logs" && r.Method == http.MethodGet:
+		targetPath += "/logs"
+		action = "get_step_logs"
 	case len(parts) == 2 && parts[1] == "validations" && r.Method == http.MethodGet:
 		targetPath += "/validations"
 		action = "get_step_validations"
@@ -430,6 +537,13 @@ func (s *Server) proxyRequest(ctx context.Context, instanceID, method, path, que
 	if record == nil {
 		return nil, nil, &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: "instance not found"}
 	}
+	connectorRecord, err := s.store.GetConnector(ctx, record.ConnectorID)
+	if err != nil {
+		return nil, record, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	if connectorRecord != nil && connectorRecord.Disabled {
+		return nil, record, &apiError{Status: http.StatusForbidden, Code: "connector_disabled", Message: "connector for this instance is disabled"}
+	}
 	session := s.hub.Get(instanceID)
 	if session == nil {
 		return nil, record, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "connector for this instance is offline"}
@@ -438,7 +552,7 @@ func (s *Server) proxyRequest(ctx context.Context, instanceID, method, path, que
 	if err != nil {
 		return nil, record, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
 	}
-	timeout := 15 * time.Second
+	timeout := s.proxyTimeout(path, body)
 	requestCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	response, err := session.proxy(requestCtx, relayproto.CommandRequest{
@@ -466,6 +580,31 @@ func (s *Server) proxyRequest(ctx context.Context, instanceID, method, path, que
 		}
 	}
 	return response, record, nil
+}
+
+func (s *Server) proxyTimeout(path string, body []byte) time.Duration {
+	const transportGrace = 2 * time.Second
+
+	timeout := time.Duration(s.cfg.ProxyTimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 300 * time.Second
+	}
+	if !strings.HasSuffix(path, "/wait") || len(body) == 0 {
+		return timeout
+	}
+
+	var request struct {
+		TimeoutMS int `json:"timeout_ms"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil || request.TimeoutMS <= 0 {
+		return timeout
+	}
+
+	requested := time.Duration(request.TimeoutMS)*time.Millisecond + transportGrace
+	if requested > timeout {
+		return timeout
+	}
+	return requested
 }
 
 func (s *Server) captureRoutes(ctx context.Context, instanceID, kind, idField string, body []byte) {
@@ -580,6 +719,23 @@ func (s *Server) connectorStatus(record *ConnectorRecord) InstanceStatus {
 	return InstanceStatus{Online: false, Status: "offline"}
 }
 
+func (s *Server) instanceStatus(ctx context.Context, record *InstanceRecord) (InstanceStatus, error) {
+	if record == nil {
+		return InstanceStatus{Online: false, Status: "not_found"}, nil
+	}
+	connectorRecord, err := s.store.GetConnector(ctx, record.ConnectorID)
+	if err != nil {
+		return InstanceStatus{}, err
+	}
+	if connectorRecord != nil && connectorRecord.Disabled {
+		return InstanceStatus{Online: false, Status: "disabled"}, nil
+	}
+	if s.hub.Get(record.InstanceID) != nil {
+		return InstanceStatus{Online: true, Status: "online"}, nil
+	}
+	return InstanceStatus{Online: false, Status: "offline"}, nil
+}
+
 func parseAuditLimit(raw string) int {
 	const (
 		defaultLimit = 100
@@ -667,6 +823,13 @@ func (s *Server) resourceProbeCandidates(ctx context.Context, principal *planner
 		if record == nil {
 			return nil, &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: "instance not found"}
 		}
+		connectorRecord, err := s.store.GetConnector(ctx, record.ConnectorID)
+		if err != nil {
+			return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+		}
+		if connectorRecord != nil && connectorRecord.Disabled {
+			return nil, &apiError{Status: http.StatusForbidden, Code: "connector_disabled", Message: "connector for this instance is disabled"}
+		}
 		if s.hub.Get(expectedInstanceID) == nil {
 			return nil, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "connector for this instance is offline"}
 		}
@@ -680,6 +843,13 @@ func (s *Server) resourceProbeCandidates(ctx context.Context, principal *planner
 	candidates := make([]InstanceRecord, 0, len(records))
 	for _, record := range records {
 		if authorizePrincipal(principal, scope, record.InstanceID) != nil {
+			continue
+		}
+		connectorRecord, err := s.store.GetConnector(ctx, record.ConnectorID)
+		if err != nil {
+			return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+		}
+		if connectorRecord != nil && connectorRecord.Disabled {
 			continue
 		}
 		if s.hub.Get(record.InstanceID) == nil {

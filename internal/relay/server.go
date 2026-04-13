@@ -49,6 +49,7 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/api/v2/connectors/enrollment-tokens", s.withPlannerScope("connectors:enroll", nil, s.handleEnrollmentTokens))
 	mux.HandleFunc("/api/v2/status", s.withPlannerScope("admin:read", nil, s.handleStatus))
 	mux.HandleFunc("/api/v2/connectors", s.withPlannerScope("admin:read", nil, s.handleConnectors))
+	mux.HandleFunc("/api/v2/connectors/", s.withPlannerScope("", nil, s.handleConnectorScoped))
 	mux.HandleFunc("/api/v2/audit", s.withPlannerScope("admin:read", nil, s.handleAudit))
 	mux.HandleFunc("/api/v2/instances", s.withPlannerScope("instances:read", nil, s.handleInstances))
 	mux.HandleFunc("/api/v2/instances/", s.withPlannerScope("", relayInstanceIDFromRequest, s.handleInstanceScoped))
@@ -56,8 +57,8 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/api/v2/artifacts/", s.withPlannerScope("artifacts:read", nil, s.handleArtifactScoped))
 	mux.HandleFunc("/api/v2/gates/", s.withPlannerScope("gates:write", nil, s.handleGateScoped))
 	mux.HandleFunc("/ws/connectors", s.handleConnectorWebSocket)
-	mux.HandleFunc("/mcp", s.withPlannerScope("", nil, s.mcp.Handle))
-	mux.HandleFunc("/mcp/call", s.withPlannerScope("", nil, s.mcp.Handle))
+	mux.HandleFunc("/mcp", s.mcp.Handle)
+	mux.HandleFunc("/mcp/call", s.mcp.Handle)
 
 	s.server = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
