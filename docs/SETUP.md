@@ -6,7 +6,7 @@ This guide provides the technical baseline for running the Codencer Orchestratio
 
 ### Software Requirements
 - **Git**: Required for worktree isolation.
-- **Go 1.21+**: Required to build the daemon and CLI.
+- **Go 1.25.0+**: Required to build the daemon, CLI, connector, relay, and MCP SDK proof helper.
 - **C Compiler (gcc/cc)**: Required for the CGO-based SQLite driver.
 - **curl**: Required for health checking and polling.
 - **jq or Python 3**: Recommended for bash/zsh automation wrappers that parse Codencer JSON output.
@@ -22,14 +22,17 @@ This guide provides the technical baseline for running the Codencer Orchestratio
 
 ### 2.1 Clone & Build
 ```bash
-git clone https://github.com/verbaux/codencer
+git clone https://github.com/lookmanrays/codencer
 cd codencer
 
 # 1. Initialize environment and check requirements
 make setup
 
-# 2. Build orchestratord and orchestratorctl binaries
+# 2. Build the canonical daemon, CLI, connector, and relay binaries
 make build
+
+# 3. Build the Windows-side agent-broker separately if you need it
+make build-broker
 ```
 
 ### 2.2 Verify Environment
@@ -45,7 +48,7 @@ The `doctor` tool verifies if your environment is ready for tactical execution.
 The `orchestratord` is the persistent system of record. It must be running to receive tasks.
 
 ### 3.1 Simulation Mode (Orchestrator Validation)
-Use this mode to test your local setup, CLI, and MCP layers without consuming LLM credits or requiring agent binaries.
+Use this mode to test your local setup, CLI, and local daemon surfaces without consuming LLM credits or requiring agent binaries.
 ```bash
 make start-sim
 ```
@@ -58,6 +61,12 @@ make start
 ```
 
 Claude is executed in headless print mode as `claude -p --output-format json`. Codencer builds the task prompt, writes it to `prompt.txt`, delivers it on `stdin`, and runs the process from the attempt workspace root.
+
+> [!IMPORTANT]
+> The daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface. The canonical remote MCP surface for planners lives on the relay at `/mcp`.
+
+> [!IMPORTANT]
+> For the practical self-host relay path, the canonical public binaries are `codencer-connectord` and `codencer-relayd`. The Windows-side `agent-broker` binary is built separately with `make build-broker` because `cmd/broker` is a nested module.
 
 ---
 
@@ -172,9 +181,9 @@ The official v1 ordered-task model is wrapper-based. Use the scripts in `example
 
 ---
 
-## 7. Antigravity Broker (Cross-Side Execution)
+## 7. Agent Broker (Cross-Side Execution)
 
-Use the Antigravity Broker for **cross-side execution** (e.g., Codencer in WSL controlling Antigravity in Windows).
+Use the `agent-broker` for **cross-side execution** (e.g., Codencer in WSL controlling Antigravity in Windows).
 
 ### 7.1 Broker Execution Model
 The broker uses a **dual-path model**:
@@ -182,14 +191,82 @@ The broker uses a **dual-path model**:
 - **Workspace Root (Execution)**: The isolated worktree path where the task is actually executed.
 
 ### 7.2 Setup & Binding
-1.  **Start the Broker**: Run `agent-broker.exe` on the host machine.
+1.  **Build and Start the Broker**: Run `make build-broker`, then start the resulting `agent-broker` binary on the host machine.
 2.  **Bind**: Link your local repository to a running IDE instance:
     ```bash
     ./bin/orchestratorctl antigravity bind <PID>
     ```
-3.  **Execute**: Submit tasks using the `antigravity-broker` adapter:
+3.  **Execute**: Submit tasks using the current `antigravity-broker` adapter name against the `agent-broker` bridge:
     ```bash
     ./bin/orchestratorctl submit <runID> --goal "Check UI" --adapter antigravity-broker --wait
     ```
 
 For detailed examples, see **[EXAMPLES.md](EXAMPLES.md)**.
+
+## 8. Self-Host Smoke Path
+
+After the daemon and relay are running, you can exercise the current happy path with:
+
+```bash
+PLANNER_TOKEN=<planner-token> make self-host-smoke
+```
+
+This helper enrolls a temporary connector, waits for the shared instance to appear on the relay, starts a run, submits a task, waits for the step, and fetches the result, validations, logs, gates, and artifacts through the relay.
+
+Optional scenario coverage:
+
+```bash
+PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp
+PLANNER_TOKEN=<planner-token> make self-host-smoke-all
+```
+
+`make self-host-smoke-mcp` includes the official Go SDK proof path via `cmd/mcp-sdk-smoke`. `make self-host-smoke-all` adds share-control and multi-instance coverage.
+
+If you want the standalone proof helper, build and run it directly:
+
+```bash
+make build-mcp-sdk-smoke
+./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8090/mcp --token <planner-token> --instance-id <instance-id>
+```
+
+## 9. Practical Self-Host Order Of Operations
+
+For a fresh self-host setup:
+
+```bash
+make build
+mkdir -p .codencer/relay
+./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'
+./bin/codencer-relayd --config .codencer/relay/config.json
+make start
+./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json
+./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>
+./bin/codencer-connectord run
+./bin/codencer-connectord discover --config .codencer/connector/config.json
+./bin/codencer-connectord list --config .codencer/connector/config.json
+./bin/codencer-connectord share --config .codencer/connector/config.json --daemon-url http://127.0.0.1:8085
+./bin/codencer-connectord unshare --config .codencer/connector/config.json --instance-id <instance-id>
+./bin/codencer-relayd instances --config .codencer/relay/config.json
+./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20
+```
+
+For the practical WSL-first topology, keep the daemon and connector in WSL/Linux next to the repo and worktrees, keep the agent-broker on Windows when Antigravity is in play, and expose the relay instead of the daemon.
+
+## 10. Cloud Control Plane (Alpha)
+
+Codencer Cloud is a separate control plane for org/workspace/project bootstrap, API tokens, connector installations, and connector audit trails. It does not replace the local daemon or the relay bridge.
+
+Build the cloud binaries with:
+
+```bash
+make build-cloud
+```
+
+Then follow the operator guide in [docs/CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). The most common flow is:
+
+1. Create a cloud config file with `db_path`, `host`, `port`, and `master_key`.
+2. Run `./bin/codencer-cloudctl bootstrap --config <config> ...` before starting the cloud server or while the SQLite file is idle.
+3. Start `./bin/codencer-cloudd --config <config>` and use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|events|audit` against the running control plane.
+4. Run `./bin/codencer-cloudworkerd` only for installations that need background provider polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this alpha pass.
+
+Cloud connector capability details live in [docs/CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md). For the cloud control-plane overview, see [docs/CLOUD.md](CLOUD.md).

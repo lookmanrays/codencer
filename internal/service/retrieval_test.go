@@ -3,6 +3,9 @@ package service_test
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -121,6 +124,184 @@ func TestRunService_Retrieval(t *testing.T) {
 		}
 		if arts[0].Name != "changes.diff" {
 			t.Errorf("expected name changes.diff, got %s", arts[0].Name)
+		}
+	})
+
+	t.Run("Artifact Content Retrieval", func(t *testing.T) {
+		contentPath := filepath.Join(artifactRoot, "stdout.log")
+		if err := os.MkdirAll(filepath.Dir(contentPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(contentPath, []byte("hello world"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		artifact := &domain.Artifact{
+			ID:        "art-content",
+			AttemptID: stepID + "-a1",
+			Type:      domain.ArtifactTypeStdout,
+			Name:      "stdout.log",
+			Path:      contentPath,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := artifactsRepo.Create(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+
+		foundArtifact, content, err := svc.GetArtifactContent(ctx, artifact.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if foundArtifact.ID != artifact.ID {
+			t.Fatalf("expected artifact %s, got %s", artifact.ID, foundArtifact.ID)
+		}
+		if string(content) != "hello world" {
+			t.Fatalf("unexpected artifact content: %s", string(content))
+		}
+	})
+
+	t.Run("Artifact Content Retrieval Rejects Escapes", func(t *testing.T) {
+		outsidePath := filepath.Join(t.TempDir(), "outside.log")
+		if err := os.WriteFile(outsidePath, []byte("secret"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		artifact := &domain.Artifact{
+			ID:        "art-escape",
+			AttemptID: stepID + "-a1",
+			Type:      domain.ArtifactTypeStdout,
+			Name:      "outside.log",
+			Path:      outsidePath,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := artifactsRepo.Create(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err := svc.GetArtifactContent(ctx, artifact.ID)
+		if !errors.Is(err, service.ErrArtifactAccessDenied) {
+			t.Fatalf("expected artifact access denial, got %v", err)
+		}
+	})
+
+	t.Run("Log Retrieval Uses Artifact Lookup", func(t *testing.T) {
+		logStepID := "log-step"
+		logAttemptID := logStepID + "-a1"
+		logStep := &domain.Step{
+			ID:      logStepID,
+			PhaseID: "phase-01-" + runID,
+			Title:   "Log Step",
+			Adapter: "mock",
+			State:   domain.StepStateCompleted,
+		}
+		if err := stepsRepo.Create(ctx, logStep); err != nil {
+			t.Fatal(err)
+		}
+		if err := attemptsRepo.Create(ctx, &domain.Attempt{
+			ID:        logAttemptID,
+			StepID:    logStepID,
+			Number:    1,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		logPath := filepath.Join(artifactRoot, "latest.log")
+		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(logPath, []byte("latest logs"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		artifact := &domain.Artifact{
+			ID:        "art-log",
+			AttemptID: logAttemptID,
+			Type:      domain.ArtifactTypeStdout,
+			Name:      "stdout.log",
+			Path:      logPath,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := artifactsRepo.Create(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+
+		foundArtifact, content, err := svc.GetLogsByStep(ctx, logStepID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if foundArtifact.ID != artifact.ID {
+			t.Fatalf("expected log artifact %s, got %s", artifact.ID, foundArtifact.ID)
+		}
+		if string(content) != "latest logs" {
+			t.Fatalf("unexpected logs content: %s", string(content))
+		}
+	})
+
+	t.Run("Log Retrieval deterministically prefers latest stdout", func(t *testing.T) {
+		logStepID := "deterministic-log-step"
+		logAttemptID := logStepID + "-a1"
+		logStep := &domain.Step{
+			ID:      logStepID,
+			PhaseID: "phase-01-" + runID,
+			Title:   "Deterministic Log Step",
+			Adapter: "mock",
+			State:   domain.StepStateCompleted,
+		}
+		if err := stepsRepo.Create(ctx, logStep); err != nil {
+			t.Fatal(err)
+		}
+		if err := attemptsRepo.Create(ctx, &domain.Attempt{
+			ID:        logAttemptID,
+			StepID:    logStepID,
+			Number:    1,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		baseTime := time.Now().Add(-3 * time.Minute)
+		for _, spec := range []struct {
+			id      string
+			kind    domain.ArtifactType
+			content string
+			when    time.Time
+		}{
+			{id: "stdout-old", kind: domain.ArtifactTypeStdout, content: "stdout-old", when: baseTime},
+			{id: "stderr-newer", kind: domain.ArtifactTypeStderr, content: "stderr-newer", when: baseTime.Add(1 * time.Minute)},
+			{id: "stdout-new", kind: domain.ArtifactTypeStdout, content: "stdout-new", when: baseTime.Add(2 * time.Minute)},
+		} {
+			logPath := filepath.Join(artifactRoot, spec.id+".log")
+			if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(logPath, []byte(spec.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := artifactsRepo.Create(ctx, &domain.Artifact{
+				ID:        spec.id,
+				AttemptID: logAttemptID,
+				Type:      spec.kind,
+				Name:      spec.id + ".log",
+				Path:      logPath,
+				CreatedAt: spec.when,
+				UpdatedAt: spec.when,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		foundArtifact, content, err := svc.GetLogsByStep(ctx, logStepID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if foundArtifact.ID != "stdout-new" {
+			t.Fatalf("expected latest stdout artifact, got %s", foundArtifact.ID)
+		}
+		if string(content) != "stdout-new" {
+			t.Fatalf("unexpected logs content: %s", string(content))
 		}
 	})
 }

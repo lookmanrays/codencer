@@ -28,7 +28,7 @@ Why:
 - good contrast for adapter-neutral design
 
 Status:
-- **Supported (Beta)**: the v1 CLI wrapper contract is implemented and covered by fake-binary integration tests, prompt/normalization unit tests, lifecycle tests, and simulation conformance tests.
+- **Implemented wrapper path (alpha-grade)**: the CLI wrapper contract is implemented and covered by fake-binary integration tests, prompt/normalization unit tests, lifecycle tests, and simulation conformance tests.
 - **Not covered in repo tests**: live authenticated Claude service calls.
 
 Current v1 contract:

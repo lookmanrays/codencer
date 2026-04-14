@@ -1,8 +1,20 @@
 # Build artifacts
 bin/
+node_modules/
+extension/out/
 orchestratorctl
 !cmd/orchestratorctl/
 !cmd/orchestratorctl/*.go
+/cmd/broker/agent-broker
+/cmd/broker/agent-broker.exe
+/cmd/codencer-connectord/codencer-connectord
+/cmd/codencer-connectord/codencer-connectord.exe
+/cmd/codencer-relayd/codencer-relayd
+/cmd/codencer-relayd/codencer-relayd.exe
+/cmd/orchestratord/orchestratord
+/cmd/orchestratord/orchestratord.exe
+/cmd/orchestratorctl/orchestratorctl
+/cmd/orchestratorctl/orchestratorctl.exe
 *.test
 *.out
 service.test

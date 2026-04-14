@@ -5,8 +5,8 @@ Codencer is a tactical orchestration bridge that manages execution, isolation, a
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
 > [!IMPORTANT]
-> **Project Status: Public Beta (v1.0-release-candidate)**.
-> Codencer is a hardened, production-oriented local orchestration bridge. While the core engine is stable and has been verified through rigorous internal audit paths, the API and protocols are finalized for the v1.0 release.
+> **Project Status: Open-source alpha for the v2 local/self-host path (`v0.2.0-alpha`)**.
+> Codencer is coherent and buildable for disciplined local and self-host use, but the current relay, auth, artifact transport, and cancellation guarantees are still alpha-grade and documented honestly below.
 
 ---
 
@@ -15,7 +15,7 @@ Designed for **local-first, self-hosted developer toolchains**, Codencer provide
 Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while the **Brain Layer** (human or LLM) handles strategy and decision-making.
 
 - **What it is**: A system of record, a workspace isolator, a validator, and a provider of immutable artifacts.
-- **What it is not**: A planner, a chat UI, a cloud service, or an AI "agent" that thinks about what to do next.
+- **What it is not**: A planner, a chat UI, a generic cloud orchestration service, or an AI "agent" that thinks about what to do next.
 
 ```text
 [ Planner (Brain) ] <---------- (ResultSpec) ---------+
@@ -30,6 +30,86 @@ Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It han
 - **Planner (Brain)**: You, a Chat UI, or an agentic planner. Decides **what** to do.
 - **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
 - **Coding Agent (Worker)**: The tactical tool performing the actual work (e.g., `codex-agent`, `claude`).
+
+## V2 Remote Path
+
+Codencer now includes the first open-source self-hostable remote path while keeping execution local:
+
+```text
+Planner / Chat
+   -> Relay MCP / Planner API
+   -> Relay Server
+   -> Authenticated Connector (outbound websocket)
+   -> Local Codencer Daemon
+   -> Local Adapter / Executor
+```
+
+Key constraints remain unchanged:
+- planning stays outside Codencer
+- execution stays local
+- the relay is transport and audit, not a planner
+- the connector exposes only a narrow allowlisted proxy to the local daemon
+- no raw remote shell or arbitrary filesystem surface is exposed
+
+### New Binaries
+
+- `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
+- `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
+- `bin/codencer-cloudctl`: admin CLI for cloud bootstrap, status, org/workspace/project, token, installation, event, and audit flows
+- `bin/codencer-cloudd`: cloud control-plane server; can optionally compose the relay handler under the same process
+- `bin/codencer-cloudworkerd`: cloud worker for background connector maintenance; Jira is polling-first in this alpha pass
+- `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side agent-broker; it lives under the nested `cmd/broker` module
+
+### Cloud Control Plane (Alpha)
+
+Codencer also includes a separate cloud control-plane foundation for connector installations and operator bootstrap. It is not a replacement for the local daemon, the relay bridge, or the self-host run/step/attempt path.
+
+- Build the cloud binaries with `make build-cloud`.
+- Start the cloud server with `./bin/codencer-cloudd --config .codencer/cloud/config.json`.
+- Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, and API token state directly in the cloud store.
+- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|events|audit` for remote control-plane operations.
+- Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this pass.
+
+For the cloud docs and status matrix, see [docs/CLOUD.md](docs/CLOUD.md), [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md), and [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md).
+
+### Self-Host Quickstart
+
+1. Build the main binaries with `make build`.
+2. Build the Windows-side `agent-broker` separately with `make build-broker` if you need the Windows bridge.
+3. Create a relay config and local planner token:
+   `./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'`
+4. Start the relay:
+   `./bin/codencer-relayd --config .codencer/relay/config.json`
+5. Start the local daemon near the repo with `make start` or `make start-sim`.
+6. Mint a one-time enrollment token from the running relay:
+   `./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json`
+7. Enroll and run the connector in WSL/Linux next to the daemon:
+   `./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>`
+   `./bin/codencer-connectord run`
+8. Inspect and control sharing explicitly:
+   `./bin/codencer-connectord discover --config .codencer/connector/config.json`
+   `./bin/codencer-connectord list`
+   `./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085`
+   `./bin/codencer-connectord unshare --instance-id <instance-id>`
+   `./bin/codencer-connectord config`
+9. Inspect relay status, connectors, and advertised instances:
+   `./bin/codencer-relayd status --config .codencer/relay/config.json`
+   `./bin/codencer-relayd connectors --config .codencer/relay/config.json`
+   `./bin/codencer-relayd instances --config .codencer/relay/config.json`
+   `./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20`
+10. Run the documented smoke path with `make self-host-smoke`, `make self-host-smoke-mcp`, or `make self-host-smoke-all` once the daemon and relay are already running. `self-host-smoke-mcp` includes the official MCP SDK proof helper; `self-host-smoke-all` adds share-control and multi-instance coverage.
+
+Planner-facing relay routes live under `/api/v2`, and the relay-hosted MCP entrypoint is `/mcp` with `/mcp/call` kept as a compatibility path.
+The connector now persists a local Ed25519 identity, `connector_id`, `machine_id`, and an explicit shared-instance allowlist under `.codencer/connector/config.json`.
+The connector also persists a local `.codencer/connector/status.json` snapshot so operators can inspect session state, last heartbeat, and the currently shared instance set without contacting the relay.
+Direct relay lookups for steps, artifacts, and gates now probe only authorized online instances and persist the discovered route, so planner HTTP and MCP flows do not depend on prior observation of those IDs.
+Planner evidence retrieval through the relay now covers result, validations, logs, artifact lists, and artifact content.
+For the end-to-end self-host flow and operating notes, see [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md), [docs/CONNECTOR.md](docs/CONNECTOR.md), [docs/RELAY.md](docs/RELAY.md), and [docs/mcp/relay_tools.md](docs/mcp/relay_tools.md).
+
+Daemon discovery and evidence notes:
+- `GET /api/v1/instance` now exposes stable repo-local daemon identity plus manifest-backed discovery metadata.
+- The daemon writes a repo-local instance manifest under `.codencer/instance.json` on startup and after Antigravity bind changes.
+- `PATCH /api/v1/runs/{id}` remains best-effort abort. It returns success only when the active step actually reaches `cancelled`; otherwise Codencer leaves an explicit non-cancelled outcome and returns an error instead of claiming a hard kill.
 
 ---
 
@@ -92,7 +172,7 @@ make start
 
 For Claude, Codencer invokes the installed CLI as `claude -p --output-format json`, sends the step prompt on `stdin`, and runs from the isolated attempt workspace as the process `cwd`.
 
-Current support level for the Claude adapter is **Supported (Beta)**: the wrapper contract is implemented and covered by prompt, normalization, lifecycle, fake-binary integration, and simulation conformance tests, but the repo test suite does not run a live authenticated Claude service call.
+The Claude adapter wrapper path is implemented and test-covered in this repo: prompt shaping, normalization, lifecycle behavior, fake-binary integration, and simulation conformance are exercised, but the repo test suite does not run a live authenticated Claude service call. Treat `/api/v1/compatibility` plus your actual runtime environment as the source of truth for local adapter readiness.
 
 ### 3. Run Your First Tactical Task
 Submit a task and wait for the bridge to report results. For the full auditing sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
@@ -133,7 +213,7 @@ echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit ru
 ```
 
 #### C. Broker-Backed Execution
-Directly target an IDE-bound agent via the Antigravity Broker using direct input:
+Directly target an IDE-bound agent via the agent-broker bridge using direct input:
 ```bash
 ./bin/orchestratorctl submit run-01 --goal "Check UI" --adapter antigravity-broker --wait --json
 ```
@@ -254,45 +334,37 @@ Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 
 ---
 
-## ⚠️ Known Limitations (Beta/MVP)
+## ⚠️ Known Limitations (Local/Self-Host Alpha)
 
-As a local-first Beta/MVP, Codencer has the following constraints:
-- **Relay Only**: The bridge does not "think" or plan; it only executes what the Planner instructs.
-- **Single-User**: Designed for local development; no multi-user or cloud concurrency.
-- **Static Extension Routing**: The experimental VS Code extension assumes the daemon binds at `127.0.0.1:8085`. Dynamic connection configuration for running instances on multiple ports is not yet natively surfaced in the IDE client.
-- **Agent Dependency**: "Real Mode" efficacy is strictly bound to the quality of the underlying agent (Codex, Claude, etc.).
-- **Manual Decisions**: The bridge reports terminal states; all recovery or retry decisions remain with the human operator or external planner.
-- **No Native Workflow Engine**: Ordered task lists are handled by wrappers/scripts outside Codencer core in v1.
+Codencer’s v2 path is materially real for local and self-host use, but it is still alpha-grade in a few places:
+- **No Planner In Core**: Codencer never decomposes, prioritizes, or decides strategy. The planner still owns those decisions.
+- **Best-Effort Abort**: `PATCH /api/v1/runs/{id}` and relay abort flows are honest but not universal hard-kill guarantees. A run is only reported cancelled when the adapter actually stops.
+- **Opportunistic Remote Routing**: Relay step, gate, and artifact routing is learned from prior responses. Direct remote lookups can fail until the relay has already seen those IDs.
+- **Bounded Artifact Transport**: Connector transport rejects oversized artifact bodies instead of turning the relay into a bulk file tunnel. Large binary transfer is intentionally limited.
+- **Static Self-Host Auth**: Planner auth is static bearer-token based, suitable for self-host alpha use but not enterprise IAM.
+- **Single-Operator Bias**: The current flow is optimized for local/self-host operators, not multi-tenant hosted service use.
+- **No Native Workflow Brain**: Ordered task execution remains wrapper- or planner-driven outside Codencer core.
 
----
+### Runtime Capability Truth
 
-### 📊 Maturity & Capability Matrix
+Adapter availability is runtime-derived, not a hardcoded support matrix. The source of truth is:
+- `GET /api/v1/compatibility`
+- `GET /api/v1/instance`
+- `./bin/orchestratorctl instance --json`
 
-Codencer is in **Public Beta (v1.0-release-candidate)**. Use this to understand the hard stability contract versus experimental value-adds.
+Those surfaces reflect actual registered adapters, simulation mode, binary availability, and Antigravity binding state at runtime.
 
-#### 🏗 v1 Stable Core (The Release Contract)
-| Feature Area | Status | Description |
-| :--- | :--- | :--- |
-| **Local Bridge Core** | ✅ **Stable** | Persistence, state machine, Git Worktrees. |
-| **Provisioning Layer**| ✅ **Stable** | Native copy/symlink layer; optional Grove subset. |
-| **Codex Adapter** | ✅ **Stable** | Primary high-fidelity relay for `codex-agent`. |
-| **Antigravity Metadata** | ✅ **Stable** | Broker-backed context, task IDs, and provenance. |
-| **Antigravity Broker** | ✅ **Stable** | Cross-side (WSL/Windows) bridge for IDE instances. |
-| **OpenClaw ACPX** | 🧪 **Experimental (Alpha)** | Standardized ACP bridge to OpenClaw ecosystem. |
-| **Simulation Mode** | ✅ **Stable** | Stub-based validation (Bridge-only smoke tests). |
+### WSL / Windows / Antigravity
 
-#### 🧪 Experimental Extensions (Outside v1 Contract)
-| Feature Area | Status | Description |
-| :--- | :--- | :--- |
-| **IDE Chat Bridge** | 🧪 **Prototype** | Proxy-mediated file access via VS Code. |
-| **Cloud / Multi-User** | 🚫 **Non-Goal** | Codencer is strictly local-first and self-hosted. |
+The practical cross-side model is:
+- daemon, repos, worktrees, and artifacts in WSL/Linux
+- connector on the same side as the daemon by default
+- agent-broker and IDE on Windows when needed
+- relay as a separate remote control plane only
 
+Use `orchestratorctl antigravity bind <PID>` to bind this repo to an active Antigravity instance. Binding selects the repo-scoped target, but execution still stays local and still depends on the chosen adapter profile.
 
-### 🔍 Direct-Local Antigravity Integration
-The `antigravity` adapter uses a **direct-local** model to control active Antigravity instances via RPC (Connect over HTTPS).
-- **Primary Model**: Codencer and Antigravity usually run on the **same OS side** (e.g., both in Linux or both in Windows).
-- **WSL ↔ Windows (Experimental)**: Cross-side communication is supported via the shared loopback (`127.0.0.1`). Codencer in WSL can discover Windows-side instances if the host's `.gemini` directory is reachable (e.g., via `/mnt/c`).
-- **Binding**: Use `orchestratorctl antigravity bind <PID>` to link this repository to an active Antigravity process. Binding establishes repo-scoped target identity and connectivity; execution still depends on the task's explicit `adapter_profile`.
+For the full trust-boundary and topology guidance, see [docs/WSL_WINDOWS_ANTIGRAVITY.md](docs/WSL_WINDOWS_ANTIGRAVITY.md).
 
 ### 🔍 Terminal Step States
 Codencer distinguishes between different failure modes to help you recover faster:
@@ -309,7 +381,7 @@ Codencer distinguishes between different failure modes to help you recover faste
 ## 🧪 Simulation vs. Real Execution
 
 1. **Simulation Mode** (`make start-sim`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
-2. **Real Mode**: Tests the full end-to-end loop with real agents. **Codex-agent** is the primary supported path; others are in early beta.
+2. **Real Mode**: Tests the full end-to-end loop with real agents. **Codex-agent** is the primary path exercised in this repo; other adapters are implementation-backed but should still be treated as alpha-grade unless your local runtime proves them ready.
 
 ---
 
@@ -323,7 +395,8 @@ Review the following guides to get started with Codencer.
 - **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)** — Machine-safe JSON mode and sequential loops.
 - **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and daemon management.
 - **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** — Resolving infrastructure vs goal failures.
-- **[Architecture Overview](docs/02_architecture.md)** — Deep dive into the Bridge model.
+- **[Architecture Overview](docs/02_architecture.md)** — Current daemon, connector, relay, and trust-boundary model.
+- **[WSL / Windows / Antigravity Topology](docs/WSL_WINDOWS_ANTIGRAVITY.md)** — Practical cross-side deployment guidance.
 
 ### 🛠 Project Governance & Maintenance (Internal)
 - **[Gap Audit & Roadmap](docs/internal/GAP_AUDIT.md)** — Current V1 release blockers and debt.

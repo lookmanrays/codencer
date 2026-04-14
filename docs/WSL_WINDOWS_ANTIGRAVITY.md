@@ -1,0 +1,135 @@
+# WSL, Windows, and Agent Broker Topology
+
+This document describes the practical v2 operator topology for Codencer when repos and execution live in WSL/Linux while an IDE or agent-broker may live on Windows.
+
+## Recommended Default Layout
+
+- **WSL/Linux**
+  - Codencer daemon
+  - Git clone
+  - worktrees
+  - artifacts
+  - connector
+  - local executor binaries and local adapter execution
+- **Windows**
+  - IDE
+  - agent-broker and IDE-side companion process, if used
+- **Anywhere reachable by the operator**
+  - relay
+
+The default recommendation is simple:
+- keep the daemon and connector on the same side as the repo
+- keep execution and artifacts local to that side
+- treat the relay as remote control plane only
+
+## Trust Boundaries
+
+The trust model is intentionally narrow:
+
+- **Planner**
+  - decides what to do
+  - calls relay HTTP API or relay MCP
+  - does not get raw shell or arbitrary file access from Codencer
+- **Relay**
+  - authenticates planners and connectors
+  - routes requests to the correct shared instance
+  - records audit events
+  - exposes the canonical remote MCP surface at `/mcp`
+  - does not execute code and does not plan
+- **Connector**
+  - opens outbound websocket session to relay
+  - advertises only explicitly shared instances
+  - proxies only an allowlisted local daemon API surface
+  - does not expose a general tunnel
+- **Daemon**
+  - owns run, step, gate, artifact, and state-machine truth
+  - executes work locally through adapters
+  - exposes `/mcp/call` only as a local compatibility/admin bridge
+  - must not be exposed directly to the internet
+- **agent-broker**
+  - is separate from relay
+  - is optional
+  - serves IDE-side discovery/binding concerns, not remote planner control
+
+## Practical WSL / Windows Model
+
+When using WSL and Windows together:
+
+1. Keep the repository checkout in WSL.
+2. Run `orchestratord` in WSL with that repo as `--repo-root`.
+3. Run `codencer-connectord` in WSL so it can talk to the daemon over local loopback without crossing trust domains.
+4. Run the relay wherever you want to terminate remote planner auth.
+5. If you use the agent-broker, keep it on the Windows/IDE side and bind from the daemon when needed.
+
+Concrete command sketch:
+
+```bash
+# WSL
+make build
+mkdir -p .codencer/relay
+./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'
+./bin/codencer-relayd --config .codencer/relay/config.json
+./bin/orchestratord --repo-root /home/<user>/Projects/my-repo
+./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label wsl-dev --json
+./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>
+./bin/codencer-connectord run
+```
+
+```powershell
+# Windows
+make build-broker
+.\bin\agent-broker.exe
+```
+
+```bash
+# WSL, when the Windows broker is in use
+export CODENCER_ANTIGRAVITY_BROKER_URL=http://127.0.0.1:8088
+./bin/orchestratorctl antigravity list
+./bin/orchestratorctl antigravity bind <pid>
+```
+
+Build note:
+- `make build` builds the daemon, CLI, connector, and relay binaries
+- `make build-broker` builds the Windows-side agent-broker from the nested `cmd/broker` module
+
+This avoids the most common problems:
+- daemon exposed beyond loopback
+- artifacts split across Windows and WSL unexpectedly
+- connector proxying through a cross-side filesystem layout it does not control
+- relay being mistaken for an execution host
+
+## Loopback and Cross-Side Cautions
+
+- Shared loopback between WSL and Windows can work, but it is an operator convenience, not a new trust boundary.
+- Do not assume artifact paths are meaningful off the daemon side. Use result, validation, and artifact APIs rather than raw paths.
+- Do not run the connector on Windows while the daemon and repo live in WSL unless you intentionally want a cross-side local hop and understand the failure modes.
+- Do not expose the daemon directly just because the relay exists. The relay should be the public remote surface.
+
+## Antigravity Guidance
+
+Antigravity remains local-side execution metadata and binding infrastructure:
+- use it when a repo needs to target a live IDE-side agent context
+- do not treat it as the relay
+- do not treat it as a planner
+- do not assume it widens the safe remote surface
+
+The broker and relay are different things:
+- **agent-broker**: local/cross-side IDE bridge
+- **relay**: authenticated remote control plane for planner calls
+
+The most common stable arrangement for this repo is:
+- WSL: repo, worktrees, daemon, connector, artifacts
+- Windows: Antigravity IDE and agent-broker
+- relay: WSL, local server, or VPS
+- planner client: relay HTTP/MCP only
+
+## Operator Checklist
+
+- daemon and repo on the same side
+- connector on the same side as the daemon
+- relay exposed instead of the daemon
+- only explicitly shared instances advertised
+- connector discovery and sharing are explicit (`discover`, `list`, `share`, `unshare`)
+- relay audit is operator-visible through the relay CLI
+- agent-broker kept separate from relay concerns
+- results, validations, and artifacts inspected through APIs and CLI, not raw cross-side paths

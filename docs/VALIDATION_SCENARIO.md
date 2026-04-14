@@ -3,11 +3,11 @@
 This scenario is designed to validate the reliability of the Bridge's execution, evidence harvesting, and reporting flow using a real (non-simulated) Codex-first execution.
 
 ## Objective
-Update the internal application version string in `internal/app/version.go`.
+Update the internal application version string in `internal/app/version.go` to a temporary validation marker.
 
 ## 1. Scenario Details
 
-- **Task**: "Update the Version variable in `internal/app/version.go` from its current value to `v0.1.0-alpha`."
+- **Task**: "Update the Version variable in `internal/app/version.go` from its current value to `v0.2.0-alpha-validation`."
 - **Adapter**: `codex` (Non-simulated).
 - **Target File**: `internal/app/version.go`.
 - **Why Safe?**:
@@ -29,7 +29,7 @@ run_id: "validation-run-01"
 # [OPTIONAL] step_id: "bump-version-01"
 # [OPTIONAL] phase_id: "phase-execution-validation-run-01"
 title: "Internal Version Bump"
-goal: "Update internal/app/version.go to set Version = \"v0.1.0-alpha\""
+goal: "Update internal/app/version.go to set Version = \"v0.2.0-alpha-validation\""
 adapter_profile: "codex"
 constraints:
   - "Do not change the package name"
@@ -55,7 +55,7 @@ constraints:
 ## 4. Verification Steps
 
 1. **Automated Submission (Recommended)**:
-   Ensure the daemon is running in a separate terminal (`make run`), then execute:
+   Ensure the daemon is running in a separate terminal (`make start` for real mode), then execute:
    ```bash
    make validate
    ```
@@ -70,7 +70,7 @@ constraints:
    A narrower direct-input equivalent is also possible when you only need goal/title/adapter-style fields:
    ```bash
    ./bin/orchestratorctl submit validation-run-01 \
-     --goal "Update internal/app/version.go to set Version = \"v0.1.0-alpha\"" \
+     --goal "Update internal/app/version.go to set Version = \"v0.2.0-alpha-validation\"" \
      --title "Internal Version Bump" \
      --adapter codex \
      --wait --json
@@ -84,7 +84,7 @@ constraints:
    ```json
    {
      "state": "completed",
-     "summary": "Updated internal/app/version.go to v0.1.0-alpha",
+     "summary": "Updated internal/app/version.go to v0.2.0-alpha-validation",
      "artifacts": {
        "result.json": "/home/lookman/projects/codencer/artifacts/val-step-01-a1/result.json",
        "stdout.log": "/home/lookman/projects/codencer/artifacts/val-step-01-a1/stdout.log"

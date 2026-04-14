@@ -1,10 +1,37 @@
+VERSION ?= v0.2.0-alpha
+LDFLAGS := -X agent-bridge/internal/app.Version=$(VERSION)
+
 all: lint test build
 
 build:
+	@mkdir -p bin
 	@echo "==> Building orchestratord..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/orchestratord ./cmd/orchestratord
+	@go build -ldflags "$(LDFLAGS)" -o bin/orchestratord ./cmd/orchestratord
 	@echo "==> Building orchestratorctl..."
-	@go build -ldflags "-X agent-bridge/internal/app.Version=v1.0-release-candidate" -o bin/orchestratorctl ./cmd/orchestratorctl
+	@go build -ldflags "$(LDFLAGS)" -o bin/orchestratorctl ./cmd/orchestratorctl
+	@echo "==> Building codencer-connectord..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-connectord ./cmd/codencer-connectord
+	@echo "==> Building codencer-relayd..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-relayd ./cmd/codencer-relayd
+
+build-cloud:
+	@mkdir -p bin
+	@echo "==> Building codencer-cloudctl..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-cloudctl ./cmd/codencer-cloudctl
+	@echo "==> Building codencer-cloudd..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-cloudd ./cmd/codencer-cloudd
+	@echo "==> Building codencer-cloudworkerd..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-cloudworkerd ./cmd/codencer-cloudworkerd
+
+build-broker:
+	@mkdir -p bin
+	@echo "==> Building agent-broker (nested module)..."
+	@cd cmd/broker && go build -o ../../bin/agent-broker ./...
+
+build-mcp-sdk-smoke:
+	@mkdir -p bin
+	@echo "==> Building mcp-sdk-smoke (official MCP SDK proof helper)..."
+	@go build -o bin/mcp-sdk-smoke ./cmd/mcp-sdk-smoke
 
 test:
 	@echo "==> Running tests..."
@@ -115,6 +142,22 @@ simulate: build
 smoke: build
 	@echo "==> Running automated smoke test..."
 	@./scripts/smoke_test.sh
+
+self-host-smoke: build
+	@echo "==> Running self-host relay/connector smoke test..."
+	@./scripts/self_host_smoke.sh
+
+self-host-smoke-all: build build-mcp-sdk-smoke
+	@echo "==> Running self-host relay/connector smoke test with all optional scenarios..."
+	@SMOKE_SCENARIOS=all ./scripts/self_host_smoke.sh
+
+self-host-smoke-mcp: build build-mcp-sdk-smoke
+	@echo "==> Running self-host relay/connector smoke test with MCP coverage..."
+	@SMOKE_SCENARIOS=status,audit,mcp,mcp-sdk ./scripts/self_host_smoke.sh
+
+cloud-smoke: build-cloud
+	@echo "==> Running cloud control-plane smoke test..."
+	@./scripts/cloud_smoke.sh
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."

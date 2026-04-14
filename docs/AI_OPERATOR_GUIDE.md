@@ -12,6 +12,7 @@ Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It han
 1.  **Bridge, Not Brain**: Do not expect the bridge to plan your next move or recursively fix its own failures. It executes precisely what you submit in a `TaskSpec`.
 2.  **Rule of Discovery (MANDATORY)**: Always verify the daemon's identity and repository anchor before taking any action. Use `instance --json`.
 3.  **Atomic Evidence**: Every task attempt is isolated in a Git Worktree. Success or failure is reported as a terminal state with immutable artifacts.
+4.  **Remote Planner Surface**: When operating remotely, target the relay HTTP API or relay MCP surface. The daemon-local `/mcp/call` endpoint is not the public remote planner surface.
 
 ---
 
@@ -27,7 +28,7 @@ Always verify the daemon's identity to ensure you are targeting the correct repo
 **Expected JSON Response:**
 ```json
 {
-  "version": "v0.1.0-beta",
+  "version": "v0.2.0-alpha",
   "repo_root": "/home/user/my-project",
   "execution_mode": "REAL",
   "port": 8085
@@ -62,6 +63,26 @@ Ideal for planners that generate structured `TaskSpec` objects.
 echo '{"version":"v1","goal":"Update README","title":"Update docs"}' | \
   ./bin/orchestratorctl submit my-run-id --task-json - --wait --json
 ```
+
+## 🌐 Remote Relay Path
+
+When operating across the self-host relay path:
+
+1. Discover the shared target instance through the relay, not by assuming it:
+   ```bash
+   ./bin/codencer-relayd instances --config .codencer/relay/config.json
+   ```
+2. Start or inspect runs through relay HTTP under `/api/v2`.
+3. Use relay MCP at `/mcp` only for the narrow `codencer.*` tool surface.
+4. Inspect result, validations, logs, artifacts, and gates through relay evidence routes before making the next planning decision.
+
+Remote planner checklist:
+- planner talks to relay
+- relay talks to authenticated connector
+- connector talks to local daemon
+- daemon remains the source of run, step, gate, and artifact truth
+
+For the separate cloud control-plane path, see [CLOUD.md](CLOUD.md) and [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). Those docs cover bootstrap/status/install/list flows, connector installation management, and the Jira polling worker. Do not confuse that surface with the local relay bridge or the daemon-local execution path.
 
 ---
 

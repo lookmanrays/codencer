@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
 )
 
@@ -20,10 +21,10 @@ import (
 type BrokerAdapter struct {
 	baseURL string
 	client  *http.Client
-	
+
 	// baseRepoRoot is the fixed repository path used for binding lookup
 	baseRepoRoot string
-	
+
 	// taskCache maps attemptID -> broker_task_id
 	taskCache map[string]string
 	// taskWorkspaceCache maps attemptID -> workspace_root (worktree)
@@ -164,15 +165,7 @@ func (a *BrokerAdapter) CollectArtifacts(ctx context.Context, attemptID, attempt
 	defer f.Close()
 	_, _ = io.Copy(f, resp.Body)
 
-	return []*domain.Artifact{
-		{
-			ID:        fmt.Sprintf("broker-traj-%s", attemptID),
-			Name:      "trajectory.json",
-			Path:      trajectoryPath,
-			Type:      domain.ArtifactTypeResultJSON,
-			CreatedAt: time.Now(),
-		},
-	}, nil
+	return common.CollectStandardArtifacts(ctx, attemptID, attemptArtifactRoot)
 }
 
 func (a *BrokerAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
@@ -228,8 +221,12 @@ func (a *BrokerAdapter) NormalizeResult(ctx context.Context, attemptID string, a
 				var traj struct {
 					Steps []struct {
 						Items []struct {
-							Message *struct{ Text string `json:"text"` } `json:"message"`
-							Error   *struct{ Message string `json:"message"` } `json:"error"`
+							Message *struct {
+								Text string `json:"text"`
+							} `json:"message"`
+							Error *struct {
+								Message string `json:"message"`
+							} `json:"error"`
 						} `json:"items"`
 					} `json:"steps"`
 				}
