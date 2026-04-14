@@ -82,6 +82,8 @@ Remote planner checklist:
 - connector talks to local daemon
 - daemon remains the source of run, step, gate, and artifact truth
 
+For the separate cloud control-plane path, see [CLOUD.md](CLOUD.md) and [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). Those docs cover bootstrap/status/install/list flows, connector installation management, and the Jira polling worker. Do not confuse that surface with the local relay bridge or the daemon-local execution path.
+
 ---
 
 ## 🔍 Phase 3: Auditing Terminal States

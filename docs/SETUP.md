@@ -251,3 +251,22 @@ make start
 ```
 
 For the practical WSL-first topology, keep the daemon and connector in WSL/Linux next to the repo and worktrees, keep the agent-broker on Windows when Antigravity is in play, and expose the relay instead of the daemon.
+
+## 10. Cloud Control Plane (Alpha)
+
+Codencer Cloud is a separate control plane for org/workspace/project bootstrap, API tokens, connector installations, and connector audit trails. It does not replace the local daemon or the relay bridge.
+
+Build the cloud binaries with:
+
+```bash
+make build-cloud
+```
+
+Then follow the operator guide in [docs/CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). The most common flow is:
+
+1. Create a cloud config file with `db_path`, `host`, `port`, and `master_key`.
+2. Run `./bin/codencer-cloudctl bootstrap --config <config> ...` before starting the cloud server or while the SQLite file is idle.
+3. Start `./bin/codencer-cloudd --config <config>` and use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|events|audit` against the running control plane.
+4. Run `./bin/codencer-cloudworkerd` only for installations that need background provider polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this alpha pass.
+
+Cloud connector capability details live in [docs/CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md). For the cloud control-plane overview, see [docs/CLOUD.md](CLOUD.md).

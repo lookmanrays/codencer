@@ -26,6 +26,8 @@ The relay is the public remote control surface.
 
 The local daemon is not intended to be exposed directly.
 
+Cloud composition note: `codencer-cloudd` can optionally front the relay handler with `--relay-config` so the cloud control plane and relay API live in one process. That composition does not change the relay role: relay remains the local self-host control plane, while cloud provider installations and connector polling live under the separate cloud domain documented in [CLOUD.md](CLOUD.md).
+
 ## Startup
 
 Run the canonical relay binary:

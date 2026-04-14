@@ -15,7 +15,7 @@ Designed for **local-first, self-hosted developer toolchains**, Codencer provide
 Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while the **Brain Layer** (human or LLM) handles strategy and decision-making.
 
 - **What it is**: A system of record, a workspace isolator, a validator, and a provider of immutable artifacts.
-- **What it is not**: A planner, a chat UI, a cloud service, or an AI "agent" that thinks about what to do next.
+- **What it is not**: A planner, a chat UI, a generic cloud orchestration service, or an AI "agent" that thinks about what to do next.
 
 ```text
 [ Planner (Brain) ] <---------- (ResultSpec) ---------+
@@ -55,7 +55,22 @@ Key constraints remain unchanged:
 
 - `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
 - `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
+- `bin/codencer-cloudctl`: admin CLI for cloud bootstrap, status, org/workspace/project, token, installation, event, and audit flows
+- `bin/codencer-cloudd`: cloud control-plane server; can optionally compose the relay handler under the same process
+- `bin/codencer-cloudworkerd`: cloud worker for background connector maintenance; Jira is polling-first in this alpha pass
 - `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side agent-broker; it lives under the nested `cmd/broker` module
+
+### Cloud Control Plane (Alpha)
+
+Codencer also includes a separate cloud control-plane foundation for connector installations and operator bootstrap. It is not a replacement for the local daemon, the relay bridge, or the self-host run/step/attempt path.
+
+- Build the cloud binaries with `make build-cloud`.
+- Start the cloud server with `./bin/codencer-cloudd --config .codencer/cloud/config.json`.
+- Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, and API token state directly in the cloud store.
+- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|events|audit` for remote control-plane operations.
+- Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this pass.
+
+For the cloud docs and status matrix, see [docs/CLOUD.md](docs/CLOUD.md), [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md), and [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md).
 
 ### Self-Host Quickstart
 

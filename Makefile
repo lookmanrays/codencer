@@ -14,6 +14,15 @@ build:
 	@echo "==> Building codencer-relayd..."
 	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-relayd ./cmd/codencer-relayd
 
+build-cloud:
+	@mkdir -p bin
+	@echo "==> Building codencer-cloudctl..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-cloudctl ./cmd/codencer-cloudctl
+	@echo "==> Building codencer-cloudd..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-cloudd ./cmd/codencer-cloudd
+	@echo "==> Building codencer-cloudworkerd..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-cloudworkerd ./cmd/codencer-cloudworkerd
+
 build-broker:
 	@mkdir -p bin
 	@echo "==> Building agent-broker (nested module)..."
@@ -145,6 +154,10 @@ self-host-smoke-all: build build-mcp-sdk-smoke
 self-host-smoke-mcp: build build-mcp-sdk-smoke
 	@echo "==> Running self-host relay/connector smoke test with MCP coverage..."
 	@SMOKE_SCENARIOS=status,audit,mcp,mcp-sdk ./scripts/self_host_smoke.sh
+
+cloud-smoke: build-cloud
+	@echo "==> Running cloud control-plane smoke test..."
+	@./scripts/cloud_smoke.sh
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."

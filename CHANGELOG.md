@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - stable daemon instance identity and manifest-backed discovery
   - outbound authenticated connector sessions with explicit shared-instance allowlists
   - self-host relay planner API, enrollment token flow, audit persistence, and relay-side MCP tools
+- Cloud control-plane alpha foundation with `codencer-cloudd`, `codencer-cloudctl`, and `codencer-cloudworkerd`, plus bootstrap/status/org/workspace/project/token/install/event/audit flows.
+- Cloud installation enable/disable routes and matching `cloudctl install enable|disable` subcommands.
+- Truthful cloud docs and smoke guidance for the bootstrap and control-plane path.
 - **OpenClaw (acpx) Adapter**: 🧪 Experimental support for OpenClaw-compatible executors via the standardized ACP bridge.
 - Official sequential wrapper examples for bash/zsh, PowerShell, and Python under `examples/automation/`.
 - Wrapper-friendly sample task lists and prompt/task inputs for ordered execution.
