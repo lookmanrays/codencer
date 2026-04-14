@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const DefaultHeartbeatIntervalSeconds = 15
@@ -64,6 +65,16 @@ func SaveConfig(path string, cfg *Config) error {
 	return os.WriteFile(path, data, 0600)
 }
 
+func (c *Config) Clone() *Config {
+	if c == nil {
+		return nil
+	}
+	clone := *c
+	clone.DiscoveryRoots = append([]string(nil), c.DiscoveryRoots...)
+	clone.Instances = append([]SharedInstanceConfig(nil), c.Instances...)
+	return &clone
+}
+
 func StatusPathForConfig(configPath string) string {
 	if configPath == "" {
 		return ""
@@ -108,4 +119,22 @@ func mergeInstanceConfig(current, next SharedInstanceConfig) SharedInstanceConfi
 	}
 	current.Share = next.Share
 	return current
+}
+
+func normalizeDiscoveryRoots(configured []string, overrides []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(configured)+len(overrides))
+	for _, root := range append(append([]string(nil), configured...), overrides...) {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		cleaned := filepath.Clean(root)
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		out = append(out, cleaned)
+	}
+	return out
 }

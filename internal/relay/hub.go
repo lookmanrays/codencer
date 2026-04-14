@@ -59,6 +59,20 @@ func (h *Hub) Remove(instanceID string) {
 	delete(h.sessions, instanceID)
 }
 
+func (h *Hub) RemoveConnectorInstances(connectorID string, instanceIDs []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	session := h.connectors[connectorID]
+	for _, instanceID := range instanceIDs {
+		if current := h.sessions[instanceID]; current == nil || session == nil || current == session {
+			delete(h.sessions, instanceID)
+		}
+		if session != nil {
+			delete(session.instanceIDs, instanceID)
+		}
+	}
+}
+
 func (h *Hub) RemoveSession(session *session) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

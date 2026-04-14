@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/relayproto"
@@ -16,6 +17,11 @@ type SharedInstance struct {
 	Info         domain.InstanceInfo
 	DaemonURL    string
 	ManifestPath string
+}
+
+type DiscoveredManifest struct {
+	Path string
+	Info domain.InstanceInfo
 }
 
 type Registry struct {
@@ -125,11 +131,27 @@ func (r *Registry) resolveInstance(ctx context.Context, candidate SharedInstance
 }
 
 func (r *Registry) discoverByInstanceID() (map[string]string, error) {
+	manifests, err := r.DiscoveredManifests()
+	if err != nil {
+		return nil, err
+	}
 	found := map[string]string{}
-	for _, root := range r.cfg.DiscoveryRoots {
-		if root == "" {
+	for _, manifest := range manifests {
+		if manifest.Info.ID == "" {
 			continue
 		}
+		found[manifest.Info.ID] = manifest.Path
+	}
+	return found, nil
+}
+
+func (r *Registry) DiscoveredManifests() ([]DiscoveredManifest, error) {
+	if r == nil || r.cfg == nil {
+		return nil, nil
+	}
+	roots := normalizeDiscoveryRoots(r.cfg.DiscoveryRoots, nil)
+	out := make([]DiscoveredManifest, 0)
+	for _, root := range roots {
 		err := filepath.WalkDir(root, func(current string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
@@ -148,14 +170,47 @@ func (r *Registry) discoverByInstanceID() (map[string]string, error) {
 			if err != nil || info.ID == "" {
 				return nil
 			}
-			found[info.ID] = current
+			out = append(out, DiscoveredManifest{Path: current, Info: *info})
 			return nil
 		})
 		if err != nil {
-			return found, err
+			return out, err
 		}
 	}
-	return found, nil
+	return out, nil
+}
+
+func matchManifest(candidate SharedInstanceConfig, manifests []DiscoveredManifest) *DiscoveredManifest {
+	for i := range manifests {
+		manifest := &manifests[i]
+		if candidate.InstanceID != "" && manifest.Info.ID == candidate.InstanceID {
+			return manifest
+		}
+		if candidate.ManifestPath != "" && manifest.Path == candidate.ManifestPath {
+			return manifest
+		}
+		if candidate.ManifestPath != "" && manifest.Info.ManifestPath != "" && manifest.Info.ManifestPath == candidate.ManifestPath {
+			return manifest
+		}
+		if candidate.DaemonURL != "" && manifest.Info.BaseURL != "" && candidate.DaemonURL == manifest.Info.BaseURL {
+			return manifest
+		}
+	}
+	return nil
+}
+
+func resolveDiscoveryLiveInfo(ctx context.Context, candidate SharedInstanceConfig, clientFactory func(string) *CodencerClient) *domain.InstanceInfo {
+	if strings.TrimSpace(candidate.DaemonURL) == "" {
+		return nil
+	}
+	if clientFactory == nil {
+		clientFactory = func(baseURL string) *CodencerClient { return NewCodencerClient(baseURL) }
+	}
+	info, err := clientFactory(candidate.DaemonURL).GetInstance(ctx)
+	if err != nil {
+		return nil
+	}
+	return info
 }
 
 func loadManifest(path string) (*domain.InstanceInfo, error) {

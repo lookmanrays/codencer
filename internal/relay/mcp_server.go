@@ -41,6 +41,8 @@ type mcpSession struct {
 	ProtocolVersion string
 	CreatedAt       time.Time
 	LastSeenAt      time.Time
+	done            chan struct{}
+	closeOnce       sync.Once
 }
 
 type mcpRequest struct {
@@ -124,21 +126,48 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *mcpServer) handleStream(w http.ResponseWriter, r *http.Request, session *mcpSession) {
+	if session == nil {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", "MCP-Session-Id header is required")
+		return
+	}
 	protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
 	if apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-
-	if session != nil {
-		s.applySessionHeaders(w, session, protocolVersion)
-	} else {
-		w.Header().Set(mcpHeaderProtocolVersion, protocolVersion)
+	if !acceptsEventStream(r.Header.Values("Accept")) {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", "Accept must include text/event-stream")
+		return
 	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", "response streaming is unavailable")
+		return
+	}
+
+	s.applySessionHeaders(w, session, protocolVersion)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 	_, _ = w.Write([]byte(": codencer-relay-mcp-stream\n\n"))
+	flusher.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-session.done:
+			return
+		case <-ticker.C:
+			if _, err := w.Write([]byte(": keepalive\n\n")); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func (s *mcpServer) handleSessionDelete(w http.ResponseWriter, session *mcpSession) {
@@ -146,9 +175,7 @@ func (s *mcpServer) handleSessionDelete(w http.ResponseWriter, session *mcpSessi
 		writeAPIError(w, http.StatusBadRequest, "malformed_request", "MCP-Session-Id header is required")
 		return
 	}
-	s.mu.Lock()
-	delete(s.sessions, session.ID)
-	s.mu.Unlock()
+	s.deleteSession(session.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -392,7 +419,7 @@ func (s *mcpServer) sessionFromRequest(r *http.Request) (*mcpSession, *apiError)
 		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
 	}
 	session.LastSeenAt = time.Now().UTC()
-	return cloneMCPSession(session), nil
+	return session, nil
 }
 
 func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) *mcpSession {
@@ -402,24 +429,45 @@ func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) 
 	if existing != nil {
 		session := s.sessions[existing.ID]
 		if session == nil {
-			session = &mcpSession{ID: existing.ID, CreatedAt: existing.CreatedAt}
+			session = &mcpSession{ID: existing.ID, CreatedAt: existing.CreatedAt, done: make(chan struct{})}
 		}
 		session.ProtocolVersion = protocolVersion
 		if session.CreatedAt.IsZero() {
 			session.CreatedAt = now
 		}
+		if session.done == nil {
+			session.done = make(chan struct{})
+		}
 		session.LastSeenAt = now
 		s.sessions[session.ID] = session
-		return cloneMCPSession(session)
+		return session
 	}
 	session := &mcpSession{
 		ID:              newMCPSessionID(),
 		ProtocolVersion: protocolVersion,
 		CreatedAt:       now,
 		LastSeenAt:      now,
+		done:            make(chan struct{}),
 	}
 	s.sessions[session.ID] = session
-	return cloneMCPSession(session)
+	return session
+}
+
+func (s *mcpServer) deleteSession(sessionID string) {
+	if strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	s.mu.Lock()
+	session := s.sessions[sessionID]
+	delete(s.sessions, sessionID)
+	s.mu.Unlock()
+	if session != nil {
+		session.closeOnce.Do(func() {
+			if session.done != nil {
+				close(session.done)
+			}
+		})
+	}
 }
 
 func (s *mcpServer) resolveProtocolVersion(r *http.Request, session *mcpSession) (string, *apiError) {
@@ -575,14 +623,6 @@ func newMCPSessionID() string {
 	return "mcp-" + base64.RawURLEncoding.EncodeToString(buf)
 }
 
-func cloneMCPSession(session *mcpSession) *mcpSession {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
-}
-
 func normalizeHost(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -603,6 +643,18 @@ func normalizeHost(value string) string {
 		}
 	}
 	return strings.Trim(value, "[]")
+}
+
+func acceptsEventStream(values []string) bool {
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
+			if part == "text/event-stream" || part == "text/*" || part == "*/*" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isLoopbackHost(value string) bool {

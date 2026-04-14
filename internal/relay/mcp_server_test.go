@@ -1,6 +1,7 @@
 package relay_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"agent-bridge/internal/connector"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/relay"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type mcpHarness struct {
@@ -150,6 +152,7 @@ func (h *mcpHarness) call(t *testing.T, auth string, method string, params any) 
 	t.Helper()
 	return h.callPath(t, auth, http.MethodPost, "/mcp", map[string]string{
 		"Content-Type": "application/json",
+		"Accept":       "application/json, text/event-stream",
 	}, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "req-1",
@@ -209,6 +212,41 @@ func (h *mcpHarness) callPath(t *testing.T, auth, httpMethod, path string, heade
 		payloadMap["content_type"] = contentType
 	}
 	return payloadMap
+}
+
+func (h *mcpHarness) openStream(t *testing.T, auth, sessionID string) (*http.Response, *bufio.Reader) {
+	t.Helper()
+
+	req, _ := http.NewRequest(http.MethodGet, h.relayHTTP.URL+"/mcp", nil)
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	req.Header.Set("MCP-Session-Id", sessionID)
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp, bufio.NewReader(resp.Body)
+}
+
+type authRoundTripper struct {
+	base          http.RoundTripper
+	authorization string
+}
+
+func (rt authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	base := rt.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	cloned := req.Clone(req.Context())
+	cloned.Header = req.Header.Clone()
+	if rt.authorization != "" {
+		cloned.Header.Set("Authorization", rt.authorization)
+	}
+	return base.RoundTrip(cloned)
 }
 
 func TestMCPToolsListIncludesRequiredCodencerTools(t *testing.T) {
@@ -375,24 +413,27 @@ func TestMCPInitializeStreamAndCompatibilityPath(t *testing.T) {
 		t.Fatalf("expected initialize to return session id, got %+v", initialize)
 	}
 
-	stream := h.callPath(t, h.auth, http.MethodGet, "/mcp", map[string]string{
-		"MCP-Session-Id":       sessionID,
-		"MCP-Protocol-Version": "2025-11-25",
-	}, nil)
-	if status := int(stream["http_status"].(float64)); status != http.StatusOK {
-		t.Fatalf("expected GET /mcp success, got %+v", stream)
+	resp, reader := h.openStream(t, h.auth, sessionID)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected GET /mcp success, got %d", resp.StatusCode)
 	}
-	contentType, _ := stream["content_type"].(string)
-	if !strings.Contains(contentType, "text/event-stream") {
-		t.Fatalf("expected SSE content type, got %+v", stream)
+	if got := resp.Header.Get("Content-Type"); got != "text/event-stream" {
+		t.Fatalf("expected SSE content type, got %q", got)
 	}
-	rawBody, _ := stream["raw_body"].(string)
-	if !strings.Contains(rawBody, "codencer-relay-mcp-stream") {
-		t.Fatalf("expected SSE bootstrap payload, got %+v", stream)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("expected bootstrap SSE line, got error: %v", err)
+	}
+	if !strings.Contains(line, "codencer-relay-mcp-stream") {
+		t.Fatalf("expected SSE bootstrap payload, got %q", line)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("expected SSE separator line, got error: %v", err)
 	}
 
 	compat := h.callPath(t, h.auth, http.MethodPost, "/mcp/call", map[string]string{
 		"Content-Type":         "application/json",
+		"Accept":               "application/json, text/event-stream",
 		"MCP-Session-Id":       sessionID,
 		"MCP-Protocol-Version": "2025-11-25",
 	}, map[string]any{
@@ -412,6 +453,20 @@ func TestMCPInitializeStreamAndCompatibilityPath(t *testing.T) {
 	if status := int(deleted["http_status"].(float64)); status != http.StatusNoContent {
 		t.Fatalf("expected session delete success, got %+v", deleted)
 	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, resp.Body)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected stream to close cleanly after DELETE, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SSE stream to close after DELETE")
+	}
+	_ = resp.Body.Close()
 }
 
 func TestMCPOriginHandling(t *testing.T) {
@@ -556,5 +611,192 @@ func TestMCPRetryStepRejectsWrongInstance(t *testing.T) {
 	errPayload := structured["error"].(map[string]any)
 	if errPayload["code"] != "instance_denied" && errPayload["code"] != "instance_not_found" {
 		t.Fatalf("expected instance_denied, got %+v", errPayload)
+	}
+}
+
+func TestMCPOfficialGoSDKInterop(t *testing.T) {
+	t.Parallel()
+
+	h := startMCPHarness(t)
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "codencer-sdk-smoke",
+		Version: "1.0.0",
+	}, nil)
+	httpClient := &http.Client{
+		Transport: authRoundTripper{authorization: h.auth},
+	}
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{
+		Endpoint:   h.relayHTTP.URL + "/mcp",
+		HTTPClient: httpClient,
+	}, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() failed: %v", err)
+	}
+	defer func() {
+		if err := session.Close(); err != nil {
+			t.Fatalf("session.Close() failed: %v", err)
+		}
+	}()
+
+	tools, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools() failed: %v", err)
+	}
+	if len(tools.Tools) == 0 {
+		t.Fatal("expected official SDK client to see relay tools")
+	}
+
+	instancesResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "codencer.list_instances",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("list_instances failed: %v", err)
+	}
+	instances, ok := instancesResult.StructuredContent.([]any)
+	if !ok || len(instances) == 0 {
+		t.Fatalf("expected list_instances structured content, got %+v", instancesResult.StructuredContent)
+	}
+	firstInstance, ok := instances[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected instance payload: %+v", instances[0])
+	}
+	instanceID, _ := firstInstance["instance_id"].(string)
+	if instanceID == "" {
+		t.Fatalf("missing instance_id in %+v", firstInstance)
+	}
+
+	if _, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.start_run",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"payload": map[string]any{
+				"id":         "run-1",
+				"project_id": "sdk-project",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("start_run failed: %v", err)
+	}
+
+	submitResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.submit_task",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"run_id":      "run-1",
+			"task": map[string]any{
+				"version": "v1",
+				"goal":    "Verify official SDK interoperability",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit_task failed: %v", err)
+	}
+	submitted, ok := submitResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected submit_task payload: %+v", submitResult.StructuredContent)
+	}
+	stepID, _ := submitted["id"].(string)
+	if stepID == "" {
+		t.Fatalf("missing step id in submit_task payload: %+v", submitted)
+	}
+
+	waitResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.wait_step",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"step_id":     stepID,
+			"timeout_ms":  750,
+			"interval_ms": 50,
+		},
+	})
+	if err != nil {
+		t.Fatalf("wait_step failed: %v", err)
+	}
+	waitPayload, ok := waitResult.StructuredContent.(map[string]any)
+	if !ok || waitPayload["terminal"] != true {
+		t.Fatalf("unexpected wait_step payload: %+v", waitResult.StructuredContent)
+	}
+
+	stepResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.get_step_result",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"step_id":     stepID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("get_step_result failed: %v", err)
+	}
+	resultPayload, ok := stepResult.StructuredContent.(map[string]any)
+	if !ok || resultPayload["summary"] != "done" {
+		t.Fatalf("unexpected get_step_result payload: %+v", stepResult.StructuredContent)
+	}
+
+	validationsResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.get_step_validations",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"step_id":     stepID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("get_step_validations failed: %v", err)
+	}
+	if validations, ok := validationsResult.StructuredContent.([]any); !ok || len(validations) != 1 {
+		t.Fatalf("unexpected validations payload: %+v", validationsResult.StructuredContent)
+	}
+
+	logsResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.get_step_logs",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"step_id":     stepID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("get_step_logs failed: %v", err)
+	}
+	logsPayload, ok := logsResult.StructuredContent.(map[string]any)
+	if !ok || logsPayload["text"] != "step-log-output" {
+		t.Fatalf("unexpected logs payload: %+v", logsResult.StructuredContent)
+	}
+
+	artifactsResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.list_step_artifacts",
+		Arguments: map[string]any{
+			"instance_id": instanceID,
+			"step_id":     stepID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("list_step_artifacts failed: %v", err)
+	}
+	artifacts, ok := artifactsResult.StructuredContent.([]any)
+	if !ok || len(artifacts) != 1 {
+		t.Fatalf("unexpected artifacts payload: %+v", artifactsResult.StructuredContent)
+	}
+	firstArtifact, ok := artifacts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected artifact payload: %+v", artifacts[0])
+	}
+	artifactID, _ := firstArtifact["id"].(string)
+	if artifactID == "" {
+		t.Fatalf("missing artifact id in %+v", firstArtifact)
+	}
+
+	artifactContent, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "codencer.get_artifact_content",
+		Arguments: map[string]any{
+			"artifact_id": artifactID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("get_artifact_content failed: %v", err)
+	}
+	artifactPayload, ok := artifactContent.StructuredContent.(map[string]any)
+	if !ok || artifactPayload["text"] != "artifact-content" {
+		t.Fatalf("unexpected artifact content payload: %+v", artifactContent.StructuredContent)
 	}
 }

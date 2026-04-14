@@ -1,72 +1,74 @@
-# Codencer Practical V2 Finish Log
+# Codencer Practical V2 Delta Finish Log
 
 ## Goal
-- Move the current repo from materially usable self-host alpha to practical v2 for serious personal operator use.
-- Keep Codencer local-first, planner-controlled, evidence-oriented, and truthful about limitations.
+- Close the remaining delta from practical self-host alpha to full practical v2 for real self-use now.
+- Keep Codencer local-first, planner-controlled, evidence-oriented, repo-bound, and truthful about runtime behavior and protocol maturity.
 
-## Locked Blockers
-- Connector blocks documented evidence routes for step artifacts, validations, and logs.
-- Relay `wait_step` is effectively capped by an internal 15s proxy timeout.
-- Relay MCP is not yet full Streamable HTTP compatible and lacks protocol/origin hardening.
-- Relay MCP is missing gate discovery.
-- Planner auth ergonomics are still manual; keep static tokens but add safe local helpers.
-- Connector share/unshare/list/config ergonomics are missing.
-- Relay connector disable/enable is not exposed.
-- Self-host cold-start docs are not yet copy-pasteable.
-- Daemon truth surfaces need hardening around degraded broker status, request contracts, conflicts, and artifact confinement.
+## Delta Blockers Locked From Repo Truth
+- Share control is not yet fully truthful:
+  - a running connector does not visibly re-advertise config-driven share changes
+  - relay instance state is not pruned when a connector stops advertising a previously shared instance
+- Operator discovery is incomplete:
+  - discovery roots exist internally, but there is no operator-facing `codencer-connectord discover` command
+- MCP maturity is only partially proven:
+  - `/mcp` is usable, but `GET /mcp` is still a thin bootstrap instead of a real long-lived SSE session
+  - external interoperability is not yet proven against an official SDK
+- Multi-instance proof is thin:
+  - the repo mostly proves single-instance relay flows rather than a two-instance select-and-target flow
+- Daemon HTTP route proof is thinner than service proof:
+  - direct route tests are missing for abort, gate decision, and step evidence endpoints
+- Relay operator ergonomics still miss a local audit helper:
+  - audit is available over HTTP, but not yet through `codencer-relayd`
+- Broker/runtime docs need a truth pass:
+  - standardize `agent-broker` naming everywhere
+  - keep the in-memory task-session limitation explicit
 
 ## Locked Decisions
 - Planner auth remains static-token based in this pass.
-- Add helper commands/scripts for planner token generation and relay config updates; do not add DB-backed planner auth lifecycle.
-- Implement full Streamable HTTP compatibility on the relay MCP surface.
-- Daemon-local MCP remains secondary compatibility/admin-only.
+- The canonical remote planner surface remains relay HTTP plus relay-side MCP.
+- Daemon-local MCP remains secondary/compatibility-only and does not gain new planner-facing claims.
+- Add an operator-facing `codencer-connectord discover` command rather than overloading `list`.
+- Prove MCP interoperability with the official Go SDK and keep compatibility claims exact.
+- Make share/unshare propagate without connector restart by reloading config and re-advertising from the running connector.
 
 ## Workstream Ownership
 - Lead:
   - `docs/internal/v2_finish_log.md`
-  - Final integration, docs truth pass, smoke expansion, verification
-- Worker A:
-  - `internal/service/run_service.go`
-  - `internal/service/instance_service.go`
-  - `internal/app/routes.go`
-  - `internal/app/api_test.go`
-  - daemon/service tests related to contract hardening
-- Worker B:
+  - integration, merge control, verification, final docs/smokes/truth pass
+- Worker `Aristotle`:
+  - `internal/app/*`
+  - daemon-facing API tests
+  - daemon/service tests only if route proof exposes a real mismatch
+- Worker `Maxwell`:
   - `cmd/codencer-connectord/main.go`
   - `internal/connector/*`
   - connector tests
   - `docs/CONNECTOR.md`
-- Lead local critical path before Worker D:
-  - `cmd/codencer-relayd/main.go`
-  - `internal/relay/{config.go,server.go,router.go,auth.go,hub.go,audit.go}`
+- Worker `Fermat`:
+  - `cmd/codencer-relayd/*`
+  - `internal/relay/server.go`
+  - `internal/relay/router.go`
+  - `internal/relay/audit.go`
   - `internal/relay/store/*`
-  - relay tests
+  - relay admin/integration tests
   - `docs/RELAY.md`
-- Worker D after relay control-plane merge:
+- Lead after relay merge:
   - `internal/relay/mcp_server.go`
   - `internal/relay/mcp_tools.go`
-  - `internal/relay/mcp_server_test.go`
+  - MCP tests
   - `docs/mcp/*`
-  - `schemas/*.json`
-- Lead docs/scripts:
-  - `README.md`
-  - `docs/SELF_HOST_REFERENCE.md`
-  - `docs/SETUP.md`
-  - `docs/WSL_WINDOWS_ANTIGRAVITY.md`
-  - `docs/TROUBLESHOOTING.md`
-  - `docs/AI_OPERATOR_GUIDE.md`
-  - `cmd/broker/README.md`
-  - `scripts/self_host_smoke.sh`
-  - `Makefile`
+  - official SDK smoke helper
+  - multi-instance smoke/docs
+  - broker/docs naming pass
 
 ## Merge Sequence
-1. Log and ownership lock
-2. Daemon hardening
-3. Connector completion
-4. Relay control-plane/admin
-5. Relay MCP maturity
-6. Operator docs/scripts and smoke flow
-7. Final formatting, verification, truth pass
+1. Lock delta log and ownership
+2. Daemon HTTP proof hardening
+3. Connector discovery plus live share propagation
+4. Relay share-prune plus audit CLI
+5. MCP streamable HTTP maturity plus official SDK smoke
+6. Operator docs/scripts, multi-instance proof, broker truth pass
+7. Formatting, broad verification, final truthful assessment
 
 ## Status
 - Merge 1: completed
@@ -78,21 +80,60 @@
 - Merge 7: completed
 
 ## Verification Ledger
-- Initial repo audit complete.
-- `go test ./...` passed before implementation.
-- `go build ./cmd/orchestratord ./cmd/orchestratorctl ./cmd/codencer-connectord ./cmd/codencer-relayd` passed before implementation.
-- `make build-broker` previously verified during audit.
-- Focused daemon, connector, and relay package tests passed after merge work:
-  - `go test ./internal/app ./internal/service ./internal/connector ./cmd/codencer-connectord`
-  - `go test ./internal/relay ./cmd/codencer-relayd`
-- Final broad verification passed:
+- Fresh audit re-confirmed:
   - `go test ./...`
   - `make build`
   - `make build-broker`
-  - live self-host smoke with temporary local relay config, simulation daemon, connector enrollment, relay status/audit, and MCP coverage via `scripts/self_host_smoke.sh`
-- Explicit gate and abort lifecycle verification passed:
-  - `go test ./internal/service -run 'TestE2EFlow|TestGateService_ApproveAndRejectLifecycle|TestRunService_AbortRunCancelsActiveAttempt|TestRunService_DispatchStepAsyncImmediateAbortCancelsBeforeAdapterStart|TestRunService_AbortRunWithoutConfirmedStopFailsClosed|TestRunService_AbortRunWithoutRegisteredExecutionMarksManualAttentionAndReturnsError|TestRunService_AbortRunPausedForGateFailsClosed' -v -count=1`
+- Current repo state before delta work:
+  - branch: `codex/implement-codencer-v2`
+  - untracked artifact observed: `./orchestratord`
+- Required focused checks after each merge:
+  - daemon: `go test ./internal/app ./internal/service`
+  - connector: `go test ./cmd/codencer-connectord ./internal/connector`
+  - relay: `go test ./internal/relay ./cmd/codencer-relayd`
+  - final: `go test ./...`, `make build`, `make build-broker`, smoke matrix
+- Merge 2 verified:
+  - `go test ./internal/app ./internal/service`
+  - added direct route proof for gate approve/reject, run abort, and step result/validations/logs
+- Merge 3 verified:
+  - `go test ./cmd/codencer-connectord ./internal/connector`
+  - added `codencer-connectord discover`
+  - added live config reload plus re-advertise for share/unshare propagation without connector restart
+- Merge 4 verified:
+  - `go test ./internal/relay ./cmd/codencer-relayd`
+  - made connector advertise authoritative for relay-side shared-instance state
+  - pruned stale instance rows and route hints when share state shrinks
+  - added `codencer-relayd audit --limit N`
+- Merge 5 verified:
+  - `go test ./internal/relay ./cmd/codencer-relayd ./cmd/mcp-sdk-smoke`
+  - upgraded `/mcp` from a one-shot bootstrap to a session-bound SSE stream with keepalive comments
+  - added official Go SDK interoperability proof and a standalone `cmd/mcp-sdk-smoke` helper
+- Merge 6 verified:
+  - `bash -n scripts/self_host_smoke.sh`
+  - `go test ./cmd/mcp-sdk-smoke`
+  - `make build-mcp-sdk-smoke`
+  - `make build-broker`
+  - updated operator docs for `discover`, relay `audit`, broker naming truth, Go 1.25.0+, and the expanded smoke matrix
+- Merge 7 verified:
+  - `gofmt -w $(git diff --name-only -- '*.go')`
+  - `go mod tidy`
+  - `git diff --check`
+  - `go test ./...`
+  - `make build`
+  - `make build-broker`
+  - `make build-mcp-sdk-smoke`
+  - live isolated self-host smoke with `SMOKE_SCENARIOS=all,mcp-sdk` against:
+    - relay on `127.0.0.1:18090`
+    - simulation daemon on `127.0.0.1:18085`
+  - live smoke outcomes:
+    - primary run completed with result, validations, logs, artifacts, audit, MCP, share-control, multi-instance, and official SDK proof paths exercised
+    - optional gate action was skipped because the simulation path produced no gate
+    - optional abort path returned HTTP `500`, matching the repo's best-effort, fail-closed abort truth rather than guaranteed confirmed cancellation
+  - cleanup:
+    - removed stray untracked root artifact `./orchestratord`
 
 ## Open Notes
-- MCP transport work must follow official MCP transport/lifecycle/tools guidance and remain truthful if any subset is still unsupported after implementation.
-- No two write-capable workers should touch the same file concurrently.
+- No two write-capable workers may edit the same files concurrently.
+- MCP compatibility claims must stay exact; this repo now proves the official Go SDK path and manual JSON-RPC callers, not universal client compatibility.
+- Share/unshare remote invisibility is now proven without restarting the connector in the live smoke flow.
+- Live abort remains best-effort and may return HTTP `500` when cancellation cannot be confirmed quickly; that is expected truth, not a hidden regression.

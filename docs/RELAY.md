@@ -92,9 +92,15 @@ The relay persists in SQLite:
 - connector records
 - one-time enrollment tokens
 - connector challenge state
-- advertised instance descriptors
+- advertised instance descriptors for the connector's current shared set
 - resource routing hints
 - audit events
+
+Advertise truth model:
+- each connector `advertise` payload is treated as the authoritative current shared-instance set for that connector
+- newly advertised instances are upserted
+- previously connector-owned instances that are absent from the new advertise payload are pruned
+- pruning also deletes cached resource-route hints for that instance so unshared instances stop appearing in `/api/v2/instances` and stop being routable
 
 ## Planner API
 
@@ -132,6 +138,7 @@ Operational notes:
 - `/api/v2/connectors` returns connector identity, online/offline state, last seen, disabled state, and shared instance ids
 - connector enable/disable mutations are explicit planner-admin actions and are audited
 - `/api/v2/audit` returns recent persisted audit events newest first, default limit `100`, max `1000`
+- offline connectors remain visible through `/api/v2/connectors`, but stale offline sessions are never used for routing
 - `/api/v2/steps/{step_id}/wait` uses planner-provided `timeout_ms` when present, capped by `proxy_timeout_seconds`
 
 ## MCP Surface
@@ -195,6 +202,7 @@ Each audit event records actor, action, target, outcome, and timestamp.
 ./bin/codencer-relayd status --config .codencer/relay/config.json
 ./bin/codencer-relayd connectors --config .codencer/relay/config.json
 ./bin/codencer-relayd instances --config .codencer/relay/config.json
+./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 50
 ./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json
 ./bin/codencer-relayd connector disable <connector-id> --config .codencer/relay/config.json
 ./bin/codencer-relayd connector enable <connector-id> --config .codencer/relay/config.json

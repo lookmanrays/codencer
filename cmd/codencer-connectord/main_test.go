@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -136,5 +137,83 @@ func TestRunStatusTextStaysInformativeAndStatusJSONPassesThrough(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "inst-hidden") {
 		t.Fatalf("expected status --json to remain raw status file output, got %s", stdout.String())
+	}
+}
+
+func TestRunDiscoverUsesConfigRootsAndOverridesWithoutMutatingShareState(t *testing.T) {
+	configRoot := t.TempDir()
+	overrideRoot := t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "connector.json")
+
+	writeManifest := func(root, repo, id, daemonURL string) string {
+		t.Helper()
+		manifestPath := filepath.Join(root, repo, ".codencer", "instance.json")
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		data, err := json.Marshal(domain.InstanceInfo{
+			ID:           id,
+			RepoRoot:     filepath.Join(root, repo),
+			ManifestPath: manifestPath,
+			BaseURL:      daemonURL,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(manifestPath, data, 0644); err != nil {
+			t.Fatal(err)
+		}
+		return manifestPath
+	}
+
+	sharedManifest := writeManifest(configRoot, "repo-shared", "inst-shared", "http://127.0.0.1:8085")
+	discoveredOnlyManifest := writeManifest(overrideRoot, "repo-discovered", "inst-discovered", "http://127.0.0.1:8086")
+
+	cfg := &connector.Config{
+		RelayURL:       "http://relay.invalid",
+		ConnectorID:    "connector-1",
+		MachineID:      "machine-1",
+		ConfigPath:     configPath,
+		DiscoveryRoots: []string{configRoot},
+		Instances: []connector.SharedInstanceConfig{
+			{InstanceID: "inst-shared", Share: true},
+			{InstanceID: "inst-hidden", ManifestPath: filepath.Join(configRoot, "repo-hidden", ".codencer", "instance.json"), Share: false},
+		},
+	}
+	if err := connector.SaveConfig(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := run(context.Background(), []string{"discover", "--config", configPath, "--root", overrideRoot}, &stdout, &stderr); err != nil {
+		t.Fatalf("discover failed: %v stderr=%s", err, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "state=shared instance_id=inst-shared") {
+		t.Fatalf("expected shared discovered output, got %s", output)
+	}
+	if !strings.Contains(output, "state=known_unshared instance_id=inst-hidden") {
+		t.Fatalf("expected known_unshared output, got %s", output)
+	}
+	if !strings.Contains(output, "state=discovered_only instance_id=inst-discovered") {
+		t.Fatalf("expected discovered_only output, got %s", output)
+	}
+	if !strings.Contains(output, "repo_root="+filepath.Join(configRoot, "repo-shared")) {
+		t.Fatalf("expected repo_root for shared instance, got %s", output)
+	}
+	if !strings.Contains(output, "manifest_path="+sharedManifest) || !strings.Contains(output, "manifest_path="+discoveredOnlyManifest) {
+		t.Fatalf("expected manifest paths in discover output, got %s", output)
+	}
+
+	savedCfg, err := connector.LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(savedCfg.Instances) != 2 {
+		t.Fatalf("expected discover to avoid mutating config, got %+v", savedCfg.Instances)
+	}
+	if savedCfg.Instances[0].Share != true || savedCfg.Instances[1].Share != false {
+		t.Fatalf("expected discover to preserve share state, got %+v", savedCfg.Instances)
 	}
 }

@@ -1,6 +1,6 @@
-# WSL, Windows, and Antigravity Topology
+# WSL, Windows, and Agent Broker Topology
 
-This document describes the practical v2 operator topology for Codencer when repos and execution live in WSL/Linux while an IDE or Antigravity broker may live on Windows.
+This document describes the practical v2 operator topology for Codencer when repos and execution live in WSL/Linux while an IDE or agent-broker may live on Windows.
 
 ## Recommended Default Layout
 
@@ -13,7 +13,7 @@ This document describes the practical v2 operator topology for Codencer when rep
   - local executor binaries and local adapter execution
 - **Windows**
   - IDE
-  - Antigravity broker and IDE-side companion process, if used
+  - agent-broker and IDE-side companion process, if used
 - **Anywhere reachable by the operator**
   - relay
 
@@ -46,7 +46,7 @@ The trust model is intentionally narrow:
   - executes work locally through adapters
   - exposes `/mcp/call` only as a local compatibility/admin bridge
   - must not be exposed directly to the internet
-- **Antigravity broker**
+- **agent-broker**
   - is separate from relay
   - is optional
   - serves IDE-side discovery/binding concerns, not remote planner control
@@ -59,7 +59,7 @@ When using WSL and Windows together:
 2. Run `orchestratord` in WSL with that repo as `--repo-root`.
 3. Run `codencer-connectord` in WSL so it can talk to the daemon over local loopback without crossing trust domains.
 4. Run the relay wherever you want to terminate remote planner auth.
-5. If you use Antigravity, keep the broker on the Windows/IDE side and bind from the daemon when needed.
+5. If you use the agent-broker, keep it on the Windows/IDE side and bind from the daemon when needed.
 
 Concrete command sketch:
 
@@ -90,7 +90,7 @@ export CODENCER_ANTIGRAVITY_BROKER_URL=http://127.0.0.1:8088
 
 Build note:
 - `make build` builds the daemon, CLI, connector, and relay binaries
-- `make build-broker` builds the Windows-side Antigravity broker from the nested `cmd/broker` module
+- `make build-broker` builds the Windows-side agent-broker from the nested `cmd/broker` module
 
 This avoids the most common problems:
 - daemon exposed beyond loopback
@@ -114,12 +114,12 @@ Antigravity remains local-side execution metadata and binding infrastructure:
 - do not assume it widens the safe remote surface
 
 The broker and relay are different things:
-- **broker**: local/cross-side IDE bridge
+- **agent-broker**: local/cross-side IDE bridge
 - **relay**: authenticated remote control plane for planner calls
 
 The most common stable arrangement for this repo is:
 - WSL: repo, worktrees, daemon, connector, artifacts
-- Windows: Antigravity IDE and broker
+- Windows: Antigravity IDE and agent-broker
 - relay: WSL, local server, or VPS
 - planner client: relay HTTP/MCP only
 
@@ -129,5 +129,7 @@ The most common stable arrangement for this repo is:
 - connector on the same side as the daemon
 - relay exposed instead of the daemon
 - only explicitly shared instances advertised
-- Antigravity broker kept separate from relay concerns
+- connector discovery and sharing are explicit (`discover`, `list`, `share`, `unshare`)
+- relay audit is operator-visible through the relay CLI
+- agent-broker kept separate from relay concerns
 - results, validations, and artifacts inspected through APIs and CLI, not raw cross-side paths

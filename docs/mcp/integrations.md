@@ -36,14 +36,18 @@ Supported MCP methods:
 
 The relay MCP surface is intentionally narrow and tool-oriented:
 - JSON-RPC over HTTP POST is supported for straightforward planner integrations
-- `/mcp` also supports Streamable HTTP-style `GET`, `POST`, and `DELETE`
+- `/mcp` supports session-bound Streamable HTTP `GET`, `POST`, and `DELETE`
 - `MCP-Protocol-Version` negotiation and `MCP-Session-Id` are supported
+- `GET /mcp` keeps a real SSE stream open for the life of the MCP session and emits keepalive comments
 - `allowed_origins` can be enforced for browser-style callers
 
-The current implementation remains request/response-first. It is suitable for serious self-host personal use now, but it does not rely on unsolicited long-lived server notifications to expose Codencer functionality.
+The tool surface is still intentionally request/response-oriented from Codencer’s perspective: planner workflows do not depend on unsolicited Codencer-specific server notifications, even though the transport itself now supports a real long-lived SSE session.
 The daemon-local `/mcp/call` endpoint is only a local compatibility/admin bridge and should not be used as the public remote integration target.
 
 ## Compatibility Note
 
 - Self-host mode is implemented in this repo now.
+- Official interoperability is proven in this repo with the official Go SDK client against the relay `/mcp` endpoint.
+- Manual JSON-RPC callers can still use `POST /mcp` or `POST /mcp/call`.
+- Client-specific desktop integrations should still be treated as documented patterns unless they are directly exercised here.
 - A future default or managed relay can expose the same narrow Codencer MCP surface without changing the local daemon contract.

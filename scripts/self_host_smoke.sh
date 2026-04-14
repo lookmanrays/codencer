@@ -12,6 +12,11 @@ PROJECT_ID="${PROJECT_ID:-smoke-project}"
 KEEP_SMOKE_STATE="${KEEP_SMOKE_STATE:-0}"
 SMOKE_SCENARIOS="${SMOKE_SCENARIOS:-status,audit}"
 GATE_ACTION="${GATE_ACTION:-approve}"
+MCP_SDK_SMOKE_BIN="${MCP_SDK_SMOKE_BIN:-./bin/mcp-sdk-smoke}"
+SECOND_DAEMON_PORT="${SECOND_DAEMON_PORT:-8086}"
+SECOND_DAEMON_URL="${SECOND_DAEMON_URL:-http://127.0.0.1:${SECOND_DAEMON_PORT}}"
+SECOND_WORKTREE=""
+SECOND_DAEMON_PID=""
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
@@ -143,6 +148,58 @@ relay_cli() {
   ./bin/codencer-relayd "${cmd[@]}" "${target[@]}"
 }
 
+run_mcp_sdk_smoke() {
+  if [[ -x "$MCP_SDK_SMOKE_BIN" ]]; then
+    "$MCP_SDK_SMOKE_BIN" "$@"
+    return
+  fi
+  go run ./cmd/mcp-sdk-smoke "$@"
+}
+
+wait_for_relay_instance_state() {
+  local instance_id="$1"
+  local desired_state="$2"
+  local outfile="$3"
+  for _ in $(seq 1 30); do
+    curl_json GET "$RELAY_URL/api/v2/instances" "$outfile"
+    if grep -q "\"instance_id\":\"$instance_id\"" "$outfile"; then
+      if [[ "$desired_state" == "present" ]]; then
+        return 0
+      fi
+    else
+      if [[ "$desired_state" == "absent" ]]; then
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+  echo "ERROR: timed out waiting for relay instance $instance_id to be $desired_state" >&2
+  cat "$outfile" >&2
+  exit 1
+}
+
+start_secondary_daemon() {
+  if [[ -n "$SECOND_WORKTREE" ]]; then
+    return 0
+  fi
+  SECOND_WORKTREE="$(mktemp -d "${TMPDIR:-/tmp}/codencer-selfhost-worktree.XXXXXX")"
+  git worktree add --detach "$SECOND_WORKTREE" HEAD >/dev/null
+  SECOND_DAEMON_PID_FILE="$TMP_DIR/daemon-secondary.pid"
+  SECOND_DAEMON_LOG="$TMP_DIR/daemon-secondary.log"
+  nohup env ALL_ADAPTERS_SIMULATION_MODE="${ALL_ADAPTERS_SIMULATION_MODE:-1}" PORT="$SECOND_DAEMON_PORT" ./bin/orchestratord --repo-root "$SECOND_WORKTREE" > "$SECOND_DAEMON_LOG" 2>&1 &
+  SECOND_DAEMON_PID="$!"
+  echo "$SECOND_DAEMON_PID" > "$SECOND_DAEMON_PID_FILE"
+  for _ in $(seq 1 20); do
+    if curl -fsS "$SECOND_DAEMON_URL/api/v1/instance" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: secondary daemon failed to start at $SECOND_DAEMON_URL" >&2
+  cat "$SECOND_DAEMON_LOG" >&2 || true
+  exit 1
+}
+
 curl_json() {
   local method="$1"
   local url="$2"
@@ -183,6 +240,13 @@ cleanup() {
   if [[ -n "$CONNECTOR_PID" ]] && kill -0 "$CONNECTOR_PID" >/dev/null 2>&1; then
     kill "$CONNECTOR_PID" >/dev/null 2>&1 || true
     wait "$CONNECTOR_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$SECOND_DAEMON_PID" ]] && kill -0 "$SECOND_DAEMON_PID" >/dev/null 2>&1; then
+    kill "$SECOND_DAEMON_PID" >/dev/null 2>&1 || true
+    wait "$SECOND_DAEMON_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$SECOND_WORKTREE" && -d "$SECOND_WORKTREE" ]]; then
+    git worktree remove -f "$SECOND_WORKTREE" >/dev/null 2>&1 || rm -rf "$SECOND_WORKTREE"
   fi
   if [[ "$KEEP_SMOKE_STATE" != "1" ]]; then
     rm -rf "$TMP_DIR"
@@ -251,6 +315,69 @@ fi
 if scenario_enabled status; then
   relay_cli connectors --json > "$TMP_DIR/relay-connectors.json"
   relay_cli instances --json > "$TMP_DIR/relay-instances.json"
+fi
+
+if scenario_enabled share-control; then
+  ./bin/codencer-connectord discover --config "$CONNECTOR_CONFIG" --json > "$TMP_DIR/connector-discover-before.json"
+  ./bin/codencer-connectord unshare --config "$CONNECTOR_CONFIG" --instance-id "$INSTANCE_ID" >/dev/null
+  ./bin/codencer-connectord list --config "$CONNECTOR_CONFIG" --json > "$TMP_DIR/connector-list-unshared.json"
+  wait_for_relay_instance_state "$INSTANCE_ID" absent "$TMP_DIR/relay-instances-unshared.json"
+  ./bin/codencer-connectord share --config "$CONNECTOR_CONFIG" --daemon-url "$DAEMON_URL" >/dev/null
+  ./bin/codencer-connectord discover --config "$CONNECTOR_CONFIG" --json > "$TMP_DIR/connector-discover-after.json"
+  wait_for_relay_instance_state "$INSTANCE_ID" present "$TMP_DIR/relay-instances-restored.json"
+fi
+
+if scenario_enabled multi-instance; then
+  start_secondary_daemon
+  SECOND_INSTANCE_JSON="$TMP_DIR/secondary-instance.json"
+  curl -fsS "$SECOND_DAEMON_URL/api/v1/instance" > "$SECOND_INSTANCE_JSON"
+  SECOND_INSTANCE_ID="$(json_get "$SECOND_INSTANCE_JSON" '.id')"
+  if [[ -z "$SECOND_INSTANCE_ID" ]]; then
+    echo "ERROR: failed to read secondary daemon instance id from $SECOND_DAEMON_URL/api/v1/instance" >&2
+    cat "$SECOND_INSTANCE_JSON" >&2
+    exit 1
+  fi
+
+  ./bin/codencer-connectord share --config "$CONNECTOR_CONFIG" --daemon-url "$SECOND_DAEMON_URL" >/dev/null
+  wait_for_relay_instance_state "$SECOND_INSTANCE_ID" present "$TMP_DIR/relay-instances-multi.json"
+
+  SECOND_RUN_ID="${RUN_ID}-multi"
+  SECOND_RUN_JSON="$TMP_DIR/second-run.json"
+  SECOND_STEP_JSON="$TMP_DIR/second-step.json"
+  curl_json POST "$RELAY_URL/api/v2/instances/$SECOND_INSTANCE_ID/runs" "$SECOND_RUN_JSON" "{\"id\":\"$SECOND_RUN_ID\",\"project_id\":\"$PROJECT_ID-multi\"}"
+  curl_json POST "$RELAY_URL/api/v2/instances/$SECOND_INSTANCE_ID/runs/$SECOND_RUN_ID/steps" "$SECOND_STEP_JSON" "{\"version\":\"v1\",\"goal\":\"Verify multi-instance targeting\",\"adapter_profile\":\"$CONNECTOR_ADAPTER\"}"
+  SECOND_STEP_ID="$(json_get "$SECOND_STEP_JSON" '.id')"
+  if [[ -z "$SECOND_STEP_ID" ]]; then
+    echo "ERROR: failed to create step for secondary instance" >&2
+    cat "$SECOND_STEP_JSON" >&2
+    exit 1
+  fi
+  curl_json POST "$RELAY_URL/api/v2/steps/$SECOND_STEP_ID/wait" "$TMP_DIR/second-wait.json" '{"timeout_ms":300000,"interval_ms":1000,"include_result":false}'
+  curl_json GET "$RELAY_URL/api/v2/instances/$SECOND_INSTANCE_ID/runs/$SECOND_RUN_ID" "$TMP_DIR/second-run-readback.json"
+
+  PRIMARY_MULTI_LOOKUP="$TMP_DIR/primary-multi-lookup.txt"
+  PRIMARY_MULTI_STATUS="$(curl_best_effort GET "$DAEMON_URL/api/v1/runs/$SECOND_RUN_ID" "$PRIMARY_MULTI_LOOKUP")"
+  if [[ "$PRIMARY_MULTI_STATUS" != "404" ]]; then
+    echo "ERROR: primary daemon unexpectedly knows secondary run $SECOND_RUN_ID (status $PRIMARY_MULTI_STATUS)" >&2
+    cat "$PRIMARY_MULTI_LOOKUP" >&2
+    exit 1
+  fi
+
+  SECONDARY_MULTI_LOOKUP="$TMP_DIR/secondary-multi-lookup.json"
+  curl_json GET "$SECOND_DAEMON_URL/api/v1/runs/$SECOND_RUN_ID" "$SECONDARY_MULTI_LOOKUP"
+fi
+
+if scenario_enabled mcp-sdk; then
+  SDK_INSTANCE_ID="${SECOND_INSTANCE_ID:-$INSTANCE_ID}"
+  run_mcp_sdk_smoke \
+    --endpoint "$RELAY_URL/mcp" \
+    --token "$PLANNER_TOKEN" \
+    --instance-id "$SDK_INSTANCE_ID" \
+    --run-id "${RUN_ID}-sdk" \
+    --project-id "${PROJECT_ID}-sdk" \
+    --adapter-profile "$CONNECTOR_ADAPTER" \
+    --wait-timeout-ms 10000 \
+    --json > "$TMP_DIR/mcp-sdk.json"
 fi
 
 RUN_JSON="$TMP_DIR/run.json"
@@ -376,7 +503,7 @@ if scenario_enabled abort; then
 fi
 
 if scenario_enabled audit; then
-  curl_json GET "$RELAY_URL/api/v2/audit?limit=20" "$TMP_DIR/audit.json"
+  relay_cli audit --limit 20 --json > "$TMP_DIR/audit.json"
 fi
 
 echo "--- Self-Host Smoke Summary ---"
@@ -396,4 +523,13 @@ if scenario_enabled audit; then
 fi
 if scenario_enabled mcp; then
   echo "MCP:         $TMP_DIR/mcp-tools.json"
+fi
+if scenario_enabled share-control; then
+  echo "Share:       $TMP_DIR/connector-discover-before.json"
+fi
+if scenario_enabled multi-instance; then
+  echo "Multi:       $TMP_DIR/secondary-instance.json"
+fi
+if scenario_enabled mcp-sdk; then
+  echo "MCP SDK:     $TMP_DIR/mcp-sdk.json"
 fi

@@ -33,6 +33,8 @@ func run(args []string) error {
 		return runConnectors(args[1:])
 	case "instances":
 		return runInstances(args[1:])
+	case "audit":
+		return runAudit(args[1:])
 	case "enrollment-token":
 		return runEnrollmentToken(args[1:])
 	case "planner-token":
@@ -114,6 +116,25 @@ func runInstances(args []string) error {
 		return err
 	}
 	return target.get("/api/v2/instances")
+}
+
+func runAudit(args []string) error {
+	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
+	configPath := fs.String("config", "", "Relay config path")
+	relayURL := fs.String("relay-url", "", "Relay base URL")
+	token := fs.String("token", "", "Planner bearer token")
+	plannerName := fs.String("planner-name", "", "Planner token name from config")
+	asJSON := fs.Bool("json", false, "Print JSON response")
+	limit := fs.Int("limit", 100, "Maximum number of audit events to return")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	target, err := resolveAdminTarget(*configPath, *relayURL, *token, *plannerName, *asJSON)
+	if err != nil {
+		return err
+	}
+	return target.get(fmt.Sprintf("/api/v2/audit?limit=%d", *limit))
 }
 
 func runEnrollmentToken(args []string) error {

@@ -158,6 +158,7 @@ Important rules:
 Inspect and manage the allowlist explicitly before running the connector:
 
 ```bash
+./bin/codencer-connectord discover --config .codencer/connector/config.json
 ./bin/codencer-connectord list
 ./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085
 ./bin/codencer-connectord unshare --instance-id <instance-id>
@@ -170,6 +171,7 @@ You can also inspect the relay-side view of shared instances with:
 
 ```bash
 ./bin/codencer-relayd connectors --config .codencer/relay/config.json
+./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20
 ```
 
 ### 7. Run the connector
@@ -276,11 +278,20 @@ The smoke flow:
 Optional smoke scenario coverage:
 
 ```bash
-PLANNER_TOKEN=<planner-token> SMOKE_SCENARIOS=status,audit,mcp make self-host-smoke
+PLANNER_TOKEN=<planner-token> SMOKE_SCENARIOS=status,audit,mcp,mcp-sdk make self-host-smoke
 PLANNER_TOKEN=<planner-token> make self-host-smoke-all
 ```
 
-If you need the Windows-side broker binary too, build it separately with:
+`make self-host-smoke-mcp` includes the official Go SDK proof helper, while `make self-host-smoke-all` adds the share-control and multi-instance scenarios.
+
+If you want the standalone SDK proof path, build and run the helper directly:
+
+```bash
+make build-mcp-sdk-smoke
+./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8090/mcp --token <planner-token> --instance-id <instance-id>
+```
+
+If you need the Windows-side agent-broker binary too, build it separately with:
 
 ```bash
 make build-broker
@@ -290,7 +301,7 @@ make build-broker
 
 The practical default is:
 - daemon, connector, repos, worktrees, and artifacts in WSL/Linux
-- Antigravity broker and IDE on Windows when needed
+- agent-broker and IDE on Windows when needed
 - relay wherever the operator wants to host the remote control plane
 
 See [WSL / Windows / Antigravity Topology](WSL_WINDOWS_ANTIGRAVITY.md) for the trust boundaries and placement guidance.

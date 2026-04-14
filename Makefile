@@ -4,6 +4,7 @@ LDFLAGS := -X agent-bridge/internal/app.Version=$(VERSION)
 all: lint test build
 
 build:
+	@mkdir -p bin
 	@echo "==> Building orchestratord..."
 	@go build -ldflags "$(LDFLAGS)" -o bin/orchestratord ./cmd/orchestratord
 	@echo "==> Building orchestratorctl..."
@@ -14,8 +15,14 @@ build:
 	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-relayd ./cmd/codencer-relayd
 
 build-broker:
+	@mkdir -p bin
 	@echo "==> Building agent-broker (nested module)..."
 	@cd cmd/broker && go build -o ../../bin/agent-broker ./...
+
+build-mcp-sdk-smoke:
+	@mkdir -p bin
+	@echo "==> Building mcp-sdk-smoke (official MCP SDK proof helper)..."
+	@go build -o bin/mcp-sdk-smoke ./cmd/mcp-sdk-smoke
 
 test:
 	@echo "==> Running tests..."
@@ -131,13 +138,13 @@ self-host-smoke: build
 	@echo "==> Running self-host relay/connector smoke test..."
 	@./scripts/self_host_smoke.sh
 
-self-host-smoke-all: build
+self-host-smoke-all: build build-mcp-sdk-smoke
 	@echo "==> Running self-host relay/connector smoke test with all optional scenarios..."
 	@SMOKE_SCENARIOS=all ./scripts/self_host_smoke.sh
 
-self-host-smoke-mcp: build
+self-host-smoke-mcp: build build-mcp-sdk-smoke
 	@echo "==> Running self-host relay/connector smoke test with MCP coverage..."
-	@SMOKE_SCENARIOS=status,audit,mcp ./scripts/self_host_smoke.sh
+	@SMOKE_SCENARIOS=status,audit,mcp,mcp-sdk ./scripts/self_host_smoke.sh
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."

@@ -279,3 +279,192 @@ func TestClientRun_ReconnectsAndReAdvertises(t *testing.T) {
 		t.Fatalf("expected reconnect to refresh status and re-advertise, got %+v", status)
 	}
 }
+
+func TestClientRun_ReloadsConfigAndReAdvertisesSharedSetChanges(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "connector.json")
+	cfg := &Config{
+		RelayURL:                 "http://relay.invalid",
+		ConnectorID:              "connector-3",
+		MachineID:                "machine-3",
+		HeartbeatIntervalSeconds: 1,
+		ConfigPath:               configPath,
+		Instances: []SharedInstanceConfig{
+			{InstanceID: "inst-1", Share: true},
+			{InstanceID: "inst-2", Share: false},
+		},
+	}
+	if err := EnsureKeypair(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	var daemon1 *httptest.Server
+	daemon1 = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/instance" {
+			_ = json.NewEncoder(w).Encode(domain.InstanceInfo{ID: "inst-1", BaseURL: daemon1.URL, RepoRoot: "/repo/one"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer daemon1.Close()
+
+	var daemon2 *httptest.Server
+	daemon2 = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/instance" {
+			_ = json.NewEncoder(w).Encode(domain.InstanceInfo{ID: "inst-2", BaseURL: daemon2.URL, RepoRoot: "/repo/two"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer daemon2.Close()
+
+	cfg.Instances[0].DaemonURL = daemon1.URL
+	cfg.Instances[1].DaemonURL = daemon2.URL
+	if err := SaveConfig(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	initialAdvertiseSeen := make(chan struct{}, 1)
+	secondAdvertiseSeen := make(chan []string, 1)
+	secondHeartbeatSeen := make(chan []string, 1)
+
+	decodeAdvertiseIDs := func(msg relayproto.AdvertiseMessage) []string {
+		out := make([]string, 0, len(msg.Instances))
+		for _, instance := range msg.Instances {
+			var info domain.InstanceInfo
+			if err := json.Unmarshal(instance.Instance, &info); err == nil {
+				out = append(out, info.ID)
+			}
+		}
+		return out
+	}
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/connectors/challenge":
+			_ = json.NewEncoder(w).Encode(relayproto.ChallengeResponse{
+				ChallengeID: "challenge-reload",
+				Nonce:       "nonce-reload",
+				Relay: relayproto.RelayMetadata{
+					WebsocketURL:             "ws" + strings.TrimPrefix(server.URL, "http") + "/ws/connectors",
+					HeartbeatIntervalSeconds: 1,
+				},
+			})
+		case "/ws/connectors":
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+
+			var hello relayproto.HelloMessage
+			if err := conn.ReadJSON(&hello); err != nil {
+				t.Fatal(err)
+			}
+			var advertise relayproto.AdvertiseMessage
+			if err := conn.ReadJSON(&advertise); err != nil {
+				t.Fatal(err)
+			}
+			initialAdvertiseSeen <- struct{}{}
+
+			for {
+				var envelope struct {
+					Type string `json:"type"`
+				}
+				if _, message, err := conn.ReadMessage(); err != nil {
+					return
+				} else if err := json.Unmarshal(message, &envelope); err != nil {
+					t.Fatal(err)
+				} else {
+					switch envelope.Type {
+					case "advertise":
+						var next relayproto.AdvertiseMessage
+						if err := json.Unmarshal(message, &next); err != nil {
+							t.Fatal(err)
+						}
+						ids := decodeAdvertiseIDs(next)
+						if len(ids) == 1 && ids[0] == "inst-2" {
+							select {
+							case secondAdvertiseSeen <- ids:
+							default:
+							}
+						}
+					case "heartbeat":
+						var heartbeat relayproto.HeartbeatMessage
+						if err := json.Unmarshal(message, &heartbeat); err != nil {
+							t.Fatal(err)
+						}
+						if len(heartbeat.InstanceIDs) == 1 && heartbeat.InstanceIDs[0] == "inst-2" {
+							select {
+							case secondHeartbeatSeen <- heartbeat.InstanceIDs:
+							default:
+							}
+						}
+					}
+				}
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cfg.RelayURL = server.URL
+	cfg.WebsocketURL = "ws" + strings.TrimPrefix(server.URL, "http") + "/ws/connectors"
+	if err := SaveConfig(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	client := NewClient(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3500*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- client.Run(ctx)
+	}()
+
+	select {
+	case <-initialAdvertiseSeen:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for initial advertise")
+	}
+
+	updatedCfg := cfg.Clone()
+	updatedCfg.Instances[0].Share = false
+	updatedCfg.Instances[1].Share = true
+	if err := SaveConfig(configPath, updatedCfg); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case ids := <-secondAdvertiseSeen:
+		if len(ids) != 1 || ids[0] != "inst-2" {
+			t.Fatalf("expected second advertise for inst-2, got %v", ids)
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for updated advertise")
+	}
+
+	select {
+	case ids := <-secondHeartbeatSeen:
+		if len(ids) != 1 || ids[0] != "inst-2" {
+			t.Fatalf("expected heartbeat for inst-2, got %v", ids)
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for updated heartbeat")
+	}
+
+	cancel()
+	_ = <-done
+
+	status, err := LoadStatus(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-2" {
+		t.Fatalf("expected status to track refreshed shared set, got %+v", status)
+	}
+}

@@ -42,6 +42,7 @@ The connector CLI now exposes the full local operator surface:
 ./bin/codencer-connectord run ...
 ./bin/codencer-connectord status [--json]
 ./bin/codencer-connectord list [--json]
+./bin/codencer-connectord discover [--json] [--root /path/to/repos]
 ./bin/codencer-connectord share --instance-id <id>
 ./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085
 ./bin/codencer-connectord unshare --instance-id <id>
@@ -51,6 +52,7 @@ The connector CLI now exposes the full local operator surface:
 Command semantics:
 - `status` reads the local status snapshot. Plain text is richer and includes configured shared/unshared instances. `--json` still prints the raw status file for machine consumers.
 - `list` shows every configured connector instance, including `share: false` entries.
+- `discover` scans configured `discovery_roots` plus any repeated `--root` overrides and reports `instance_id`, `repo_root`, `manifest_path`, `daemon_url`, and state as `shared`, `known_unshared`, or `discovered_only`. It never changes the allowlist.
 - `share` upserts an allowlist entry and sets `share=true`. When `--daemon-url` is provided, the connector will try to enrich the entry from the daemon’s `/api/v1/instance` response.
 - `unshare` keeps the entry but flips `share=false`. It does not delete history from the config.
 - `config` prints the persisted config safely by default. `private_key` is redacted unless `--show-secrets` is explicitly passed. `--json` is available for machine-readable output.
@@ -100,7 +102,7 @@ Enrollment does two things:
 - exchanges the one-time relay enrollment token for connector identity
 - seeds one shared instance from the daemon URL used during enrollment
 
-That enrollment seed is only a starting point. Use `share`, `unshare`, and `list` for day-to-day instance management after the connector is enrolled.
+That enrollment seed is only a starting point. Use `share`, `unshare`, `list`, and `discover` for day-to-day instance management after the connector is enrolled.
 
 ## Shared Instances
 
@@ -131,7 +133,16 @@ Examples:
 
 ./bin/codencer-connectord list \
   --config .codencer/connector/config.json
+
+./bin/codencer-connectord discover \
+  --config .codencer/connector/config.json \
+  --root ~/src
 ```
+
+`list` and `discover` are intentionally different:
+- `list` is the configured-state view from the local allowlist.
+- `discover` is the live visibility view from configured discovery roots plus optional overrides.
+- `discover` never auto-shares newly found instances.
 
 ## Session Model
 
@@ -140,7 +151,8 @@ At runtime the connector:
 2. signs the challenge with its local private key
 3. opens an outbound websocket session
 4. advertises only shared instances
-5. sends heartbeats and re-advertises after reconnect
+5. reloads config before heartbeats and sends a fresh advertise when the effective shared set changes
+6. re-advertises after reconnect
 
 No inbound listener is required for normal use.
 

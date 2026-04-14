@@ -55,11 +55,18 @@ The relay MCP server currently supports:
 
 ## Transport Notes
 
-- `/mcp` supports Streamable HTTP-style `GET`, `POST`, and `DELETE`
+- `/mcp` supports session-bound Streamable HTTP `GET`, `POST`, and `DELETE`
 - the relay returns `MCP-Protocol-Version`
 - the relay can return `MCP-Session-Id` on `initialize`
+- `GET /mcp` keeps an SSE stream open for the negotiated session and emits keepalive comments
 - `/mcp/call` remains as a compatibility alias for simple POST callers
-- the current relay is still request/response-first; it does not rely on unsolicited long-lived server notifications for planner functionality
+- the Codencer tool model remains intentionally request/response-oriented even though the transport now supports a real SSE session
+
+## Proven Compatibility
+
+- verified in repo tests against the official Go SDK `StreamableClientTransport`
+- verified for manual JSON-RPC callers using `POST /mcp` and `POST /mcp/call`
+- not overclaimed as universal client compatibility beyond the integrations directly exercised here
 
 ## Local MCP Distinction
 

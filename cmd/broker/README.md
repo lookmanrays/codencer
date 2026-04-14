@@ -1,6 +1,6 @@
-# Antigravity Discovery Broker
+# Agent Broker
 
-A lightweight same-side discovery and execution service for bridging Codencer (WSL) and Antigravity (Windows). The broker acts as a headless, local-only proxy that handles LS discovery, workspace binding, and cascade execution.
+A lightweight same-side discovery and execution service for bridging Codencer (WSL) and Windows IDE-side agent contexts. The agent-broker acts as a headless, local-only proxy that handles LS discovery, workspace binding, and cascade execution.
 
 ## Configuration
 
@@ -12,7 +12,7 @@ The broker is configured via environment variables:
 ## Build & Run
 
 ### 1. Build (Windows Host)
-It is recommended to run the broker natively on the Windows host where the IDE is running.
+It is recommended to run the agent-broker natively on the Windows host where the IDE is running.
 ```powershell
 # In PowerShell (Windows)
 make build-broker
@@ -35,10 +35,10 @@ Practical placement:
 ### Health & Discovery
 - `GET /health`: Basic health check.
 - `GET /version`: Version info.
-- `GET /instances`: Lists all discovered Antigravity instances on the host.
+- `GET /instances`: Lists all discovered agent-broker instances on the host.
 
 ### Binding Management
-Binding is repo-specific. Each repository on the guest machine can be bound to a separate Antigravity instance.
+Binding is repo-specific. Each repository on the guest machine can be bound to a separate IDE-side instance.
 
 - `GET /binding?repo_root=<path>`: Returns the active service instance for the repo.
 - `POST /binding`: Bind repo to an instance (JSON: `{"pid": <PID>, "repo_root": "<path>"}`).
@@ -54,4 +54,4 @@ Binding is repo-specific. Each repository on the guest machine can be bound to a
 
 ## Persistence
 Binding state is persisted to `~/.gemini/antigravity/broker_binding.json` on the host machine.
-Task sessions are currently kept in-memory; restarting the broker will orphan active tasks.
+Task sessions are currently kept in-memory; restarting the agent-broker will orphan active tasks.

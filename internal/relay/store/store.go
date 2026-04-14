@@ -429,6 +429,87 @@ func (s *Store) SaveInstance(ctx context.Context, record InstanceRecord) error {
 	return err
 }
 
+func (s *Store) ReplaceConnectorInstances(ctx context.Context, connectorID string, records []InstanceRecord) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	keep := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		if record.InstanceID == "" {
+			continue
+		}
+		if record.LastSeenAt.IsZero() {
+			record.LastSeenAt = time.Now().UTC()
+		}
+		record.ConnectorID = connectorID
+		if _, execErr := tx.ExecContext(ctx, `
+			INSERT INTO instances (instance_id, connector_id, repo_root, base_url, instance_json, last_seen_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(instance_id) DO UPDATE SET
+				connector_id = excluded.connector_id,
+				repo_root = excluded.repo_root,
+				base_url = excluded.base_url,
+				instance_json = excluded.instance_json,
+				last_seen_at = excluded.last_seen_at
+		`, record.InstanceID, record.ConnectorID, record.RepoRoot, record.BaseURL, record.InstanceJSON, record.LastSeenAt.UTC()); execErr != nil {
+			err = execErr
+			return nil, err
+		}
+		keep[record.InstanceID] = struct{}{}
+	}
+
+	rows, queryErr := tx.QueryContext(ctx, `
+		SELECT instance_id
+		FROM instances
+		WHERE connector_id = ?
+	`, connectorID)
+	if queryErr != nil {
+		err = queryErr
+		return nil, err
+	}
+	var pruneIDs []string
+	for rows.Next() {
+		var instanceID string
+		if scanErr := rows.Scan(&instanceID); scanErr != nil {
+			_ = rows.Close()
+			err = scanErr
+			return nil, err
+		}
+		if _, ok := keep[instanceID]; !ok {
+			pruneIDs = append(pruneIDs, instanceID)
+		}
+	}
+	if closeErr := rows.Close(); closeErr != nil {
+		err = closeErr
+		return nil, err
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		err = rowsErr
+		return nil, err
+	}
+
+	for _, instanceID := range pruneIDs {
+		if _, execErr := tx.ExecContext(ctx, `DELETE FROM resource_routes WHERE instance_id = ?`, instanceID); execErr != nil {
+			err = execErr
+			return nil, err
+		}
+		if _, execErr := tx.ExecContext(ctx, `DELETE FROM instances WHERE instance_id = ? AND connector_id = ?`, instanceID, connectorID); execErr != nil {
+			err = execErr
+			return nil, err
+		}
+	}
+
+	err = tx.Commit()
+	return pruneIDs, err
+}
+
 func (s *Store) GetInstance(ctx context.Context, instanceID string) (*InstanceRecord, error) {
 	record := &InstanceRecord{}
 	if err := s.db.QueryRowContext(ctx, `
@@ -517,6 +598,14 @@ func (s *Store) LookupResourceRoute(ctx context.Context, kind, id string) (strin
 		return "", err
 	}
 	return instanceID, nil
+}
+
+func (s *Store) DeleteResourceRoute(ctx context.Context, kind, id string) error {
+	if kind == "" || id == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM resource_routes WHERE resource_kind = ? AND resource_id = ?`, kind, id)
+	return err
 }
 
 func (s *Store) AppendAudit(ctx context.Context, event AuditEvent) error {

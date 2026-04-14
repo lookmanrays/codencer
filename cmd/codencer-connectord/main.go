@@ -25,7 +25,7 @@ func main() {
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: codencer-connectord <enroll|run|status|list|share|unshare|config> [flags]")
+		return fmt.Errorf("usage: codencer-connectord <enroll|run|status|list|discover|share|unshare|config> [flags]")
 	}
 
 	switch args[0] {
@@ -37,6 +37,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runStatus(args[1:], stdout, stderr)
 	case "list":
 		return runList(args[1:], stdout, stderr)
+	case "discover":
+		return runDiscover(ctx, args[1:], stdout, stderr)
 	case "share":
 		return runShare(ctx, args[1:], stdout, stderr)
 	case "unshare":
@@ -177,6 +179,39 @@ func runList(args []string, stdout, stderr io.Writer) error {
 	}
 	for _, entry := range entries {
 		if _, err := fmt.Fprintln(stdout, formatInstanceLine(entry)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runDiscover(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("discover", stderr)
+	configPath := fs.String("config", defaultConnectorConfigPath, "Connector config path")
+	jsonOutput := fs.Bool("json", false, "Print discovered instance view as JSON")
+	var roots multiStringFlag
+	fs.Var(&roots, "root", "Additional discovery root to scan (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := connector.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	entries, err := connector.DiscoverInstances(ctx, cfg, roots.Values(), nil)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return writeJSON(stdout, entries)
+	}
+	if len(entries) == 0 {
+		_, err := fmt.Fprintln(stdout, "no connector instances discovered")
+		return err
+	}
+	for _, entry := range entries {
+		if _, err := fmt.Fprintln(stdout, formatDiscoverLine(entry)); err != nil {
 			return err
 		}
 	}
@@ -346,6 +381,37 @@ func formatInstanceLine(entry connector.SharedInstanceConfig) string {
 		blankOrValue(entry.DaemonURL),
 		blankOrValue(entry.ManifestPath),
 	)
+}
+
+func formatDiscoverLine(entry connector.DiscoverEntry) string {
+	return fmt.Sprintf("state=%s instance_id=%s repo_root=%s daemon_url=%s manifest_path=%s",
+		blankOrValue(entry.State),
+		blankOrValue(entry.InstanceID),
+		blankOrValue(entry.RepoRoot),
+		blankOrValue(entry.DaemonURL),
+		blankOrValue(entry.ManifestPath),
+	)
+}
+
+type multiStringFlag []string
+
+func (f *multiStringFlag) String() string {
+	if f == nil || len(*f) == 0 {
+		return ""
+	}
+	return strings.Join(*f, ",")
+}
+
+func (f *multiStringFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func (f *multiStringFlag) Values() []string {
+	if f == nil {
+		return nil
+	}
+	return append([]string(nil), (*f)...)
 }
 
 func writeJSON(stdout io.Writer, value any) error {

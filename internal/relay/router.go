@@ -759,21 +759,39 @@ func (s *Server) resolveResourceRoute(ctx context.Context, principal *plannerPri
 	if err != nil {
 		return "", &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
 	}
+	var hintedErr *apiError
 	if routedInstance != "" {
 		switch {
 		case expectedInstanceID != "" && routedInstance == expectedInstanceID:
 			if apiErr := authorizePrincipal(principal, scope, routedInstance); apiErr == nil {
-				return routedInstance, nil
+				if ok, routeErr := s.canRouteToInstance(ctx, routedInstance); ok {
+					return routedInstance, nil
+				} else if routeErr != nil {
+					hintedErr = routeErr
+					if routeErr.Code == "instance_not_found" {
+						_ = s.store.DeleteResourceRoute(ctx, resourceKind, resourceID)
+					}
+				}
 			}
 		case expectedInstanceID == "":
 			if apiErr := authorizePrincipal(principal, scope, routedInstance); apiErr == nil {
-				return routedInstance, nil
+				if ok, routeErr := s.canRouteToInstance(ctx, routedInstance); ok {
+					return routedInstance, nil
+				} else if routeErr != nil {
+					hintedErr = routeErr
+					if routeErr.Code == "instance_not_found" {
+						_ = s.store.DeleteResourceRoute(ctx, resourceKind, resourceID)
+					}
+				}
 			}
 		}
 	}
 
 	candidates, apiErr := s.resourceProbeCandidates(ctx, principal, scope, expectedInstanceID)
 	if apiErr != nil {
+		if hintedErr != nil && (apiErr.Code == "connector_offline" || apiErr.Code == "instance_not_found") {
+			return "", hintedErr
+		}
 		return "", apiErr
 	}
 
@@ -798,6 +816,9 @@ func (s *Server) resolveResourceRoute(ctx context.Context, principal *plannerPri
 		_ = s.store.SaveResourceRoute(ctx, resourceKind, resourceID, matches[0])
 		return matches[0], nil
 	case 0:
+		if hintedErr != nil {
+			return "", hintedErr
+		}
 		if lastErr != nil {
 			return "", lastErr
 		}
@@ -872,6 +893,27 @@ func (s *Server) probeResourceRoute(ctx context.Context, instanceID, resourceKin
 	}
 	if response == nil || response.StatusCode >= 400 {
 		return false, &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: fmt.Sprintf("%s route not found", resourceKind)}
+	}
+	return true, nil
+}
+
+func (s *Server) canRouteToInstance(ctx context.Context, instanceID string) (bool, *apiError) {
+	record, err := s.store.GetInstance(ctx, instanceID)
+	if err != nil {
+		return false, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	if record == nil {
+		return false, &apiError{Status: http.StatusNotFound, Code: "instance_not_found", Message: "instance not found"}
+	}
+	connectorRecord, err := s.store.GetConnector(ctx, record.ConnectorID)
+	if err != nil {
+		return false, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	if connectorRecord != nil && connectorRecord.Disabled {
+		return false, &apiError{Status: http.StatusForbidden, Code: "connector_disabled", Message: "connector for this instance is disabled"}
+	}
+	if s.hub.Get(instanceID) == nil {
+		return false, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "connector for this instance is offline"}
 	}
 	return true, nil
 }

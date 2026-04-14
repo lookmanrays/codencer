@@ -6,7 +6,7 @@ This guide provides the technical baseline for running the Codencer Orchestratio
 
 ### Software Requirements
 - **Git**: Required for worktree isolation.
-- **Go 1.21+**: Required to build the daemon and CLI.
+- **Go 1.25.0+**: Required to build the daemon, CLI, connector, relay, and MCP SDK proof helper.
 - **C Compiler (gcc/cc)**: Required for the CGO-based SQLite driver.
 - **curl**: Required for health checking and polling.
 - **jq or Python 3**: Recommended for bash/zsh automation wrappers that parse Codencer JSON output.
@@ -31,7 +31,7 @@ make setup
 # 2. Build the canonical daemon, CLI, connector, and relay binaries
 make build
 
-# 3. Build the Windows-side Antigravity broker separately if you need it
+# 3. Build the Windows-side agent-broker separately if you need it
 make build-broker
 ```
 
@@ -66,7 +66,7 @@ Claude is executed in headless print mode as `claude -p --output-format json`. C
 > The daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface. The canonical remote MCP surface for planners lives on the relay at `/mcp`.
 
 > [!IMPORTANT]
-> For the practical self-host relay path, the canonical public binaries are `codencer-connectord` and `codencer-relayd`. The broker binary is built separately with `make build-broker` because `cmd/broker` is a nested module.
+> For the practical self-host relay path, the canonical public binaries are `codencer-connectord` and `codencer-relayd`. The Windows-side `agent-broker` binary is built separately with `make build-broker` because `cmd/broker` is a nested module.
 
 ---
 
@@ -181,9 +181,9 @@ The official v1 ordered-task model is wrapper-based. Use the scripts in `example
 
 ---
 
-## 7. Antigravity Broker (Cross-Side Execution)
+## 7. Agent Broker (Cross-Side Execution)
 
-Use the Antigravity Broker for **cross-side execution** (e.g., Codencer in WSL controlling Antigravity in Windows).
+Use the `agent-broker` for **cross-side execution** (e.g., Codencer in WSL controlling Antigravity in Windows).
 
 ### 7.1 Broker Execution Model
 The broker uses a **dual-path model**:
@@ -191,12 +191,12 @@ The broker uses a **dual-path model**:
 - **Workspace Root (Execution)**: The isolated worktree path where the task is actually executed.
 
 ### 7.2 Setup & Binding
-1.  **Build and Start the Broker**: Run `make build-broker`, then start the resulting broker binary on the host machine.
+1.  **Build and Start the Broker**: Run `make build-broker`, then start the resulting `agent-broker` binary on the host machine.
 2.  **Bind**: Link your local repository to a running IDE instance:
     ```bash
     ./bin/orchestratorctl antigravity bind <PID>
     ```
-3.  **Execute**: Submit tasks using the `antigravity-broker` adapter:
+3.  **Execute**: Submit tasks using the current `antigravity-broker` adapter name against the `agent-broker` bridge:
     ```bash
     ./bin/orchestratorctl submit <runID> --goal "Check UI" --adapter antigravity-broker --wait
     ```
@@ -220,6 +220,15 @@ PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp
 PLANNER_TOKEN=<planner-token> make self-host-smoke-all
 ```
 
+`make self-host-smoke-mcp` includes the official Go SDK proof path via `cmd/mcp-sdk-smoke`. `make self-host-smoke-all` adds share-control and multi-instance coverage.
+
+If you want the standalone proof helper, build and run it directly:
+
+```bash
+make build-mcp-sdk-smoke
+./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8090/mcp --token <planner-token> --instance-id <instance-id>
+```
+
 ## 9. Practical Self-Host Order Of Operations
 
 For a fresh self-host setup:
@@ -233,7 +242,12 @@ make start
 ./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json
 ./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>
 ./bin/codencer-connectord run
+./bin/codencer-connectord discover --config .codencer/connector/config.json
+./bin/codencer-connectord list --config .codencer/connector/config.json
+./bin/codencer-connectord share --config .codencer/connector/config.json --daemon-url http://127.0.0.1:8085
+./bin/codencer-connectord unshare --config .codencer/connector/config.json --instance-id <instance-id>
 ./bin/codencer-relayd instances --config .codencer/relay/config.json
+./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20
 ```
 
-For the practical WSL-first topology, keep the daemon and connector in WSL/Linux next to the repo and worktrees, keep the broker on Windows when Antigravity is in play, and expose the relay instead of the daemon.
+For the practical WSL-first topology, keep the daemon and connector in WSL/Linux next to the repo and worktrees, keep the agent-broker on Windows when Antigravity is in play, and expose the relay instead of the daemon.

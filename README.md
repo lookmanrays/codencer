@@ -55,12 +55,12 @@ Key constraints remain unchanged:
 
 - `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
 - `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
-- `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side Antigravity broker; it lives under the nested `cmd/broker` module
+- `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side agent-broker; it lives under the nested `cmd/broker` module
 
 ### Self-Host Quickstart
 
 1. Build the main binaries with `make build`.
-2. Build the Windows-side broker separately with `make build-broker` if you need the Antigravity bridge on Windows.
+2. Build the Windows-side `agent-broker` separately with `make build-broker` if you need the Windows bridge.
 3. Create a relay config and local planner token:
    `./bin/codencer-relayd planner-token create --config .codencer/relay/config.json --write-config --name operator --scope '*'`
 4. Start the relay:
@@ -72,6 +72,7 @@ Key constraints remain unchanged:
    `./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>`
    `./bin/codencer-connectord run`
 8. Inspect and control sharing explicitly:
+   `./bin/codencer-connectord discover --config .codencer/connector/config.json`
    `./bin/codencer-connectord list`
    `./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085`
    `./bin/codencer-connectord unshare --instance-id <instance-id>`
@@ -80,7 +81,8 @@ Key constraints remain unchanged:
    `./bin/codencer-relayd status --config .codencer/relay/config.json`
    `./bin/codencer-relayd connectors --config .codencer/relay/config.json`
    `./bin/codencer-relayd instances --config .codencer/relay/config.json`
-10. Run the documented smoke path with `make self-host-smoke` or `make self-host-smoke-mcp` once the daemon and relay are already running.
+   `./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20`
+10. Run the documented smoke path with `make self-host-smoke`, `make self-host-smoke-mcp`, or `make self-host-smoke-all` once the daemon and relay are already running. `self-host-smoke-mcp` includes the official MCP SDK proof helper; `self-host-smoke-all` adds share-control and multi-instance coverage.
 
 Planner-facing relay routes live under `/api/v2`, and the relay-hosted MCP entrypoint is `/mcp` with `/mcp/call` kept as a compatibility path.
 The connector now persists a local Ed25519 identity, `connector_id`, `machine_id`, and an explicit shared-instance allowlist under `.codencer/connector/config.json`.
@@ -196,7 +198,7 @@ echo '{"version":"v1","goal":"Update README"}' | ./bin/orchestratorctl submit ru
 ```
 
 #### C. Broker-Backed Execution
-Directly target an IDE-bound agent via the Antigravity Broker using direct input:
+Directly target an IDE-bound agent via the agent-broker bridge using direct input:
 ```bash
 ./bin/orchestratorctl submit run-01 --goal "Check UI" --adapter antigravity-broker --wait --json
 ```
@@ -342,7 +344,7 @@ Those surfaces reflect actual registered adapters, simulation mode, binary avail
 The practical cross-side model is:
 - daemon, repos, worktrees, and artifacts in WSL/Linux
 - connector on the same side as the daemon by default
-- Antigravity broker and IDE on Windows when needed
+- agent-broker and IDE on Windows when needed
 - relay as a separate remote control plane only
 
 Use `orchestratorctl antigravity bind <PID>` to bind this repo to an active Antigravity instance. Binding selects the repo-scoped target, but execution still stays local and still depends on the chosen adapter profile.

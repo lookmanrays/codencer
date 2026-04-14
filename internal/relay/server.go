@@ -237,25 +237,34 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 		return err
 	}
 	s.hub.Touch(session)
+	now := time.Now().UTC()
+	records := make([]InstanceRecord, 0, len(advertise.Instances))
 	next := make(map[string]struct{})
 	for _, advertised := range advertise.Instances {
 		var info domain.InstanceInfo
 		if err := json.Unmarshal(advertised.Instance, &info); err != nil {
 			return err
 		}
-		record := InstanceRecord{
+		if info.ID == "" {
+			return fmt.Errorf("advertised instance is missing id")
+		}
+		records = append(records, InstanceRecord{
 			InstanceID:   info.ID,
 			ConnectorID:  session.connectorID,
 			RepoRoot:     info.RepoRoot,
 			BaseURL:      info.BaseURL,
 			InstanceJSON: string(advertised.Instance),
-			LastSeenAt:   time.Now().UTC(),
-		}
-		if err := s.store.SaveInstance(ctx, record); err != nil {
-			return err
-		}
+			LastSeenAt:   now,
+		})
 		s.hub.Register(info.ID, session)
 		next[info.ID] = struct{}{}
+	}
+	pruned, err := s.store.ReplaceConnectorInstances(ctx, session.connectorID, records)
+	if err != nil {
+		return err
+	}
+	if len(pruned) > 0 {
+		s.hub.RemoveConnectorInstances(session.connectorID, pruned)
 	}
 	for instanceID := range session.instanceIDs {
 		if _, ok := next[instanceID]; !ok {
@@ -274,6 +283,9 @@ func (s *Server) handleHeartbeat(ctx context.Context, session *session, message 
 	s.hub.Touch(session)
 	_ = s.store.MarkConnectorSeen(ctx, session.connectorID, time.Now().UTC())
 	for _, instanceID := range heartbeat.InstanceIDs {
+		if _, ok := session.instanceIDs[instanceID]; !ok {
+			continue
+		}
 		_ = s.store.TouchInstance(ctx, instanceID)
 	}
 }

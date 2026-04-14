@@ -637,7 +637,7 @@ func (s *RunService) failStep(ctx context.Context, step *domain.Step, reason str
 	step.StatusReason = reason
 	step.UpdatedAt = time.Now().UTC()
 	_ = s.stepsRepo.UpdateState(ctx, step)
-	return fmt.Errorf(reason)
+	return fmt.Errorf("%s", reason)
 }
 
 func (s *RunService) executeAttempt(
