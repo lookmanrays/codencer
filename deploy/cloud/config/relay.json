@@ -1,0 +1,9 @@
+{
+  "host": "127.0.0.1",
+  "port": 8090,
+  "db_path": "/var/lib/codencer/relay/relay.db",
+  "planner_token": "",
+  "enrollment_secret": "",
+  "proxy_timeout_seconds": 300,
+  "allowed_origins": []
+}

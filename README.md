@@ -67,10 +67,14 @@ Codencer also includes a cloud control-plane foundation for provider connector i
 - Build the cloud binaries with `make build-cloud`.
 - Start the cloud server with `./bin/codencer-cloudd --config .codencer/cloud/config.json`.
 - Start it with `--relay-config` when you want cloud to claim and control Codencer runtime connectors and shared instances through the internal relay bridge.
-- Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, and API token state directly in the cloud store.
-- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|runtime-connectors|runtime-instances|events|audit` for remote control-plane operations.
+- Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, membership, and API token state directly in the cloud store.
+- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|memberships|tokens|install|runtime-connectors|runtime-instances|events|audit` for remote control-plane operations.
 - Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this pass.
-- Cloud runtime control is HTTP-scoped in this pass. The cloud daemon does not yet expose a cloud-scoped MCP surface.
+- When cloud is running with the relay bridge, the cloud-scoped remote surface is:
+  - HTTP under `/api/cloud/v1/runtime/*`
+  - MCP under `/api/cloud/v1/mcp` with `/api/cloud/v1/mcp/call` kept as a compatibility alias
+- Relay `/mcp` remains the self-host relay MCP surface. Cloud `/api/cloud/v1/mcp` is the tenant-scoped cloud contract.
+- A Docker-based self-host baseline now lives under `deploy/cloud/` and can be smoke-checked with `make cloud-stack-smoke`.
 
 For the cloud docs and status matrix, see [docs/CLOUD.md](docs/CLOUD.md), [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md), and [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md).
 

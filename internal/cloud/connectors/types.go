@@ -33,10 +33,11 @@ const (
 )
 
 type InstallationConfig struct {
-	APIBaseURL    string `json:"api_base_url,omitempty"`
-	Token         string `json:"token,omitempty"`
-	WebhookSecret string `json:"webhook_secret,omitempty"`
-	Username      string `json:"username,omitempty"`
+	APIBaseURL    string            `json:"api_base_url,omitempty"`
+	Token         string            `json:"token,omitempty"`
+	WebhookSecret string            `json:"webhook_secret,omitempty"`
+	Username      string            `json:"username,omitempty"`
+	Extras        map[string]string `json:"extras,omitempty"`
 }
 
 type ValidationResult struct {
@@ -115,6 +116,7 @@ type ConnectorStatus struct {
 
 type Connector interface {
 	Provider() Provider
+	ValidateConfig(cfg InstallationConfig) error
 	ValidateInstallation(ctx context.Context, cfg InstallationConfig) (ValidationResult, error)
 	VerifyWebhook(headers http.Header, body []byte, cfg InstallationConfig) (WebhookVerification, error)
 	NormalizeEvent(headers http.Header, body []byte, cfg InstallationConfig) ([]Event, error)

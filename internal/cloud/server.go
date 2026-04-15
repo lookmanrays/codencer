@@ -21,7 +21,11 @@ type AdminStore interface {
 	CreateWorkspace(ctx context.Context, workspace Workspace) (*Workspace, error)
 	ListWorkspaces(ctx context.Context, orgID string) ([]Workspace, error)
 	CreateProject(ctx context.Context, project Project) (*Project, error)
+	GetProject(ctx context.Context, id string) (*Project, error)
 	ListProjects(ctx context.Context, workspaceID string) ([]Project, error)
+	CreateMembership(ctx context.Context, membership Membership) (*Membership, error)
+	GetMembership(ctx context.Context, id string) (*Membership, error)
+	ListMemberships(ctx context.Context, orgID, workspaceID, projectID string) ([]Membership, error)
 	CreateAPIToken(ctx context.Context, token APIToken, rawToken string) (*APIToken, error)
 	ListAPITokens(ctx context.Context, orgID, workspaceID, projectID string) ([]APIToken, error)
 	RevokeAPIToken(ctx context.Context, tokenID string) error
@@ -63,6 +67,7 @@ type Server struct {
 	store      AdminStore
 	connectors *cloudconnectors.Registry
 	runtime    *RelayRuntime
+	mcp        *mcpServer
 	handler    http.Handler
 	server     *http.Server
 	startedAt  time.Time
@@ -79,6 +84,7 @@ func NewServer(cfg *Config, store AdminStore, connectors *cloudconnectors.Regist
 		runtime:    runtime,
 		startedAt:  time.Now().UTC(),
 	}
+	s.mcp = newMCPServer(s)
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 	s.handler = mux

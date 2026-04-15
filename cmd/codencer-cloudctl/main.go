@@ -24,7 +24,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: codencer-cloudctl <bootstrap|status|orgs|workspaces|projects|tokens|install|runtime-connectors|runtime-instances|events|audit> [flags]")
+		return fmt.Errorf("usage: codencer-cloudctl <bootstrap|status|orgs|workspaces|projects|memberships|tokens|install|runtime-connectors|runtime-instances|events|audit> [flags]")
 	}
 	switch args[0] {
 	case "bootstrap":
@@ -41,6 +41,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runResource("workspaces", "/api/cloud/v1/workspaces", args[1:], stdout, stderr)
 	case "projects":
 		return runResource("projects", "/api/cloud/v1/projects", args[1:], stdout, stderr)
+	case "memberships":
+		return runMemberships(args[1:], stdout, stderr)
 	case "tokens":
 		return runTokens(args[1:], stdout, stderr)
 	case "install":
@@ -69,6 +71,8 @@ func runBootstrap(args []string, stdout, stderr io.Writer) error {
 	projectSlug := fs.String("project-slug", "default-project", "Project slug")
 	projectName := fs.String("project-name", "Default Project", "Project name")
 	tokenName := fs.String("token-name", "operator", "Bootstrap token name")
+	memberName := fs.String("member-name", "Bootstrap Owner", "Bootstrap membership display name")
+	memberEmail := fs.String("member-email", "", "Bootstrap membership email")
 	asJSON := fs.Bool("json", false, "Print JSON output")
 	var scopes multiFlag
 	fs.Var(&scopes, "scope", "Token scope; repeatable")
@@ -81,6 +85,7 @@ func runBootstrap(args []string, stdout, stderr io.Writer) error {
 			"orgs:read", "orgs:write",
 			"workspaces:read", "workspaces:write",
 			"projects:read", "projects:write",
+			"memberships:read", "memberships:write",
 			"tokens:read", "tokens:write",
 			"installations:read", "installations:write",
 			"runtime_connectors:read", "runtime_connectors:write",
@@ -135,26 +140,41 @@ func runBootstrap(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	membership, err := store.CreateMembership(ctx, cloud.Membership{
+		OrgID:       org.ID,
+		WorkspaceID: workspace.ID,
+		ProjectID:   project.ID,
+		Name:        *memberName,
+		Email:       *memberEmail,
+		Role:        cloud.RoleOrgOwner,
+	})
+	if err != nil {
+		return err
+	}
 	rawToken, err := cloud.GenerateAPIToken()
 	if err != nil {
 		return err
 	}
 	token, err := store.CreateAPIToken(ctx, cloud.APIToken{
-		OrgID:       org.ID,
-		WorkspaceID: workspace.ID,
-		ProjectID:   project.ID,
-		Name:        *tokenName,
-		Scopes:      append([]string(nil), scopes...),
+		OrgID:        org.ID,
+		WorkspaceID:  workspace.ID,
+		ProjectID:    project.ID,
+		MembershipID: membership.ID,
+		Name:         *tokenName,
+		SubjectType:  "membership",
+		SubjectName:  membership.Name,
+		Scopes:       append([]string(nil), scopes...),
 	}, rawToken)
 	if err != nil {
 		return err
 	}
 	payload := map[string]any{
-		"org":       org,
-		"workspace": workspace,
-		"project":   project,
-		"token":     rawToken,
-		"record":    token,
+		"org":        org,
+		"workspace":  workspace,
+		"project":    project,
+		"membership": membership,
+		"token":      rawToken,
+		"record":     token,
 	}
 	return printOutput(stdout, payload, *asJSON)
 }
@@ -206,6 +226,50 @@ func runTokens(args []string, stdout, stderr io.Writer) error {
 		return target.post("/api/cloud/v1/tokens/"+*tokenID+"/revoke", nil, asJSON, stdout)
 	default:
 		return fmt.Errorf("usage: codencer-cloudctl tokens [list|create|revoke]")
+	}
+}
+
+func runMemberships(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 || args[0] == "list" {
+		target, query, asJSON, err := parseTargetWithFilter("memberships", trimListArgs(args), stderr)
+		if err != nil {
+			return err
+		}
+		return target.get("/api/cloud/v1/memberships"+query, asJSON, stdout)
+	}
+	switch args[0] {
+	case "create":
+		target, asJSON, body, err := parseCreateMembershipTarget(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return target.post("/api/cloud/v1/memberships", body, asJSON, stdout)
+	case "get":
+		fs := flag.NewFlagSet("memberships get", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		membershipID := fs.String("membership-id", "", "Membership id")
+		target, asJSON, err := parseHTTPFlags(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*membershipID) == "" {
+			return fmt.Errorf("--membership-id is required")
+		}
+		return target.get("/api/cloud/v1/memberships/"+*membershipID, asJSON, stdout)
+	case "enable", "disable":
+		fs := flag.NewFlagSet("memberships "+args[0], flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		membershipID := fs.String("membership-id", "", "Membership id")
+		target, asJSON, err := parseHTTPFlags(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*membershipID) == "" {
+			return fmt.Errorf("--membership-id is required")
+		}
+		return target.post("/api/cloud/v1/memberships/"+*membershipID+"/"+args[0], nil, asJSON, stdout)
+	default:
+		return fmt.Errorf("usage: codencer-cloudctl memberships [list|create|get|enable|disable]")
 	}
 }
 
@@ -506,6 +570,7 @@ func parseCreateTokenTarget(args []string, stderr io.Writer) (target, bool, []by
 	orgID := fs.String("org-id", "", "Organization id")
 	workspaceID := fs.String("workspace-id", "", "Workspace id")
 	projectID := fs.String("project-id", "", "Project id")
+	membershipID := fs.String("membership-id", "", "Membership id")
 	name := fs.String("name", "", "Token name")
 	kind := fs.String("kind", "", "Token kind")
 	var scopes multiFlag
@@ -515,12 +580,13 @@ func parseCreateTokenTarget(args []string, stderr io.Writer) (target, bool, []by
 		return target, false, nil, err
 	}
 	payload := map[string]any{
-		"org_id":       *orgID,
-		"workspace_id": *workspaceID,
-		"project_id":   *projectID,
-		"name":         *name,
-		"kind":         *kind,
-		"scopes":       []string(scopes),
+		"org_id":        *orgID,
+		"workspace_id":  *workspaceID,
+		"project_id":    *projectID,
+		"membership_id": *membershipID,
+		"name":          *name,
+		"kind":          *kind,
+		"scopes":        []string(scopes),
 	}
 	data, err := json.Marshal(payload)
 	return target, asJSON, data, err
@@ -554,6 +620,31 @@ func parseCreateInstallTarget(args []string, stderr io.Writer) (target, bool, []
 		"external_account":         *externalAccount,
 		"config":                   map[string]string(configs),
 		"secrets":                  map[string]string(secrets),
+	}
+	data, err := json.Marshal(payload)
+	return target, asJSON, data, err
+}
+
+func parseCreateMembershipTarget(args []string, stderr io.Writer) (target, bool, []byte, error) {
+	fs := flag.NewFlagSet("memberships create", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	orgID := fs.String("org-id", "", "Organization id")
+	workspaceID := fs.String("workspace-id", "", "Workspace id")
+	projectID := fs.String("project-id", "", "Project id")
+	name := fs.String("name", "", "Member name")
+	email := fs.String("email", "", "Member email")
+	role := fs.String("role", cloud.RoleProjectOperator, "Membership role")
+	target, asJSON, err := parseHTTPFlags(fs, args)
+	if err != nil {
+		return target, false, nil, err
+	}
+	payload := map[string]any{
+		"org_id":       *orgID,
+		"workspace_id": *workspaceID,
+		"project_id":   *projectID,
+		"name":         *name,
+		"email":        *email,
+		"role":         *role,
 	}
 	data, err := json.Marshal(payload)
 	return target, asJSON, data, err

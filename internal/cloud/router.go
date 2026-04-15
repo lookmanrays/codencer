@@ -13,21 +13,35 @@ import (
 	cloudconnectors "agent-bridge/internal/cloud/connectors"
 )
 
+type apiError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
 type cloudStatusResponse struct {
 	Status             string                     `json:"status"`
 	Version            string                     `json:"version"`
 	StartedAt          string                     `json:"started_at"`
 	CloudAPIBase       string                     `json:"cloud_api_base"`
+	CloudMCPBase       string                     `json:"cloud_mcp_base,omitempty"`
 	RelayComposed      bool                       `json:"relay_composed"`
 	ConnectorProviders []cloudconnectors.Provider `json:"connector_providers"`
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
+	if s.runtime != nil && s.runtime.Server != nil {
+		mux.HandleFunc("/api/v2/connectors/enroll", s.handleRelayConnectorIngress)
+		mux.HandleFunc("/api/v2/connectors/challenge", s.handleRelayConnectorIngress)
+		mux.HandleFunc("/ws/connectors", s.handleRelayConnectorIngress)
+	}
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/api/cloud/v1/status", s.handleStatus)
 	mux.HandleFunc("/api/cloud/v1/orgs", s.handleOrgs)
 	mux.HandleFunc("/api/cloud/v1/workspaces", s.handleWorkspaces)
 	mux.HandleFunc("/api/cloud/v1/projects", s.handleProjects)
+	mux.HandleFunc("/api/cloud/v1/memberships", s.handleMemberships)
+	mux.HandleFunc("/api/cloud/v1/memberships/", s.handleMembershipByID)
 	mux.HandleFunc("/api/cloud/v1/tokens", s.handleTokens)
 	mux.HandleFunc("/api/cloud/v1/tokens/", s.handleTokenByID)
 	mux.HandleFunc("/api/cloud/v1/installations", s.handleInstallations)
@@ -36,6 +50,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cloud/v1/runtime/connectors/", s.handleRuntimeConnectorByID)
 	mux.HandleFunc("/api/cloud/v1/runtime/instances", s.handleRuntimeInstances)
 	mux.HandleFunc("/api/cloud/v1/runtime/instances/", s.handleRuntimeInstanceByID)
+	mux.HandleFunc("/api/cloud/v1/mcp", s.mcp.Handle)
+	mux.HandleFunc("/api/cloud/v1/mcp/call", s.mcp.Handle)
 	mux.HandleFunc("/api/cloud/v1/events", s.handleEvents)
 	mux.HandleFunc("/api/cloud/v1/audit", s.handleAudit)
 	mux.HandleFunc("/", s.handleRoot)
@@ -43,6 +59,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
+}
+
+func (s *Server) handleRelayConnectorIngress(w http.ResponseWriter, r *http.Request) {
+	if s.runtime == nil || s.runtime.Server == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "runtime_bridge_missing", "cloud runtime bridge is not configured")
+		return
+	}
+	s.runtime.Server.Handler().ServeHTTP(w, r)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -62,6 +86,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Version:            "cloud-v1-alpha",
 		StartedAt:          s.startedAt.UTC().Format(time.RFC3339),
 		CloudAPIBase:       "/api/cloud/v1",
+		CloudMCPBase:       "/api/cloud/v1/mcp",
 		RelayComposed:      s.runtime != nil && s.runtime.Server != nil && s.runtime.Store != nil,
 		ConnectorProviders: providers,
 	})
@@ -241,12 +266,13 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var req struct {
-			OrgID       string   `json:"org_id"`
-			WorkspaceID string   `json:"workspace_id,omitempty"`
-			ProjectID   string   `json:"project_id,omitempty"`
-			Name        string   `json:"name"`
-			Kind        string   `json:"kind,omitempty"`
-			Scopes      []string `json:"scopes"`
+			OrgID        string   `json:"org_id"`
+			WorkspaceID  string   `json:"workspace_id,omitempty"`
+			ProjectID    string   `json:"project_id,omitempty"`
+			MembershipID string   `json:"membership_id,omitempty"`
+			Name         string   `json:"name"`
+			Kind         string   `json:"kind,omitempty"`
+			Scopes       []string `json:"scopes"`
 		}
 		if err := decodeJSON(r.Body, &req); err != nil {
 			writeAPIError(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -256,18 +282,50 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusForbidden, "scope_denied", "token is not allowed to create a token for this scope")
 			return
 		}
+		tokenSubjectType := "service"
+		tokenSubjectName := req.Name
+		membershipID := strings.TrimSpace(req.MembershipID)
+		if membershipID == "" && strings.TrimSpace(token.MembershipID) != "" {
+			membershipID = token.MembershipID
+		}
+		if membershipID != "" {
+			membership, err := s.store.GetMembership(r.Context(), membershipID)
+			if err != nil {
+				writeAPIError(w, http.StatusBadRequest, "membership_not_found", err.Error())
+				return
+			}
+			if membership.Status != DefaultMembershipStatus || membership.DisabledAt != nil {
+				writeAPIError(w, http.StatusConflict, "membership_disabled", "membership is disabled")
+				return
+			}
+			if !TokenAllowsTarget(token, membership.OrgID, membership.WorkspaceID, membership.ProjectID) || !MembershipAllowsTarget(membership, req.OrgID, req.WorkspaceID, req.ProjectID) {
+				writeAPIError(w, http.StatusForbidden, "scope_denied", "token is not allowed to create a token for this membership scope")
+				return
+			}
+			scopes, err := ClampScopesForRole(membership.Role, req.Scopes)
+			if err != nil {
+				writeAPIError(w, http.StatusBadRequest, "invalid_scopes", err.Error())
+				return
+			}
+			req.Scopes = scopes
+			tokenSubjectType = "membership"
+			tokenSubjectName = membership.Name
+		}
 		raw, err := GenerateAPIToken()
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, "token_generation_failed", err.Error())
 			return
 		}
 		record, err := s.store.CreateAPIToken(r.Context(), APIToken{
-			OrgID:       req.OrgID,
-			WorkspaceID: req.WorkspaceID,
-			ProjectID:   req.ProjectID,
-			Name:        req.Name,
-			Kind:        req.Kind,
-			Scopes:      req.Scopes,
+			OrgID:        req.OrgID,
+			WorkspaceID:  req.WorkspaceID,
+			ProjectID:    req.ProjectID,
+			MembershipID: membershipID,
+			Name:         req.Name,
+			Kind:         req.Kind,
+			SubjectType:  tokenSubjectType,
+			SubjectName:  tokenSubjectName,
+			Scopes:       req.Scopes,
 		}, raw)
 		if err != nil {
 			writeAPIError(w, http.StatusBadRequest, "create_failed", err.Error())
@@ -358,21 +416,39 @@ func (s *Server) handleInstallations(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusBadRequest, "unsupported_connector", "no registered connector matches the installation")
 			return
 		}
+		connector, _ := s.connectors.Get(cloudconnectors.Provider(req.ConnectorKey))
 		cfgJSON, err := json.Marshal(req.Config)
 		if err != nil {
 			writeAPIError(w, http.StatusBadRequest, "bad_config", err.Error())
+			return
+		}
+		cfg := cloudconnectors.InstallationConfig{
+			APIBaseURL: req.Config["api_base_url"],
+			Username:   req.Config["username"],
+			Extras:     req.Config,
+		}
+		if tokenValue, ok := req.Secrets["token"]; ok {
+			cfg.Token = tokenValue
+		}
+		if webhookSecret, ok := req.Secrets["webhook_secret"]; ok {
+			cfg.WebhookSecret = webhookSecret
+		}
+		if err := connector.ValidateConfig(cfg); err != nil {
+			writeAPIError(w, http.StatusBadRequest, "invalid_config", err.Error())
 			return
 		}
 		installation, err := s.store.CreateConnectorInstallation(r.Context(), ConnectorInstallation{
 			OrgID:                  req.OrgID,
 			WorkspaceID:            req.WorkspaceID,
 			ProjectID:              req.ProjectID,
+			OwnerMembershipID:      token.MembershipID,
 			ConnectorKey:           req.ConnectorKey,
 			ExternalInstallationID: req.ExternalInstallationID,
 			ExternalAccount:        req.ExternalAccount,
 			Name:                   req.Name,
 			Status:                 "created",
 			Enabled:                true,
+			Health:                 DefaultInstallationHealth,
 			ConfigJSON:             cfgJSON,
 		})
 		if err != nil {
@@ -453,18 +529,25 @@ func (s *Server) handleInstallationValidate(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusForbidden, "scope_denied", "token is not allowed to validate this installation")
 		return
 	}
+	if err := connector.ValidateConfig(cfg); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_config", err.Error())
+		return
+	}
 	result, err := connector.ValidateInstallation(r.Context(), cfg)
+	status := connector.DeriveStatus(result, cloudconnectors.WebhookVerification{})
+	now := time.Now().UTC()
+	installation.LastValidatedAt = &now
 	if err != nil {
 		installation.Status = "error"
+		installation.Health = "degraded"
 		installation.LastError = err.Error()
 	} else {
 		installation.Status = "active"
+		installation.Health = status.State
 		installation.LastError = ""
-		now := time.Now().UTC()
 		installation.LastSeenAt = &now
 	}
 	installation, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
-	status := connector.DeriveStatus(result, cloudconnectors.WebhookVerification{})
 	s.recordAudit(r, token, "validate_installation", "installation", installation.ID, installation.OrgID, installation.WorkspaceID, installation.ProjectID, outcomeFromErr(err), map[string]any{"provider": connector.Provider(), "message": result.Message})
 	writeJSON(w, httpStatusFromErr(err, http.StatusOK), map[string]any{
 		"validation": result,
@@ -492,9 +575,13 @@ func (s *Server) handleInstallationEnableDisable(w http.ResponseWriter, r *http.
 		if installation.Status == "disabled" {
 			installation.Status = "created"
 		}
+		if installation.Health == "" {
+			installation.Health = DefaultInstallationHealth
+		}
 		installation.LastError = ""
 	} else {
 		installation.Status = "disabled"
+		installation.Health = "disabled"
 	}
 	updated, err := s.store.CreateConnectorInstallation(r.Context(), *installation)
 	if err != nil {
@@ -532,11 +619,22 @@ func (s *Server) handleInstallationAction(w http.ResponseWriter, r *http.Request
 		return
 	}
 	result, err := connector.ExecuteAction(r.Context(), req, cfg)
+	now := time.Now().UTC()
+	installation.LastActionAt = &now
 	responseJSON, _ := json.Marshal(result)
 	status := "completed"
 	if err != nil {
 		status = "failed"
+		installation.Status = "error"
+		installation.Health = "degraded"
+		installation.LastError = err.Error()
+	} else {
+		installation.Status = "active"
+		installation.Health = "healthy"
+		installation.LastSeenAt = &now
+		installation.LastError = ""
 	}
+	installation, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
 	_, _ = s.store.CreateConnectorActionLog(r.Context(), ConnectorActionLog{
 		InstallationID: installation.ID,
 		ActionName:     string(req.Action),
@@ -568,8 +666,11 @@ func (s *Server) handleInstallationWebhook(w http.ResponseWriter, r *http.Reques
 	}
 	verification, err := connector.VerifyWebhook(r.Header, body, cfg)
 	if err != nil {
+		now := time.Now().UTC()
 		installation.Status = "error"
+		installation.Health = "degraded"
 		installation.LastError = err.Error()
+		installation.LastSeenAt = &now
 		_, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
 		writeAPIError(w, http.StatusUnauthorized, "verification_failed", err.Error())
 		return
@@ -595,7 +696,9 @@ func (s *Server) handleInstallationWebhook(w http.ResponseWriter, r *http.Reques
 	}
 	now := time.Now().UTC()
 	installation.Status = "active"
+	installation.Health = "healthy"
 	installation.LastSeenAt = &now
+	installation.LastWebhookAt = &now
 	installation.LastError = ""
 	_, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
 	_, _ = s.store.CreateCloudAuditEvent(r.Context(), CloudAuditEvent{
@@ -666,10 +769,18 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) requireToken(w http.ResponseWriter, r *http.Request, scope string) (*APIToken, bool) {
+	token, apiErr := s.authenticateToken(r, scope)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return nil, false
+	}
+	return token, true
+}
+
+func (s *Server) authenticateToken(r *http.Request, scope string) (*APIToken, *apiError) {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		writeAPIError(w, http.StatusUnauthorized, "auth_required", "bearer token is required")
-		return nil, false
+		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_required", Message: "bearer token is required"}
 	}
 	raw := strings.TrimSpace(header[len("Bearer "):])
 	token, err := s.store.LookupAPIToken(r.Context(), raw)
@@ -678,19 +789,31 @@ func (s *Server) requireToken(w http.ResponseWriter, r *http.Request, scope stri
 		if errors.Is(err, ErrAPITokenInvalid) {
 			status = http.StatusBadRequest
 		}
-		writeAPIError(w, status, "auth_failed", err.Error())
-		return nil, false
+		return nil, &apiError{Status: status, Code: "auth_failed", Message: err.Error()}
 	}
 	if token.Disabled || token.RevokedAt != nil {
-		writeAPIError(w, http.StatusUnauthorized, "auth_failed", "api token is disabled or revoked")
-		return nil, false
+		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "api token is disabled or revoked"}
+	}
+	if strings.TrimSpace(token.MembershipID) != "" {
+		membership, err := s.store.GetMembership(r.Context(), token.MembershipID)
+		if err != nil {
+			return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: err.Error()}
+		}
+		if membership.DisabledAt != nil || membership.Status != DefaultMembershipStatus {
+			return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "membership is disabled"}
+		}
+		token.Role = membership.Role
+		token.MembershipWorkspaceID = membership.WorkspaceID
+		token.MembershipProjectID = membership.ProjectID
+		if token.SubjectName == "" {
+			token.SubjectName = membership.Name
+		}
 	}
 	if !TokenHasScope(token, scope) {
-		writeAPIError(w, http.StatusForbidden, "scope_denied", "api token lacks required scope")
-		return nil, false
+		return nil, &apiError{Status: http.StatusForbidden, Code: "scope_denied", Message: "api token lacks required scope"}
 	}
 	_ = s.store.TouchAPITokenUsage(r.Context(), token.ID)
-	return token, true
+	return token, nil
 }
 
 func (s *Server) resolveInstallationConnector(w http.ResponseWriter, r *http.Request, installationID string) (*ConnectorInstallation, cloudconnectors.Connector, cloudconnectors.InstallationConfig, bool) {
@@ -728,6 +851,7 @@ func (s *Server) installationConfig(r *http.Request, installation *ConnectorInst
 		}
 		cfg.APIBaseURL = raw["api_base_url"]
 		cfg.Username = raw["username"]
+		cfg.Extras = raw
 	}
 	token, err := s.store.GetInstallationSecret(r.Context(), installation.ID, "token")
 	if err == nil {
@@ -748,9 +872,29 @@ func (s *Server) recordAudit(r *http.Request, token *APIToken, action, resourceT
 	if s.store == nil {
 		return
 	}
+	actorType := "api_token"
+	actorID := ""
+	if token != nil {
+		actorID = token.ID
+	}
+	if token != nil && strings.TrimSpace(token.MembershipID) != "" {
+		actorType = "membership_token"
+		actorID = token.MembershipID
+		if details == nil {
+			details = map[string]any{}
+		}
+		details["token_id"] = token.ID
+		details["token_name"] = token.Name
+		if token.Role != "" {
+			details["membership_role"] = token.Role
+		}
+		if token.SubjectName != "" {
+			details["membership_name"] = token.SubjectName
+		}
+	}
 	_, _ = s.store.CreateCloudAuditEvent(r.Context(), CloudAuditEvent{
-		ActorType:    "api_token",
-		ActorID:      token.ID,
+		ActorType:    actorType,
+		ActorID:      actorID,
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,

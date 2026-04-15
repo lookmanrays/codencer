@@ -24,6 +24,16 @@ func (c *GitLabConnector) Provider() Provider {
 	return ProviderGitLab
 }
 
+func (c *GitLabConnector) ValidateConfig(cfg InstallationConfig) error {
+	if err := nonEmpty(cfg.Token, "token"); err != nil {
+		return err
+	}
+	if _, err := resolveAPIBase(gitlabDefaultAPIBaseURL, cfg.APIBaseURL); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *GitLabConnector) ValidateInstallation(ctx context.Context, cfg InstallationConfig) (ValidationResult, error) {
 	if err := nonEmpty(cfg.Token, "token"); err != nil {
 		return ValidationResult{Provider: ProviderGitLab, CheckedAt: nowUTC(), Message: err.Error()}, err

@@ -28,6 +28,7 @@ func TestOpenStoreRunsMigrationsAndIsIdempotent(t *testing.T) {
 		"orgs",
 		"workspaces",
 		"projects",
+		"memberships",
 		"api_tokens",
 		"connector_installations",
 		"runtime_connector_installations",
@@ -49,8 +50,8 @@ func TestOpenStoreRunsMigrationsAndIsIdempotent(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM cloud_schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatal(err)
 	}
-	if appliedCount != 2 {
-		t.Fatalf("expected two migration rows, got %d", appliedCount)
+	if appliedCount != len(migrations) {
+		t.Fatalf("expected %d migration rows, got %d", len(migrations), appliedCount)
 	}
 
 	store, err = OpenStore(path, "cloud-master-key")
@@ -62,7 +63,7 @@ func TestOpenStoreRunsMigrationsAndIsIdempotent(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM cloud_schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatal(err)
 	}
-	if appliedCount != 2 {
+	if appliedCount != len(migrations) {
 		t.Fatalf("expected migrations to remain idempotent, got %d rows", appliedCount)
 	}
 }

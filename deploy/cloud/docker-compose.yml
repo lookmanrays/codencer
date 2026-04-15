@@ -1,0 +1,62 @@
+services:
+  cloud:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile
+    environment:
+      CODENCER_CLOUD_HOST: ${CODENCER_CLOUD_HOST:-0.0.0.0}
+      CODENCER_CLOUD_PORT: ${CODENCER_CLOUD_INTERNAL_PORT:-8190}
+      CODENCER_CLOUD_DB_PATH: ${CODENCER_CLOUD_DB_PATH:-/var/lib/codencer/cloud/cloud.db}
+      CODENCER_CLOUD_MASTER_KEY: ${CODENCER_CLOUD_MASTER_KEY:?set CODENCER_CLOUD_MASTER_KEY}
+      CODENCER_CLOUD_RELAY_CONFIG: /etc/codencer/relay/config.json
+      RELAY_DB_PATH: ${RELAY_DB_PATH:-/var/lib/codencer/relay/relay.db}
+      RELAY_PLANNER_TOKEN: ${RELAY_PLANNER_TOKEN:?set RELAY_PLANNER_TOKEN}
+      RELAY_ENROLLMENT_SECRET: ${RELAY_ENROLLMENT_SECRET:?set RELAY_ENROLLMENT_SECRET}
+      RELAY_PROXY_TIMEOUT_SECONDS: ${RELAY_PROXY_TIMEOUT_SECONDS:-300}
+      RELAY_ALLOWED_ORIGINS: ${RELAY_ALLOWED_ORIGINS:-}
+    command:
+      - --config
+      - /etc/codencer/cloud/config.json
+      - --relay-config
+      - /etc/codencer/relay/config.json
+    ports:
+      - "${CODENCER_CLOUD_PORT:-8190}:8190"
+    volumes:
+      - cloud-data:/var/lib/codencer/cloud
+      - relay-data:/var/lib/codencer/relay
+      - ./config/cloud.json:/etc/codencer/cloud/config.json:ro
+      - ./config/relay.json:/etc/codencer/relay/config.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8190/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile
+    entrypoint: ["/usr/local/bin/codencer-cloudworkerd"]
+    environment:
+      CODENCER_CLOUD_DB_PATH: ${CODENCER_CLOUD_DB_PATH:-/var/lib/codencer/cloud/cloud.db}
+      CODENCER_CLOUD_MASTER_KEY: ${CODENCER_CLOUD_MASTER_KEY:?set CODENCER_CLOUD_MASTER_KEY}
+    command:
+      - --config
+      - /etc/codencer/cloud/config.json
+      - --interval
+      - ${CLOUD_WORKER_INTERVAL:-2m}
+      - --limit
+      - ${CLOUD_WORKER_LIMIT:-50}
+    depends_on:
+      cloud:
+        condition: service_healthy
+    volumes:
+      - cloud-data:/var/lib/codencer/cloud
+      - ./config/cloud.json:/etc/codencer/cloud/config.json:ro
+    restart: unless-stopped
+
+volumes:
+  cloud-data:
+  relay-data:

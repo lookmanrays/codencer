@@ -159,6 +159,16 @@ cloud-smoke: build-cloud
 	@echo "==> Running cloud control-plane smoke test..."
 	@./scripts/cloud_smoke.sh
 
+cloud-stack-config:
+	@ENV_FILE=deploy/cloud/.env; \
+	if [ ! -f "$$ENV_FILE" ]; then ENV_FILE=deploy/cloud/.env.example; fi; \
+	echo "==> Validating docker compose cloud stack with $$ENV_FILE..."; \
+	docker compose --env-file "$$ENV_FILE" -f deploy/cloud/docker-compose.yml config > /dev/null
+
+cloud-stack-smoke:
+	@echo "==> Running docker-compose cloud stack smoke test..."
+	@./deploy/cloud/smoke.sh
+
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."
 	@./bin/orchestratorctl run start validation-run-01 validation-project || true

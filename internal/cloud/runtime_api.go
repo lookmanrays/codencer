@@ -75,14 +75,15 @@ func (s *Server) handleRuntimeConnectors(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		installation := RuntimeConnectorInstallation{
-			OrgID:       req.OrgID,
-			WorkspaceID: req.WorkspaceID,
-			ProjectID:   req.ProjectID,
-			ConnectorID: relayRecord.ConnectorID,
-			MachineID:   relayRecord.MachineID,
-			Label:       relayRecord.Label,
-			PublicKey:   relayRecord.PublicKey,
-			Enabled:     true,
+			OrgID:             req.OrgID,
+			WorkspaceID:       req.WorkspaceID,
+			ProjectID:         req.ProjectID,
+			OwnerMembershipID: token.MembershipID,
+			ConnectorID:       relayRecord.ConnectorID,
+			MachineID:         relayRecord.MachineID,
+			Label:             relayRecord.Label,
+			PublicKey:         relayRecord.PublicKey,
+			Enabled:           true,
 		}
 		if existing != nil {
 			installation = *existing
@@ -93,6 +94,9 @@ func (s *Server) handleRuntimeConnectors(w http.ResponseWriter, r *http.Request)
 			installation.MachineID = relayRecord.MachineID
 			installation.Label = relayRecord.Label
 			installation.PublicKey = relayRecord.PublicKey
+			if installation.OwnerMembershipID == "" {
+				installation.OwnerMembershipID = token.MembershipID
+			}
 		}
 		synced, _, err := s.syncRuntimeConnectorFromRelay(r.Context(), installation)
 		if err != nil {
@@ -274,7 +278,7 @@ func (s *Server) handleRuntimeInstanceByID(w http.ResponseWriter, r *http.Reques
 	switch {
 	case len(parts) == 1 && r.Method == http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{
-			"instance":           instance,
+			"instance":          instance,
 			"runtime_connector": connector,
 		})
 	case len(parts) >= 2:

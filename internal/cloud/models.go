@@ -12,10 +12,20 @@ const (
 	DefaultOrgStatus          = "active"
 	DefaultWorkspaceStatus    = "active"
 	DefaultProjectStatus      = "active"
+	DefaultMembershipStatus   = "active"
 	DefaultAPITokenKind       = "api"
 	DefaultInstallationStatus = "active"
+	DefaultInstallationHealth = "unknown"
 	DefaultRuntimeStatus      = "active"
 	DefaultRuntimeHealth      = "unknown"
+)
+
+const (
+	RoleOrgOwner        = "org_owner"
+	RoleOrgAdmin        = "org_admin"
+	RoleWorkspaceAdmin  = "workspace_admin"
+	RoleProjectOperator = "project_operator"
+	RoleProjectViewer   = "project_viewer"
 )
 
 // Org is the top-level tenant boundary for the cloud control plane.
@@ -51,22 +61,44 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// APIToken is a hashed bearer token record for cloud auth.
-type APIToken struct {
+// Membership is the minimal first-class operator/service membership record used
+// to attribute cloud control-plane actions and constrain token issuance.
+type Membership struct {
 	ID          string     `json:"id"`
 	OrgID       string     `json:"org_id"`
 	WorkspaceID string     `json:"workspace_id,omitempty"`
 	ProjectID   string     `json:"project_id,omitempty"`
 	Name        string     `json:"name"`
-	Kind        string     `json:"kind"`
-	TokenHash   string     `json:"token_hash"`
-	TokenPrefix string     `json:"token_prefix,omitempty"`
-	Scopes      []string   `json:"scopes,omitempty"`
-	Disabled    bool       `json:"disabled"`
+	Email       string     `json:"email,omitempty"`
+	Role        string     `json:"role"`
+	Status      string     `json:"status"`
+	DisabledAt  *time.Time `json:"disabled_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
-	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
-	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+}
+
+// APIToken is a hashed bearer token record for cloud auth.
+type APIToken struct {
+	ID                    string     `json:"id"`
+	OrgID                 string     `json:"org_id"`
+	WorkspaceID           string     `json:"workspace_id,omitempty"`
+	ProjectID             string     `json:"project_id,omitempty"`
+	MembershipID          string     `json:"membership_id,omitempty"`
+	Role                  string     `json:"role,omitempty"`
+	Name                  string     `json:"name"`
+	Kind                  string     `json:"kind"`
+	SubjectType           string     `json:"subject_type,omitempty"`
+	SubjectName           string     `json:"subject_name,omitempty"`
+	TokenHash             string     `json:"token_hash"`
+	TokenPrefix           string     `json:"token_prefix,omitempty"`
+	Scopes                []string   `json:"scopes,omitempty"`
+	Disabled              bool       `json:"disabled"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+	LastUsedAt            *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt             *time.Time `json:"revoked_at,omitempty"`
+	MembershipWorkspaceID string     `json:"-"`
+	MembershipProjectID   string     `json:"-"`
 }
 
 // ConnectorInstallation tracks an installation of a provider connector.
@@ -75,16 +107,21 @@ type ConnectorInstallation struct {
 	OrgID                  string          `json:"org_id"`
 	WorkspaceID            string          `json:"workspace_id,omitempty"`
 	ProjectID              string          `json:"project_id,omitempty"`
+	OwnerMembershipID      string          `json:"owner_membership_id,omitempty"`
 	ConnectorKey           string          `json:"connector_key"`
 	ExternalInstallationID string          `json:"external_installation_id,omitempty"`
 	ExternalAccount        string          `json:"external_account,omitempty"`
 	Name                   string          `json:"name,omitempty"`
 	Status                 string          `json:"status"`
 	Enabled                bool            `json:"enabled"`
+	Health                 string          `json:"health"`
 	ConfigJSON             json.RawMessage `json:"config_json,omitempty"`
 	MetadataJSON           json.RawMessage `json:"metadata_json,omitempty"`
 	LastSeenAt             *time.Time      `json:"last_seen_at,omitempty"`
 	LastSyncAt             *time.Time      `json:"last_sync_at,omitempty"`
+	LastValidatedAt        *time.Time      `json:"last_validated_at,omitempty"`
+	LastWebhookAt          *time.Time      `json:"last_webhook_at,omitempty"`
+	LastActionAt           *time.Time      `json:"last_action_at,omitempty"`
 	LastError              string          `json:"last_error,omitempty"`
 	CreatedAt              time.Time       `json:"created_at"`
 	UpdatedAt              time.Time       `json:"updated_at"`
@@ -92,22 +129,23 @@ type ConnectorInstallation struct {
 
 // RuntimeConnectorInstallation tracks a Codencer runtime connector/node inside a tenant scope.
 type RuntimeConnectorInstallation struct {
-	ID           string          `json:"id"`
-	OrgID        string          `json:"org_id"`
-	WorkspaceID  string          `json:"workspace_id,omitempty"`
-	ProjectID    string          `json:"project_id,omitempty"`
-	ConnectorID  string          `json:"connector_id"`
-	MachineID    string          `json:"machine_id"`
-	Label        string          `json:"label,omitempty"`
-	PublicKey    string          `json:"public_key,omitempty"`
-	Status       string          `json:"status"`
-	Enabled      bool            `json:"enabled"`
-	Health       string          `json:"health"`
-	MetadataJSON json.RawMessage `json:"metadata_json,omitempty"`
-	LastSeenAt   *time.Time      `json:"last_seen_at,omitempty"`
-	LastError    string          `json:"last_error,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID                string          `json:"id"`
+	OrgID             string          `json:"org_id"`
+	WorkspaceID       string          `json:"workspace_id,omitempty"`
+	ProjectID         string          `json:"project_id,omitempty"`
+	OwnerMembershipID string          `json:"owner_membership_id,omitempty"`
+	ConnectorID       string          `json:"connector_id"`
+	MachineID         string          `json:"machine_id"`
+	Label             string          `json:"label,omitempty"`
+	PublicKey         string          `json:"public_key,omitempty"`
+	Status            string          `json:"status"`
+	Enabled           bool            `json:"enabled"`
+	Health            string          `json:"health"`
+	MetadataJSON      json.RawMessage `json:"metadata_json,omitempty"`
+	LastSeenAt        *time.Time      `json:"last_seen_at,omitempty"`
+	LastError         string          `json:"last_error,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
 }
 
 // RuntimeInstance tracks a shared Codencer runtime instance owned by a runtime connector installation.

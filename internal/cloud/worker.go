@@ -151,6 +151,7 @@ func (w *Worker) syncJiraInstallation(ctx context.Context, installation Connecto
 		}
 	}
 	installation.Status = "active"
+	installation.Health = "healthy"
 	installation.LastError = ""
 	installation.Enabled = true
 	installation.LastSeenAt = &receivedAt
@@ -179,6 +180,7 @@ func (w *Worker) failInstallation(ctx context.Context, installation ConnectorIns
 	}
 	now := w.now()
 	installation.Status = "error"
+	installation.Health = "degraded"
 	installation.LastError = err.Error()
 	installation.LastSeenAt = &now
 	if _, updateErr := w.store.CreateConnectorInstallation(ctx, installation); updateErr != nil {

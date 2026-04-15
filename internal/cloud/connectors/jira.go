@@ -470,6 +470,22 @@ func (c *JiraConnector) Provider() Provider {
 	return ProviderJira
 }
 
+func (c *JiraConnector) ValidateConfig(cfg InstallationConfig) error {
+	if err := nonEmpty(cfg.APIBaseURL, "api_base_url"); err != nil {
+		return err
+	}
+	if err := nonEmpty(cfg.Username, "username"); err != nil {
+		return err
+	}
+	if err := nonEmpty(cfg.Token, "token"); err != nil {
+		return err
+	}
+	if cfg.Extras == nil || (strings.TrimSpace(cfg.Extras["jql"]) == "" && strings.TrimSpace(cfg.Extras["project_key"]) == "") {
+		return fmt.Errorf("jira installation requires config.jql or config.project_key")
+	}
+	return nil
+}
+
 func (c *JiraConnector) ValidateInstallation(ctx context.Context, cfg InstallationConfig) (ValidationResult, error) {
 	client := &JiraClient{
 		BaseURL:    cfg.APIBaseURL,

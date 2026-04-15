@@ -235,6 +235,44 @@ CREATE INDEX IF NOT EXISTS idx_runtime_instances_runtime_connector_installation_
 CREATE INDEX IF NOT EXISTS idx_runtime_instances_shared ON runtime_instances(shared);
 `,
 	},
+	{
+		version: 3,
+		sql: `
+CREATE TABLE IF NOT EXISTS memberships (
+	id TEXT PRIMARY KEY,
+	org_id TEXT NOT NULL,
+	workspace_id TEXT,
+	project_id TEXT,
+	name TEXT NOT NULL,
+	email TEXT,
+	role TEXT NOT NULL,
+	status TEXT NOT NULL,
+	disabled_at DATETIME,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE,
+	FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+	FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_memberships_org_id ON memberships(org_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_workspace_id ON memberships(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_project_id ON memberships(project_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_role ON memberships(role);
+
+ALTER TABLE api_tokens ADD COLUMN membership_id TEXT;
+ALTER TABLE api_tokens ADD COLUMN subject_type TEXT NOT NULL DEFAULT 'service';
+ALTER TABLE api_tokens ADD COLUMN subject_name TEXT;
+
+ALTER TABLE connector_installations ADD COLUMN owner_membership_id TEXT;
+ALTER TABLE connector_installations ADD COLUMN health TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE connector_installations ADD COLUMN last_validated_at DATETIME;
+ALTER TABLE connector_installations ADD COLUMN last_webhook_at DATETIME;
+ALTER TABLE connector_installations ADD COLUMN last_action_at DATETIME;
+
+ALTER TABLE runtime_connector_installations ADD COLUMN owner_membership_id TEXT;
+`,
+	},
 }
 
 // OpenStore opens or creates the cloud SQLite store and applies code-defined migrations.
@@ -542,6 +580,125 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 	return &project, nil
 }
 
+// CreateMembership inserts or updates a membership record.
+func (s *Store) CreateMembership(ctx context.Context, membership Membership) (*Membership, error) {
+	if strings.TrimSpace(membership.OrgID) == "" {
+		return nil, fmt.Errorf("membership org_id is required")
+	}
+	if strings.TrimSpace(membership.Name) == "" {
+		return nil, fmt.Errorf("membership name is required")
+	}
+	if strings.TrimSpace(membership.Role) == "" {
+		return nil, fmt.Errorf("membership role is required")
+	}
+	if membership.ID == "" {
+		id, err := newID("mem")
+		if err != nil {
+			return nil, err
+		}
+		membership.ID = id
+	}
+	if membership.Status == "" {
+		membership.Status = DefaultMembershipStatus
+	}
+	now := time.Now().UTC()
+	if membership.CreatedAt.IsZero() {
+		membership.CreatedAt = now
+	}
+	membership.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO memberships (
+			id, org_id, workspace_id, project_id, name, email, role, status, disabled_at, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			org_id = excluded.org_id,
+			workspace_id = excluded.workspace_id,
+			project_id = excluded.project_id,
+			name = excluded.name,
+			email = excluded.email,
+			role = excluded.role,
+			status = excluded.status,
+			disabled_at = excluded.disabled_at,
+			updated_at = excluded.updated_at
+	`, membership.ID, membership.OrgID, nullString(membership.WorkspaceID), nullString(membership.ProjectID), membership.Name, nullString(membership.Email), membership.Role, membership.Status, nullTime(membership.DisabledAt), membership.CreatedAt, membership.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("upsert membership: %w", err)
+	}
+	return &membership, nil
+}
+
+// GetMembership loads a membership by id.
+func (s *Store) GetMembership(ctx context.Context, id string) (*Membership, error) {
+	var membership Membership
+	var workspaceID sql.NullString
+	var projectID sql.NullString
+	var email sql.NullString
+	var disabledAt sql.NullTime
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id, org_id, workspace_id, project_id, name, email, role, status, disabled_at, created_at, updated_at
+		FROM memberships
+		WHERE id = ?
+	`, id).Scan(&membership.ID, &membership.OrgID, &workspaceID, &projectID, &membership.Name, &email, &membership.Role, &membership.Status, &disabledAt, &membership.CreatedAt, &membership.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound("membership", id)
+		}
+		return nil, fmt.Errorf("get membership: %w", err)
+	}
+	membership.WorkspaceID = workspaceID.String
+	membership.ProjectID = projectID.String
+	membership.Email = email.String
+	membership.DisabledAt = scanTime(disabledAt)
+	return &membership, nil
+}
+
+// ListMemberships returns memberships filtered by tenant scope.
+func (s *Store) ListMemberships(ctx context.Context, orgID, workspaceID, projectID string) ([]Membership, error) {
+	query := `
+		SELECT id, org_id, workspace_id, project_id, name, email, role, status, disabled_at, created_at, updated_at
+		FROM memberships
+	`
+	args := []any{}
+	clauses := make([]string, 0, 3)
+	if strings.TrimSpace(orgID) != "" {
+		clauses = append(clauses, "org_id = ?")
+		args = append(args, orgID)
+	}
+	if strings.TrimSpace(workspaceID) != "" {
+		clauses = append(clauses, "workspace_id = ?")
+		args = append(args, workspaceID)
+	}
+	if strings.TrimSpace(projectID) != "" {
+		clauses = append(clauses, "project_id = ?")
+		args = append(args, projectID)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list memberships: %w", err)
+	}
+	defer rows.Close()
+	var out []Membership
+	for rows.Next() {
+		var membership Membership
+		var workspaceID sql.NullString
+		var projectID sql.NullString
+		var email sql.NullString
+		var disabledAt sql.NullTime
+		if err := rows.Scan(&membership.ID, &membership.OrgID, &workspaceID, &projectID, &membership.Name, &email, &membership.Role, &membership.Status, &disabledAt, &membership.CreatedAt, &membership.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan membership: %w", err)
+		}
+		membership.WorkspaceID = workspaceID.String
+		membership.ProjectID = projectID.String
+		membership.Email = email.String
+		membership.DisabledAt = scanTime(disabledAt)
+		out = append(out, membership)
+	}
+	return out, rows.Err()
+}
+
 // ListProjects returns projects optionally filtered by workspace.
 func (s *Store) ListProjects(ctx context.Context, workspaceID string) ([]Project, error) {
 	query := `
@@ -591,6 +748,12 @@ func (s *Store) CreateAPIToken(ctx context.Context, token APIToken, rawToken str
 	if token.Kind == "" {
 		token.Kind = DefaultAPITokenKind
 	}
+	if token.SubjectType == "" {
+		token.SubjectType = "service"
+		if strings.TrimSpace(token.MembershipID) != "" {
+			token.SubjectType = "membership"
+		}
+	}
 	now := time.Now().UTC()
 	if token.CreatedAt.IsZero() {
 		token.CreatedAt = now
@@ -604,10 +767,10 @@ func (s *Store) CreateAPIToken(ctx context.Context, token APIToken, rawToken str
 	}
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO api_tokens (
-			id, org_id, workspace_id, project_id, name, kind, token_hash, token_prefix,
-			scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, token.ID, token.OrgID, nullString(token.WorkspaceID), nullString(token.ProjectID), token.Name, token.Kind, token.TokenHash, token.TokenPrefix, string(scopesJSON), boolToInt(token.Disabled), token.CreatedAt, token.UpdatedAt, nullTime(token.LastUsedAt), nullTime(token.RevokedAt))
+			id, org_id, workspace_id, project_id, membership_id, name, kind, subject_type, subject_name,
+			token_hash, token_prefix, scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, token.ID, token.OrgID, nullString(token.WorkspaceID), nullString(token.ProjectID), nullString(token.MembershipID), token.Name, token.Kind, token.SubjectType, nullString(token.SubjectName), token.TokenHash, token.TokenPrefix, string(scopesJSON), boolToInt(token.Disabled), token.CreatedAt, token.UpdatedAt, nullTime(token.LastUsedAt), nullTime(token.RevokedAt))
 	if err != nil {
 		return nil, fmt.Errorf("insert api token: %w", err)
 	}
@@ -624,14 +787,16 @@ func (s *Store) LookupAPIToken(ctx context.Context, rawToken string) (*APIToken,
 	var disabled int
 	var workspaceID sql.NullString
 	var projectID sql.NullString
+	var membershipID sql.NullString
+	var subjectName sql.NullString
 	var scopesJSON sql.NullString
 	var lastUsed sql.NullTime
 	var revoked sql.NullTime
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT id, org_id, workspace_id, project_id, name, kind, token_hash, token_prefix, scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
+		SELECT id, org_id, workspace_id, project_id, membership_id, name, kind, subject_type, subject_name, token_hash, token_prefix, scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
 		FROM api_tokens
 		WHERE token_hash = ?
-	`, hash).Scan(&token.ID, &token.OrgID, &workspaceID, &projectID, &token.Name, &token.Kind, &token.TokenHash, &token.TokenPrefix, &scopesJSON, &disabled, &token.CreatedAt, &token.UpdatedAt, &lastUsed, &revoked); err != nil {
+	`, hash).Scan(&token.ID, &token.OrgID, &workspaceID, &projectID, &membershipID, &token.Name, &token.Kind, &token.SubjectType, &subjectName, &token.TokenHash, &token.TokenPrefix, &scopesJSON, &disabled, &token.CreatedAt, &token.UpdatedAt, &lastUsed, &revoked); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrAPITokenNotFound
 		}
@@ -643,6 +808,8 @@ func (s *Store) LookupAPIToken(ctx context.Context, rawToken string) (*APIToken,
 	token.Disabled = disabled != 0
 	token.WorkspaceID = workspaceID.String
 	token.ProjectID = projectID.String
+	token.MembershipID = membershipID.String
+	token.SubjectName = subjectName.String
 	token.LastUsedAt = scanTime(lastUsed)
 	token.RevokedAt = scanTime(revoked)
 	return &token, nil
@@ -665,7 +832,7 @@ func (s *Store) TouchAPITokenUsage(ctx context.Context, tokenID string) error {
 // ListAPITokens returns token metadata for the requested scope.
 func (s *Store) ListAPITokens(ctx context.Context, orgID, workspaceID, projectID string) ([]APIToken, error) {
 	query := `
-		SELECT id, org_id, workspace_id, project_id, name, kind, token_hash, token_prefix, scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
+		SELECT id, org_id, workspace_id, project_id, membership_id, name, kind, subject_type, subject_name, token_hash, token_prefix, scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
 		FROM api_tokens
 	`
 	args := []any{}
@@ -697,10 +864,12 @@ func (s *Store) ListAPITokens(ctx context.Context, orgID, workspaceID, projectID
 		var disabled int
 		var workspaceID sql.NullString
 		var projectID sql.NullString
+		var membershipID sql.NullString
+		var subjectName sql.NullString
 		var scopesJSON sql.NullString
 		var lastUsed sql.NullTime
 		var revoked sql.NullTime
-		if err := rows.Scan(&token.ID, &token.OrgID, &workspaceID, &projectID, &token.Name, &token.Kind, &token.TokenHash, &token.TokenPrefix, &scopesJSON, &disabled, &token.CreatedAt, &token.UpdatedAt, &lastUsed, &revoked); err != nil {
+		if err := rows.Scan(&token.ID, &token.OrgID, &workspaceID, &projectID, &membershipID, &token.Name, &token.Kind, &token.SubjectType, &subjectName, &token.TokenHash, &token.TokenPrefix, &scopesJSON, &disabled, &token.CreatedAt, &token.UpdatedAt, &lastUsed, &revoked); err != nil {
 			return nil, fmt.Errorf("scan api token: %w", err)
 		}
 		if scopesJSON.Valid {
@@ -711,6 +880,8 @@ func (s *Store) ListAPITokens(ctx context.Context, orgID, workspaceID, projectID
 		token.Disabled = disabled != 0
 		token.WorkspaceID = workspaceID.String
 		token.ProjectID = projectID.String
+		token.MembershipID = membershipID.String
+		token.SubjectName = subjectName.String
 		token.LastUsedAt = scanTime(lastUsed)
 		token.RevokedAt = scanTime(revoked)
 		out = append(out, token)
@@ -736,6 +907,9 @@ func (s *Store) CreateConnectorInstallation(ctx context.Context, installation Co
 	if installation.Status == "" {
 		installation.Status = DefaultInstallationStatus
 	}
+	if installation.Health == "" {
+		installation.Health = DefaultInstallationHealth
+	}
 	if !installation.Enabled && installation.Status == DefaultInstallationStatus {
 		installation.Enabled = true
 	}
@@ -747,9 +921,9 @@ func (s *Store) CreateConnectorInstallation(ctx context.Context, installation Co
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO connector_installations (
 			id, org_id, workspace_id, project_id, connector_key, external_installation_id,
-			external_account, name, status, enabled, config_json, metadata_json, last_seen_at,
-			last_sync_at, last_error, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			external_account, name, owner_membership_id, status, enabled, health, config_json, metadata_json, last_seen_at,
+			last_sync_at, last_validated_at, last_webhook_at, last_action_at, last_error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			org_id = excluded.org_id,
 			workspace_id = excluded.workspace_id,
@@ -758,15 +932,20 @@ func (s *Store) CreateConnectorInstallation(ctx context.Context, installation Co
 			external_installation_id = excluded.external_installation_id,
 			external_account = excluded.external_account,
 			name = excluded.name,
+			owner_membership_id = excluded.owner_membership_id,
 			status = excluded.status,
 			enabled = excluded.enabled,
+			health = excluded.health,
 			config_json = excluded.config_json,
 			metadata_json = excluded.metadata_json,
 			last_seen_at = excluded.last_seen_at,
 			last_sync_at = excluded.last_sync_at,
+			last_validated_at = excluded.last_validated_at,
+			last_webhook_at = excluded.last_webhook_at,
+			last_action_at = excluded.last_action_at,
 			last_error = excluded.last_error,
 			updated_at = excluded.updated_at
-	`, installation.ID, installation.OrgID, nullString(installation.WorkspaceID), nullString(installation.ProjectID), installation.ConnectorKey, nullString(installation.ExternalInstallationID), nullString(installation.ExternalAccount), nullString(installation.Name), installation.Status, boolToInt(installation.Enabled), rawMessage(installation.ConfigJSON), rawMessage(installation.MetadataJSON), nullTime(installation.LastSeenAt), nullTime(installation.LastSyncAt), nullString(installation.LastError), installation.CreatedAt, installation.UpdatedAt)
+	`, installation.ID, installation.OrgID, nullString(installation.WorkspaceID), nullString(installation.ProjectID), installation.ConnectorKey, nullString(installation.ExternalInstallationID), nullString(installation.ExternalAccount), nullString(installation.Name), nullString(installation.OwnerMembershipID), installation.Status, boolToInt(installation.Enabled), installation.Health, rawMessage(installation.ConfigJSON), rawMessage(installation.MetadataJSON), nullTime(installation.LastSeenAt), nullTime(installation.LastSyncAt), nullTime(installation.LastValidatedAt), nullTime(installation.LastWebhookAt), nullTime(installation.LastActionAt), nullString(installation.LastError), installation.CreatedAt, installation.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("upsert connector installation: %w", err)
 	}
@@ -782,18 +961,22 @@ func (s *Store) GetConnectorInstallation(ctx context.Context, id string) (*Conne
 	var externalInstallationID sql.NullString
 	var externalAccount sql.NullString
 	var name sql.NullString
+	var ownerMembershipID sql.NullString
 	var configJSON sql.NullString
 	var metadataJSON sql.NullString
 	var lastSeen sql.NullTime
 	var lastSync sql.NullTime
+	var lastValidated sql.NullTime
+	var lastWebhook sql.NullTime
+	var lastAction sql.NullTime
 	var lastError sql.NullString
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT id, org_id, workspace_id, project_id, connector_key, external_installation_id,
-		       external_account, name, status, enabled, config_json, metadata_json,
-		       last_seen_at, last_sync_at, last_error, created_at, updated_at
+		       external_account, name, owner_membership_id, status, enabled, health, config_json, metadata_json,
+		       last_seen_at, last_sync_at, last_validated_at, last_webhook_at, last_action_at, last_error, created_at, updated_at
 		FROM connector_installations
 		WHERE id = ?
-	`, id).Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorKey, &externalInstallationID, &externalAccount, &name, &installation.Status, &enabled, &configJSON, &metadataJSON, &lastSeen, &lastSync, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
+	`, id).Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorKey, &externalInstallationID, &externalAccount, &name, &ownerMembershipID, &installation.Status, &enabled, &installation.Health, &configJSON, &metadataJSON, &lastSeen, &lastSync, &lastValidated, &lastWebhook, &lastAction, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound("connector installation", id)
 		}
@@ -805,10 +988,14 @@ func (s *Store) GetConnectorInstallation(ctx context.Context, id string) (*Conne
 	installation.ExternalInstallationID = externalInstallationID.String
 	installation.ExternalAccount = externalAccount.String
 	installation.Name = name.String
+	installation.OwnerMembershipID = ownerMembershipID.String
 	installation.ConfigJSON = rawMessageFromNull(configJSON)
 	installation.MetadataJSON = rawMessageFromNull(metadataJSON)
 	installation.LastSeenAt = scanTime(lastSeen)
 	installation.LastSyncAt = scanTime(lastSync)
+	installation.LastValidatedAt = scanTime(lastValidated)
+	installation.LastWebhookAt = scanTime(lastWebhook)
+	installation.LastActionAt = scanTime(lastAction)
 	installation.LastError = lastError.String
 	return &installation, nil
 }
@@ -836,8 +1023,8 @@ func (s *Store) DeleteConnectorInstallation(ctx context.Context, installationID 
 func (s *Store) ListConnectorInstallations(ctx context.Context, orgID, workspaceID, projectID string) ([]ConnectorInstallation, error) {
 	query := `
 		SELECT id, org_id, workspace_id, project_id, connector_key, external_installation_id,
-		       external_account, name, status, enabled, config_json, metadata_json,
-		       last_seen_at, last_sync_at, last_error, created_at, updated_at
+		       external_account, name, owner_membership_id, status, enabled, health, config_json, metadata_json,
+		       last_seen_at, last_sync_at, last_validated_at, last_webhook_at, last_action_at, last_error, created_at, updated_at
 		FROM connector_installations
 	`
 	args := []any{}
@@ -872,12 +1059,16 @@ func (s *Store) ListConnectorInstallations(ctx context.Context, orgID, workspace
 		var externalInstallationID sql.NullString
 		var externalAccount sql.NullString
 		var name sql.NullString
+		var ownerMembershipID sql.NullString
 		var configJSON sql.NullString
 		var metadataJSON sql.NullString
 		var lastSeen sql.NullTime
 		var lastSync sql.NullTime
+		var lastValidated sql.NullTime
+		var lastWebhook sql.NullTime
+		var lastAction sql.NullTime
 		var lastError sql.NullString
-		if err := rows.Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorKey, &externalInstallationID, &externalAccount, &name, &installation.Status, &enabled, &configJSON, &metadataJSON, &lastSeen, &lastSync, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
+		if err := rows.Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorKey, &externalInstallationID, &externalAccount, &name, &ownerMembershipID, &installation.Status, &enabled, &installation.Health, &configJSON, &metadataJSON, &lastSeen, &lastSync, &lastValidated, &lastWebhook, &lastAction, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan connector installation: %w", err)
 		}
 		installation.Enabled = enabled != 0
@@ -886,10 +1077,14 @@ func (s *Store) ListConnectorInstallations(ctx context.Context, orgID, workspace
 		installation.ExternalInstallationID = externalInstallationID.String
 		installation.ExternalAccount = externalAccount.String
 		installation.Name = name.String
+		installation.OwnerMembershipID = ownerMembershipID.String
 		installation.ConfigJSON = rawMessageFromNull(configJSON)
 		installation.MetadataJSON = rawMessageFromNull(metadataJSON)
 		installation.LastSeenAt = scanTime(lastSeen)
 		installation.LastSyncAt = scanTime(lastSync)
+		installation.LastValidatedAt = scanTime(lastValidated)
+		installation.LastWebhookAt = scanTime(lastWebhook)
+		installation.LastActionAt = scanTime(lastAction)
 		installation.LastError = lastError.String
 		out = append(out, installation)
 	}
@@ -927,15 +1122,16 @@ func (s *Store) GetRuntimeConnectorInstallation(ctx context.Context, id string) 
 	var projectID sql.NullString
 	var label sql.NullString
 	var publicKey sql.NullString
+	var ownerMembershipID sql.NullString
 	var metadataJSON sql.NullString
 	var lastSeen sql.NullTime
 	var lastError sql.NullString
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT id, org_id, workspace_id, project_id, connector_id, machine_id, label, public_key, status, enabled, health,
+		SELECT id, org_id, workspace_id, project_id, owner_membership_id, connector_id, machine_id, label, public_key, status, enabled, health,
 		       metadata_json, last_seen_at, last_error, created_at, updated_at
 		FROM runtime_connector_installations
 		WHERE id = ?
-	`, id).Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorID, &installation.MachineID, &label, &publicKey, &installation.Status, &enabled, &installation.Health, &metadataJSON, &lastSeen, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
+	`, id).Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &ownerMembershipID, &installation.ConnectorID, &installation.MachineID, &label, &publicKey, &installation.Status, &enabled, &installation.Health, &metadataJSON, &lastSeen, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound("runtime connector installation", id)
 		}
@@ -944,6 +1140,7 @@ func (s *Store) GetRuntimeConnectorInstallation(ctx context.Context, id string) 
 	installation.Enabled = enabled != 0
 	installation.WorkspaceID = workspaceID.String
 	installation.ProjectID = projectID.String
+	installation.OwnerMembershipID = ownerMembershipID.String
 	installation.Label = label.String
 	installation.PublicKey = publicKey.String
 	installation.MetadataJSON = rawMessageFromNull(metadataJSON)
@@ -955,7 +1152,7 @@ func (s *Store) GetRuntimeConnectorInstallation(ctx context.Context, id string) 
 // ListRuntimeConnectorInstallations returns runtime connector installations optionally filtered by org/workspace/project.
 func (s *Store) ListRuntimeConnectorInstallations(ctx context.Context, orgID, workspaceID, projectID string) ([]RuntimeConnectorInstallation, error) {
 	query := `
-		SELECT id, org_id, workspace_id, project_id, connector_id, machine_id, label, public_key, status, enabled, health,
+		SELECT id, org_id, workspace_id, project_id, owner_membership_id, connector_id, machine_id, label, public_key, status, enabled, health,
 		       metadata_json, last_seen_at, last_error, created_at, updated_at
 		FROM runtime_connector_installations
 	`
@@ -988,17 +1185,19 @@ func (s *Store) ListRuntimeConnectorInstallations(ctx context.Context, orgID, wo
 		var enabled int
 		var workspaceID sql.NullString
 		var projectID sql.NullString
+		var ownerMembershipID sql.NullString
 		var label sql.NullString
 		var publicKey sql.NullString
 		var metadataJSON sql.NullString
 		var lastSeen sql.NullTime
 		var lastError sql.NullString
-		if err := rows.Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorID, &installation.MachineID, &label, &publicKey, &installation.Status, &enabled, &installation.Health, &metadataJSON, &lastSeen, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
+		if err := rows.Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &ownerMembershipID, &installation.ConnectorID, &installation.MachineID, &label, &publicKey, &installation.Status, &enabled, &installation.Health, &metadataJSON, &lastSeen, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan runtime connector installation: %w", err)
 		}
 		installation.Enabled = enabled != 0
 		installation.WorkspaceID = workspaceID.String
 		installation.ProjectID = projectID.String
+		installation.OwnerMembershipID = ownerMembershipID.String
 		installation.Label = label.String
 		installation.PublicKey = publicKey.String
 		installation.MetadataJSON = rawMessageFromNull(metadataJSON)
@@ -1152,13 +1351,14 @@ func (s *Store) upsertRuntimeConnectorInstallation(ctx context.Context, installa
 	installation.UpdatedAt = now
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO runtime_connector_installations (
-			id, org_id, workspace_id, project_id, connector_id, machine_id, label, public_key,
+			id, org_id, workspace_id, project_id, owner_membership_id, connector_id, machine_id, label, public_key,
 			status, enabled, health, metadata_json, last_seen_at, last_error, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			org_id = excluded.org_id,
 			workspace_id = excluded.workspace_id,
 			project_id = excluded.project_id,
+			owner_membership_id = excluded.owner_membership_id,
 			connector_id = excluded.connector_id,
 			machine_id = excluded.machine_id,
 			label = excluded.label,
@@ -1170,7 +1370,7 @@ func (s *Store) upsertRuntimeConnectorInstallation(ctx context.Context, installa
 			last_seen_at = excluded.last_seen_at,
 			last_error = excluded.last_error,
 			updated_at = excluded.updated_at
-	`, installation.ID, installation.OrgID, nullString(installation.WorkspaceID), nullString(installation.ProjectID), installation.ConnectorID, installation.MachineID, nullString(installation.Label), nullString(installation.PublicKey), installation.Status, boolToInt(installation.Enabled), installation.Health, rawMessage(installation.MetadataJSON), nullTime(installation.LastSeenAt), nullString(installation.LastError), installation.CreatedAt, installation.UpdatedAt)
+	`, installation.ID, installation.OrgID, nullString(installation.WorkspaceID), nullString(installation.ProjectID), nullString(installation.OwnerMembershipID), installation.ConnectorID, installation.MachineID, nullString(installation.Label), nullString(installation.PublicKey), installation.Status, boolToInt(installation.Enabled), installation.Health, rawMessage(installation.MetadataJSON), nullTime(installation.LastSeenAt), nullString(installation.LastError), installation.CreatedAt, installation.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("upsert runtime connector installation: %w", err)
 	}

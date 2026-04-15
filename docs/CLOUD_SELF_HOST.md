@@ -11,6 +11,19 @@ This guide covers the practical self-host bootstrap path for Codencer Cloud.
 
 The cloud control plane still does not execute coding work. In this pass it can also claim runtime connectors and shared instances into org/workspace/project scope, but the daemon and connector still execute and report locally.
 
+## Docker Baseline
+
+The repo now includes a practical Docker baseline under `deploy/cloud/`:
+
+- `deploy/cloud/Dockerfile`
+- `deploy/cloud/docker-compose.yml`
+- `deploy/cloud/.env.example`
+- `deploy/cloud/config/cloud.json`
+- `deploy/cloud/config/relay.json`
+- `deploy/cloud/smoke.sh`
+
+This stack is still alpha-grade and SQLite-backed. It is meant to be a serious self-host baseline, not a production-ready managed deployment recipe.
+
 ## Build
 
 Build the cloud binaries with:
@@ -24,6 +37,61 @@ This produces:
 - `bin/codencer-cloudctl`
 - `bin/codencer-cloudd`
 - `bin/codencer-cloudworkerd`
+
+## Docker Compose Quickstart
+
+1. Copy the env file and set the required secrets:
+
+```bash
+cp deploy/cloud/.env.example deploy/cloud/.env
+```
+
+Set at least:
+
+- `CODENCER_CLOUD_MASTER_KEY`
+- `RELAY_PLANNER_TOKEN`
+- `RELAY_ENROLLMENT_SECRET`
+
+2. Bootstrap the SQLite store before starting the cloud service:
+
+```bash
+docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml run --rm \
+  --entrypoint codencer-cloudctl cloud \
+  bootstrap \
+  --config /etc/codencer/cloud/config.json \
+  --org-slug acme \
+  --workspace-slug platform \
+  --project-slug core \
+  --token-name operator \
+  --member-name "Bootstrap Owner" \
+  --member-email owner@example.com \
+  --json
+```
+
+3. Start the cloud daemon and worker:
+
+```bash
+docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml up -d cloud worker
+```
+
+4. Check health:
+
+```bash
+curl -fsS http://127.0.0.1:8190/healthz
+```
+
+5. Optional deployment smoke:
+
+```bash
+make cloud-stack-smoke
+```
+
+Persistent state in the compose baseline lives in named volumes:
+
+- `cloud-data` for the cloud SQLite database
+- `relay-data` for the composed relay SQLite database
+
+The committed JSON config files are templates. Secrets still come from the compose env file through runtime environment overrides.
 
 ## Cloud Config
 
@@ -64,6 +132,7 @@ The bootstrap response includes:
 - `org`
 - `workspace`
 - `project`
+- `membership`
 - a raw bearer token string
 - the persisted token record
 
@@ -83,6 +152,13 @@ Cloud plus relay composition:
 
 In composed mode, use the cloud API for tenant-scoped runtime control. Do not treat raw relay routes as the cloud contract.
 
+Cloud-scoped MCP is also available in composed mode:
+
+- canonical cloud MCP endpoint: `/api/cloud/v1/mcp`
+- compatibility alias: `/api/cloud/v1/mcp/call`
+
+Use relay `/mcp` only when you are operating the self-host relay directly without cloud tenancy.
+
 ## Operator Commands
 
 Use the bearer token from bootstrap with the cloud control-plane CLI:
@@ -92,6 +168,7 @@ Use the bearer token from bootstrap with the cloud control-plane CLI:
 curl -fsS -H "Authorization: Bearer <token>" http://127.0.0.1:8190/api/cloud/v1/orgs
 curl -fsS -H "Authorization: Bearer <token>" "http://127.0.0.1:8190/api/cloud/v1/workspaces?org_id=<org-id>"
 curl -fsS -H "Authorization: Bearer <token>" "http://127.0.0.1:8190/api/cloud/v1/projects?workspace_id=<workspace-id>"
+curl -fsS -H "Authorization: Bearer <token>" "http://127.0.0.1:8190/api/cloud/v1/memberships?org_id=<org-id>"
 curl -fsS -H "Authorization: Bearer <token>" "http://127.0.0.1:8190/api/cloud/v1/tokens?org_id=<org-id>"
 curl -fsS -H "Authorization: Bearer <token>" "http://127.0.0.1:8190/api/cloud/v1/installations?org_id=<org-id>"
 ./bin/codencer-cloudctl events --cloud-url http://127.0.0.1:8190 --token <token> --json
@@ -120,6 +197,16 @@ Then toggle the installation explicitly:
 ./bin/codencer-cloudctl install disable --cloud-url http://127.0.0.1:8190 --token <token> --installation-id <installation-id>
 ./bin/codencer-cloudctl install enable --cloud-url http://127.0.0.1:8190 --token <token> --installation-id <installation-id>
 ```
+
+Installation records now expose:
+
+- `owner_membership_id`
+- `health`
+- `last_validated_at`
+- `last_webhook_at`
+- `last_action_at`
+- `last_sync_at`
+- `last_error`
 
 ## Claim Codencer Runtime Into Cloud Scope
 
@@ -155,6 +242,38 @@ curl -fsS \
 ```
 
 Runtime steps, gates, logs, validations, and artifact content follow the same instance-scoped prefix under `/api/cloud/v1/runtime/instances/<instance-id>/...`.
+
+The same tenant-scoped runtime access is also available through cloud MCP once the runtime bridge is active:
+
+```bash
+make build-mcp-sdk-smoke
+./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8190/api/cloud/v1/mcp --token <token> --instance-id <instance-id>
+```
+
+## Connector Ingress In Composed Mode
+
+When `codencer-cloudd` is started with the relay bridge, the cloud host itself accepts local Codencer connector ingress:
+
+- `POST /api/v2/connectors/enroll`
+- `POST /api/v2/connectors/challenge`
+- `GET /ws/connectors`
+
+That means a local Codencer connector can point its relay URL at the cloud host in composed mode.
+
+Current limitation:
+
+- enrollment-token creation is still relay-config backed and is not yet a cloud-native API lifecycle
+
+For docker-compose based operators, the same image includes the relay admin CLI, so you can mint an enrollment token with:
+
+```bash
+docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml run --rm \
+  --entrypoint codencer-relayd cloud \
+  enrollment-token create \
+  --config /etc/codencer/relay/config.json \
+  --label local-dev \
+  --json
+```
 
 ## Worker
 
@@ -192,6 +311,22 @@ The repo includes `scripts/cloud_smoke.sh` and a `make cloud-smoke` target. The 
 
 It does not claim external provider verification.
 
+For the Docker-based deployment baseline, use:
+
+```bash
+make cloud-stack-smoke
+```
+
+That compose smoke verifies:
+
+- image build
+- bootstrap through the mounted config and SQLite volume
+- cloud health on the published port
+- installation create
+- audit visibility
+
+It requires a running Docker daemon. In environments where Docker CLI is installed but the daemon/socket is unavailable, use `docker compose ... config` plus the binary-native `make cloud-smoke` path instead.
+
 ## Troubleshooting
 
 - If `bootstrap` or `status` fail, confirm the cloud server is using the same `db_path` as your config.
@@ -199,6 +334,7 @@ It does not claim external provider verification.
 - If a connector install remains `disabled`, check the enable route and the audit trail.
 - If runtime connector claim fails, confirm the relay bridge is configured and that the target connector id already exists in relay state.
 - If a runtime instance does not appear, confirm it is still shared by the local Codencer connector.
+- If cloud MCP calls fail, confirm the cloud daemon was started with `relay_config_path` or `--relay-config` and that the token includes `runtime_instances:read` plus the tool-specific scopes.
 - If Jira polling fails, confirm `config.jql` or `config.project_key` is present and that the provider credentials are valid.
 
 For connector capability details, see [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md). For the high-level cloud overview, see [CLOUD.md](CLOUD.md).

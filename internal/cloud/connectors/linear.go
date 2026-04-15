@@ -331,6 +331,16 @@ func (c *LinearConnector) Provider() Provider {
 	return ProviderLinear
 }
 
+func (c *LinearConnector) ValidateConfig(cfg InstallationConfig) error {
+	if err := nonEmpty(cfg.APIBaseURL, "api_base_url"); err != nil {
+		return err
+	}
+	if err := nonEmpty(cfg.Token, "token"); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *LinearConnector) ValidateInstallation(ctx context.Context, cfg InstallationConfig) (ValidationResult, error) {
 	client := &LinearClient{
 		BaseURL:    cfg.APIBaseURL,

@@ -2,6 +2,54 @@
 
 Last updated: 2026-04-15
 
+## Current Cloud Hardening Pass
+
+Mission for this pass:
+
+- add a cloud-scoped canonical remote surface decision and implementation
+- harden tenancy with memberships, roles, and better audit attribution
+- deepen the priority connector lifecycle without adding more connector breadth
+- add a real Docker-based self-host baseline and deployment smoke
+
+Exact blockers locked for this pass:
+
+1. Cloud-scoped runtime control had no cloud MCP surface
+2. Tenancy lacked first-class memberships, roles, and ownership semantics
+3. Provider installations lacked stronger owner/health/timestamp lifecycle depth
+4. The repo had no Docker deployment baseline for the cloud stack
+
+### Current Hardening Ownership Map
+
+- Access and cloud MCP:
+  - `internal/cloud/auth.go`
+  - `internal/cloud/router.go`
+  - `internal/cloud/server.go`
+  - `internal/cloud/mcp_server.go`
+  - `internal/cloud/mcp_tools.go`
+  - `internal/cloud/membership_api.go`
+  - `cmd/codencer-cloudctl/main.go`
+- Connector lifecycle hardening:
+  - `internal/cloud/connectors/*`
+  - `internal/cloud/worker.go`
+- Deployment baseline:
+  - `deploy/cloud/*`
+  - `Makefile`
+- Truth/docs:
+  - `README.md`
+  - `docs/CLOUD.md`
+  - `docs/CLOUD_CONNECTORS.md`
+  - `docs/CLOUD_SELF_HOST.md`
+  - this file
+
+### Current Hardening Verification Ledger
+
+| Merge | Scope | Checks | Result | Notes |
+| --- | --- | --- | --- | --- |
+| 1 | membership + role + audit attribution + cloud MCP | `go test ./internal/cloud/... ./cmd/codencer-cloudctl ./cmd/codencer-cloudd ./cmd/codencer-cloudworkerd` | passed | API and cloud MCP coverage landed together |
+| 2 | connector lifecycle hardening | `go test ./internal/cloud/connectors ./internal/cloud/...` | passed | provider config validation and lifecycle persistence remained green |
+| 3 | deployment baseline | `docker compose --env-file deploy/cloud/.env.example -f deploy/cloud/docker-compose.yml config` | passed | compose file, env wiring, mounts, and healthcheck syntax validated |
+| 4 | compose smoke | `./deploy/cloud/smoke.sh` | blocked | Docker CLI was installed, but the Docker daemon/socket was unavailable in this environment, so the stack could not be started live |
+
 ## Current Deepening Pass
 
 This pass is narrower than the original cloud-foundation push.
