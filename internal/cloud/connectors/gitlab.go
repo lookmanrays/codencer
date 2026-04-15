@@ -60,9 +60,10 @@ func (c *GitLabConnector) ValidateInstallation(ctx context.Context, cfg Installa
 		Identity:  response.Username,
 		CheckedAt: nowUTC(),
 		Details: map[string]string{
-			"user_id": strconv.FormatInt(response.ID, 10),
-			"name":    response.Name,
-			"web_url": response.WebURL,
+			"user_id":  strconv.FormatInt(response.ID, 10),
+			"name":     response.Name,
+			"username": response.Username,
+			"web_url":  response.WebURL,
 		},
 		Message: "token validated against GitLab user endpoint",
 	}, nil
@@ -139,20 +140,34 @@ func (c *GitLabConnector) ExecuteAction(ctx context.Context, req ActionRequest, 
 	if err := nonEmpty(cfg.Token, "token"); err != nil {
 		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	if req.Action != ActionGitLabCreateIssueNote {
+	switch req.Action {
+	case ActionGitLabCreateIssueNote:
+		if err := nonEmpty(req.Project, "project"); err != nil {
+			return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		if req.IssueNumber <= 0 {
+			err := fmt.Errorf("issue_number must be greater than zero")
+			return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		if err := nonEmpty(req.Body, "body"); err != nil {
+			return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return c.createGitLabIssueNote(ctx, req, cfg)
+	case ActionGitLabCreateIssue:
+		if err := nonEmpty(req.Project, "project"); err != nil {
+			return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		if err := nonEmpty(req.Title, "title"); err != nil {
+			return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return c.createGitLabIssue(ctx, req, cfg)
+	default:
 		err := fmt.Errorf("unsupported gitlab action %q", req.Action)
 		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	if err := nonEmpty(req.Project, "project"); err != nil {
-		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
-	if req.IssueNumber <= 0 {
-		err := fmt.Errorf("issue_number must be greater than zero")
-		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
-	if err := nonEmpty(req.Body, "body"); err != nil {
-		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
+}
+
+func (c *GitLabConnector) createGitLabIssueNote(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
 	baseURL, err := resolveAPIBase(gitlabDefaultAPIBaseURL, cfg.APIBaseURL)
 	if err != nil {
 		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
@@ -192,6 +207,56 @@ func (c *GitLabConnector) ExecuteAction(ctx context.Context, req ActionRequest, 
 		URL:        response.WebURL,
 		CheckedAt:  nowUTC(),
 		Message:    "gitlab issue note created",
+	}, nil
+}
+
+func (c *GitLabConnector) createGitLabIssue(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
+	baseURL, err := resolveAPIBase(gitlabDefaultAPIBaseURL, cfg.APIBaseURL)
+	if err != nil {
+		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	endpoint, err := apiURL(baseURL, "projects", req.Project, "issues")
+	if err != nil {
+		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	form := url.Values{}
+	form.Set("title", req.Title)
+	if strings.TrimSpace(req.Description) != "" {
+		form.Set("description", req.Description)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	httpReq.Header.Set("PRIVATE-TOKEN", cfg.Token)
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("User-Agent", userAgent)
+	var response struct {
+		ID     int64  `json:"id"`
+		IID    int    `json:"iid"`
+		WebURL string `json:"web_url"`
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	if err := readJSONResponse(resp, &response); err != nil {
+		return ActionResult{Provider: ProviderGitLab, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	externalID := strconv.FormatInt(response.ID, 10)
+	if response.IID > 0 {
+		externalID = strconv.Itoa(response.IID)
+	}
+	return ActionResult{
+		Provider:   ProviderGitLab,
+		Action:     req.Action,
+		OK:         true,
+		StatusCode: resp.StatusCode,
+		ExternalID: externalID,
+		URL:        response.WebURL,
+		CheckedAt:  nowUTC(),
+		Message:    "gitlab issue created",
 	}, nil
 }
 

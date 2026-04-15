@@ -16,6 +16,7 @@ CLOUD_PROJECT_NAME="${CLOUD_PROJECT_NAME:-Smoke Project}"
 CLOUD_TOKEN_NAME="${CLOUD_TOKEN_NAME:-smoke-operator}"
 KEEP_CLOUD_SMOKE_STATE="${KEEP_CLOUD_SMOKE_STATE:-0}"
 RELAY_CONFIG="${CLOUD_RELAY_CONFIG:-}"
+CLOUD_RUNTIME_CONNECTOR_ID="${CLOUD_RUNTIME_CONNECTOR_ID:-}"
 
 CLOUD_DB="$TMP_DIR/cloud.db"
 CLOUD_CONFIG="$TMP_DIR/cloud.json"
@@ -242,6 +243,9 @@ INSTALL_GET_JSON="$TMP_DIR/install-get.json"
 INSTALL_DISABLE_JSON="$TMP_DIR/install-disable.json"
 INSTALL_ENABLE_JSON="$TMP_DIR/install-enable.json"
 AUDIT_JSON="$TMP_DIR/audit.json"
+RUNTIME_CLAIM_JSON="$TMP_DIR/runtime-claim.json"
+RUNTIME_CONNECTORS_JSON="$TMP_DIR/runtime-connectors.json"
+RUNTIME_INSTANCES_JSON="$TMP_DIR/runtime-instances.json"
 WORKER_LOG="$TMP_DIR/cloud-worker.log"
 
 "$BIN_DIR/codencer-cloudctl" status --cloud-url "$CLOUD_URL" --token "$BOOTSTRAP_TOKEN" --json > "$STATUS_JSON"
@@ -331,6 +335,42 @@ for want in create_installation disable_installation enable_installation; do
     exit 1
   fi
 done
+
+if [[ -n "$RELAY_CONFIG" && -n "$CLOUD_RUNTIME_CONNECTOR_ID" ]]; then
+  "$BIN_DIR/codencer-cloudctl" runtime-connectors claim \
+    --cloud-url "$CLOUD_URL" \
+    --token "$BOOTSTRAP_TOKEN" \
+    --org-id "$ORG_ID" \
+    --workspace-id "$WORKSPACE_ID" \
+    --project-id "$PROJECT_ID" \
+    --connector-id "$CLOUD_RUNTIME_CONNECTOR_ID" \
+    --json > "$RUNTIME_CLAIM_JSON"
+
+  RUNTIME_CONNECTOR_RECORD_ID="$(json_get "$RUNTIME_CLAIM_JSON" '.id')"
+  if [[ -z "$RUNTIME_CONNECTOR_RECORD_ID" ]]; then
+    echo "ERROR: runtime connector claim did not return a record id." >&2
+    cat "$RUNTIME_CLAIM_JSON" >&2
+    exit 1
+  fi
+
+  "$BIN_DIR/codencer-cloudctl" runtime-connectors list \
+    --cloud-url "$CLOUD_URL" \
+    --token "$BOOTSTRAP_TOKEN" \
+    --org-id "$ORG_ID" \
+    --json > "$RUNTIME_CONNECTORS_JSON"
+
+  "$BIN_DIR/codencer-cloudctl" runtime-instances list \
+    --cloud-url "$CLOUD_URL" \
+    --token "$BOOTSTRAP_TOKEN" \
+    --org-id "$ORG_ID" \
+    --json > "$RUNTIME_INSTANCES_JSON"
+
+  if ! grep -q "$CLOUD_RUNTIME_CONNECTOR_ID" "$RUNTIME_CONNECTORS_JSON"; then
+    echo "ERROR: runtime connector list did not include the claimed relay connector." >&2
+    cat "$RUNTIME_CONNECTORS_JSON" >&2
+    exit 1
+  fi
+fi
 
 "$BIN_DIR/codencer-cloudworkerd" --config "$CLOUD_CONFIG" --once > "$WORKER_LOG" 2>&1
 

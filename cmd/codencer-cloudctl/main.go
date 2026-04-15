@@ -24,7 +24,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: codencer-cloudctl <bootstrap|status|orgs|workspaces|projects|tokens|install|events|audit> [flags]")
+		return fmt.Errorf("usage: codencer-cloudctl <bootstrap|status|orgs|workspaces|projects|tokens|install|runtime-connectors|runtime-instances|events|audit> [flags]")
 	}
 	switch args[0] {
 	case "bootstrap":
@@ -45,6 +45,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runTokens(args[1:], stdout, stderr)
 	case "install":
 		return runInstall(args[1:], stdout, stderr)
+	case "runtime-connectors":
+		return runRuntimeConnectors(args[1:], stdout, stderr)
+	case "runtime-instances":
+		return runRuntimeInstances(args[1:], stdout, stderr)
 	case "events":
 		return runEvents(args[1:], stdout, stderr)
 	case "audit":
@@ -72,7 +76,21 @@ func runBootstrap(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if len(scopes) == 0 {
-		scopes = append(scopes, "cloud:admin", "cloud:read", "orgs:read", "orgs:write", "workspaces:read", "workspaces:write", "projects:read", "projects:write", "tokens:read", "tokens:write", "installations:read", "installations:write", "events:read", "audit:read")
+		scopes = append(scopes,
+			"cloud:admin", "cloud:read",
+			"orgs:read", "orgs:write",
+			"workspaces:read", "workspaces:write",
+			"projects:read", "projects:write",
+			"tokens:read", "tokens:write",
+			"installations:read", "installations:write",
+			"runtime_connectors:read", "runtime_connectors:write",
+			"runtime_instances:read",
+			"runs:read", "runs:write",
+			"steps:read", "steps:write",
+			"artifacts:read",
+			"gates:read", "gates:write",
+			"events:read", "audit:read",
+		)
 	}
 
 	cfg, err := cloud.LoadConfig(*configPath)
@@ -143,7 +161,7 @@ func runBootstrap(args []string, stdout, stderr io.Writer) error {
 
 func runResource(name, path string, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "list" {
-		target, query, asJSON, err := parseTargetWithFilter(name, args, stderr)
+		target, query, asJSON, err := parseTargetWithFilter(name, trimListArgs(args), stderr)
 		if err != nil {
 			return err
 		}
@@ -161,7 +179,7 @@ func runResource(name, path string, args []string, stdout, stderr io.Writer) err
 
 func runTokens(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "list" {
-		target, query, asJSON, err := parseTargetWithFilter("tokens", args, stderr)
+		target, query, asJSON, err := parseTargetWithFilter("tokens", trimListArgs(args), stderr)
 		if err != nil {
 			return err
 		}
@@ -193,7 +211,7 @@ func runTokens(args []string, stdout, stderr io.Writer) error {
 
 func runInstall(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "list" {
-		target, query, asJSON, err := parseTargetWithFilter("install", args, stderr)
+		target, query, asJSON, err := parseTargetWithFilter("install", trimListArgs(args), stderr)
 		if err != nil {
 			return err
 		}
@@ -253,8 +271,93 @@ func runInstall(args []string, stdout, stderr io.Writer) error {
 	}
 }
 
+func runRuntimeConnectors(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 || args[0] == "list" {
+		target, query, asJSON, err := parseTargetWithFilter("runtime-connectors", trimListArgs(args), stderr)
+		if err != nil {
+			return err
+		}
+		return target.get("/api/cloud/v1/runtime/connectors"+query, asJSON, stdout)
+	}
+	switch args[0] {
+	case "claim":
+		target, asJSON, body, err := parseRuntimeConnectorClaimTarget(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return target.post("/api/cloud/v1/runtime/connectors", body, asJSON, stdout)
+	case "get":
+		fs := flag.NewFlagSet("runtime-connectors get", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		runtimeConnectorID := fs.String("runtime-connector-id", "", "Cloud runtime connector record id")
+		target, asJSON, err := parseHTTPFlags(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*runtimeConnectorID) == "" {
+			return fmt.Errorf("--runtime-connector-id is required")
+		}
+		return target.get("/api/cloud/v1/runtime/connectors/"+*runtimeConnectorID, asJSON, stdout)
+	case "enable", "disable", "sync":
+		fs := flag.NewFlagSet("runtime-connectors "+args[0], flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		runtimeConnectorID := fs.String("runtime-connector-id", "", "Cloud runtime connector record id")
+		target, asJSON, err := parseHTTPFlags(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*runtimeConnectorID) == "" {
+			return fmt.Errorf("--runtime-connector-id is required")
+		}
+		return target.post("/api/cloud/v1/runtime/connectors/"+*runtimeConnectorID+"/"+args[0], nil, asJSON, stdout)
+	case "instances":
+		fs := flag.NewFlagSet("runtime-connectors instances", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		runtimeConnectorID := fs.String("runtime-connector-id", "", "Cloud runtime connector record id")
+		includeUnshared := fs.Bool("include-unshared", false, "Include remembered but currently unshared instances")
+		target, asJSON, err := parseHTTPFlags(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*runtimeConnectorID) == "" {
+			return fmt.Errorf("--runtime-connector-id is required")
+		}
+		query := ""
+		if *includeUnshared {
+			query = "?include_unshared=true"
+		}
+		return target.get("/api/cloud/v1/runtime/connectors/"+*runtimeConnectorID+"/instances"+query, asJSON, stdout)
+	default:
+		return fmt.Errorf("usage: codencer-cloudctl runtime-connectors [list|claim|get|enable|disable|sync|instances]")
+	}
+}
+
+func runRuntimeInstances(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 || args[0] == "list" {
+		target, query, asJSON, err := parseRuntimeInstanceListTarget(trimListArgs(args), stderr)
+		if err != nil {
+			return err
+		}
+		return target.get("/api/cloud/v1/runtime/instances"+query, asJSON, stdout)
+	}
+	if args[0] != "get" {
+		return fmt.Errorf("usage: codencer-cloudctl runtime-instances [list|get]")
+	}
+	fs := flag.NewFlagSet("runtime-instances get", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	instanceID := fs.String("instance-id", "", "Runtime instance id")
+	target, asJSON, err := parseHTTPFlags(fs, args[1:])
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(*instanceID) == "" {
+		return fmt.Errorf("--instance-id is required")
+	}
+	return target.get("/api/cloud/v1/runtime/instances/"+*instanceID, asJSON, stdout)
+}
+
 func runEvents(args []string, stdout, stderr io.Writer) error {
-	target, query, asJSON, err := parseTargetWithFilter("events", args, stderr)
+	target, query, asJSON, err := parseTargetWithFilter("events", trimListArgs(args), stderr)
 	if err != nil {
 		return err
 	}
@@ -262,7 +365,7 @@ func runEvents(args []string, stdout, stderr io.Writer) error {
 }
 
 func runAudit(args []string, stdout, stderr io.Writer) error {
-	target, query, asJSON, err := parseTargetWithFilter("audit", args, stderr)
+	target, query, asJSON, err := parseTargetWithFilter("audit", trimListArgs(args), stderr)
 	if err != nil {
 		return err
 	}
@@ -465,9 +568,12 @@ func parseInstallActionTarget(args []string, stderr io.Writer) (target, string, 
 	project := fs.String("project", "", "Project identifier")
 	issueNumber := fs.Int("issue-number", 0, "Issue number")
 	issueKey := fs.String("issue-key", "", "Issue key")
+	issueID := fs.String("issue-id", "", "Issue id")
 	channel := fs.String("channel", "", "Slack channel id")
 	threadTS := fs.String("thread-ts", "", "Slack thread ts")
+	messageTS := fs.String("message-ts", "", "Slack message ts")
 	teamID := fs.String("team-id", "", "Linear team id")
+	transitionID := fs.String("transition-id", "", "Jira transition id")
 	title := fs.String("title", "", "Title")
 	description := fs.String("description", "", "Description")
 	body := fs.String("body", "", "Body")
@@ -479,20 +585,85 @@ func parseInstallActionTarget(args []string, stderr io.Writer) (target, string, 
 		return target, "", false, nil, fmt.Errorf("--installation-id is required")
 	}
 	payload := cloudconnectors.ActionRequest{
-		Action:      cloudconnectors.ActionName(*action),
-		Repository:  *repository,
-		Project:     *project,
-		IssueNumber: *issueNumber,
-		IssueKey:    *issueKey,
-		Channel:     *channel,
-		ThreadTS:    *threadTS,
-		TeamID:      *teamID,
-		Title:       *title,
-		Description: *description,
-		Body:        *body,
+		Action:       cloudconnectors.ActionName(*action),
+		Repository:   *repository,
+		Project:      *project,
+		IssueNumber:  *issueNumber,
+		IssueKey:     *issueKey,
+		IssueID:      *issueID,
+		Channel:      *channel,
+		ThreadTS:     *threadTS,
+		MessageTS:    *messageTS,
+		TeamID:       *teamID,
+		TransitionID: *transitionID,
+		Title:        *title,
+		Description:  *description,
+		Body:         *body,
 	}
 	data, err := json.Marshal(payload)
 	return target, *installationID, asJSON, data, err
+}
+
+func parseRuntimeConnectorClaimTarget(args []string, stderr io.Writer) (target, bool, []byte, error) {
+	fs := flag.NewFlagSet("runtime-connectors claim", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	orgID := fs.String("org-id", "", "Organization id")
+	workspaceID := fs.String("workspace-id", "", "Workspace id")
+	projectID := fs.String("project-id", "", "Project id")
+	connectorID := fs.String("connector-id", "", "Relay connector id")
+	target, asJSON, err := parseHTTPFlags(fs, args)
+	if err != nil {
+		return target, false, nil, err
+	}
+	payload := map[string]string{
+		"org_id":       *orgID,
+		"workspace_id": *workspaceID,
+		"project_id":   *projectID,
+		"connector_id": *connectorID,
+	}
+	data, err := json.Marshal(payload)
+	return target, asJSON, data, err
+}
+
+func parseRuntimeInstanceListTarget(args []string, stderr io.Writer) (target, string, bool, error) {
+	fs := flag.NewFlagSet("runtime-instances list", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	orgID := fs.String("org-id", "", "Organization id")
+	workspaceID := fs.String("workspace-id", "", "Workspace id")
+	projectID := fs.String("project-id", "", "Project id")
+	runtimeConnectorID := fs.String("runtime-connector-id", "", "Cloud runtime connector record id")
+	includeUnshared := fs.Bool("include-unshared", false, "Include remembered but currently unshared instances")
+	target, asJSON, err := parseHTTPFlags(fs, args)
+	if err != nil {
+		return target, "", false, err
+	}
+	query := []string{}
+	if *orgID != "" {
+		query = append(query, "org_id="+*orgID)
+	}
+	if *workspaceID != "" {
+		query = append(query, "workspace_id="+*workspaceID)
+	}
+	if *projectID != "" {
+		query = append(query, "project_id="+*projectID)
+	}
+	if *runtimeConnectorID != "" {
+		query = append(query, "runtime_connector_id="+*runtimeConnectorID)
+	}
+	if *includeUnshared {
+		query = append(query, "include_unshared=true")
+	}
+	if len(query) == 0 {
+		return target, "", asJSON, nil
+	}
+	return target, "?" + strings.Join(query, "&"), asJSON, nil
+}
+
+func trimListArgs(args []string) []string {
+	if len(args) > 0 && args[0] == "list" {
+		return args[1:]
+	}
+	return args
 }
 
 type multiFlag []string

@@ -176,6 +176,65 @@ CREATE INDEX IF NOT EXISTS idx_connector_action_logs_installation_id ON connecto
 CREATE INDEX IF NOT EXISTS idx_audit_events_org_id ON cloud_audit_events(org_id);
 `,
 	},
+	{
+		version: 2,
+		sql: `
+CREATE TABLE IF NOT EXISTS runtime_connector_installations (
+	id TEXT PRIMARY KEY,
+	org_id TEXT NOT NULL,
+	workspace_id TEXT,
+	project_id TEXT,
+	connector_id TEXT NOT NULL,
+	machine_id TEXT NOT NULL,
+	label TEXT,
+	public_key TEXT,
+	status TEXT NOT NULL,
+	enabled INTEGER NOT NULL DEFAULT 1,
+	health TEXT NOT NULL,
+	metadata_json TEXT,
+	last_seen_at DATETIME,
+	last_error TEXT,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	UNIQUE(org_id, connector_id),
+	FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE,
+	FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+	FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS runtime_instances (
+	instance_id TEXT PRIMARY KEY,
+	org_id TEXT NOT NULL,
+	workspace_id TEXT,
+	project_id TEXT,
+	runtime_connector_installation_id TEXT NOT NULL,
+	repo_root TEXT NOT NULL,
+	instance_json TEXT,
+	status TEXT NOT NULL,
+	enabled INTEGER NOT NULL DEFAULT 1,
+	health TEXT NOT NULL,
+	shared INTEGER NOT NULL DEFAULT 0,
+	last_seen_at DATETIME,
+	last_error TEXT,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE,
+	FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+	FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+	FOREIGN KEY (runtime_connector_installation_id) REFERENCES runtime_connector_installations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_connector_installations_org_id ON runtime_connector_installations(org_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_connector_installations_workspace_id ON runtime_connector_installations(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_connector_installations_project_id ON runtime_connector_installations(project_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_connector_installations_machine_id ON runtime_connector_installations(machine_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_org_id ON runtime_instances(org_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_workspace_id ON runtime_instances(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_project_id ON runtime_instances(project_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_runtime_connector_installation_id ON runtime_instances(runtime_connector_installation_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_instances_shared ON runtime_instances(shared);
+`,
+	},
 }
 
 // OpenStore opens or creates the cloud SQLite store and applies code-defined migrations.
@@ -835,6 +894,341 @@ func (s *Store) ListConnectorInstallations(ctx context.Context, orgID, workspace
 		out = append(out, installation)
 	}
 	return out, rows.Err()
+}
+
+// CreateRuntimeConnectorInstallation stores or updates a Codencer runtime connector installation record.
+func (s *Store) CreateRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error) {
+	return s.upsertRuntimeConnectorInstallation(ctx, installation)
+}
+
+// UpsertRuntimeConnectorInstallation stores or updates a Codencer runtime connector installation record.
+func (s *Store) UpsertRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error) {
+	return s.upsertRuntimeConnectorInstallation(ctx, installation)
+}
+
+// UpdateRuntimeConnectorInstallation updates an existing Codencer runtime connector installation record.
+func (s *Store) UpdateRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error) {
+	if strings.TrimSpace(installation.ID) == "" {
+		return nil, fmt.Errorf("runtime connector installation id is required")
+	}
+	existing, err := s.GetRuntimeConnectorInstallation(ctx, installation.ID)
+	if err != nil {
+		return nil, err
+	}
+	installation.CreatedAt = existing.CreatedAt
+	return s.upsertRuntimeConnectorInstallation(ctx, installation)
+}
+
+// GetRuntimeConnectorInstallation loads a Codencer runtime connector installation by ID.
+func (s *Store) GetRuntimeConnectorInstallation(ctx context.Context, id string) (*RuntimeConnectorInstallation, error) {
+	var installation RuntimeConnectorInstallation
+	var enabled int
+	var workspaceID sql.NullString
+	var projectID sql.NullString
+	var label sql.NullString
+	var publicKey sql.NullString
+	var metadataJSON sql.NullString
+	var lastSeen sql.NullTime
+	var lastError sql.NullString
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id, org_id, workspace_id, project_id, connector_id, machine_id, label, public_key, status, enabled, health,
+		       metadata_json, last_seen_at, last_error, created_at, updated_at
+		FROM runtime_connector_installations
+		WHERE id = ?
+	`, id).Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorID, &installation.MachineID, &label, &publicKey, &installation.Status, &enabled, &installation.Health, &metadataJSON, &lastSeen, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound("runtime connector installation", id)
+		}
+		return nil, fmt.Errorf("get runtime connector installation: %w", err)
+	}
+	installation.Enabled = enabled != 0
+	installation.WorkspaceID = workspaceID.String
+	installation.ProjectID = projectID.String
+	installation.Label = label.String
+	installation.PublicKey = publicKey.String
+	installation.MetadataJSON = rawMessageFromNull(metadataJSON)
+	installation.LastSeenAt = scanTime(lastSeen)
+	installation.LastError = lastError.String
+	return &installation, nil
+}
+
+// ListRuntimeConnectorInstallations returns runtime connector installations optionally filtered by org/workspace/project.
+func (s *Store) ListRuntimeConnectorInstallations(ctx context.Context, orgID, workspaceID, projectID string) ([]RuntimeConnectorInstallation, error) {
+	query := `
+		SELECT id, org_id, workspace_id, project_id, connector_id, machine_id, label, public_key, status, enabled, health,
+		       metadata_json, last_seen_at, last_error, created_at, updated_at
+		FROM runtime_connector_installations
+	`
+	args := []any{}
+	clauses := make([]string, 0, 3)
+	if strings.TrimSpace(orgID) != "" {
+		clauses = append(clauses, "org_id = ?")
+		args = append(args, orgID)
+	}
+	if strings.TrimSpace(workspaceID) != "" {
+		clauses = append(clauses, "workspace_id = ?")
+		args = append(args, workspaceID)
+	}
+	if strings.TrimSpace(projectID) != "" {
+		clauses = append(clauses, "project_id = ?")
+		args = append(args, projectID)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list runtime connector installations: %w", err)
+	}
+	defer rows.Close()
+	var out []RuntimeConnectorInstallation
+	for rows.Next() {
+		var installation RuntimeConnectorInstallation
+		var enabled int
+		var workspaceID sql.NullString
+		var projectID sql.NullString
+		var label sql.NullString
+		var publicKey sql.NullString
+		var metadataJSON sql.NullString
+		var lastSeen sql.NullTime
+		var lastError sql.NullString
+		if err := rows.Scan(&installation.ID, &installation.OrgID, &workspaceID, &projectID, &installation.ConnectorID, &installation.MachineID, &label, &publicKey, &installation.Status, &enabled, &installation.Health, &metadataJSON, &lastSeen, &lastError, &installation.CreatedAt, &installation.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan runtime connector installation: %w", err)
+		}
+		installation.Enabled = enabled != 0
+		installation.WorkspaceID = workspaceID.String
+		installation.ProjectID = projectID.String
+		installation.Label = label.String
+		installation.PublicKey = publicKey.String
+		installation.MetadataJSON = rawMessageFromNull(metadataJSON)
+		installation.LastSeenAt = scanTime(lastSeen)
+		installation.LastError = lastError.String
+		out = append(out, installation)
+	}
+	return out, rows.Err()
+}
+
+// CreateRuntimeInstance stores or updates a Codencer runtime instance record.
+func (s *Store) CreateRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error) {
+	return s.upsertRuntimeInstance(ctx, instance)
+}
+
+// UpsertRuntimeInstance stores or updates a Codencer runtime instance record.
+func (s *Store) UpsertRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error) {
+	return s.upsertRuntimeInstance(ctx, instance)
+}
+
+// UpdateRuntimeInstance updates an existing Codencer runtime instance record.
+func (s *Store) UpdateRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error) {
+	if strings.TrimSpace(instance.ID) == "" {
+		return nil, fmt.Errorf("runtime instance id is required")
+	}
+	existing, err := s.GetRuntimeInstance(ctx, instance.ID)
+	if err != nil {
+		return nil, err
+	}
+	instance.CreatedAt = existing.CreatedAt
+	return s.upsertRuntimeInstance(ctx, instance)
+}
+
+// GetRuntimeInstance loads a Codencer runtime instance by instance ID.
+func (s *Store) GetRuntimeInstance(ctx context.Context, id string) (*RuntimeInstance, error) {
+	var instance RuntimeInstance
+	var enabled int
+	var shared int
+	var workspaceID sql.NullString
+	var projectID sql.NullString
+	var instanceJSON sql.NullString
+	var lastSeen sql.NullTime
+	var lastError sql.NullString
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT instance_id, org_id, workspace_id, project_id, runtime_connector_installation_id, repo_root, instance_json,
+		       status, enabled, health, shared, last_seen_at, last_error, created_at, updated_at
+		FROM runtime_instances
+		WHERE instance_id = ?
+	`, id).Scan(&instance.ID, &instance.OrgID, &workspaceID, &projectID, &instance.RuntimeConnectorInstallationID, &instance.RepoRoot, &instanceJSON, &instance.Status, &enabled, &instance.Health, &shared, &lastSeen, &lastError, &instance.CreatedAt, &instance.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound("runtime instance", id)
+		}
+		return nil, fmt.Errorf("get runtime instance: %w", err)
+	}
+	instance.Enabled = enabled != 0
+	instance.Shared = shared != 0
+	instance.WorkspaceID = workspaceID.String
+	instance.ProjectID = projectID.String
+	instance.InstanceJSON = rawMessageFromNull(instanceJSON)
+	instance.LastSeenAt = scanTime(lastSeen)
+	instance.LastError = lastError.String
+	return &instance, nil
+}
+
+// ListRuntimeInstances returns runtime instances optionally filtered by tenant scope and runtime connector installation.
+func (s *Store) ListRuntimeInstances(ctx context.Context, orgID, workspaceID, projectID, runtimeConnectorInstallationID string) ([]RuntimeInstance, error) {
+	query := `
+		SELECT instance_id, org_id, workspace_id, project_id, runtime_connector_installation_id, repo_root, instance_json,
+		       status, enabled, health, shared, last_seen_at, last_error, created_at, updated_at
+		FROM runtime_instances
+	`
+	args := []any{}
+	clauses := make([]string, 0, 4)
+	if strings.TrimSpace(orgID) != "" {
+		clauses = append(clauses, "org_id = ?")
+		args = append(args, orgID)
+	}
+	if strings.TrimSpace(workspaceID) != "" {
+		clauses = append(clauses, "workspace_id = ?")
+		args = append(args, workspaceID)
+	}
+	if strings.TrimSpace(projectID) != "" {
+		clauses = append(clauses, "project_id = ?")
+		args = append(args, projectID)
+	}
+	if strings.TrimSpace(runtimeConnectorInstallationID) != "" {
+		clauses = append(clauses, "runtime_connector_installation_id = ?")
+		args = append(args, runtimeConnectorInstallationID)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list runtime instances: %w", err)
+	}
+	defer rows.Close()
+	var out []RuntimeInstance
+	for rows.Next() {
+		var instance RuntimeInstance
+		var enabled int
+		var shared int
+		var workspaceID sql.NullString
+		var projectID sql.NullString
+		var instanceJSON sql.NullString
+		var lastSeen sql.NullTime
+		var lastError sql.NullString
+		if err := rows.Scan(&instance.ID, &instance.OrgID, &workspaceID, &projectID, &instance.RuntimeConnectorInstallationID, &instance.RepoRoot, &instanceJSON, &instance.Status, &enabled, &instance.Health, &shared, &lastSeen, &lastError, &instance.CreatedAt, &instance.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan runtime instance: %w", err)
+		}
+		instance.Enabled = enabled != 0
+		instance.Shared = shared != 0
+		instance.WorkspaceID = workspaceID.String
+		instance.ProjectID = projectID.String
+		instance.InstanceJSON = rawMessageFromNull(instanceJSON)
+		instance.LastSeenAt = scanTime(lastSeen)
+		instance.LastError = lastError.String
+		out = append(out, instance)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) upsertRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error) {
+	if strings.TrimSpace(installation.OrgID) == "" {
+		return nil, fmt.Errorf("runtime connector installation org_id is required")
+	}
+	if strings.TrimSpace(installation.ConnectorID) == "" {
+		return nil, fmt.Errorf("runtime connector installation connector_id is required")
+	}
+	if strings.TrimSpace(installation.MachineID) == "" {
+		return nil, fmt.Errorf("runtime connector installation machine_id is required")
+	}
+	if installation.ID == "" {
+		id, err := newID("rconn")
+		if err != nil {
+			return nil, err
+		}
+		installation.ID = id
+	}
+	if installation.Status == "" {
+		installation.Status = DefaultRuntimeStatus
+	}
+	if installation.Health == "" {
+		installation.Health = DefaultRuntimeHealth
+	}
+	now := time.Now().UTC()
+	if installation.CreatedAt.IsZero() {
+		installation.CreatedAt = now
+	}
+	installation.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO runtime_connector_installations (
+			id, org_id, workspace_id, project_id, connector_id, machine_id, label, public_key,
+			status, enabled, health, metadata_json, last_seen_at, last_error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			org_id = excluded.org_id,
+			workspace_id = excluded.workspace_id,
+			project_id = excluded.project_id,
+			connector_id = excluded.connector_id,
+			machine_id = excluded.machine_id,
+			label = excluded.label,
+			public_key = excluded.public_key,
+			status = excluded.status,
+			enabled = excluded.enabled,
+			health = excluded.health,
+			metadata_json = excluded.metadata_json,
+			last_seen_at = excluded.last_seen_at,
+			last_error = excluded.last_error,
+			updated_at = excluded.updated_at
+	`, installation.ID, installation.OrgID, nullString(installation.WorkspaceID), nullString(installation.ProjectID), installation.ConnectorID, installation.MachineID, nullString(installation.Label), nullString(installation.PublicKey), installation.Status, boolToInt(installation.Enabled), installation.Health, rawMessage(installation.MetadataJSON), nullTime(installation.LastSeenAt), nullString(installation.LastError), installation.CreatedAt, installation.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("upsert runtime connector installation: %w", err)
+	}
+	return &installation, nil
+}
+
+func (s *Store) upsertRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error) {
+	if strings.TrimSpace(instance.OrgID) == "" {
+		return nil, fmt.Errorf("runtime instance org_id is required")
+	}
+	if strings.TrimSpace(instance.RuntimeConnectorInstallationID) == "" {
+		return nil, fmt.Errorf("runtime instance runtime_connector_installation_id is required")
+	}
+	if strings.TrimSpace(instance.RepoRoot) == "" {
+		return nil, fmt.Errorf("runtime instance repo_root is required")
+	}
+	if instance.ID == "" {
+		id, err := newID("rinst")
+		if err != nil {
+			return nil, err
+		}
+		instance.ID = id
+	}
+	if instance.Status == "" {
+		instance.Status = DefaultRuntimeStatus
+	}
+	if instance.Health == "" {
+		instance.Health = DefaultRuntimeHealth
+	}
+	now := time.Now().UTC()
+	if instance.CreatedAt.IsZero() {
+		instance.CreatedAt = now
+	}
+	instance.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO runtime_instances (
+			instance_id, org_id, workspace_id, project_id, runtime_connector_installation_id, repo_root,
+			instance_json, status, enabled, health, shared, last_seen_at, last_error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(instance_id) DO UPDATE SET
+			org_id = excluded.org_id,
+			workspace_id = excluded.workspace_id,
+			project_id = excluded.project_id,
+			runtime_connector_installation_id = excluded.runtime_connector_installation_id,
+			repo_root = excluded.repo_root,
+			instance_json = excluded.instance_json,
+			status = excluded.status,
+			enabled = excluded.enabled,
+			health = excluded.health,
+			shared = excluded.shared,
+			last_seen_at = excluded.last_seen_at,
+			last_error = excluded.last_error,
+			updated_at = excluded.updated_at
+	`, instance.ID, instance.OrgID, nullString(instance.WorkspaceID), nullString(instance.ProjectID), instance.RuntimeConnectorInstallationID, instance.RepoRoot, rawMessage(instance.InstanceJSON), instance.Status, boolToInt(instance.Enabled), instance.Health, boolToInt(instance.Shared), nullTime(instance.LastSeenAt), nullString(instance.LastError), instance.CreatedAt, instance.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("upsert runtime instance: %w", err)
+	}
+	return &instance, nil
 }
 
 // PutInstallationSecret encrypts and persists a secret for an installation.

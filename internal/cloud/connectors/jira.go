@@ -89,9 +89,19 @@ func (c *JiraClient) Validate(ctx context.Context) error {
 		return fmt.Errorf("validate jira credentials: %w", err)
 	}
 	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("read jira validation response: %w", err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return fmt.Errorf("validate jira credentials: %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		return fmt.Errorf("validate jira credentials: %s: %s", resp.Status, strings.TrimSpace(string(data)))
+	}
+	var decoded jiraAccountResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode jira validation response: %w", err)
+	}
+	if strings.TrimSpace(decoded.AccountID) == "" && strings.TrimSpace(decoded.DisplayName) == "" && strings.TrimSpace(decoded.Email) == "" {
+		return fmt.Errorf("jira validation response missing identity fields")
 	}
 	return nil
 }
@@ -154,6 +164,59 @@ func (c *JiraClient) AddComment(ctx context.Context, issueKey, body string) (*Ji
 	}
 	if decoded.Visibility != nil {
 		result.Visibility = decoded.Visibility.Value
+	}
+	return result, nil
+}
+
+// TransitionIssue moves an issue to a named transition ID.
+func (c *JiraClient) TransitionIssue(ctx context.Context, issueKey, transitionID string) (*JiraTransitionResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("jira client is nil")
+	}
+	issueKey = strings.TrimSpace(issueKey)
+	transitionID = strings.TrimSpace(transitionID)
+	if issueKey == "" {
+		return nil, fmt.Errorf("issue key is required")
+	}
+	if transitionID == "" {
+		return nil, fmt.Errorf("transition id is required")
+	}
+
+	payload := map[string]any{"transition": map[string]any{"id": transitionID}}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode jira transition payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, jiraResolveURL(c.BaseURL, "/rest/api/3/issue/"+url.PathEscape(issueKey)+"/transitions"), bytes.NewReader(buf))
+	if err != nil {
+		return nil, fmt.Errorf("create jira transition request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", jiraBasicAuth(c.Email, c.APIToken))
+
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("transition jira issue: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read jira transition response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("transition jira issue: %s: %s", resp.Status, strings.TrimSpace(string(data)))
+	}
+	result := &JiraTransitionResult{
+		IssueKey:     issueKey,
+		TransitionID: transitionID,
+	}
+	if len(data) > 0 {
+		var decoded jiraTransitionResponse
+		if err := json.Unmarshal(data, &decoded); err == nil {
+			result.Status = decoded.ToString()
+		}
 	}
 	return result, nil
 }
@@ -369,6 +432,32 @@ type jiraVisibility struct {
 	Value string `json:"value"`
 }
 
+type jiraAccountResponse struct {
+	AccountID   string `json:"accountId"`
+	DisplayName string `json:"displayName"`
+	Email       string `json:"emailAddress"`
+	AccountType string `json:"accountType"`
+	Self        string `json:"self"`
+}
+
+type JiraTransitionResult struct {
+	IssueKey     string `json:"issue_key"`
+	TransitionID string `json:"transition_id"`
+	Status       string `json:"status,omitempty"`
+}
+
+type jiraTransitionResponse struct {
+	To jiraTransitionState `json:"to"`
+}
+
+type jiraTransitionState struct {
+	Name string `json:"name"`
+}
+
+func (r jiraTransitionResponse) ToString() string {
+	return r.To.Name
+}
+
 type JiraConnector struct {
 	client *http.Client
 }
@@ -392,12 +481,20 @@ func (c *JiraConnector) ValidateInstallation(ctx context.Context, cfg Installati
 	result := ValidationResult{
 		Provider:  ProviderJira,
 		OK:        err == nil,
-		Identity:  cfg.Username,
 		CheckedAt: nowUTC(),
 		Message:   "jira credentials validated via /rest/api/3/myself",
+		Details:   map[string]string{},
+	}
+	if strings.TrimSpace(cfg.APIBaseURL) != "" {
+		result.Details["api_base_url"] = strings.TrimSpace(cfg.APIBaseURL)
+	}
+	if strings.TrimSpace(cfg.Username) != "" {
+		result.Details["username"] = strings.TrimSpace(cfg.Username)
 	}
 	if err != nil {
 		result.Message = err.Error()
+	} else {
+		result.Identity = cfg.Username
 	}
 	return result, err
 }
@@ -437,35 +534,64 @@ func (c *JiraConnector) NormalizeEvent(_ http.Header, body []byte, _ Installatio
 }
 
 func (c *JiraConnector) ExecuteAction(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
-	if req.Action != ActionJiraAddIssueComment {
-		err := fmt.Errorf("unsupported jira action %q", req.Action)
-		return ActionResult{Provider: ProviderJira, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
 	client := &JiraClient{
 		BaseURL:    cfg.APIBaseURL,
 		Email:      cfg.Username,
 		APIToken:   cfg.Token,
 		HTTPClient: c.client,
 	}
-	result, err := client.AddComment(ctx, req.IssueKey, req.Body)
-	if err != nil {
+	switch req.Action {
+	case ActionJiraAddIssueComment:
+		result, err := client.AddComment(ctx, req.IssueKey, req.Body)
+		if err != nil {
+			return ActionResult{Provider: ProviderJira, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return ActionResult{
+			Provider:   ProviderJira,
+			Action:     req.Action,
+			OK:         true,
+			ExternalID: result.CommentID,
+			URL:        result.Self,
+			CheckedAt:  nowUTC(),
+			Message:    "jira issue comment created",
+			Details: map[string]string{
+				"issue_key": result.IssueKey,
+				"author":    result.Author,
+			},
+		}, nil
+	case ActionJiraTransitionIssue:
+		result, err := client.TransitionIssue(ctx, req.IssueKey, req.TransitionID)
+		if err != nil {
+			return ActionResult{Provider: ProviderJira, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		details := map[string]string{
+			"issue_key":     result.IssueKey,
+			"transition_id": result.TransitionID,
+		}
+		if result.Status != "" {
+			details["status"] = result.Status
+		}
+		return ActionResult{
+			Provider:   ProviderJira,
+			Action:     req.Action,
+			OK:         true,
+			ExternalID: result.TransitionID,
+			CheckedAt:  nowUTC(),
+			Message:    "jira issue transitioned",
+			Details:    details,
+		}, nil
+	default:
+		err := fmt.Errorf("unsupported jira action %q", req.Action)
 		return ActionResult{Provider: ProviderJira, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	return ActionResult{
-		Provider:   ProviderJira,
-		Action:     req.Action,
-		OK:         true,
-		ExternalID: result.CommentID,
-		URL:        result.Self,
-		CheckedAt:  nowUTC(),
-		Message:    "jira issue comment created",
-		Details: map[string]string{
-			"issue_key": result.IssueKey,
-			"author":    result.Author,
-		},
-	}, nil
 }
 
 func (c *JiraConnector) DeriveStatus(validation ValidationResult, _ WebhookVerification) ConnectorStatus {
-	return validationOnlyStatus(ProviderJira, validation, "installation validated; jira webhook ingest is intentionally polling-first")
+	status := validationOnlyStatus(ProviderJira, validation, "installation validated; jira webhook ingest is intentionally polling-first")
+	if status.Details == nil {
+		status.Details = map[string]string{}
+	}
+	status.Details["polling_mode"] = "polling-first"
+	status.Details["webhook_ingest"] = "disabled"
+	return status
 }

@@ -32,16 +32,16 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cloud/v1/tokens/", s.handleTokenByID)
 	mux.HandleFunc("/api/cloud/v1/installations", s.handleInstallations)
 	mux.HandleFunc("/api/cloud/v1/installations/", s.handleInstallationByID)
+	mux.HandleFunc("/api/cloud/v1/runtime/connectors", s.handleRuntimeConnectors)
+	mux.HandleFunc("/api/cloud/v1/runtime/connectors/", s.handleRuntimeConnectorByID)
+	mux.HandleFunc("/api/cloud/v1/runtime/instances", s.handleRuntimeInstances)
+	mux.HandleFunc("/api/cloud/v1/runtime/instances/", s.handleRuntimeInstanceByID)
 	mux.HandleFunc("/api/cloud/v1/events", s.handleEvents)
 	mux.HandleFunc("/api/cloud/v1/audit", s.handleAudit)
 	mux.HandleFunc("/", s.handleRoot)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
-	if s.relayHandler != nil && s.isRelayPath(r.URL.Path) {
-		s.relayHandler.ServeHTTP(w, r)
-		return
-	}
 	http.NotFound(w, r)
 }
 
@@ -62,7 +62,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Version:            "cloud-v1-alpha",
 		StartedAt:          s.startedAt.UTC().Format(time.RFC3339),
 		CloudAPIBase:       "/api/cloud/v1",
-		RelayComposed:      s.relayHandler != nil,
+		RelayComposed:      s.runtime != nil && s.runtime.Server != nil && s.runtime.Store != nil,
 		ConnectorProviders: providers,
 	})
 }

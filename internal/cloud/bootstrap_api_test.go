@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	cloudconnectors "agent-bridge/internal/cloud/connectors"
+	"agent-bridge/internal/relay"
 )
 
 func TestServerBootstrapFlowsAndInstallationRollback(t *testing.T) {
@@ -47,9 +48,21 @@ func TestServerBootstrapFlowsAndInstallationRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := NewServer(DefaultConfig(), store, cloudconnectors.NewRegistry(), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"relay": "ok"})
-	}))
+	relayStore, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer relayStore.Close()
+	relayServer := relay.NewServer(&relay.Config{
+		Host:   "127.0.0.1",
+		Port:   0,
+		DBPath: filepath.Join(t.TempDir(), "unused-relay.db"),
+	}, relayStore)
+
+	server := NewServer(DefaultConfig(), store, cloudconnectors.NewRegistry(), &RelayRuntime{
+		Server: relayServer,
+		Store:  relayStore,
+	})
 	handler := server.Handler()
 
 	rr := httptest.NewRecorder()

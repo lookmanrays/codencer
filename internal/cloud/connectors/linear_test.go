@@ -78,6 +78,37 @@ func TestLinearClientCreateIssue(t *testing.T) {
 	}
 }
 
+func TestLinearClientAddComment(t *testing.T) {
+	t.Parallel()
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/graphql" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		gotBody, _ = ioReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"commentCreate":{"success":true,"comment":{"id":"comment-1","body":"Looks good","url":"https://linear.example/comment/comment-1"}}}}`))
+	}))
+	defer srv.Close()
+
+	client := &LinearClient{
+		BaseURL:    srv.URL,
+		Token:      "linear-token",
+		HTTPClient: srv.Client(),
+	}
+	comment, err := client.AddComment(context.Background(), "issue-1", "Looks good")
+	if err != nil {
+		t.Fatalf("AddComment failed: %v", err)
+	}
+	if !bytes.Contains(gotBody, []byte("commentCreate")) || !bytes.Contains(gotBody, []byte(`"issueId":"issue-1"`)) {
+		t.Fatalf("mutation payload missing fields: %s", string(gotBody))
+	}
+	if comment.ID != "comment-1" || comment.Body != "Looks good" {
+		t.Fatalf("unexpected comment result: %#v", comment)
+	}
+}
+
 func TestLinearWebhookSignatureAndNormalization(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +136,35 @@ func TestLinearWebhookSignatureAndNormalization(t *testing.T) {
 	}
 	if ev.EntityID != "issue-1" || ev.Title != "Ship it" || ev.Actor != "Ada" {
 		t.Fatalf("unexpected normalized payload: %#v", ev)
+	}
+}
+
+func TestLinearValidateReportsProviderDetails(t *testing.T) {
+	t.Parallel()
+
+	connector := NewLinearConnector(nil)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/graphql" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"id":"u-1","name":"Coder","email":"coder@example.com"}}}`))
+	}))
+	defer srv.Close()
+
+	connector.client = srv.Client()
+	validation, err := connector.ValidateInstallation(context.Background(), InstallationConfig{
+		APIBaseURL: srv.URL,
+		Token:      "linear-token",
+	})
+	if err != nil {
+		t.Fatalf("ValidateInstallation failed: %v", err)
+	}
+	if !validation.OK {
+		t.Fatalf("unexpected validation: %#v", validation)
+	}
+	if got := validation.Details["token_present"]; got != "true" {
+		t.Fatalf("unexpected validation details: %#v", validation.Details)
 	}
 }
 

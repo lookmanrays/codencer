@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	cloudconnectors "agent-bridge/internal/cloud/connectors"
+	"agent-bridge/internal/relay"
 )
 
 // AdminStore captures the cloud persistence operations used by the HTTP admin
@@ -36,30 +36,48 @@ type AdminStore interface {
 	CreateConnectorActionLog(ctx context.Context, log ConnectorActionLog) (*ConnectorActionLog, error)
 	CreateCloudAuditEvent(ctx context.Context, event CloudAuditEvent) (*CloudAuditEvent, error)
 	ListCloudAuditEvents(ctx context.Context, limit int) ([]CloudAuditEvent, error)
+	CreateRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error)
+	UpsertRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error)
+	UpdateRuntimeConnectorInstallation(ctx context.Context, installation RuntimeConnectorInstallation) (*RuntimeConnectorInstallation, error)
+	GetRuntimeConnectorInstallation(ctx context.Context, id string) (*RuntimeConnectorInstallation, error)
+	ListRuntimeConnectorInstallations(ctx context.Context, orgID, workspaceID, projectID string) ([]RuntimeConnectorInstallation, error)
+	CreateRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error)
+	UpsertRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error)
+	UpdateRuntimeInstance(ctx context.Context, instance RuntimeInstance) (*RuntimeInstance, error)
+	GetRuntimeInstance(ctx context.Context, id string) (*RuntimeInstance, error)
+	ListRuntimeInstances(ctx context.Context, orgID, workspaceID, projectID, runtimeConnectorInstallationID string) ([]RuntimeInstance, error)
+}
+
+// RelayRuntime holds the trusted in-process relay runtime bridge used by the
+// cloud control plane when runtime control is enabled.
+type RelayRuntime struct {
+	Server *relay.Server
+	Store  *relay.Store
 }
 
 // Server is the cloud control-plane HTTP service. It composes cloud admin APIs
-// with the existing relay handler so the local runtime path remains intact.
+// with the in-process relay runtime bridge so tenant-scoped runtime control can
+// reuse the existing local execution path without exposing raw relay state.
 type Server struct {
-	cfg          *Config
-	store        AdminStore
-	connectors   *cloudconnectors.Registry
-	relayHandler http.Handler
-	handler      http.Handler
-	server       *http.Server
-	startedAt    time.Time
+	cfg        *Config
+	store      AdminStore
+	connectors *cloudconnectors.Registry
+	runtime    *RelayRuntime
+	handler    http.Handler
+	server     *http.Server
+	startedAt  time.Time
 }
 
-func NewServer(cfg *Config, store AdminStore, connectors *cloudconnectors.Registry, relayHandler http.Handler) *Server {
+func NewServer(cfg *Config, store AdminStore, connectors *cloudconnectors.Registry, runtime *RelayRuntime) *Server {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	}
 	s := &Server{
-		cfg:          cfg,
-		store:        store,
-		connectors:   connectors,
-		relayHandler: relayHandler,
-		startedAt:    time.Now().UTC(),
+		cfg:        cfg,
+		store:      store,
+		connectors: connectors,
+		runtime:    runtime,
+		startedAt:  time.Now().UTC(),
 	}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
@@ -91,16 +109,5 @@ func (s *Server) Start(ctx context.Context) error {
 		return s.server.Shutdown(shutdownCtx)
 	case err := <-errCh:
 		return err
-	}
-}
-
-func (s *Server) isRelayPath(path string) bool {
-	switch {
-	case path == "/mcp", path == "/mcp/call", path == "/ws/connectors":
-		return true
-	case strings.HasPrefix(path, "/api/v2/"):
-		return true
-	default:
-		return path == "/api/v2"
 	}
 }

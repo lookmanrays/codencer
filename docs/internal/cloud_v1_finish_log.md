@@ -1,6 +1,153 @@
 # Codencer Cloud V1 Finish Log
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
+
+## Current Deepening Pass
+
+This pass is narrower than the original cloud-foundation push.
+
+Mission for the current pass:
+
+- make cloud the tenant-aware control plane for Codencer runtime when cloud mode is used
+- keep the local daemon, relay, and connector execution doctrine intact
+- deepen the priority provider connectors instead of adding more shallow breadth
+- keep claims about connector and cloud maturity exact
+
+This pass does **not** add UI, billing, or new low-priority connectors.
+
+## Runtime Control-Plane Gap Lock
+
+Current code truth at the start of this pass:
+
+- cloud control-plane APIs exist under `/api/cloud/v1/*`
+- relay runtime APIs still exist separately under `/api/v2/*`, `/mcp`, and `/ws/connectors`
+- `codencer-cloudd` can compose relay in-process, but that is still process composition rather than tenant-aware runtime ownership
+- cloud token scope governs cloud admin APIs only
+- relay planner tokens still govern runtime routing and instance visibility
+- cloud stores provider connector installations, but not tenant-scoped Codencer runtime connector installations or runtime instances
+
+Exact blockers locked for this pass:
+
+1. No cloud-side Codencer runtime installation model
+   - missing tenant-scoped record for local Codencer connector identity, machine metadata, enabled state, last seen, health, and last error
+
+2. No cloud-side runtime instance registry
+   - missing tenant-scoped record for shared instances, instance metadata, connector ownership, enabled state, and last seen
+
+3. No cloud-scoped runtime API surface
+   - missing cloud routes for runtime connectors, instances, and runtime inspection under org/workspace/project scope
+
+4. No cloud/relay auth alignment
+   - composed cloud mode does not translate tenant ownership and cloud token scope into runtime visibility
+
+5. Provider connectors still remain thin alpha integrations
+   - GitHub, GitLab, Linear, and Slack each expose one minimal action
+   - Jira remains polling-first with limited health depth
+   - docs compress code existence and verified depth too aggressively
+
+## Current Pass Ownership Map
+
+### A. Runtime Model + Store
+
+- Owner: write worker
+- Scope:
+  - add tenant-scoped Codencer runtime installation and runtime instance models
+  - extend cloud store and migrations
+  - add store tests for runtime registry behavior
+- Files:
+  - `internal/cloud/models.go`
+  - `internal/cloud/store.go`
+  - `internal/cloud/*_test.go` for runtime model/store coverage
+- Status: completed
+
+### B. Cloud Runtime API + Auth + Relay Alignment
+
+- Owner: Lead
+- Scope:
+  - cloud runtime routes
+  - cloud token scope enforcement for runtime resources
+  - composed relay alignment and tenant-scoped runtime visibility
+  - cloudctl runtime admin surfaces
+- Files:
+  - `internal/cloud/auth.go`
+  - `internal/cloud/server.go`
+  - `internal/cloud/router.go`
+  - `cmd/codencer-cloudd/main.go`
+  - `cmd/codencer-cloudctl/main.go`
+  - `internal/relay/*` as needed for composed cloud alignment
+- Status: completed
+
+### C. Priority Connector Deepening
+
+- Owner: write worker
+- Scope:
+  - stronger validation and provider-specific status detail where practical
+  - richer action surface for priority providers
+  - stronger normalization tests
+  - no new providers
+- Files:
+  - `internal/cloud/connectors/types.go`
+  - `internal/cloud/connectors/common.go`
+  - `internal/cloud/connectors/github.go`
+  - `internal/cloud/connectors/gitlab.go`
+  - `internal/cloud/connectors/jira.go`
+  - `internal/cloud/connectors/linear.go`
+  - `internal/cloud/connectors/slack.go`
+  - matching tests under `internal/cloud/connectors/*_test.go`
+- Status: completed
+
+### D. Docs / Truth / Verification
+
+- Owner: Lead
+- Scope:
+  - update cloud docs and connector matrix
+  - record exact verification after each merge
+  - keep claims narrow and evidence-based
+- Files:
+  - `docs/CLOUD.md`
+  - `docs/CLOUD_CONNECTORS.md`
+  - `docs/CLOUD_SELF_HOST.md`
+  - this finish log
+- Status: completed
+
+## Current Merge Order
+
+1. Update runtime blocker lock and ownership log
+2. Merge cloud runtime model/store foundation
+3. Re-run `go test ./internal/cloud/...`
+4. Merge cloud runtime API/auth/alignment work
+5. Re-run focused cloud + relay tests
+6. Merge provider connector deepening
+7. Re-run `go test ./internal/cloud/connectors ./internal/cloud/...`
+8. Update docs and self-host/cloud truth
+9. Run broad verification: `go test ./...`, `make build`, `make build-cloud`
+
+## Current Pass Delivery Snapshot
+
+Implemented in this pass:
+
+- cloud-side runtime registry foundation:
+  - `RuntimeConnectorInstallation`
+  - `RuntimeInstance`
+  - runtime registry migrations and store methods
+- cloud-scoped runtime routes under `/api/cloud/v1/runtime/*`
+- cloud-scoped runtime connector claim/sync/enable/disable flows
+- cloud-scoped runtime instance inspection and instance-scoped HTTP proxying for runs, steps, gates, and artifacts
+- relay helper support for trusted in-process planner principals used by the cloud daemon
+- deeper provider connector action surface and stronger connector tests
+- updated cloud docs and optional runtime-claim smoke wiring
+
+## Current Pass Verification Ledger
+
+| Merge | Scope | Checks | Result | Notes |
+| --- | --- | --- | --- | --- |
+| 1 | runtime blocker lock + ownership map | log update only | passed | this file is the canonical pass log |
+| 2 | runtime model/store foundation + connector depth slices merged | `go test ./internal/cloud/... ./internal/cloud/connectors` | passed | worker slices landed cleanly |
+| 3 | relay in-process planner injection helper | `go test ./internal/relay -run 'TestPlanner|TestServeAsPlanner'` | passed | cloud can now proxy through relay without a second bearer token hop |
+| 4 | cloud runtime API + cloudctl | `go test ./internal/cloud/... ./cmd/codencer-cloudctl ./internal/relay ./cmd/codencer-cloudd ./cmd/codencer-cloudworkerd` | passed | claim/list/disable runtime flows covered |
+| 5 | broad verification | `go test ./...` | passed | repo-wide tests remained green |
+| 6 | build verification | `make build` and `make build-cloud` | passed | core binaries and cloud binaries build |
+| 7 | operator smoke | `bash -n scripts/cloud_smoke.sh` and `make cloud-smoke` | passed | runtime-claim smoke path remains optional and env-driven |
 
 ## Mission
 

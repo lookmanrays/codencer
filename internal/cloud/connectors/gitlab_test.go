@@ -30,6 +30,23 @@ func TestGitLabConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 				t.Fatalf("unexpected body: %q", got)
 			}
 			_, _ = w.Write([]byte(`{"id":88,"body":"Hello from Codencer","web_url":"https://gitlab.local/group/repo/-/issues/11#note_88"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v4/projects/group/repo/issues":
+			if got := r.Header.Get("PRIVATE-TOKEN"); got != "token-abc" {
+				t.Fatalf("unexpected token header: %q", got)
+			}
+			if got := r.URL.RawPath; got != "/api/v4/projects/group%2Frepo/issues" {
+				t.Fatalf("unexpected raw path: %q", got)
+			}
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm failed: %v", err)
+			}
+			if got := r.Form.Get("title"); got != "Ship it" {
+				t.Fatalf("unexpected title: %q", got)
+			}
+			if got := r.Form.Get("description"); got != "Planned from Codencer" {
+				t.Fatalf("unexpected description: %q", got)
+			}
+			_, _ = w.Write([]byte(`{"id":101,"iid":12,"web_url":"https://gitlab.local/group/repo/-/issues/12"}`))
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
@@ -49,6 +66,9 @@ func TestGitLabConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 	}
 	if !validation.OK || validation.Identity != "gitlab-user" {
 		t.Fatalf("unexpected validation: %#v", validation)
+	}
+	if got := validation.Details["name"]; got != "GitLab User" {
+		t.Fatalf("unexpected validation details: %#v", validation.Details)
 	}
 
 	body := []byte(`{"object_kind":"issue","event_type":"issue","user_username":"alice","project":{"path_with_namespace":"group/repo","web_url":"https://gitlab.local/group/repo"},"object_attributes":{"action":"open","iid":11,"title":"Bug","url":"https://gitlab.local/group/repo/-/issues/11"}}`)
@@ -82,6 +102,19 @@ func TestGitLabConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 	}
 	if !result.OK || result.ExternalID != "88" {
 		t.Fatalf("unexpected action result: %#v", result)
+	}
+
+	issueResult, err := connector.ExecuteAction(context.Background(), ActionRequest{
+		Action:      ActionGitLabCreateIssue,
+		Project:     "group/repo",
+		Title:       "Ship it",
+		Description: "Planned from Codencer",
+	}, cfg)
+	if err != nil {
+		t.Fatalf("CreateIssue failed: %v", err)
+	}
+	if !issueResult.OK || issueResult.ExternalID != "12" || issueResult.URL != "https://gitlab.local/group/repo/-/issues/12" {
+		t.Fatalf("unexpected create issue result: %#v", issueResult)
 	}
 
 	status := connector.DeriveStatus(validation, verify)

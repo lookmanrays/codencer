@@ -14,6 +14,8 @@ const (
 	DefaultProjectStatus      = "active"
 	DefaultAPITokenKind       = "api"
 	DefaultInstallationStatus = "active"
+	DefaultRuntimeStatus      = "active"
+	DefaultRuntimeHealth      = "unknown"
 )
 
 // Org is the top-level tenant boundary for the cloud control plane.
@@ -86,6 +88,45 @@ type ConnectorInstallation struct {
 	LastError              string          `json:"last_error,omitempty"`
 	CreatedAt              time.Time       `json:"created_at"`
 	UpdatedAt              time.Time       `json:"updated_at"`
+}
+
+// RuntimeConnectorInstallation tracks a Codencer runtime connector/node inside a tenant scope.
+type RuntimeConnectorInstallation struct {
+	ID           string          `json:"id"`
+	OrgID        string          `json:"org_id"`
+	WorkspaceID  string          `json:"workspace_id,omitempty"`
+	ProjectID    string          `json:"project_id,omitempty"`
+	ConnectorID  string          `json:"connector_id"`
+	MachineID    string          `json:"machine_id"`
+	Label        string          `json:"label,omitempty"`
+	PublicKey    string          `json:"public_key,omitempty"`
+	Status       string          `json:"status"`
+	Enabled      bool            `json:"enabled"`
+	Health       string          `json:"health"`
+	MetadataJSON json.RawMessage `json:"metadata_json,omitempty"`
+	LastSeenAt   *time.Time      `json:"last_seen_at,omitempty"`
+	LastError    string          `json:"last_error,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+// RuntimeInstance tracks a shared Codencer runtime instance owned by a runtime connector installation.
+type RuntimeInstance struct {
+	ID                             string          `json:"instance_id"`
+	OrgID                          string          `json:"org_id"`
+	WorkspaceID                    string          `json:"workspace_id,omitempty"`
+	ProjectID                      string          `json:"project_id,omitempty"`
+	RuntimeConnectorInstallationID string          `json:"runtime_connector_installation_id"`
+	RepoRoot                       string          `json:"repo_root"`
+	InstanceJSON                   json.RawMessage `json:"instance_json,omitempty"`
+	Status                         string          `json:"status"`
+	Enabled                        bool            `json:"enabled"`
+	Health                         string          `json:"health"`
+	Shared                         bool            `json:"shared"`
+	LastSeenAt                     *time.Time      `json:"last_seen_at,omitempty"`
+	LastError                      string          `json:"last_error,omitempty"`
+	CreatedAt                      time.Time       `json:"created_at"`
+	UpdatedAt                      time.Time       `json:"updated_at"`
 }
 
 // InstallationSecret stores encrypted provider secrets for an installation.

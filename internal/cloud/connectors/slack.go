@@ -95,13 +95,21 @@ func (c *SlackClient) Validate(ctx context.Context) error {
 		return fmt.Errorf("validate slack token: %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}
 	var decoded struct {
-		OK bool `json:"ok"`
+		OK     bool   `json:"ok"`
+		TeamID string `json:"team_id"`
+		Team   string `json:"team"`
+		UserID string `json:"user_id"`
+		User   string `json:"user"`
+		URL    string `json:"url"`
 	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("decode slack auth.test response: %w", err)
 	}
 	if !decoded.OK {
 		return errors.New("slack auth.test returned ok=false")
+	}
+	if strings.TrimSpace(decoded.TeamID) == "" && strings.TrimSpace(decoded.Team) == "" && strings.TrimSpace(decoded.UserID) == "" {
+		return errors.New("slack auth.test response missing identity fields")
 	}
 	return nil
 }
@@ -161,6 +169,64 @@ func (c *SlackClient) PostMessage(ctx context.Context, channel, text string, opt
 	}
 	if !decoded.OK {
 		return nil, fmt.Errorf("slack chat.postMessage returned ok=false")
+	}
+	return &decoded, nil
+}
+
+// UpdateMessage updates an existing Slack message through chat.update.
+func (c *SlackClient) UpdateMessage(ctx context.Context, channel, ts, text string) (*SlackMessageResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("slack client is nil")
+	}
+	channel = strings.TrimSpace(channel)
+	ts = strings.TrimSpace(ts)
+	text = strings.TrimSpace(text)
+	if channel == "" {
+		return nil, fmt.Errorf("channel is required")
+	}
+	if ts == "" {
+		return nil, fmt.Errorf("message ts is required")
+	}
+	if text == "" {
+		return nil, fmt.Errorf("text is required")
+	}
+
+	payload := map[string]any{
+		"channel": channel,
+		"ts":      ts,
+		"text":    text,
+	}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode slack update payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackResolveURL(c.BaseURL, "/api/chat.update"), bytes.NewReader(buf))
+	if err != nil {
+		return nil, fmt.Errorf("create slack chat.update request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.BotToken))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("update slack message: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read slack chat.update response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("update slack message: %s: %s", resp.Status, strings.TrimSpace(string(data)))
+	}
+	var decoded SlackMessageResult
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return nil, fmt.Errorf("decode slack chat.update response: %w", err)
+	}
+	if !decoded.OK {
+		return nil, fmt.Errorf("slack chat.update returned ok=false")
 	}
 	return &decoded, nil
 }
@@ -380,9 +446,13 @@ func (c *SlackConnector) ValidateInstallation(ctx context.Context, cfg Installat
 		OK:        err == nil,
 		CheckedAt: nowUTC(),
 		Message:   "slack bot token validated via auth.test",
+		Details:   map[string]string{},
 	}
 	if err != nil {
 		result.Message = err.Error()
+	} else {
+		result.Details["provider"] = "slack"
+		result.Details["base_url"] = strings.TrimSpace(cfg.APIBaseURL)
 	}
 	return result, err
 }
@@ -448,31 +518,50 @@ func (c *SlackConnector) NormalizeEvent(headers http.Header, body []byte, cfg In
 }
 
 func (c *SlackConnector) ExecuteAction(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
-	if req.Action != ActionSlackPostMessage {
-		err := fmt.Errorf("unsupported slack action %q", req.Action)
-		return ActionResult{Provider: ProviderSlack, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
 	client := &SlackClient{
 		BaseURL:    cfg.APIBaseURL,
 		BotToken:   cfg.Token,
 		HTTPClient: c.client,
 	}
-	result, err := client.PostMessage(ctx, req.Channel, req.Body, SlackPostMessageOptions{ThreadTS: req.ThreadTS})
-	if err != nil {
+	switch req.Action {
+	case ActionSlackPostMessage:
+		result, err := client.PostMessage(ctx, req.Channel, req.Body, SlackPostMessageOptions{ThreadTS: req.ThreadTS})
+		if err != nil {
+			return ActionResult{Provider: ProviderSlack, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return ActionResult{
+			Provider:   ProviderSlack,
+			Action:     req.Action,
+			OK:         result.OK,
+			ExternalID: result.TS,
+			CheckedAt:  nowUTC(),
+			Message:    "slack message posted",
+			Details: map[string]string{
+				"channel": result.Channel,
+				"text":    result.Text,
+			},
+		}, nil
+	case ActionSlackUpdateMessage:
+		result, err := client.UpdateMessage(ctx, req.Channel, firstNonEmpty(req.MessageTS, req.ThreadTS), req.Body)
+		if err != nil {
+			return ActionResult{Provider: ProviderSlack, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return ActionResult{
+			Provider:   ProviderSlack,
+			Action:     req.Action,
+			OK:         result.OK,
+			ExternalID: result.TS,
+			CheckedAt:  nowUTC(),
+			Message:    "slack message updated",
+			Details: map[string]string{
+				"channel": result.Channel,
+				"text":    result.Text,
+			},
+		}, nil
+	default:
+		err := fmt.Errorf("unsupported slack action %q", req.Action)
 		return ActionResult{Provider: ProviderSlack, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	return ActionResult{
-		Provider:   ProviderSlack,
-		Action:     req.Action,
-		OK:         result.OK,
-		ExternalID: result.TS,
-		CheckedAt:  nowUTC(),
-		Message:    "slack message posted",
-		Details: map[string]string{
-			"channel": result.Channel,
-			"text":    result.Text,
-		},
-	}, nil
 }
 
 func (c *SlackConnector) DeriveStatus(validation ValidationResult, webhook WebhookVerification) ConnectorStatus {

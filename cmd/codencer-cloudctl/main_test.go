@@ -109,3 +109,51 @@ func TestRunStatusUsesAuthAndCloudURL(t *testing.T) {
 		t.Fatalf("unexpected status output: %s", got)
 	}
 }
+
+func TestRunRuntimeConnectorCommandsUseCloudRuntimePaths(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Method+" "+r.URL.RequestURI()+" "+r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/cloud/v1/runtime/connectors":
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/cloud/v1/runtime/connectors":
+			_, _ = w.Write([]byte(`{"id":"rconn_1","connector_id":"conn-1"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/cloud/v1/runtime/instances":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"runtime-connectors", "list", "--cloud-url", srv.URL, "--token", "tok", "--org-id", "org-1", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runtime-connectors list failed: %v stderr=%s", err, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := run([]string{"runtime-connectors", "claim", "--cloud-url", srv.URL, "--token", "tok", "--org-id", "org-1", "--workspace-id", "ws-1", "--project-id", "proj-1", "--connector-id", "conn-1", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runtime-connectors claim failed: %v stderr=%s", err, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := run([]string{"runtime-instances", "list", "--cloud-url", srv.URL, "--token", "tok", "--runtime-connector-id", "rconn_1", "--include-unshared", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runtime-instances list failed: %v stderr=%s", err, stderr.String())
+	}
+
+	expected := []string{
+		"GET /api/cloud/v1/runtime/connectors?org_id=org-1 Bearer tok",
+		"POST /api/cloud/v1/runtime/connectors Bearer tok",
+		"GET /api/cloud/v1/runtime/instances?runtime_connector_id=rconn_1&include_unshared=true Bearer tok",
+	}
+	if len(seen) != len(expected) {
+		t.Fatalf("unexpected request count: got %v want %v", seen, expected)
+	}
+	for i := range expected {
+		if seen[i] != expected[i] {
+			t.Fatalf("unexpected request %d: got %q want %q", i, seen[i], expected[i])
+		}
+	}
+}

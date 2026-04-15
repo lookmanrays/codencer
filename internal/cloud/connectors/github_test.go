@@ -19,7 +19,7 @@ func TestGitHubConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 			if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
 				t.Fatalf("unexpected auth header: %q", got)
 			}
-			_, _ = w.Write([]byte(`{"login":"octocat","id":42,"html_url":"https://github.com/octocat"}`))
+			_, _ = w.Write([]byte(`{"login":"octocat","name":"Octo Cat","id":42,"html_url":"https://github.com/octocat"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/widgets/issues/12/comments":
 			if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
 				t.Fatalf("unexpected auth header: %q", got)
@@ -31,6 +31,11 @@ func TestGitHubConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 				t.Fatalf("unexpected raw path: %q", got)
 			}
 			_, _ = w.Write([]byte(`{"id":99,"html_url":"https://github.local/comment/99"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/acme/widgets/issues":
+			if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
+				t.Fatalf("unexpected auth header: %q", got)
+			}
+			_, _ = w.Write([]byte(`{"id":100,"number":33,"html_url":"https://github.local/issues/33"}`))
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
@@ -50,6 +55,9 @@ func TestGitHubConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 	}
 	if !validation.OK || validation.Identity != "octocat" {
 		t.Fatalf("unexpected validation: %#v", validation)
+	}
+	if got := validation.Details["name"]; got != "Octo Cat" {
+		t.Fatalf("unexpected validation details: %#v", validation.Details)
 	}
 
 	body := []byte(`{"action":"opened","issue":{"id":1,"number":12,"title":"Bug","html_url":"https://github.local/issues/12"},"repository":{"full_name":"acme/widgets"},"sender":{"login":"alice"}}`)
@@ -73,6 +81,28 @@ func TestGitHubConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 		t.Fatalf("unexpected normalized event: %#v", events)
 	}
 
+	prBody := []byte(`{"action":"closed","pull_request":{"id":2,"number":13,"title":"Add feature","html_url":"https://github.local/pull/13","merged":true},"repository":{"full_name":"acme/widgets"},"sender":{"login":"bob"}}`)
+	prHeaders := http.Header{}
+	prHeaders.Set("X-GitHub-Event", "pull_request")
+	prEvents, err := connector.NormalizeEvent(prHeaders, prBody, cfg)
+	if err != nil {
+		t.Fatalf("NormalizeEvent pull request failed: %v", err)
+	}
+	if len(prEvents) != 1 || prEvents[0].Kind != "pull_request.merged" {
+		t.Fatalf("unexpected pull request event: %#v", prEvents)
+	}
+
+	pushBody := []byte(`{"ref":"refs/heads/main","before":"abc","after":"def","repository":{"full_name":"acme/widgets"},"sender":{"login":"carol"}}`)
+	pushHeaders := http.Header{}
+	pushHeaders.Set("X-GitHub-Event", "push")
+	pushEvents, err := connector.NormalizeEvent(pushHeaders, pushBody, cfg)
+	if err != nil {
+		t.Fatalf("NormalizeEvent push failed: %v", err)
+	}
+	if len(pushEvents) != 1 || pushEvents[0].Kind != "push.pushed" || pushEvents[0].Details["ref"] != "main" {
+		t.Fatalf("unexpected push event: %#v", pushEvents)
+	}
+
 	result, err := connector.ExecuteAction(context.Background(), ActionRequest{
 		Action:      ActionGitHubCreateIssueComment,
 		Repository:  "acme/widgets",
@@ -84,6 +114,19 @@ func TestGitHubConnectorValidateVerifyNormalizeAndWrite(t *testing.T) {
 	}
 	if !result.OK || result.ExternalID != "99" {
 		t.Fatalf("unexpected action result: %#v", result)
+	}
+
+	issueResult, err := connector.ExecuteAction(context.Background(), ActionRequest{
+		Action:      ActionGitHubCreateIssue,
+		Repository:  "acme/widgets",
+		Title:       "Ship it",
+		Description: "Planned from Codencer",
+	}, cfg)
+	if err != nil {
+		t.Fatalf("CreateIssue action failed: %v", err)
+	}
+	if !issueResult.OK || issueResult.ExternalID != "33" || issueResult.URL != "https://github.local/issues/33" {
+		t.Fatalf("unexpected create issue result: %#v", issueResult)
 	}
 
 	status := connector.DeriveStatus(validation, verify)

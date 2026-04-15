@@ -44,6 +44,7 @@ func (c *GitHubConnector) ValidateInstallation(ctx context.Context, cfg Installa
 	req.Header.Set("Accept", "application/vnd.github+json")
 	var response struct {
 		Login   string `json:"login"`
+		Name    string `json:"name"`
 		ID      int64  `json:"id"`
 		HTMLURL string `json:"html_url"`
 	}
@@ -61,6 +62,7 @@ func (c *GitHubConnector) ValidateInstallation(ctx context.Context, cfg Installa
 		CheckedAt: nowUTC(),
 		Details: map[string]string{
 			"user_id":  strconv.FormatInt(response.ID, 10),
+			"name":     response.Name,
 			"html_url": response.HTMLURL,
 		},
 		Message: "token validated against GitHub user endpoint",
@@ -110,20 +112,34 @@ func (c *GitHubConnector) ExecuteAction(ctx context.Context, req ActionRequest, 
 	if err := nonEmpty(cfg.Token, "token"); err != nil {
 		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	if req.Action != ActionGitHubCreateIssueComment {
+	switch req.Action {
+	case ActionGitHubCreateIssueComment:
+		if err := nonEmpty(req.Repository, "repository"); err != nil {
+			return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		if req.IssueNumber <= 0 {
+			err := fmt.Errorf("issue_number must be greater than zero")
+			return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		if err := nonEmpty(req.Body, "body"); err != nil {
+			return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return c.createGitHubIssueComment(ctx, req, cfg)
+	case ActionGitHubCreateIssue:
+		if err := nonEmpty(req.Repository, "repository"); err != nil {
+			return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		if err := nonEmpty(req.Title, "title"); err != nil {
+			return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return c.createGitHubIssue(ctx, req, cfg)
+	default:
 		err := fmt.Errorf("unsupported github action %q", req.Action)
 		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	if err := nonEmpty(req.Repository, "repository"); err != nil {
-		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
-	if req.IssueNumber <= 0 {
-		err := fmt.Errorf("issue_number must be greater than zero")
-		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
-	if err := nonEmpty(req.Body, "body"); err != nil {
-		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
+}
+
+func (c *GitHubConnector) createGitHubIssueComment(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
 	baseURL, err := resolveAPIBase(githubDefaultAPIBaseURL, cfg.APIBaseURL)
 	if err != nil {
 		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
@@ -163,6 +179,59 @@ func (c *GitHubConnector) ExecuteAction(ctx context.Context, req ActionRequest, 
 		URL:        response.HTMLURL,
 		CheckedAt:  nowUTC(),
 		Message:    "github issue comment created",
+	}, nil
+}
+
+func (c *GitHubConnector) createGitHubIssue(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
+	baseURL, err := resolveAPIBase(githubDefaultAPIBaseURL, cfg.APIBaseURL)
+	if err != nil {
+		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	owner, repo, err := splitGitHubRepository(req.Repository)
+	if err != nil {
+		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	endpoint, err := apiURL(baseURL, "repos", owner, repo, "issues")
+	if err != nil {
+		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	payload := map[string]string{
+		"title": req.Title,
+	}
+	if strings.TrimSpace(req.Description) != "" {
+		payload["body"] = req.Description
+	}
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, payload)
+	if err != nil {
+		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.Token)
+	httpReq.Header.Set("Accept", "application/vnd.github+json")
+	var response struct {
+		ID      int64  `json:"id"`
+		Number  int    `json:"number"`
+		HTMLURL string `json:"html_url"`
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	if err := readJSONResponse(resp, &response); err != nil {
+		return ActionResult{Provider: ProviderGitHub, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+	}
+	externalID := strconv.FormatInt(response.ID, 10)
+	if response.Number > 0 {
+		externalID = strconv.Itoa(response.Number)
+	}
+	return ActionResult{
+		Provider:   ProviderGitHub,
+		Action:     req.Action,
+		OK:         true,
+		StatusCode: resp.StatusCode,
+		ExternalID: externalID,
+		URL:        response.HTMLURL,
+		CheckedAt:  nowUTC(),
+		Message:    "github issue created",
 	}, nil
 }
 

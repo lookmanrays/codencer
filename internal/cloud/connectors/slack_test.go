@@ -30,7 +30,7 @@ func TestSlackClientValidateUsesAuthTest(t *testing.T) {
 		gotAuth = r.Header.Get("Authorization")
 		gotBody, _ = ioReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true,"team":"team","user":"bot"}`))
+		_, _ = w.Write([]byte(`{"ok":true,"team_id":"T123","team":"team","user_id":"U123","user":"bot"}`))
 	}))
 	defer srv.Close()
 
@@ -79,6 +79,41 @@ func TestSlackClientPostMessage(t *testing.T) {
 	}
 	if body["channel"] != "C123" || body["text"] != "Hello" || body["thread_ts"] != "1713095999.000001" {
 		t.Fatalf("unexpected postMessage body: %#v", body)
+	}
+	if res.Channel != "C123" || res.TS != "1713096000.000100" {
+		t.Fatalf("unexpected result: %#v", res)
+	}
+}
+
+func TestSlackClientUpdateMessage(t *testing.T) {
+	t.Parallel()
+
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/chat.update" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer xoxb-token" {
+			t.Fatalf("missing auth header: %q", r.Header.Get("Authorization"))
+		}
+		decoded, _ := ioReadAll(r.Body)
+		_ = json.Unmarshal(decoded, &body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"channel":"C123","ts":"1713096000.000100","text":"Updated"}`))
+	}))
+	defer srv.Close()
+
+	client := &SlackClient{
+		BaseURL:    srv.URL,
+		BotToken:   "xoxb-token",
+		HTTPClient: srv.Client(),
+	}
+	res, err := client.UpdateMessage(context.Background(), "C123", "1713096000.000100", "Updated")
+	if err != nil {
+		t.Fatalf("UpdateMessage failed: %v", err)
+	}
+	if body["channel"] != "C123" || body["ts"] != "1713096000.000100" || body["text"] != "Updated" {
+		t.Fatalf("unexpected updateMessage body: %#v", body)
 	}
 	if res.Channel != "C123" || res.TS != "1713096000.000100" {
 		t.Fatalf("unexpected result: %#v", res)
@@ -137,6 +172,33 @@ func TestSlackNormalizeInteractiveApproval(t *testing.T) {
 	ev := events[0]
 	if ev.Kind != "block_actions" || ev.ApprovalAction != "approve" || ev.CallbackID != "gate-1" {
 		t.Fatalf("unexpected interactive normalization: %#v", ev)
+	}
+}
+
+func TestSlackNormalizeSlashCommand(t *testing.T) {
+	t.Parallel()
+
+	form := url.Values{}
+	form.Set("command", "/codencer")
+	form.Set("channel_id", "C3")
+	form.Set("user_id", "U3")
+	form.Set("text", "status")
+	form.Set("response_url", "https://slack.example/response")
+	raw := []byte(form.Encode())
+	req := httptest.NewRequest(http.MethodPost, "/slack", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setSlackSignature(req.Header, "slack-secret", raw, 1713096000)
+
+	events, err := NormalizeSlackRequest(req, "slack-secret", time.Unix(1713096000, 0))
+	if err != nil {
+		t.Fatalf("NormalizeSlackRequest failed: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev.Kind != "slash_command" || ev.Command != "/codencer" || ev.Text != "status" {
+		t.Fatalf("unexpected slash command normalization: %#v", ev)
 	}
 }
 

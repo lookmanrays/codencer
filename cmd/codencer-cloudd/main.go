@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,8 +41,9 @@ func run(args []string) error {
 	}
 	defer store.Close()
 
-	var relayHandler http.Handler
+	var relayRuntime *cloud.RelayRuntime
 	var relayStore *relay.Store
+	var relayServer *relay.Server
 	if *relayConfigPath != "" {
 		relayCfg, err := relay.LoadConfig(*relayConfigPath)
 		if err != nil {
@@ -54,10 +54,14 @@ func run(args []string) error {
 			return err
 		}
 		defer relayStore.Close()
-		relayHandler = relay.NewServer(relayCfg, relayStore).Handler()
+		relayServer = relay.NewServer(relayCfg, relayStore)
+		relayRuntime = &cloud.RelayRuntime{
+			Server: relayServer,
+			Store:  relayStore,
+		}
 	}
 
-	server := cloud.NewServer(cfg, store, cloudconnectors.NewRegistry(), relayHandler)
+	server := cloud.NewServer(cfg, store, cloudconnectors.NewRegistry(), relayRuntime)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	return server.Start(ctx)

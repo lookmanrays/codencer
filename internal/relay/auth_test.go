@@ -93,3 +93,47 @@ func TestPlannerAdminScopeRequiredForRelayStatus(t *testing.T) {
 		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestServeAsPlannerAllowsTrustedInProcessPrincipal(t *testing.T) {
+	t.Parallel()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := relay.NewServer(&relay.Config{
+		DBPath: filepath.Join(t.TempDir(), "unused.db"),
+	}, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/status", nil)
+	rec := httptest.NewRecorder()
+	server.ServeAsPlanner(rec, req, "cloud", []string{"admin:read"}, nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeAsPlannerStillEnforcesScopeAndInstanceRestrictions(t *testing.T) {
+	t.Parallel()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := relay.NewServer(&relay.Config{
+		DBPath: filepath.Join(t.TempDir(), "unused.db"),
+	}, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/instances/inst-denied/runs", nil)
+	rec := httptest.NewRecorder()
+	server.ServeAsPlanner(rec, req, "cloud", []string{"runs:*"}, []string{"inst-allowed"})
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}

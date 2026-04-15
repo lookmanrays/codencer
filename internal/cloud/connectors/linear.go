@@ -35,6 +35,13 @@ type LinearIssue struct {
 	URL   string `json:"url,omitempty"`
 }
 
+// LinearComment captures the normalized write result for comment creation.
+type LinearComment struct {
+	ID   string `json:"id"`
+	Body string `json:"body,omitempty"`
+	URL  string `json:"url,omitempty"`
+}
+
 // LinearNormalizedEvent is a provider-specific normalized event for issues/comments.
 type LinearNormalizedEvent struct {
 	Provider         string         `json:"provider"`
@@ -63,10 +70,20 @@ func (c *LinearClient) Validate(ctx context.Context) error {
 	if strings.TrimSpace(c.Token) == "" {
 		return fmt.Errorf("linear token is required")
 	}
-	_, err := c.graphQL(ctx, map[string]any{
+	res, err := c.graphQL(ctx, map[string]any{
 		"query": `query Me { viewer { id name email } }`,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	viewer, ok := nestedMap(res, "data", "viewer")
+	if !ok {
+		return fmt.Errorf("linear viewer response missing viewer")
+	}
+	if strings.TrimSpace(stringFromMap(viewer, "id")) == "" && strings.TrimSpace(stringFromMap(viewer, "name")) == "" {
+		return fmt.Errorf("linear viewer response missing identity fields")
+	}
+	return nil
 }
 
 // CreateIssue creates a real Linear issue using GraphQL.
@@ -110,6 +127,49 @@ func (c *LinearClient) CreateIssue(ctx context.Context, teamID, title, descripti
 		ID:    stringFromMap(issueMap, "id"),
 		Title: stringFromMap(issueMap, "title"),
 		URL:   stringFromMap(issueMap, "url"),
+	}, nil
+}
+
+// AddComment posts a real comment to an existing Linear issue.
+func (c *LinearClient) AddComment(ctx context.Context, issueID, body string) (*LinearComment, error) {
+	if c == nil {
+		return nil, fmt.Errorf("linear client is nil")
+	}
+	issueID = strings.TrimSpace(issueID)
+	body = strings.TrimSpace(body)
+	if issueID == "" {
+		return nil, fmt.Errorf("issue id is required")
+	}
+	if body == "" {
+		return nil, fmt.Errorf("comment body is required")
+	}
+
+	res, err := c.graphQL(ctx, map[string]any{
+		"query": `mutation CommentCreate($input: CommentCreateInput!) {
+			commentCreate(input: $input) {
+				success
+				comment { id body url }
+			}
+		}`,
+		"variables": map[string]any{
+			"input": map[string]any{
+				"issueId": issueID,
+				"body":    body,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	commentMap, ok := nestedMap(res, "data", "commentCreate", "comment")
+	if !ok {
+		return nil, fmt.Errorf("linear commentCreate response missing comment")
+	}
+	return &LinearComment{
+		ID:   stringFromMap(commentMap, "id"),
+		Body: stringFromMap(commentMap, "body"),
+		URL:  stringFromMap(commentMap, "url"),
 	}, nil
 }
 
@@ -278,11 +338,19 @@ func (c *LinearConnector) ValidateInstallation(ctx context.Context, cfg Installa
 		HTTPClient: c.client,
 	}
 	err := client.Validate(ctx)
+	details := map[string]string{}
+	if strings.TrimSpace(cfg.APIBaseURL) != "" {
+		details["api_base_url"] = strings.TrimSpace(cfg.APIBaseURL)
+	}
+	if strings.TrimSpace(cfg.Token) != "" {
+		details["token_present"] = "true"
+	}
 	result := ValidationResult{
 		Provider:  ProviderLinear,
 		OK:        err == nil,
 		CheckedAt: nowUTC(),
 		Message:   "linear token validated via viewer query",
+		Details:   details,
 	}
 	if err != nil {
 		result.Message = err.Error()
@@ -339,31 +407,51 @@ func (c *LinearConnector) NormalizeEvent(headers http.Header, body []byte, cfg I
 }
 
 func (c *LinearConnector) ExecuteAction(ctx context.Context, req ActionRequest, cfg InstallationConfig) (ActionResult, error) {
-	if req.Action != ActionLinearCreateIssue {
-		err := fmt.Errorf("unsupported linear action %q", req.Action)
-		return ActionResult{Provider: ProviderLinear, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
-	}
 	client := &LinearClient{
 		BaseURL:    cfg.APIBaseURL,
 		Token:      cfg.Token,
 		HTTPClient: c.client,
 	}
-	issue, err := client.CreateIssue(ctx, req.TeamID, req.Title, req.Description)
-	if err != nil {
+	switch req.Action {
+	case ActionLinearCreateIssue:
+		issue, err := client.CreateIssue(ctx, req.TeamID, req.Title, req.Description)
+		if err != nil {
+			return ActionResult{Provider: ProviderLinear, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return ActionResult{
+			Provider:   ProviderLinear,
+			Action:     req.Action,
+			OK:         true,
+			ExternalID: issue.ID,
+			URL:        issue.URL,
+			CheckedAt:  nowUTC(),
+			Message:    "linear issue created",
+			Details: map[string]string{
+				"title": issue.Title,
+			},
+		}, nil
+	case ActionLinearAddComment:
+		comment, err := client.AddComment(ctx, req.IssueID, req.Body)
+		if err != nil {
+			return ActionResult{Provider: ProviderLinear, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
+		}
+		return ActionResult{
+			Provider:   ProviderLinear,
+			Action:     req.Action,
+			OK:         true,
+			ExternalID: comment.ID,
+			URL:        comment.URL,
+			CheckedAt:  nowUTC(),
+			Message:    "linear issue comment created",
+			Details: map[string]string{
+				"issue_id": req.IssueID,
+				"body":     comment.Body,
+			},
+		}, nil
+	default:
+		err := fmt.Errorf("unsupported linear action %q", req.Action)
 		return ActionResult{Provider: ProviderLinear, Action: req.Action, CheckedAt: nowUTC(), Message: err.Error()}, err
 	}
-	return ActionResult{
-		Provider:   ProviderLinear,
-		Action:     req.Action,
-		OK:         true,
-		ExternalID: issue.ID,
-		URL:        issue.URL,
-		CheckedAt:  nowUTC(),
-		Message:    "linear issue created",
-		Details: map[string]string{
-			"title": issue.Title,
-		},
-	}, nil
 }
 
 func (c *LinearConnector) DeriveStatus(validation ValidationResult, webhook WebhookVerification) ConnectorStatus {

@@ -90,6 +90,18 @@ func (s *Server) Handler() http.Handler {
 	return s.server.Handler
 }
 
+// ConnectorStatus exposes the current relay view of connector availability for
+// trusted in-process callers such as the cloud control plane.
+func (s *Server) ConnectorStatus(record *ConnectorRecord) InstanceStatus {
+	return s.connectorStatus(record)
+}
+
+// InstanceStatus exposes the current relay view of instance availability for
+// trusted in-process callers such as the cloud control plane.
+func (s *Server) InstanceStatus(ctx context.Context, record *InstanceRecord) (InstanceStatus, error) {
+	return s.instanceStatus(ctx, record)
+}
+
 func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")

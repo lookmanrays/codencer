@@ -21,10 +21,15 @@ type ActionName string
 
 const (
 	ActionGitHubCreateIssueComment ActionName = "create_issue_comment"
+	ActionGitHubCreateIssue        ActionName = "create_issue"
 	ActionGitLabCreateIssueNote    ActionName = "create_issue_note"
+	ActionGitLabCreateIssue        ActionName = "create_issue"
 	ActionJiraAddIssueComment      ActionName = "add_issue_comment"
+	ActionJiraTransitionIssue      ActionName = "transition_issue"
 	ActionLinearCreateIssue        ActionName = "create_issue"
+	ActionLinearAddComment         ActionName = "add_comment"
 	ActionSlackPostMessage         ActionName = "post_message"
+	ActionSlackUpdateMessage       ActionName = "update_message"
 )
 
 type InstallationConfig struct {
@@ -71,17 +76,20 @@ type Event struct {
 }
 
 type ActionRequest struct {
-	Action      ActionName `json:"action"`
-	Repository  string     `json:"repository,omitempty"`
-	Project     string     `json:"project,omitempty"`
-	IssueNumber int        `json:"issue_number,omitempty"`
-	IssueKey    string     `json:"issue_key,omitempty"`
-	Channel     string     `json:"channel,omitempty"`
-	ThreadTS    string     `json:"thread_ts,omitempty"`
-	TeamID      string     `json:"team_id,omitempty"`
-	Title       string     `json:"title,omitempty"`
-	Description string     `json:"description,omitempty"`
-	Body        string     `json:"body,omitempty"`
+	Action       ActionName `json:"action"`
+	Repository   string     `json:"repository,omitempty"`
+	Project      string     `json:"project,omitempty"`
+	IssueNumber  int        `json:"issue_number,omitempty"`
+	IssueKey     string     `json:"issue_key,omitempty"`
+	IssueID      string     `json:"issue_id,omitempty"`
+	Channel      string     `json:"channel,omitempty"`
+	ThreadTS     string     `json:"thread_ts,omitempty"`
+	MessageTS    string     `json:"message_ts,omitempty"`
+	TeamID       string     `json:"team_id,omitempty"`
+	TransitionID string     `json:"transition_id,omitempty"`
+	Title        string     `json:"title,omitempty"`
+	Description  string     `json:"description,omitempty"`
+	Body         string     `json:"body,omitempty"`
 }
 
 type ActionResult struct {

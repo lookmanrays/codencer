@@ -47,6 +47,36 @@ func TestJiraClientValidateUsesBasicAuth(t *testing.T) {
 	}
 }
 
+func TestJiraConnectorValidateInstallationReportsProviderDetails(t *testing.T) {
+	t.Parallel()
+
+	connector := NewJiraConnector(nil)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"accountId":"acct-1","displayName":"Jane Doe","emailAddress":"jane@example.com","accountType":"atlassian"}`))
+	}))
+	defer srv.Close()
+
+	connector.client = srv.Client()
+	validation, err := connector.ValidateInstallation(context.Background(), InstallationConfig{
+		APIBaseURL: srv.URL,
+		Username:   "jane@example.com",
+		Token:      "jira-token",
+	})
+	if err != nil {
+		t.Fatalf("ValidateInstallation failed: %v", err)
+	}
+	if !validation.OK || validation.Identity != "jane@example.com" {
+		t.Fatalf("unexpected validation: %#v", validation)
+	}
+	if got := validation.Details["username"]; got != "jane@example.com" {
+		t.Fatalf("unexpected validation details: %#v", validation.Details)
+	}
+	if got := validation.Details["api_base_url"]; got != srv.URL {
+		t.Fatalf("unexpected validation details: %#v", validation.Details)
+	}
+}
+
 func TestJiraClientAddComment(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +121,40 @@ func TestJiraClientAddComment(t *testing.T) {
 	}
 	if res.CommentID != "10001" || res.IssueKey != "PROJ-17" || res.Author != "Codex" {
 		t.Fatalf("unexpected result: %#v", res)
+	}
+}
+
+func TestJiraClientTransitionIssue(t *testing.T) {
+	t.Parallel()
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/rest/api/3/issue/PROJ-17/transitions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		gotBody, _ = ioReadAll(r.Body)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	client := &JiraClient{
+		BaseURL:    srv.URL,
+		Email:      "tester@example.com",
+		APIToken:   "jira-token",
+		HTTPClient: srv.Client(),
+	}
+	res, err := client.TransitionIssue(context.Background(), "PROJ-17", "31")
+	if err != nil {
+		t.Fatalf("TransitionIssue failed: %v", err)
+	}
+	if !strings.Contains(string(gotBody), `"id":"31"`) {
+		t.Fatalf("transition payload not posted: %s", string(gotBody))
+	}
+	if res.IssueKey != "PROJ-17" || res.TransitionID != "31" {
+		t.Fatalf("unexpected transition result: %#v", res)
 	}
 }
 
@@ -145,6 +209,23 @@ func TestNormalizeJiraCommentPayload(t *testing.T) {
 	}
 	if ev.Comment != "Looks good" || ev.Author != "Grace Hopper" {
 		t.Fatalf("unexpected comment normalization: %#v", ev)
+	}
+}
+
+func TestJiraConnectorStatusIncludesPollingMode(t *testing.T) {
+	t.Parallel()
+
+	connector := NewJiraConnector(nil)
+	status := connector.DeriveStatus(ValidationResult{
+		Provider: ProviderJira,
+		OK:       true,
+		Identity: "jane@example.com",
+	}, WebhookVerification{})
+	if got := status.Details["polling_mode"]; got != "polling-first" {
+		t.Fatalf("unexpected status details: %#v", status.Details)
+	}
+	if got := status.Details["webhook_ingest"]; got != "disabled" {
+		t.Fatalf("unexpected status details: %#v", status.Details)
 	}
 }
 

@@ -55,20 +55,22 @@ Key constraints remain unchanged:
 
 - `bin/codencer-connectord`: enroll with a relay and maintain the outbound authenticated connector session
 - `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
-- `bin/codencer-cloudctl`: admin CLI for cloud bootstrap, status, org/workspace/project, token, installation, event, and audit flows
-- `bin/codencer-cloudd`: cloud control-plane server; can optionally compose the relay handler under the same process
+- `bin/codencer-cloudctl`: admin CLI for cloud bootstrap, status, org/workspace/project, token, installation, runtime-connector, runtime-instance, event, and audit flows
+- `bin/codencer-cloudd`: cloud control-plane server; can optionally start an internal relay runtime bridge for tenant-scoped Codencer runtime control
 - `bin/codencer-cloudworkerd`: cloud worker for background connector maintenance; Jira is polling-first in this alpha pass
 - `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side agent-broker; it lives under the nested `cmd/broker` module
 
 ### Cloud Control Plane (Alpha)
 
-Codencer also includes a separate cloud control-plane foundation for connector installations and operator bootstrap. It is not a replacement for the local daemon, the relay bridge, or the self-host run/step/attempt path.
+Codencer also includes a cloud control-plane foundation for provider connector installations, operator bootstrap, and tenant-scoped Codencer runtime control. It is not a replacement for the local daemon, the relay bridge, or the self-host run/step/attempt path.
 
 - Build the cloud binaries with `make build-cloud`.
 - Start the cloud server with `./bin/codencer-cloudd --config .codencer/cloud/config.json`.
+- Start it with `--relay-config` when you want cloud to claim and control Codencer runtime connectors and shared instances through the internal relay bridge.
 - Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, and API token state directly in the cloud store.
-- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|events|audit` for remote control-plane operations.
+- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|runtime-connectors|runtime-instances|events|audit` for remote control-plane operations.
 - Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this pass.
+- Cloud runtime control is HTTP-scoped in this pass. The cloud daemon does not yet expose a cloud-scoped MCP surface.
 
 For the cloud docs and status matrix, see [docs/CLOUD.md](docs/CLOUD.md), [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md), and [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md).
 

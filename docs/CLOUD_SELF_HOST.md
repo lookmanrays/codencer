@@ -7,9 +7,9 @@ This guide covers the practical self-host bootstrap path for Codencer Cloud.
 - `codencer-cloudd` on a server, VPS, or local host
 - `codencer-cloudctl` on the operator machine
 - `codencer-cloudworkerd` alongside the cloud daemon or as a scheduled worker
-- optional relay composition under `codencer-cloudd` if you want cloud and relay surfaces served by one process
+- optional internal relay bridge under `codencer-cloudd` if you want cloud to own tenant-scoped Codencer runtime control
 
-The cloud control plane is separate from the local daemon/connector self-host path. It manages cloud metadata and connector installations; it does not execute coding work.
+The cloud control plane still does not execute coding work. In this pass it can also claim runtime connectors and shared instances into org/workspace/project scope, but the daemon and connector still execute and report locally.
 
 ## Build
 
@@ -42,7 +42,7 @@ Create a cloud config file such as `.codencer/cloud/config.json`:
 Notes:
 
 - `master_key` is required if you want encrypted installation secrets.
-- `relay_config_path` is optional and only needed if you want `codencer-cloudd` to compose the relay handler in the same process.
+- `relay_config_path` is optional and only needed if you want `codencer-cloudd` to own cloud-scoped runtime control through an internal relay bridge.
 - If you use the environment variables `CODENCER_CLOUD_DB_PATH`, `CODENCER_CLOUD_HOST`, `CODENCER_CLOUD_PORT`, `CODENCER_CLOUD_MASTER_KEY`, or `CODENCER_CLOUD_RELAY_CONFIG`, they override the file values.
 
 ## Bootstrap Order
@@ -80,6 +80,8 @@ Cloud plus relay composition:
 ```bash
 ./bin/codencer-cloudd --config .codencer/cloud/config.json --relay-config .codencer/relay/config.json
 ```
+
+In composed mode, use the cloud API for tenant-scoped runtime control. Do not treat raw relay routes as the cloud contract.
 
 ## Operator Commands
 
@@ -119,7 +121,40 @@ Then toggle the installation explicitly:
 ./bin/codencer-cloudctl install enable --cloud-url http://127.0.0.1:8190 --token <token> --installation-id <installation-id>
 ```
 
-Note: the current CLI parser still normalizes list forms. For now, use the HTTP API for list assertions in automation and smoke runs. Keep using `cloudctl` for bootstrap, status, create, validate, enable, disable, and revoke flows.
+## Claim Codencer Runtime Into Cloud Scope
+
+When `codencer-cloudd` has a relay bridge configured and the relay already knows about a local Codencer connector, claim that runtime connector into tenant scope:
+
+```bash
+./bin/codencer-cloudctl runtime-connectors claim \
+  --cloud-url http://127.0.0.1:8190 \
+  --token <token> \
+  --org-id <org-id> \
+  --workspace-id <workspace-id> \
+  --project-id <project-id> \
+  --connector-id <relay-connector-id> \
+  --json
+```
+
+Then inspect the claimed runtime connector and its shared instances:
+
+```bash
+./bin/codencer-cloudctl runtime-connectors list --cloud-url http://127.0.0.1:8190 --token <token> --org-id <org-id> --json
+./bin/codencer-cloudctl runtime-connectors instances --cloud-url http://127.0.0.1:8190 --token <token> --runtime-connector-id <runtime-connector-record-id> --json
+./bin/codencer-cloudctl runtime-instances list --cloud-url http://127.0.0.1:8190 --token <token> --org-id <org-id> --json
+```
+
+You can also use the cloud HTTP surface directly for runtime work:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"adapter":"sim","title":"Smoke run"}' \
+  http://127.0.0.1:8190/api/cloud/v1/runtime/instances/<instance-id>/runs
+```
+
+Runtime steps, gates, logs, validations, and artifact content follow the same instance-scoped prefix under `/api/cloud/v1/runtime/instances/<instance-id>/...`.
 
 ## Worker
 
@@ -153,6 +188,7 @@ The repo includes `scripts/cloud_smoke.sh` and a `make cloud-smoke` target. The 
 - installation enable/disable
 - audit inspection
 - a safe no-op `cloudworkerd --once` pass
+- optional runtime claim/list assertions when `CLOUD_RELAY_CONFIG` and `CLOUD_RUNTIME_CONNECTOR_ID` are supplied
 
 It does not claim external provider verification.
 
@@ -161,6 +197,8 @@ It does not claim external provider verification.
 - If `bootstrap` or `status` fail, confirm the cloud server is using the same `db_path` as your config.
 - If secret storage fails, confirm `master_key` is set.
 - If a connector install remains `disabled`, check the enable route and the audit trail.
+- If runtime connector claim fails, confirm the relay bridge is configured and that the target connector id already exists in relay state.
+- If a runtime instance does not appear, confirm it is still shared by the local Codencer connector.
 - If Jira polling fails, confirm `config.jql` or `config.project_key` is present and that the provider credentials are valid.
 
 For connector capability details, see [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md). For the high-level cloud overview, see [CLOUD.md](CLOUD.md).

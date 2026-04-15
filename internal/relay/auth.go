@@ -20,6 +20,15 @@ func (s *Server) withPlannerScope(scope string, instanceIDFromRequest func(*http
 		if instanceIDFromRequest != nil {
 			instanceID = instanceIDFromRequest(r)
 		}
+		principal := plannerFromContext(r.Context())
+		if principal != nil {
+			if err := authorizePrincipal(principal, scope, instanceID); err != nil {
+				writeAPIError(w, err.Status, err.Code, err.Message)
+				return
+			}
+			next(w, r)
+			return
+		}
 		principal, err := s.authenticatePlanner(r, scope, instanceID)
 		if err != nil {
 			writeAPIError(w, err.Status, err.Code, err.Message)
@@ -90,4 +99,27 @@ func scopeAllowed(scopes []string, required string) bool {
 		}
 	}
 	return false
+}
+
+// ServeAsPlanner routes an HTTP request through the relay using an injected
+// planner principal. This is intended for trusted in-process callers such as the
+// composed cloud control plane; it does not change the public relay auth model.
+func (s *Server) ServeAsPlanner(w http.ResponseWriter, r *http.Request, name string, scopes []string, instanceIDs []string) {
+	if s == nil || s.server == nil || s.server.Handler == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "relay_unavailable", "relay handler is not available")
+		return
+	}
+	principal := &plannerPrincipal{
+		Name:        name,
+		Scopes:      append([]string(nil), scopes...),
+		InstanceIDs: make(map[string]struct{}, len(instanceIDs)),
+	}
+	for _, instanceID := range instanceIDs {
+		instanceID = strings.TrimSpace(instanceID)
+		if instanceID == "" {
+			continue
+		}
+		principal.InstanceIDs[instanceID] = struct{}{}
+	}
+	s.server.Handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), plannerPrincipalKey{}, principal)))
 }
