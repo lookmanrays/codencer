@@ -273,6 +273,41 @@ ALTER TABLE connector_installations ADD COLUMN last_action_at DATETIME;
 ALTER TABLE runtime_connector_installations ADD COLUMN owner_membership_id TEXT;
 `,
 	},
+	{
+		version: 4,
+		sql: `
+CREATE TABLE IF NOT EXISTS connector_events_v4 (
+	id TEXT PRIMARY KEY,
+	installation_id TEXT NOT NULL,
+	source_event_id TEXT,
+	event_type TEXT NOT NULL,
+	action TEXT,
+	status TEXT NOT NULL,
+	payload_json TEXT,
+	metadata_json TEXT,
+	occurred_at DATETIME NOT NULL,
+	received_at DATETIME NOT NULL,
+	processed_at DATETIME,
+	error_message TEXT,
+	FOREIGN KEY (installation_id) REFERENCES connector_installations(id) ON DELETE CASCADE
+);
+
+INSERT INTO connector_events_v4 (
+	id, installation_id, source_event_id, event_type, action, status, payload_json, metadata_json,
+	occurred_at, received_at, processed_at, error_message
+)
+SELECT
+	id, installation_id, source_event_id, event_type, action, status, payload_json, metadata_json,
+	occurred_at, received_at, processed_at, error_message
+FROM connector_events;
+
+DROP TABLE connector_events;
+ALTER TABLE connector_events_v4 RENAME TO connector_events;
+
+CREATE INDEX IF NOT EXISTS idx_connector_events_installation_id ON connector_events(installation_id);
+CREATE INDEX IF NOT EXISTS idx_connector_events_source_event_id ON connector_events(source_event_id);
+`,
+	},
 }
 
 // OpenStore opens or creates the cloud SQLite store and applies code-defined migrations.
@@ -887,6 +922,40 @@ func (s *Store) ListAPITokens(ctx context.Context, orgID, workspaceID, projectID
 		out = append(out, token)
 	}
 	return out, rows.Err()
+}
+
+// GetAPIToken loads token metadata by token record ID.
+func (s *Store) GetAPIToken(ctx context.Context, id string) (*APIToken, error) {
+	var token APIToken
+	var disabled int
+	var workspaceID sql.NullString
+	var projectID sql.NullString
+	var membershipID sql.NullString
+	var subjectName sql.NullString
+	var scopesJSON sql.NullString
+	var lastUsed sql.NullTime
+	var revoked sql.NullTime
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id, org_id, workspace_id, project_id, membership_id, name, kind, subject_type, subject_name, token_hash, token_prefix, scopes_json, disabled, created_at, updated_at, last_used_at, revoked_at
+		FROM api_tokens
+		WHERE id = ?
+	`, id).Scan(&token.ID, &token.OrgID, &workspaceID, &projectID, &membershipID, &token.Name, &token.Kind, &token.SubjectType, &subjectName, &token.TokenHash, &token.TokenPrefix, &scopesJSON, &disabled, &token.CreatedAt, &token.UpdatedAt, &lastUsed, &revoked); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound("api token", id)
+		}
+		return nil, fmt.Errorf("get api token: %w", err)
+	}
+	if err := json.Unmarshal([]byte(scopesJSON.String), &token.Scopes); err != nil && scopesJSON.Valid {
+		return nil, fmt.Errorf("decode api token scopes: %w", err)
+	}
+	token.Disabled = disabled != 0
+	token.WorkspaceID = workspaceID.String
+	token.ProjectID = projectID.String
+	token.MembershipID = membershipID.String
+	token.SubjectName = subjectName.String
+	token.LastUsedAt = scanTime(lastUsed)
+	token.RevokedAt = scanTime(revoked)
+	return &token, nil
 }
 
 // CreateConnectorInstallation stores or updates a connector installation record.
@@ -1525,16 +1594,6 @@ func (s *Store) CreateConnectorEvent(ctx context.Context, event ConnectorEvent) 
 			id, installation_id, source_event_id, event_type, action, status, payload_json, metadata_json,
 			occurred_at, received_at, processed_at, error_message
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(installation_id, source_event_id) DO UPDATE SET
-			event_type = excluded.event_type,
-			action = excluded.action,
-			status = excluded.status,
-			payload_json = excluded.payload_json,
-			metadata_json = excluded.metadata_json,
-			occurred_at = excluded.occurred_at,
-			received_at = excluded.received_at,
-			processed_at = excluded.processed_at,
-			error_message = excluded.error_message
 	`, event.ID, event.InstallationID, nullString(event.SourceEventID), event.EventType, nullString(event.Action), event.Status, rawMessage(event.PayloadJSON), rawMessage(event.MetadataJSON), event.OccurredAt, event.ReceivedAt, nullTime(event.ProcessedAt), nullString(event.ErrorMessage))
 	if err != nil {
 		return nil, fmt.Errorf("insert connector event: %w", err)
@@ -1586,6 +1645,68 @@ func (s *Store) ListConnectorEvents(ctx context.Context, installationID string, 
 	return out, rows.Err()
 }
 
+// ListConnectorEventsScoped returns recent connector events restricted to an
+// authorized org/workspace/project scope, optionally narrowed to one installation.
+func (s *Store) ListConnectorEventsScoped(ctx context.Context, orgID, workspaceID, projectID, installationID string, limit int) ([]ConnectorEvent, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	query := `
+		SELECT ce.id, ce.installation_id, ce.source_event_id, ce.event_type, ce.action, ce.status, ce.payload_json, ce.metadata_json, ce.occurred_at, ce.received_at, ce.processed_at, ce.error_message
+		FROM connector_events ce
+		INNER JOIN connector_installations ci ON ci.id = ce.installation_id
+	`
+	args := []any{}
+	clauses := make([]string, 0, 4)
+	if strings.TrimSpace(orgID) != "" {
+		clauses = append(clauses, "ci.org_id = ?")
+		args = append(args, orgID)
+	}
+	if strings.TrimSpace(workspaceID) != "" {
+		clauses = append(clauses, "ci.workspace_id = ?")
+		args = append(args, workspaceID)
+	}
+	if strings.TrimSpace(projectID) != "" {
+		clauses = append(clauses, "ci.project_id = ?")
+		args = append(args, projectID)
+	}
+	if strings.TrimSpace(installationID) != "" {
+		clauses = append(clauses, "ce.installation_id = ?")
+		args = append(args, installationID)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += ` ORDER BY ce.received_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list scoped connector events: %w", err)
+	}
+	defer rows.Close()
+	var out []ConnectorEvent
+	for rows.Next() {
+		var event ConnectorEvent
+		var payloadJSON sql.NullString
+		var metadataJSON sql.NullString
+		var processed sql.NullTime
+		var sourceID sql.NullString
+		var action sql.NullString
+		var errorMessage sql.NullString
+		if err := rows.Scan(&event.ID, &event.InstallationID, &sourceID, &event.EventType, &action, &event.Status, &payloadJSON, &metadataJSON, &event.OccurredAt, &event.ReceivedAt, &processed, &errorMessage); err != nil {
+			return nil, fmt.Errorf("scan scoped connector event: %w", err)
+		}
+		event.SourceEventID = sourceID.String
+		event.Action = action.String
+		event.PayloadJSON = rawMessageFromNull(payloadJSON)
+		event.MetadataJSON = rawMessageFromNull(metadataJSON)
+		event.ProcessedAt = scanTime(processed)
+		event.ErrorMessage = errorMessage.String
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
 // CreateConnectorActionLog records a connector action dispatch.
 func (s *Store) CreateConnectorActionLog(ctx context.Context, log ConnectorActionLog) (*ConnectorActionLog, error) {
 	if strings.TrimSpace(log.InstallationID) == "" {
@@ -1622,6 +1743,46 @@ func (s *Store) CreateConnectorActionLog(ctx context.Context, log ConnectorActio
 		return nil, fmt.Errorf("insert connector action log: %w", err)
 	}
 	return &log, nil
+}
+
+// ListConnectorActionLogs returns recent action logs for an installation.
+func (s *Store) ListConnectorActionLogs(ctx context.Context, installationID string, limit int) ([]ConnectorActionLog, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	query := `
+		SELECT id, installation_id, action_name, status, request_json, response_json, error_message, started_at, completed_at
+		FROM connector_action_logs
+	`
+	args := []any{}
+	if strings.TrimSpace(installationID) != "" {
+		query += ` WHERE installation_id = ?`
+		args = append(args, installationID)
+	}
+	query += ` ORDER BY started_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list connector action logs: %w", err)
+	}
+	defer rows.Close()
+	var out []ConnectorActionLog
+	for rows.Next() {
+		var log ConnectorActionLog
+		var requestJSON sql.NullString
+		var responseJSON sql.NullString
+		var errorMessage sql.NullString
+		var completedAt sql.NullTime
+		if err := rows.Scan(&log.ID, &log.InstallationID, &log.ActionName, &log.Status, &requestJSON, &responseJSON, &errorMessage, &log.StartedAt, &completedAt); err != nil {
+			return nil, fmt.Errorf("scan connector action log: %w", err)
+		}
+		log.RequestJSON = rawMessageFromNull(requestJSON)
+		log.ResponseJSON = rawMessageFromNull(responseJSON)
+		log.ErrorMessage = errorMessage.String
+		log.CompletedAt = scanTime(completedAt)
+		out = append(out, log)
+	}
+	return out, rows.Err()
 }
 
 // CreateCloudAuditEvent appends an audit event to the cloud audit trail.
@@ -1696,16 +1857,82 @@ func (s *Store) ListCloudAuditEvents(ctx context.Context, limit int) ([]CloudAud
 	return out, rows.Err()
 }
 
+// ListCloudAuditEventsScoped returns recent audit events restricted to an exact
+// org/workspace/project scope.
+func (s *Store) ListCloudAuditEventsScoped(ctx context.Context, orgID, workspaceID, projectID string, limit int) ([]CloudAuditEvent, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	query := `
+		SELECT id, actor_type, actor_id, action, resource_type, resource_id, org_id, workspace_id, project_id, outcome, details_json, created_at
+		FROM cloud_audit_events
+	`
+	args := []any{}
+	clauses := make([]string, 0, 3)
+	if strings.TrimSpace(orgID) != "" {
+		clauses = append(clauses, "org_id = ?")
+		args = append(args, orgID)
+	}
+	if strings.TrimSpace(workspaceID) != "" {
+		clauses = append(clauses, "workspace_id = ?")
+		args = append(args, workspaceID)
+	}
+	if strings.TrimSpace(projectID) != "" {
+		clauses = append(clauses, "project_id = ?")
+		args = append(args, projectID)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += ` ORDER BY created_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list scoped cloud audit events: %w", err)
+	}
+	defer rows.Close()
+	var out []CloudAuditEvent
+	for rows.Next() {
+		var event CloudAuditEvent
+		var actorID sql.NullString
+		var resourceType sql.NullString
+		var resourceID sql.NullString
+		var scopedOrgID sql.NullString
+		var scopedWorkspaceID sql.NullString
+		var scopedProjectID sql.NullString
+		var detailsJSON sql.NullString
+		if err := rows.Scan(&event.ID, &event.ActorType, &actorID, &event.Action, &resourceType, &resourceID, &scopedOrgID, &scopedWorkspaceID, &scopedProjectID, &event.Outcome, &detailsJSON, &event.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan scoped cloud audit event: %w", err)
+		}
+		event.ActorID = actorID.String
+		event.ResourceType = resourceType.String
+		event.ResourceID = resourceID.String
+		event.OrgID = scopedOrgID.String
+		event.WorkspaceID = scopedWorkspaceID.String
+		event.ProjectID = scopedProjectID.String
+		event.DetailsJSON = rawMessageFromNull(detailsJSON)
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
 // RevokeAPIToken marks an API token as revoked without deleting its historical row.
 func (s *Store) RevokeAPIToken(ctx context.Context, tokenID string) error {
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		UPDATE api_tokens
 		SET disabled = 1, revoked_at = ?, updated_at = ?
 		WHERE id = ?
 	`, now, now, tokenID)
 	if err != nil {
 		return fmt.Errorf("revoke api token: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("revoke api token rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound("api token", tokenID)
 	}
 	return nil
 }

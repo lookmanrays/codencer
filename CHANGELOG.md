@@ -7,24 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta] - 2026-04-23
+
 ### Added
 - Self-hostable v2 relay path with:
   - stable daemon instance identity and manifest-backed discovery
   - outbound authenticated connector sessions with explicit shared-instance allowlists
   - self-host relay planner API, enrollment token flow, audit persistence, and relay-side MCP tools
-- Cloud control-plane alpha foundation with `codencer-cloudd`, `codencer-cloudctl`, and `codencer-cloudworkerd`, plus bootstrap/status/org/workspace/project/token/install/event/audit flows.
+- Cloud control-plane self-host surface with `codencer-cloudd`, `codencer-cloudctl`, and `codencer-cloudworkerd`, plus bootstrap/status/org/workspace/project/token/install/event/audit flows.
 - Cloud installation enable/disable routes and matching `cloudctl install enable|disable` subcommands.
 - Truthful cloud docs and smoke guidance for the bootstrap and control-plane path.
 - **OpenClaw (acpx) Adapter**: 🧪 Experimental support for OpenClaw-compatible executors via the standardized ACP bridge.
 - Official sequential wrapper examples for bash/zsh, PowerShell, and Python under `examples/automation/`.
 - Wrapper-friendly sample task lists and prompt/task inputs for ordered execution.
 - New `scripts/smoke_test_v1.sh` for verifying all 6 primary submission modes.
+- Public beta tester guide in `docs/BETA_TESTING.md` with exact local, relay, cloud, planner/client, and provider test-track entrypoints.
+- `make build-supported`, `make verify-beta`, and `make verify-beta-docker` as explicit repo-level verification entrypoints for the supported tracks.
 
 ### Changed
-- Adopted `v0.2.0-alpha` as the truthful build/version string for the current v2 self-host alpha repo state.
+- Adopted `v0.2.0-beta` as the truthful build/version string for the current v2 local/self-host beta repo state.
 - Rewrote operator-facing v2 docs to match the implemented local/self-host path and current runtime truth.
 - Clarified that the relay is the public remote HTTP/MCP surface and the daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface.
-- Documented current self-host alpha limitations explicitly: best-effort abort, bounded artifact transport, static-token auth, and relay routing that now probes only authorized online shared instances before failing closed.
+- Documented current self-host beta boundaries explicitly: best-effort abort, bounded artifact transport, static-token auth, and relay routing that now probes only authorized online shared instances before failing closed.
 - Removed duplicate public connector/relay binary surfaces in favor of the canonical `codencer-connectord` and `codencer-relayd` entrypoints.
 - Tightened abort reporting so Codencer only reports success when the active step really reaches `cancelled`.
 - Removed committed extension dependency/build output directories and kept only the extension manifests plus source.
@@ -33,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expanded automation documentation to make the shell-planner story explicit and machine-oriented.
 - Clarified that ordered task execution in v1 is wrapper-based and not a native workflow engine.
 - Hardened smoke/example guidance around strict JSON parsing and machine-safe CLI usage.
+- Clarified the public test-track boundaries so local, relay/runtime, cloud, planner/client, and provider testing route to the right docs without mixing surfaces.
+- Parameterized the Docker cloud image build version through the compose environment instead of hardcoding it only inside the Dockerfile.
 
 ## [0.1.0-beta] - 2026-03-28
 
@@ -64,3 +70,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 [0.1.0-beta]: https://github.com/lookmanrays/codencer/releases/tag/v0.1.0-beta
+[0.2.0-beta]: https://github.com/lookmanrays/codencer/releases/tag/v0.2.0-beta

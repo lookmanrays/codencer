@@ -136,6 +136,11 @@ func (w *Worker) syncJiraInstallation(ctx context.Context, installation Connecto
 		if !event.Issue.UpdatedAt.IsZero() {
 			sourceEventID = fmt.Sprintf("%s:%d", event.Issue.Key, event.Issue.UpdatedAt.UTC().UnixMilli())
 		}
+		metadataJSON := mustJSON(map[string]any{
+			"provider":    installation.ConnectorKey,
+			"ingest_path": "poll",
+			"issue_key":   event.Issue.Key,
+		})
 		_, err = w.store.CreateConnectorEvent(ctx, ConnectorEvent{
 			InstallationID: installation.ID,
 			SourceEventID:  sourceEventID,
@@ -143,10 +148,11 @@ func (w *Worker) syncJiraInstallation(ctx context.Context, installation Connecto
 			Action:         event.Action,
 			Status:         "received",
 			PayloadJSON:    payload,
+			MetadataJSON:   metadataJSON,
 			OccurredAt:     nonZeroTime(event.Issue.UpdatedAt.UTC(), receivedAt),
 			ReceivedAt:     receivedAt,
 		})
-		if err != nil && !strings.Contains(err.Error(), "UNIQUE") {
+		if err != nil {
 			return w.failInstallation(ctx, installation, fmt.Errorf("persist jira event: %w", err))
 		}
 	}

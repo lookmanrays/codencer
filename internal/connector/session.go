@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -126,7 +127,8 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := c.advertise(ctx, conn); err != nil {
+	lastAdvertisedSignature, err := c.advertise(ctx, conn)
+	if err != nil {
 		if c.status != nil {
 			_ = c.status.MarkFailure(c.currentConfig(), err.Error(), time.Now().UTC())
 		}
@@ -135,7 +137,7 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 
 	heartbeatCtx, heartbeatCancel := context.WithCancel(ctx)
 	defer heartbeatCancel()
-	go c.heartbeatLoop(heartbeatCtx, conn)
+	go c.heartbeatLoop(heartbeatCtx, conn, lastAdvertisedSignature)
 
 	for {
 		_, message, err := conn.ReadMessage()
@@ -211,12 +213,19 @@ func (c *Client) fetchChallenge(ctx context.Context) (*relayproto.ChallengeRespo
 	return &challenge, nil
 }
 
-func (c *Client) advertise(ctx context.Context, conn *websocket.Conn) error {
+func (c *Client) advertise(ctx context.Context, conn *websocket.Conn) (string, error) {
 	cfg := c.currentConfig()
 	instances, instanceIDs, err := c.registryForConfig(cfg).Advertisements(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
+	if err := c.writeAdvertise(cfg, conn, instances, instanceIDs); err != nil {
+		return "", err
+	}
+	return advertisedInstanceSignature(instanceIDs), nil
+}
+
+func (c *Client) writeAdvertise(cfg *Config, conn *websocket.Conn, instances []relayproto.InstanceAdvertisement, instanceIDs []string) error {
 	if err := conn.WriteJSON(relayproto.AdvertiseMessage{
 		Type:      "advertise",
 		Instances: instances,
@@ -229,8 +238,7 @@ func (c *Client) advertise(ctx context.Context, conn *websocket.Conn) error {
 	return nil
 }
 
-func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
-	lastAdvertisedSignature := sharedSetSignature(c.currentConfig())
+func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAdvertisedSignature string) {
 	currentInterval := c.heartbeatInterval(c.currentConfig())
 	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
@@ -240,7 +248,7 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cfg, changed, err := c.reloadConfig()
+			cfg, _, err := c.reloadConfig()
 			if err != nil {
 				if c.status != nil {
 					_ = c.status.MarkFailure(c.currentConfig(), err.Error(), time.Now().UTC())
@@ -251,26 +259,23 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
 				ticker.Reset(nextInterval)
 				currentInterval = nextInterval
 			}
-			if changed {
-				currentSignature := sharedSetSignature(cfg)
-				if currentSignature != lastAdvertisedSignature {
-					if err := c.advertise(ctx, conn); err != nil {
-						if c.status != nil {
-							_ = c.status.MarkFailure(c.currentConfig(), err.Error(), time.Now().UTC())
-						}
-						_ = conn.Close()
-						return
-					}
-					lastAdvertisedSignature = currentSignature
-				}
-			}
-
-			_, instanceIDs, advertiseErr := c.registryForConfig(cfg).Advertisements(ctx)
+			instances, instanceIDs, advertiseErr := c.registryForConfig(cfg).Advertisements(ctx)
 			if advertiseErr != nil {
 				if c.status != nil {
 					_ = c.status.MarkFailure(cfg, advertiseErr.Error(), time.Now().UTC())
 				}
 				continue
+			}
+			currentAdvertisedSignature := advertisedInstanceSignature(instanceIDs)
+			if currentAdvertisedSignature != lastAdvertisedSignature {
+				if err := c.writeAdvertise(cfg, conn, instances, instanceIDs); err != nil {
+					if c.status != nil {
+						_ = c.status.MarkFailure(cfg, err.Error(), time.Now().UTC())
+					}
+					_ = conn.Close()
+					return
+				}
+				lastAdvertisedSignature = currentAdvertisedSignature
 			}
 			if err := conn.WriteJSON(relayproto.HeartbeatMessage{
 				Type:        "heartbeat",
@@ -367,6 +372,15 @@ func sharedSetSignature(cfg *Config) string {
 		}, "|"))
 	}
 	return strings.Join(shared, "\n")
+}
+
+func advertisedInstanceSignature(instanceIDs []string) string {
+	if len(instanceIDs) == 0 {
+		return ""
+	}
+	normalized := append([]string(nil), instanceIDs...)
+	sort.Strings(normalized)
+	return strings.Join(normalized, "\n")
 }
 
 func httpToWebsocket(rawURL string) string {

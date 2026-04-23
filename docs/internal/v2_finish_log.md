@@ -1,5 +1,9 @@
 # Codencer Practical V2 Delta Finish Log
 
+> [!WARNING]
+> **HISTORICAL FINISH LOG**: This log records an earlier v2 delta pass and is not the current release contract.
+> Use the frozen `BETA_*` docs in this directory for current beta truth and remaining work.
+
 ## Goal
 - Close the remaining delta from practical self-host alpha to full practical v2 for real self-use now.
 - Keep Codencer local-first, planner-controlled, evidence-oriented, repo-bound, and truthful about runtime behavior and protocol maturity.

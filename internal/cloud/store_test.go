@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestOpenStoreRunsMigrationsAndIsIdempotent(t *testing.T) {
@@ -109,5 +110,71 @@ func TestStoreCreatesOrgWorkspaceProjectAndInstallation(t *testing.T) {
 	}
 	if loaded.ConnectorKey != "github" || loaded.Name != "GitHub" {
 		t.Fatalf("unexpected installation loaded: %+v", loaded)
+	}
+}
+
+func TestStoreCreateConnectorEventPreservesRepeatedSourceEventHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cloud.db")
+	store, err := OpenStore(path, "cloud-master-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	org, err := store.CreateOrg(ctx, Org{Slug: "acme", Name: "Acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := store.CreateWorkspace(ctx, Workspace{OrgID: org.ID, Slug: "platform", Name: "Platform"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := store.CreateProject(ctx, Project{OrgID: org.ID, WorkspaceID: workspace.ID, Slug: "core", Name: "Core"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation, err := store.CreateConnectorInstallation(ctx, ConnectorInstallation{
+		OrgID:        org.ID,
+		WorkspaceID:  workspace.ID,
+		ProjectID:    project.ID,
+		ConnectorKey: "github",
+		Name:         "GitHub",
+		Status:       "active",
+		Enabled:      true,
+		Health:       "healthy",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	base := time.Now().UTC()
+	for idx := 0; idx < 2; idx++ {
+		if _, err := store.CreateConnectorEvent(ctx, ConnectorEvent{
+			ID:             "",
+			InstallationID: installation.ID,
+			SourceEventID:  "issue-17",
+			EventType:      "issue.opened",
+			Action:         "opened",
+			Status:         "received",
+			OccurredAt:     base.Add(time.Duration(idx) * time.Second),
+			ReceivedAt:     base.Add(time.Duration(idx) * time.Second),
+		}); err != nil {
+			t.Fatalf("CreateConnectorEvent(%d) failed: %v", idx, err)
+		}
+	}
+
+	events, err := store.ListConnectorEvents(ctx, installation.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected repeated source_event_id rows to be preserved, got %+v", events)
+	}
+	if events[0].SourceEventID != "issue-17" || events[1].SourceEventID != "issue-17" {
+		t.Fatalf("unexpected source event ids: %+v", events)
+	}
+	if !events[0].ReceivedAt.After(events[1].ReceivedAt) {
+		t.Fatalf("expected newest event first, got %+v", events)
 	}
 }

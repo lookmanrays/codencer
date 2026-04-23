@@ -468,3 +468,168 @@ func TestClientRun_ReloadsConfigAndReAdvertisesSharedSetChanges(t *testing.T) {
 		t.Fatalf("expected status to track refreshed shared set, got %+v", status)
 	}
 }
+
+func TestClientRun_ReAdvertisesWhenLiveSharedSetChangesWithoutConfigMutation(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "connector.json")
+	cfg := &Config{
+		RelayURL:                 "http://relay.invalid",
+		ConnectorID:              "connector-live",
+		MachineID:                "machine-live",
+		HeartbeatIntervalSeconds: 1,
+		ConfigPath:               configPath,
+		Instances: []SharedInstanceConfig{
+			{InstanceID: "inst-live", Share: true},
+		},
+	}
+	if err := EnsureKeypair(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	var daemonHealthy atomic.Bool
+	daemonHealthy.Store(true)
+
+	var daemon *httptest.Server
+	daemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/instance" {
+			http.NotFound(w, r)
+			return
+		}
+		if !daemonHealthy.Load() {
+			http.Error(w, "daemon unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(domain.InstanceInfo{ID: "inst-live", BaseURL: daemon.URL, RepoRoot: "/repo/live"})
+	}))
+	defer daemon.Close()
+
+	cfg.Instances[0].DaemonURL = daemon.URL
+	if err := SaveConfig(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	initialAdvertiseSeen := make(chan struct{}, 1)
+	emptyAdvertiseSeen := make(chan struct{}, 1)
+	recoveredAdvertiseSeen := make(chan struct{}, 1)
+
+	decodeAdvertiseIDs := func(msg relayproto.AdvertiseMessage) []string {
+		out := make([]string, 0, len(msg.Instances))
+		for _, instance := range msg.Instances {
+			var info domain.InstanceInfo
+			if err := json.Unmarshal(instance.Instance, &info); err == nil {
+				out = append(out, info.ID)
+			}
+		}
+		return out
+	}
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/connectors/challenge":
+			_ = json.NewEncoder(w).Encode(relayproto.ChallengeResponse{
+				ChallengeID: "challenge-live",
+				Nonce:       "nonce-live",
+				Relay: relayproto.RelayMetadata{
+					WebsocketURL:             "ws" + strings.TrimPrefix(server.URL, "http") + "/ws/connectors",
+					HeartbeatIntervalSeconds: 1,
+				},
+			})
+		case "/ws/connectors":
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+
+			var hello relayproto.HelloMessage
+			if err := conn.ReadJSON(&hello); err != nil {
+				t.Fatal(err)
+			}
+			var advertise relayproto.AdvertiseMessage
+			if err := conn.ReadJSON(&advertise); err != nil {
+				t.Fatal(err)
+			}
+			initialAdvertiseSeen <- struct{}{}
+
+			for {
+				var envelope struct {
+					Type string `json:"type"`
+				}
+				if _, message, err := conn.ReadMessage(); err != nil {
+					return
+				} else if err := json.Unmarshal(message, &envelope); err != nil {
+					t.Fatal(err)
+				} else if envelope.Type == "advertise" {
+					var next relayproto.AdvertiseMessage
+					if err := json.Unmarshal(message, &next); err != nil {
+						t.Fatal(err)
+					}
+					ids := decodeAdvertiseIDs(next)
+					switch {
+					case len(ids) == 0:
+						select {
+						case emptyAdvertiseSeen <- struct{}{}:
+						default:
+						}
+					case len(ids) == 1 && ids[0] == "inst-live":
+						select {
+						case recoveredAdvertiseSeen <- struct{}{}:
+						default:
+						}
+					}
+				}
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cfg.RelayURL = server.URL
+	cfg.WebsocketURL = "ws" + strings.TrimPrefix(server.URL, "http") + "/ws/connectors"
+	if err := SaveConfig(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	client := NewClient(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4500*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- client.Run(ctx)
+	}()
+
+	select {
+	case <-initialAdvertiseSeen:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for initial advertise")
+	}
+
+	daemonHealthy.Store(false)
+	select {
+	case <-emptyAdvertiseSeen:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for empty advertise after daemon became unavailable")
+	}
+
+	daemonHealthy.Store(true)
+	select {
+	case <-recoveredAdvertiseSeen:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for recovered advertise after daemon became healthy again")
+	}
+
+	cancel()
+	_ = <-done
+
+	status, err := LoadStatus(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-live" {
+		t.Fatalf("expected status to recover the live shared set, got %+v", status)
+	}
+}

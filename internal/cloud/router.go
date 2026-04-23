@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	bridgeapp "agent-bridge/internal/app"
 	cloudconnectors "agent-bridge/internal/cloud/connectors"
 )
 
@@ -83,7 +84,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, cloudStatusResponse{
 		Status:             "ok",
-		Version:            "cloud-v1-alpha",
+		Version:            bridgeapp.Version,
 		StartedAt:          s.startedAt.UTC().Format(time.RFC3339),
 		CloudAPIBase:       "/api/cloud/v1",
 		CloudMCPBase:       "/api/cloud/v1/mcp",
@@ -356,11 +357,26 @@ func (s *Server) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.store.RevokeAPIToken(r.Context(), parts[0]); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "revoke_failed", err.Error())
+	target, err := s.store.GetAPIToken(r.Context(), parts[0])
+	if err != nil {
+		writeAPIError(w, http.StatusNotFound, "not_found", err.Error())
 		return
 	}
-	s.recordAudit(r, token, "revoke_api_token", "api_token", parts[0], token.OrgID, token.WorkspaceID, token.ProjectID, "ok", nil)
+	if !TokenAllowsTarget(token, target.OrgID, target.WorkspaceID, target.ProjectID) {
+		writeAPIError(w, http.StatusForbidden, "scope_denied", "token is not allowed to revoke this api token")
+		return
+	}
+	if err := s.store.RevokeAPIToken(r.Context(), parts[0]); err != nil {
+		status := http.StatusInternalServerError
+		code := "revoke_failed"
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+			code = "not_found"
+		}
+		writeAPIError(w, status, code, err.Error())
+		return
+	}
+	s.recordAudit(r, token, "revoke_api_token", "api_token", parts[0], target.OrgID, target.WorkspaceID, target.ProjectID, "ok", map[string]any{"revoked_token_name": target.Name})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked", "token_id": parts[0]})
 }
 
@@ -618,9 +634,11 @@ func (s *Server) handleInstallationAction(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	requestJSON, _ := json.Marshal(req)
+	startedAt := time.Now().UTC()
 	result, err := connector.ExecuteAction(r.Context(), req, cfg)
-	now := time.Now().UTC()
-	installation.LastActionAt = &now
+	completedAt := time.Now().UTC()
+	installation.LastActionAt = &completedAt
 	responseJSON, _ := json.Marshal(result)
 	status := "completed"
 	if err != nil {
@@ -631,7 +649,7 @@ func (s *Server) handleInstallationAction(w http.ResponseWriter, r *http.Request
 	} else {
 		installation.Status = "active"
 		installation.Health = "healthy"
-		installation.LastSeenAt = &now
+		installation.LastSeenAt = &completedAt
 		installation.LastError = ""
 	}
 	installation, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
@@ -639,11 +657,22 @@ func (s *Server) handleInstallationAction(w http.ResponseWriter, r *http.Request
 		InstallationID: installation.ID,
 		ActionName:     string(req.Action),
 		Status:         status,
+		RequestJSON:    requestJSON,
 		ResponseJSON:   responseJSON,
 		ErrorMessage:   errorString(err),
-		StartedAt:      time.Now().UTC(),
+		StartedAt:      startedAt,
+		CompletedAt:    &completedAt,
 	})
-	s.recordAudit(r, token, "connector_action", "installation", installation.ID, installation.OrgID, installation.WorkspaceID, installation.ProjectID, outcomeFromErr(err), map[string]any{"action": req.Action, "provider": connector.Provider()})
+	s.recordAudit(r, token, "connector_action", "installation", installation.ID, installation.OrgID, installation.WorkspaceID, installation.ProjectID, outcomeFromErr(err), map[string]any{
+		"action":      req.Action,
+		"provider":    connector.Provider(),
+		"status":      status,
+		"external_id": result.ExternalID,
+		"url":         result.URL,
+		"status_code": result.StatusCode,
+		"message":     result.Message,
+		"error":       errorString(err),
+	})
 	writeJSON(w, httpStatusFromErr(err, http.StatusOK), map[string]any{
 		"result": result,
 		"error":  errorString(err),
@@ -672,27 +701,102 @@ func (s *Server) handleInstallationWebhook(w http.ResponseWriter, r *http.Reques
 		installation.LastError = err.Error()
 		installation.LastSeenAt = &now
 		_, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
+		_, _ = s.store.CreateCloudAuditEvent(r.Context(), CloudAuditEvent{
+			ActorType:    "connector_webhook",
+			Action:       "webhook_ingest",
+			ResourceType: "installation",
+			ResourceID:   installation.ID,
+			OrgID:        installation.OrgID,
+			WorkspaceID:  installation.WorkspaceID,
+			ProjectID:    installation.ProjectID,
+			Outcome:      "error",
+			DetailsJSON:  mustJSON(map[string]any{"provider": connector.Provider(), "delivery_id": verification.DeliveryID, "event_type": verification.EventType, "error": err.Error()}),
+			CreatedAt:    now,
+		})
 		writeAPIError(w, http.StatusUnauthorized, "verification_failed", err.Error())
+		return
+	}
+	if !verification.Verified {
+		_, _ = s.store.CreateCloudAuditEvent(r.Context(), CloudAuditEvent{
+			ActorType:    "connector_webhook",
+			Action:       "webhook_ingest",
+			ResourceType: "installation",
+			ResourceID:   installation.ID,
+			OrgID:        installation.OrgID,
+			WorkspaceID:  installation.WorkspaceID,
+			ProjectID:    installation.ProjectID,
+			Outcome:      "deferred",
+			DetailsJSON:  mustJSON(map[string]any{"provider": connector.Provider(), "delivery_id": verification.DeliveryID, "event_type": verification.EventType, "message": verification.Message}),
+			CreatedAt:    time.Now().UTC(),
+		})
+		writeAPIError(w, http.StatusNotImplemented, "webhook_deferred", firstNonEmpty(verification.Message, "webhook ingest is not implemented for this provider"))
 		return
 	}
 	events, err := connector.NormalizeEvent(r.Header, body, cfg)
 	if err != nil {
+		_, _ = s.store.CreateCloudAuditEvent(r.Context(), CloudAuditEvent{
+			ActorType:    "connector_webhook",
+			Action:       "webhook_ingest",
+			ResourceType: "installation",
+			ResourceID:   installation.ID,
+			OrgID:        installation.OrgID,
+			WorkspaceID:  installation.WorkspaceID,
+			ProjectID:    installation.ProjectID,
+			Outcome:      "error",
+			DetailsJSON:  mustJSON(map[string]any{"provider": connector.Provider(), "delivery_id": verification.DeliveryID, "event_type": verification.EventType, "error": err.Error()}),
+			CreatedAt:    time.Now().UTC(),
+		})
 		writeAPIError(w, http.StatusBadRequest, "normalize_failed", err.Error())
 		return
 	}
-	for _, item := range events {
+	receivedAt := time.Now().UTC()
+	persistedSourceIDs := make([]string, 0, len(events))
+	for idx, item := range events {
 		payload, _ := json.Marshal(item)
 		sourceEventID := firstNonEmpty(item.ExternalID, item.SubjectID, verification.DeliveryID)
-		_, _ = s.store.CreateConnectorEvent(r.Context(), ConnectorEvent{
+		metadataJSON := mustJSON(map[string]any{
+			"provider":            connector.Provider(),
+			"delivery_id":         verification.DeliveryID,
+			"verified_event_type": verification.EventType,
+			"event_index":         idx,
+			"subject_type":        item.SubjectType,
+			"subject_id":          item.SubjectID,
+			"external_id":         item.ExternalID,
+			"ingest_path":         "webhook",
+		})
+		if _, err := s.store.CreateConnectorEvent(r.Context(), ConnectorEvent{
 			InstallationID: installation.ID,
 			SourceEventID:  sourceEventID,
 			EventType:      item.Kind,
 			Action:         item.Action,
 			Status:         "received",
 			PayloadJSON:    payload,
+			MetadataJSON:   metadataJSON,
 			OccurredAt:     nonZeroTime(item.OccurredAt, time.Now().UTC()),
-			ReceivedAt:     time.Now().UTC(),
-		})
+			ReceivedAt:     receivedAt,
+		}); err != nil {
+			now := time.Now().UTC()
+			installation.Status = "error"
+			installation.Health = "degraded"
+			installation.LastError = err.Error()
+			installation.LastSeenAt = &now
+			_, _ = s.store.CreateConnectorInstallation(r.Context(), *installation)
+			_, _ = s.store.CreateCloudAuditEvent(r.Context(), CloudAuditEvent{
+				ActorType:    "connector_webhook",
+				Action:       "webhook_ingest",
+				ResourceType: "installation",
+				ResourceID:   installation.ID,
+				OrgID:        installation.OrgID,
+				WorkspaceID:  installation.WorkspaceID,
+				ProjectID:    installation.ProjectID,
+				Outcome:      "error",
+				DetailsJSON:  mustJSON(map[string]any{"provider": connector.Provider(), "delivery_id": verification.DeliveryID, "event_type": verification.EventType, "error": err.Error(), "source_event_id": sourceEventID}),
+				CreatedAt:    now,
+			})
+			writeAPIError(w, http.StatusInternalServerError, "persist_failed", err.Error())
+			return
+		}
+		persistedSourceIDs = append(persistedSourceIDs, sourceEventID)
 	}
 	now := time.Now().UTC()
 	installation.Status = "active"
@@ -710,7 +814,7 @@ func (s *Server) handleInstallationWebhook(w http.ResponseWriter, r *http.Reques
 		WorkspaceID:  installation.WorkspaceID,
 		ProjectID:    installation.ProjectID,
 		Outcome:      "ok",
-		DetailsJSON:  mustJSON(map[string]any{"provider": connector.Provider(), "event_type": verification.EventType, "delivery_id": verification.DeliveryID, "count": len(events)}),
+		DetailsJSON:  mustJSON(map[string]any{"provider": connector.Provider(), "event_type": verification.EventType, "delivery_id": verification.DeliveryID, "count": len(events), "source_event_ids": persistedSourceIDs}),
 		CreatedAt:    time.Now().UTC(),
 	})
 	writeJSON(w, http.StatusAccepted, map[string]any{
@@ -737,7 +841,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	events, err := s.store.ListConnectorEvents(r.Context(), installationID, limit)
+	events, err := s.store.ListConnectorEventsScoped(r.Context(), token.OrgID, token.WorkspaceID, token.ProjectID, installationID, limit)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "list_failed", err.Error())
 		return
@@ -751,19 +855,10 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := parseIntDefault(r.URL.Query().Get("limit"), 100)
-	events, err := s.store.ListCloudAuditEvents(r.Context(), limit)
+	events, err := s.store.ListCloudAuditEventsScoped(r.Context(), token.OrgID, token.WorkspaceID, token.ProjectID, limit)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "list_failed", err.Error())
 		return
-	}
-	if token.OrgID != "" {
-		filtered := make([]CloudAuditEvent, 0, len(events))
-		for _, event := range events {
-			if event.OrgID == "" || event.OrgID == token.OrgID {
-				filtered = append(filtered, event)
-			}
-		}
-		events = filtered
 	}
 	writeJSON(w, http.StatusOK, events)
 }

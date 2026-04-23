@@ -2,16 +2,18 @@ FROM golang:1.25-bookworm AS builder
 
 WORKDIR /src
 
+ARG VERSION=v0.2.0-beta
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
 RUN mkdir -p /out && \
-    go build -ldflags "-X agent-bridge/internal/app.Version=v0.2.0-alpha" -o /out/codencer-cloudd ./cmd/codencer-cloudd && \
-    go build -ldflags "-X agent-bridge/internal/app.Version=v0.2.0-alpha" -o /out/codencer-cloudctl ./cmd/codencer-cloudctl && \
-    go build -ldflags "-X agent-bridge/internal/app.Version=v0.2.0-alpha" -o /out/codencer-cloudworkerd ./cmd/codencer-cloudworkerd && \
-    go build -ldflags "-X agent-bridge/internal/app.Version=v0.2.0-alpha" -o /out/codencer-relayd ./cmd/codencer-relayd
+    go build -ldflags "-X agent-bridge/internal/app.Version=${VERSION}" -o /out/codencer-cloudd ./cmd/codencer-cloudd && \
+    go build -ldflags "-X agent-bridge/internal/app.Version=${VERSION}" -o /out/codencer-cloudctl ./cmd/codencer-cloudctl && \
+    go build -ldflags "-X agent-bridge/internal/app.Version=${VERSION}" -o /out/codencer-cloudworkerd ./cmd/codencer-cloudworkerd && \
+    go build -ldflags "-X agent-bridge/internal/app.Version=${VERSION}" -o /out/codencer-relayd ./cmd/codencer-relayd
 
 FROM debian:bookworm-slim
 

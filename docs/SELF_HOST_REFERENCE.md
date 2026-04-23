@@ -1,6 +1,8 @@
-# Self-Host Reference
+# Self-Host Relay / Runtime Reference
 
 Codencer v2 supports a self-hostable remote planner path without moving execution off the local machine.
+
+If you want cloud tenancy, cloud-scoped runtime control, or provider installations instead of the raw relay/runtime path, start with [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md).
 
 ## Current Topology
 
@@ -161,11 +163,14 @@ Inspect and manage the allowlist explicitly before running the connector:
 ./bin/codencer-connectord discover --config .codencer/connector/config.json
 ./bin/codencer-connectord list
 ./bin/codencer-connectord share --daemon-url http://127.0.0.1:8085
+./bin/codencer-connectord share --instance-id <instance-id>
 ./bin/codencer-connectord unshare --instance-id <instance-id>
 ./bin/codencer-connectord config
 ```
 
 `unshare` marks an instance as `share=false` and keeps the record in local config, so operators can see both known-shared and known-unshared repos.
+
+`share --instance-id` is only valid when discovery or existing connector metadata can resolve that id back to a healthy local daemon. `share --daemon-url` is the self-sufficient operator path.
 
 You can also inspect the relay-side view of shared instances with:
 
@@ -195,6 +200,8 @@ Use either:
 - relay MCP at `/mcp`
 
 The relay is the remote planner surface. The daemon-local `/mcp/call` endpoint is only a local compatibility/admin bridge.
+
+For the frozen planner/client compatibility matrix, generic HTTP/MCP examples, and client-specific packaging notes, see [mcp/integrations.md](mcp/integrations.md) and [mcp/relay_tools.md](mcp/relay_tools.md).
 
 Current MCP transport posture:
 - canonical endpoint: `/mcp`
@@ -277,12 +284,29 @@ The smoke flow:
 
 Optional smoke scenario coverage:
 
+Default proof from `make self-host-smoke`:
+- connector enrollment and websocket session establishment
+- relay instance visibility for the enrolled daemon
+- run create, task submit, wait, result, validations, logs, gates, and artifact fetch over relay HTTP
+- relay audit visibility when `audit` is enabled
+
+Optional proof paths:
+
 ```bash
-PLANNER_TOKEN=<planner-token> SMOKE_SCENARIOS=status,audit,mcp,mcp-sdk make self-host-smoke
+PLANNER_TOKEN=<planner-token> SMOKE_SCENARIOS=status,audit,share-control,mcp,mcp-sdk make self-host-smoke
 PLANNER_TOKEN=<planner-token> make self-host-smoke-all
 ```
 
-`make self-host-smoke-mcp` includes the official Go SDK proof helper, while `make self-host-smoke-all` adds the share-control and multi-instance scenarios.
+- `share-control` now proves `unshare` removes relay visibility and blocks routing, then `share --instance-id` restores visibility before the main relay flow runs again.
+- `mcp` proves manual relay MCP initialize, SSE stream bootstrap, compatibility POST alias use, tool calls, and session delete.
+- `mcp-sdk` proves official Go SDK interoperability against relay `/mcp`.
+- `multi-instance` proves one connector can advertise two local daemons and that explicit instance targeting reaches only the selected daemon.
+
+Still outside smoke proof:
+- cold bootstrap of the daemon and relay themselves
+- real non-simulation adapter execution
+- WSL/Windows/Antigravity topology behavior
+- hard guarantees for gate, retry, or abort semantics beyond the statuses captured by the script
 
 If you want the standalone SDK proof path, build and run the helper directly:
 
@@ -304,7 +328,7 @@ The practical default is:
 - agent-broker and IDE on Windows when needed
 - relay wherever the operator wants to host the remote control plane
 
-See [WSL / Windows / Antigravity Topology](WSL_WINDOWS_ANTIGRAVITY.md) for the trust boundaries and placement guidance.
+This is recommended operator topology, not an automated smoke proof. See [WSL / Windows / Antigravity Topology](WSL_WINDOWS_ANTIGRAVITY.md) for the trust boundaries and placement guidance.
 
 ## Default Relay vs Self-Host
 

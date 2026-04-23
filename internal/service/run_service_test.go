@@ -981,8 +981,11 @@ func TestRunService_Isolation_ProvisionedWorktree(t *testing.T) {
 	_ = runSvc.DispatchStep(ctx, runID, step)
 
 	res, _ := runSvc.GetResultByStep(ctx, step.ID)
-	if res.State != domain.StepStateCompleted {
-		t.Errorf("Expected completed, got %s. Summary: %s", res.State, res.Summary)
+	if res.State != domain.StepStateNeedsApproval {
+		t.Errorf("Expected needs_approval, got %s. Summary: %s", res.State, res.Summary)
+	}
+	if !res.NeedsHumanDecision {
+		t.Error("Expected gated result to keep needs_human_decision")
 	}
 
 	// Verify the validation actually passed
@@ -1375,6 +1378,79 @@ func TestRunService_AbortRunPausedForGateFailsClosed(t *testing.T) {
 	currentRun, _ := runSvc.GetRun(ctx, runID)
 	if currentRun.State != domain.RunStatePausedForGate {
 		t.Fatalf("expected run to remain paused_for_gate, got %s", currentRun.State)
+	}
+}
+
+func TestRunService_RetryStepReconcilesRunBackToRunning(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	defer db.Close()
+	_ = sqlite.RunMigrations(db)
+
+	runsRepo := sqlite.NewRunsRepo(db)
+	phasesRepo := sqlite.NewPhasesRepo(db)
+	stepsRepo := sqlite.NewStepsRepo(db)
+	attemptsRepo := sqlite.NewAttemptsRepo(db)
+	gatesRepo := sqlite.NewGatesRepo(db)
+	artifactsRepo := sqlite.NewArtifactsRepo(db)
+	validationsRepo := sqlite.NewValidationsRepo(db)
+	benchmarksRepo := sqlite.NewBenchmarksRepo(db)
+
+	adapter := &cancelAwareAdapter{}
+	runSvc := service.NewRunService(
+		runsRepo, phasesRepo, stepsRepo, attemptsRepo, gatesRepo, artifactsRepo, validationsRepo,
+		service.NewRoutingService(benchmarksRepo, map[string]domain.Adapter{"cancel-aware": adapter}),
+		service.NewPolicyRegistry(),
+		workspace.NewNullProvisioner(),
+		filepath.Join(t.TempDir(), "artifacts"),
+		filepath.Join(t.TempDir(), "workspace"),
+		repoRoot,
+	)
+
+	ctx := context.Background()
+	runID := "retry-run"
+	now := time.Now().UTC()
+	_, _ = runSvc.StartRun(ctx, runID, "project", "", "", "")
+	if err := runsRepo.UpdateState(ctx, &domain.Run{ID: runID, State: domain.RunStateFailed, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("set failed run state: %v", err)
+	}
+
+	step := &domain.Step{
+		ID:        "retry-step",
+		PhaseID:   "phase-execution-" + runID,
+		Title:     "Retry Step",
+		Adapter:   "cancel-aware",
+		State:     domain.StepStateFailedValidation,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := stepsRepo.Create(ctx, step); err != nil {
+		t.Fatalf("create step: %v", err)
+	}
+
+	if err := runSvc.RetryStep(ctx, step.ID); err != nil {
+		t.Fatalf("RetryStep failed: %v", err)
+	}
+
+	currentRun, err := runSvc.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("load run: %v", err)
+	}
+	if currentRun.State != domain.RunStateRunning {
+		t.Fatalf("expected run state running immediately after retry, got %s", currentRun.State)
+	}
+
+	currentStep, err := runSvc.GetStep(ctx, step.ID)
+	if err != nil {
+		t.Fatalf("load step: %v", err)
+	}
+	if currentStep.State != domain.StepStateDispatching && currentStep.State != domain.StepStateRunning {
+		t.Fatalf("expected step to re-enter execution, got %s", currentStep.State)
+	}
+
+	if err := runSvc.AbortRun(ctx, runID); err != nil {
+		t.Fatalf("cleanup abort failed: %v", err)
 	}
 }
 

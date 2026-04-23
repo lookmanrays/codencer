@@ -190,7 +190,7 @@ start_secondary_daemon() {
   SECOND_DAEMON_PID="$!"
   echo "$SECOND_DAEMON_PID" > "$SECOND_DAEMON_PID_FILE"
   for _ in $(seq 1 20); do
-    if curl -fsS "$SECOND_DAEMON_URL/api/v1/instance" >/dev/null; then
+    if curl -fsS "$SECOND_DAEMON_URL/api/v1/instance" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -322,7 +322,14 @@ if scenario_enabled share-control; then
   ./bin/codencer-connectord unshare --config "$CONNECTOR_CONFIG" --instance-id "$INSTANCE_ID" >/dev/null
   ./bin/codencer-connectord list --config "$CONNECTOR_CONFIG" --json > "$TMP_DIR/connector-list-unshared.json"
   wait_for_relay_instance_state "$INSTANCE_ID" absent "$TMP_DIR/relay-instances-unshared.json"
-  ./bin/codencer-connectord share --config "$CONNECTOR_CONFIG" --daemon-url "$DAEMON_URL" >/dev/null
+  UNSHARED_ROUTE_JSON="$TMP_DIR/relay-unshared-route.json"
+  unshared_route_status="$(curl_best_effort POST "$RELAY_URL/api/v2/instances/$INSTANCE_ID/runs" "$UNSHARED_ROUTE_JSON" "{\"id\":\"${RUN_ID}-unshared\",\"project_id\":\"$PROJECT_ID\"}")"
+  if [[ "$unshared_route_status" != "404" ]]; then
+    echo "ERROR: expected unshared instance $INSTANCE_ID to stop routing, got status $unshared_route_status" >&2
+    cat "$UNSHARED_ROUTE_JSON" >&2
+    exit 1
+  fi
+  ./bin/codencer-connectord share --config "$CONNECTOR_CONFIG" --instance-id "$INSTANCE_ID" >/dev/null
   ./bin/codencer-connectord discover --config "$CONNECTOR_CONFIG" --json > "$TMP_DIR/connector-discover-after.json"
   wait_for_relay_instance_state "$INSTANCE_ID" present "$TMP_DIR/relay-instances-restored.json"
 fi
@@ -418,60 +425,83 @@ fi
 if scenario_enabled mcp; then
   MCP_INIT_HEADERS="$TMP_DIR/mcp-init.headers"
   MCP_INIT_JSON="$TMP_DIR/mcp-init.json"
+  MCP_STREAM_FILE="$TMP_DIR/mcp-stream.txt"
+  MCP_STREAM_ERR="$TMP_DIR/mcp-stream.err"
+  MCP_SUMMARY_FILE=""
   curl -fsS -D "$MCP_INIT_HEADERS" -X POST "$RELAY_URL/mcp" \
     -H "Authorization: Bearer $PLANNER_TOKEN" \
     -H 'Content-Type: application/json' \
     -H 'MCP-Protocol-Version: 2025-11-25' \
     -d '{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{"protocolVersion":"2025-11-25"}}' \
     > "$MCP_INIT_JSON"
-  MCP_SESSION_ID="$(awk 'BEGIN{IGNORECASE=1}/^MCP-Session-Id:/{print $2}' "$MCP_INIT_HEADERS" | tr -d '\r' | tail -n 1)"
-  if [[ -n "$MCP_SESSION_ID" ]]; then
-    curl -fsS "$RELAY_URL/mcp" \
+  MCP_SESSION_ID="$(awk 'tolower($1)=="mcp-session-id:"{print $2}' "$MCP_INIT_HEADERS" | tr -d '\r' | tail -n 1)"
+  if [[ -z "$MCP_SESSION_ID" ]]; then
+    echo "ERROR: failed to negotiate relay MCP session id" >&2
+    cat "$MCP_INIT_HEADERS" >&2
+    cat "$MCP_INIT_JSON" >&2
+    exit 1
+  fi
+  set +e
+  curl -Ns --max-time 2 "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H "MCP-Session-Id: $MCP_SESSION_ID" \
       -H 'MCP-Protocol-Version: 2025-11-25' \
-      > "$TMP_DIR/mcp-stream.txt"
-    curl -fsS -X POST "$RELAY_URL/mcp/call" \
+      -H 'Accept: text/event-stream' \
+      > "$MCP_STREAM_FILE" 2> "$MCP_STREAM_ERR"
+  mcp_stream_status="$?"
+  set -e
+  if [[ "$mcp_stream_status" != "0" && "$mcp_stream_status" != "28" ]]; then
+    echo "ERROR: relay MCP stream probe failed with status $mcp_stream_status" >&2
+    cat "$MCP_STREAM_ERR" >&2 || true
+    cat "$MCP_STREAM_FILE" >&2 || true
+    exit 1
+  fi
+  if ! grep -q 'codencer-relay-mcp-stream' "$MCP_STREAM_FILE"; then
+    echo "ERROR: relay MCP stream probe did not capture the expected bootstrap line" >&2
+    cat "$MCP_STREAM_FILE" >&2 || true
+    exit 1
+  fi
+  curl -fsS -X POST "$RELAY_URL/mcp/call" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
       -H "MCP-Session-Id: $MCP_SESSION_ID" \
       -H 'MCP-Protocol-Version: 2025-11-25' \
-      -d '{"jsonrpc":"2.0","id":"tools-1","method":"tools/list","params":{}}' \
-      > "$TMP_DIR/mcp-tools.json"
-    curl -fsS -X POST "$RELAY_URL/mcp" \
+      -d '{"jsonrpc":"2.0","id":"compat-1","method":"tools/call","params":{"name":"codencer.list_instances","arguments":{}}}' \
+      > "$TMP_DIR/mcp-compat-call.json"
+  curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
       -H "MCP-Session-Id: $MCP_SESSION_ID" \
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.list_instances\",\"arguments\":{}}}" \
       > "$TMP_DIR/mcp-list-instances.json"
-    curl -fsS -X POST "$RELAY_URL/mcp" \
+  curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
       -H "MCP-Session-Id: $MCP_SESSION_ID" \
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.get_step_result\",\"arguments\":{\"step_id\":\"$STEP_ID\"}}}" \
       > "$TMP_DIR/mcp-step-result.json"
-    curl -fsS -X POST "$RELAY_URL/mcp" \
+  curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
       -H "MCP-Session-Id: $MCP_SESSION_ID" \
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.list_run_gates\",\"arguments\":{\"instance_id\":\"$INSTANCE_ID\",\"run_id\":\"$RUN_ID\"}}}" \
       > "$TMP_DIR/mcp-run-gates.json"
-    curl -fsS -X POST "$RELAY_URL/mcp" \
+  curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
       -H "MCP-Session-Id: $MCP_SESSION_ID" \
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.get_step_logs\",\"arguments\":{\"step_id\":\"$STEP_ID\"}}}" \
       > "$TMP_DIR/mcp-step-logs.json"
-    curl -fsS -X DELETE "$RELAY_URL/mcp" \
-      -H "Authorization: Bearer $PLANNER_TOKEN" \
-      -H "MCP-Session-Id: $MCP_SESSION_ID" \
-      -H 'MCP-Protocol-Version: 2025-11-25' \
-      >/dev/null
-  fi
+  curl -fsS -X DELETE "$RELAY_URL/mcp" \
+    -H "Authorization: Bearer $PLANNER_TOKEN" \
+    -H "MCP-Session-Id: $MCP_SESSION_ID" \
+    -H 'MCP-Protocol-Version: 2025-11-25' \
+    >/dev/null
+  MCP_SUMMARY_FILE="$TMP_DIR/mcp-compat-call.json"
 fi
 
 if scenario_enabled retry; then
@@ -522,7 +552,9 @@ if scenario_enabled audit; then
   echo "Audit:       $TMP_DIR/audit.json"
 fi
 if scenario_enabled mcp; then
-  echo "MCP:         $TMP_DIR/mcp-tools.json"
+  if [[ -n "${MCP_SUMMARY_FILE:-}" && -f "$MCP_SUMMARY_FILE" ]]; then
+    echo "MCP:         $MCP_SUMMARY_FILE"
+  fi
 fi
 if scenario_enabled share-control; then
   echo "Share:       $TMP_DIR/connector-discover-before.json"

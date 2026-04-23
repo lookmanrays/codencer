@@ -40,6 +40,7 @@ type mcpServer struct {
 
 type mcpSession struct {
 	ID              string
+	TokenID         string
 	ProtocolVersion string
 	CreatedAt       time.Time
 	LastSeenAt      time.Time
@@ -100,14 +101,14 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, apiErr := s.cloud.authenticateToken(r, "runtime_instances:read")
+	token, apiErr := s.cloud.authenticateToken(r, "")
 	if apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
 	r = r.WithContext(context.WithValue(r.Context(), cloudTokenKey{}, token))
 
-	session, apiErr := s.sessionFromRequest(r)
+	session, apiErr := s.sessionFromRequest(r, token)
 	if apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
@@ -210,7 +211,7 @@ func (s *mcpServer) handlePost(w http.ResponseWriter, r *http.Request, session *
 
 	switch req.Method {
 	case "initialize":
-		s.handleInitialize(w, req, session, headerProtocolVersion)
+		s.handleInitialize(w, r, req, session, headerProtocolVersion)
 	case "notifications/initialized":
 		protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
 		if apiErr != nil {
@@ -246,13 +247,14 @@ func (s *mcpServer) handlePost(w http.ResponseWriter, r *http.Request, session *
 	}
 }
 
-func (s *mcpServer) handleInitialize(w http.ResponseWriter, req mcpRequest, session *mcpSession, headerProtocolVersion string) {
+func (s *mcpServer) handleInitialize(w http.ResponseWriter, r *http.Request, req mcpRequest, session *mcpSession, headerProtocolVersion string) {
 	var params struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
 	_ = json.Unmarshal(req.Params, &params)
 	protocolVersion := negotiateProtocolVersion(params.ProtocolVersion, headerProtocolVersion)
-	session = s.ensureSession(session, protocolVersion)
+	token, _ := r.Context().Value(cloudTokenKey{}).(*APIToken)
+	session = s.ensureSession(session, token, protocolVersion)
 	s.writeRPC(w, mcpResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -343,7 +345,7 @@ func (s *mcpServer) applyOriginHeaders(w http.ResponseWriter, r *http.Request) *
 	return nil
 }
 
-func (s *mcpServer) sessionFromRequest(r *http.Request) (*mcpSession, *apiError) {
+func (s *mcpServer) sessionFromRequest(r *http.Request, token *APIToken) (*mcpSession, *apiError) {
 	sessionID := strings.TrimSpace(r.Header.Get(mcpHeaderSessionID))
 	if sessionID == "" {
 		return nil, nil
@@ -354,18 +356,33 @@ func (s *mcpServer) sessionFromRequest(r *http.Request) (*mcpSession, *apiError)
 	if !ok {
 		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
 	}
+	if token != nil && session.TokenID != "" && session.TokenID != token.ID {
+		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
+	}
 	session.LastSeenAt = time.Now().UTC()
 	return session, nil
 }
 
-func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) *mcpSession {
+func (s *mcpServer) ensureSession(existing *mcpSession, token *APIToken, protocolVersion string) *mcpSession {
 	now := time.Now().UTC()
+	tokenID := ""
+	if token != nil {
+		tokenID = token.ID
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if existing != nil {
 		session := s.sessions[existing.ID]
 		if session == nil {
-			session = &mcpSession{ID: existing.ID, CreatedAt: existing.CreatedAt, done: make(chan struct{})}
+			session = &mcpSession{
+				ID:        existing.ID,
+				TokenID:   firstNonEmpty(existing.TokenID, tokenID),
+				CreatedAt: existing.CreatedAt,
+				done:      make(chan struct{}),
+			}
+		}
+		if session.TokenID == "" {
+			session.TokenID = tokenID
 		}
 		session.ProtocolVersion = protocolVersion
 		if session.CreatedAt.IsZero() {
@@ -380,6 +397,7 @@ func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) 
 	}
 	session := &mcpSession{
 		ID:              newMCPSessionID(),
+		TokenID:         tokenID,
 		ProtocolVersion: protocolVersion,
 		CreatedAt:       now,
 		LastSeenAt:      now,

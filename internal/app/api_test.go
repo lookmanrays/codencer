@@ -846,6 +846,83 @@ func TestAPI_RouteProofs(t *testing.T) {
 		}
 	})
 
+	t.Run("GET /api/v1/steps/{id}/result reflects post-attempt lifecycle state", func(t *testing.T) {
+		env := newAPIRouteProofEnv(t, nil)
+		ctx := context.Background()
+		runID := "result-overlay-run"
+		stepID := "result-overlay-step"
+		attemptID := "result-overlay-attempt"
+
+		if _, err := env.runSvc.StartRun(ctx, runID, "gate-proj", "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		step := &domain.Step{
+			ID:        stepID,
+			PhaseID:   "phase-execution-" + runID,
+			Title:     "Overlay step",
+			Goal:      "Expose current lifecycle truth",
+			Adapter:   "mock",
+			State:     domain.StepStateNeedsApproval,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := env.stepsRepo.Create(ctx, step); err != nil {
+			t.Fatal(err)
+		}
+		if err := env.attemptsRepo.Create(ctx, &domain.Attempt{
+			ID:        attemptID,
+			StepID:    stepID,
+			Number:    1,
+			Adapter:   "mock",
+			Result:    &domain.ResultSpec{Version: "v1", State: domain.StepStateCompleted, Summary: "attempt completed"},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/steps/"+stepID+"/result", nil)
+		w := httptest.NewRecorder()
+		env.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+		}
+
+		var result domain.ResultSpec
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		if result.State != domain.StepStateNeedsApproval {
+			t.Fatalf("expected needs_approval overlay, got %s", result.State)
+		}
+		if !result.NeedsHumanDecision {
+			t.Fatal("expected needs_human_decision for gated step result")
+		}
+
+		step.State = domain.StepStateCancelled
+		step.StatusReason = "Gate rejected by operator."
+		step.UpdatedAt = time.Now().UTC()
+		if err := env.stepsRepo.UpdateState(ctx, step); err != nil {
+			t.Fatal(err)
+		}
+
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/steps/"+stepID+"/result", nil)
+		w = httptest.NewRecorder()
+		env.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+		}
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		if result.State != domain.StepStateCancelled {
+			t.Fatalf("expected cancelled overlay, got %s", result.State)
+		}
+		if result.Summary != step.StatusReason {
+			t.Fatalf("expected cancelled summary %q, got %q", step.StatusReason, result.Summary)
+		}
+	})
+
 	t.Run("PATCH /api/v1/runs/{id} aborts an active step", func(t *testing.T) {
 		adapter := newBlockingAPIAdapter()
 		env := newAPIRouteProofEnv(t, map[string]domain.Adapter{"blocking": adapter})
@@ -899,6 +976,67 @@ func TestAPI_RouteProofs(t *testing.T) {
 		if step.State != domain.StepStateCancelled {
 			t.Fatalf("expected step to be cancelled, got %s", step.State)
 		}
+	})
+
+	t.Run("POST /api/v1/steps/{id}/retry re-enters execution and marks run running", func(t *testing.T) {
+		adapter := newBlockingAPIAdapter()
+		env := newAPIRouteProofEnv(t, map[string]domain.Adapter{"blocking": adapter})
+		ctx := context.Background()
+		runID := "retry-route-run"
+		now := time.Now().UTC()
+
+		if _, err := env.runSvc.StartRun(ctx, runID, "retry-proj", "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := env.runsRepo.UpdateState(ctx, &domain.Run{ID: runID, State: domain.RunStateFailed, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		step := &domain.Step{
+			ID:        "retry-route-step",
+			PhaseID:   "phase-execution-" + runID,
+			Title:     "Retry route step",
+			Goal:      "Re-enter execution",
+			Adapter:   "blocking",
+			State:     domain.StepStateFailedValidation,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := env.stepsRepo.Create(ctx, step); err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/steps/"+step.ID+"/retry", nil)
+		w := httptest.NewRecorder()
+		env.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusAccepted {
+			t.Fatalf("expected 202, got %d body=%s", w.Code, w.Body.String())
+		}
+
+		waitForChannel(t, adapter.started, "adapter start")
+
+		run, err := env.runsRepo.Get(ctx, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.State != domain.RunStateRunning {
+			t.Fatalf("expected run to be running after retry, got %s", run.State)
+		}
+
+		reloadedStep, err := env.stepsRepo.Get(ctx, step.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reloadedStep.State != domain.StepStateDispatching && reloadedStep.State != domain.StepStateRunning {
+			t.Fatalf("expected retried step to re-enter execution, got %s", reloadedStep.State)
+		}
+
+		abortReq := httptest.NewRequest(http.MethodPatch, "/api/v1/runs/"+runID, strings.NewReader(`{"action":"abort"}`))
+		abortW := httptest.NewRecorder()
+		env.mux.ServeHTTP(abortW, abortReq)
+		if abortW.Code != http.StatusOK {
+			t.Fatalf("expected 200 during retry cleanup, got %d body=%s", abortW.Code, abortW.Body.String())
+		}
+		waitForChannel(t, adapter.cancelled, "adapter cancel")
 	})
 
 	t.Run("GET /api/v1/steps/{id}/result, validations, logs return persisted evidence", func(t *testing.T) {

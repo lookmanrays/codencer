@@ -1,6 +1,13 @@
-# Codencer Cloud Self-Host Guide
+# Codencer Self-Host Cloud Control Plane Guide
 
 This guide covers the practical self-host bootstrap path for Codencer Cloud.
+
+Use this page when cloud tenancy is the public control plane.
+
+- Use [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) when you want the raw relay/runtime self-host path instead of cloud tenancy.
+- Use [CLOUD.md](CLOUD.md) for the cloud route/scope reference.
+- Use [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) for per-provider install/test depth and limitations.
+- Use [mcp/integrations.md](mcp/integrations.md) for the planner/client compatibility matrix.
 
 ## Recommended Topology
 
@@ -22,7 +29,23 @@ The repo now includes a practical Docker baseline under `deploy/cloud/`:
 - `deploy/cloud/config/relay.json`
 - `deploy/cloud/smoke.sh`
 
-This stack is still alpha-grade and SQLite-backed. It is meant to be a serious self-host baseline, not a production-ready managed deployment recipe.
+This stack is beta-track, SQLite-backed, and meant to be a serious self-host baseline rather than a production-ready managed deployment recipe.
+
+## Compose Reality
+
+The Docker baseline is intentionally narrow:
+
+- it starts `codencer-cloudd` plus `codencer-cloudworkerd`
+- it embeds the relay bridge inside the cloud process
+- it publishes only the cloud HTTP port on `8190`
+- it does **not** create a usable runtime instance by itself
+- cloud-scoped runtime proof still requires an external `orchestratord` plus `codencer-connectord`
+
+Proof boundary:
+
+- `make cloud-stack-smoke` proves the Docker baseline only
+- `make cloud-smoke` proves the binary-native cloud control-plane path
+- `make cloud-smoke` with composed-mode runtime inputs proves claimed runtime HTTP, cloud MCP, and official Go SDK access
 
 ## Build
 
@@ -93,6 +116,38 @@ Persistent state in the compose baseline lives in named volumes:
 
 The committed JSON config files are templates. Secrets still come from the compose env file through runtime environment overrides.
 
+## Composed Runtime Proof With An External Daemon
+
+When you want tenant-scoped runtime control against the cloud host, use this order:
+
+1. bootstrap and start the cloud stack
+2. start a local `orchestratord` next to the repo you want to serve
+3. mint a relay enrollment token from the cloud image:
+
+```bash
+docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml run --rm \
+  --entrypoint codencer-relayd cloud \
+  enrollment-token create \
+  --config /etc/codencer/relay/config.json \
+  --label local-dev \
+  --json
+```
+
+4. enroll and run `codencer-connectord` against `http://127.0.0.1:8190`
+5. claim the runtime connector into org/workspace/project scope with `codencer-cloudctl runtime-connectors claim`
+6. use cloud HTTP under `/api/cloud/v1/runtime/...` or cloud MCP under `/api/cloud/v1/mcp`
+
+If you want the scripted composed proof from a local checkout instead of the Docker baseline, use the binary-native smoke path:
+
+```bash
+make build-cloud build-mcp-sdk-smoke
+CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
+CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8085 \
+CLOUD_SMOKE_MCP=1 \
+CLOUD_SMOKE_SDK=1 \
+make cloud-smoke
+```
+
 ## Cloud Config
 
 Create a cloud config file such as `.codencer/cloud/config.json`:
@@ -158,6 +213,8 @@ Cloud-scoped MCP is also available in composed mode:
 - compatibility alias: `/api/cloud/v1/mcp/call`
 
 Use relay `/mcp` only when you are operating the self-host relay directly without cloud tenancy.
+
+For the frozen planner/client compatibility matrix, generic client examples, and cloud-vs-relay boundary, see [mcp/integrations.md](mcp/integrations.md) and [mcp/cloud_tools.md](mcp/cloud_tools.md).
 
 ## Operator Commands
 
@@ -237,8 +294,18 @@ You can also use the cloud HTTP surface directly for runtime work:
 curl -fsS \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"adapter":"sim","title":"Smoke run"}' \
+  -d '{"id":"cloud-runtime-smoke","project_id":"cloud-smoke-project"}' \
   http://127.0.0.1:8190/api/cloud/v1/runtime/instances/<instance-id>/runs
+```
+
+Then submit a task through the same cloud-scoped prefix:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"version":"v1","goal":"Verify the cloud runtime HTTP path","adapter_profile":"codex"}' \
+  http://127.0.0.1:8190/api/cloud/v1/runtime/instances/<instance-id>/runs/cloud-runtime-smoke/steps
 ```
 
 Runtime steps, gates, logs, validations, and artifact content follow the same instance-scoped prefix under `/api/cloud/v1/runtime/instances/<instance-id>/...`.
@@ -277,11 +344,12 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml r
 
 ## Worker
 
-`codencer-cloudworkerd` is the background worker for connector maintenance. In this alpha pass:
+`codencer-cloudworkerd` is the background worker for connector maintenance. In the current beta track:
 
 - GitHub, GitLab, Linear, and Slack remain webhook-first
 - Jira is polling-first
-- Jira webhook ingest is intentionally not implemented
+- Jira webhook ingest is intentionally deferred
+- routed Jira webhook calls return `501 webhook_deferred` and do not persist events
 
 Safe worker run:
 
@@ -305,11 +373,40 @@ The repo includes `scripts/cloud_smoke.sh` and a `make cloud-smoke` target. The 
 - org/workspace/project listing via the HTTP API
 - installation creation/list/get
 - installation enable/disable
+- Slack-style webhook verification for the smoke installation
+- event listing for the smoke installation
 - audit inspection
 - a safe no-op `cloudworkerd --once` pass
-- optional runtime claim/list assertions when `CLOUD_RELAY_CONFIG` and `CLOUD_RUNTIME_CONNECTOR_ID` are supplied
+- optional composed-mode runtime claim/list assertions when `CLOUD_RELAY_CONFIG` is supplied together with either `CLOUD_RUNTIME_CONNECTOR_ID` or `CLOUD_RUNTIME_DAEMON_URL`
+- optional composed-mode cloud runtime HTTP proof under the same composed-mode runtime inputs
+- optional composed-mode cloud MCP initialize/list/call proof when `CLOUD_SMOKE_MCP=1`
+- optional composed-mode official Go SDK proof against `/api/cloud/v1/mcp` when `CLOUD_SMOKE_SDK=1`
 
 It does not claim external provider verification.
+
+Provider truth for this smoke:
+
+- Slack is the current provider-shaped binary smoke path
+- Jira polling is proven by focused tests and `codencer-cloudworkerd --once`, not by the baseline binary smoke
+- GitHub, GitLab, and Linear remain provider-fixture and routed-install/action proof paths, not provider-specific binary smoke paths
+
+Practical split:
+
+- `make cloud-smoke` proves the baseline cloud control-plane path.
+- `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_CONNECTOR_ID=... make cloud-smoke` adds composed-mode claimed-runtime and cloud runtime HTTP proof.
+- `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8080 make cloud-smoke` can bootstrap a temporary connector automatically for the composed proof when you do not already have a shared connector id.
+- `make build-mcp-sdk-smoke` plus `CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1` adds cloud MCP and official Go SDK proof in the same composed-mode smoke run.
+
+Example composed-mode proof:
+
+```bash
+make build-cloud build-mcp-sdk-smoke
+CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
+CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8080 \
+CLOUD_SMOKE_MCP=1 \
+CLOUD_SMOKE_SDK=1 \
+make cloud-smoke
+```
 
 For the Docker-based deployment baseline, use:
 
@@ -332,9 +429,11 @@ It requires a running Docker daemon. In environments where Docker CLI is install
 - If `bootstrap` or `status` fail, confirm the cloud server is using the same `db_path` as your config.
 - If secret storage fails, confirm `master_key` is set.
 - If a connector install remains `disabled`, check the enable route and the audit trail.
-- If runtime connector claim fails, confirm the relay bridge is configured and that the target connector id already exists in relay state.
+- If a Jira webhook call returns `webhook_deferred`, that is expected in this phase; use `codencer-cloudworkerd` for Jira ingest.
+- If runtime connector claim fails, confirm the relay bridge is configured and either provide a valid shared `CLOUD_RUNTIME_CONNECTOR_ID` or set `CLOUD_RUNTIME_DAEMON_URL` so the smoke can enroll a temporary connector first.
 - If a runtime instance does not appear, confirm it is still shared by the local Codencer connector.
-- If cloud MCP calls fail, confirm the cloud daemon was started with `relay_config_path` or `--relay-config` and that the token includes `runtime_instances:read` plus the tool-specific scopes.
+- If cloud MCP calls fail, confirm the cloud daemon was started with `relay_config_path` or `--relay-config`, that the token is valid for the target tenant scope, and that the token includes the tool-specific scopes you are calling. `list_instances` and `get_instance` still require `runtime_instances:read`.
 - If Jira polling fails, confirm `config.jql` or `config.project_key` is present and that the provider credentials are valid.
+- If connector event history shows repeated source IDs, that is now expected append-only behavior rather than a silent overwrite.
 
 For connector capability details, see [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md). For the high-level cloud overview, see [CLOUD.md](CLOUD.md).

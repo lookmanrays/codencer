@@ -5,8 +5,33 @@ Codencer is a tactical orchestration bridge that manages execution, isolation, a
 Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
 
 > [!IMPORTANT]
-> **Project Status: Open-source alpha for the v2 local/self-host path (`v0.2.0-alpha`)**.
-> Codencer is coherent and buildable for disciplined local and self-host use, but the current relay, auth, artifact transport, and cancellation guarantees are still alpha-grade and documented honestly below.
+> **Project Status: Open-source beta for the v2 local/self-host path (`v0.2.0-beta`)**.
+> Codencer is publicly testable for the supported local, relay/runtime, cloud, planner/client, and provider tracks documented in [docs/BETA_TESTING.md](docs/BETA_TESTING.md). Compatibility-only and deferred surfaces remain explicitly outside that beta promise.
+
+## Supported Beta Test Tracks
+
+Use [docs/BETA_TESTING.md](docs/BETA_TESTING.md) as the repo-level tester guide. The quick chooser is:
+
+| Track | Start doc | Build | Proof command | Current boundary |
+| --- | --- | --- | --- | --- |
+| Local-only daemon + CLI | [docs/SETUP.md](docs/SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter claims stay narrow. |
+| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md) | `make build` | `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path. |
+| Self-host cloud control plane | [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Docker baseline and binary-native composed proof are separate. |
+| Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude-style product paths stay compatibility-only. |
+| Provider connectors | [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider tests | Slack is strongest; Jira is polling-first; the rest remain narrower. |
+
+For a supported non-Docker repo pass:
+
+```bash
+make build-supported
+make verify-beta
+```
+
+For the Docker-backed cloud baseline on a Docker-capable host:
+
+```bash
+make verify-beta-docker
+```
 
 ---
 
@@ -57,10 +82,10 @@ Key constraints remain unchanged:
 - `bin/codencer-relayd`: run the self-hostable relay server, planner-facing API, connector websocket endpoint, and relay-side MCP surface
 - `bin/codencer-cloudctl`: admin CLI for cloud bootstrap, status, org/workspace/project, token, installation, runtime-connector, runtime-instance, event, and audit flows
 - `bin/codencer-cloudd`: cloud control-plane server; can optionally start an internal relay runtime bridge for tenant-scoped Codencer runtime control
-- `bin/codencer-cloudworkerd`: cloud worker for background connector maintenance; Jira is polling-first in this alpha pass
+- `bin/codencer-cloudworkerd`: cloud worker for background connector maintenance; Jira is polling-first in the current beta track
 - `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side agent-broker; it lives under the nested `cmd/broker` module
 
-### Cloud Control Plane (Alpha)
+### Cloud Control Plane (Beta Track)
 
 Codencer also includes a cloud control-plane foundation for provider connector installations, operator bootstrap, and tenant-scoped Codencer runtime control. It is not a replacement for the local daemon, the relay bridge, or the self-host run/step/attempt path.
 
@@ -69,7 +94,7 @@ Codencer also includes a cloud control-plane foundation for provider connector i
 - Start it with `--relay-config` when you want cloud to claim and control Codencer runtime connectors and shared instances through the internal relay bridge.
 - Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, membership, and API token state directly in the cloud store.
 - Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|memberships|tokens|install|runtime-connectors|runtime-instances|events|audit` for remote control-plane operations.
-- Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this pass.
+- Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest remains deferred in the current beta track.
 - When cloud is running with the relay bridge, the cloud-scoped remote surface is:
   - HTTP under `/api/cloud/v1/runtime/*`
   - MCP under `/api/cloud/v1/mcp` with `/api/cloud/v1/mcp/call` kept as a compatibility alias
@@ -180,6 +205,8 @@ For Claude, Codencer invokes the installed CLI as `claude -p --output-format jso
 
 The Claude adapter wrapper path is implemented and test-covered in this repo: prompt shaping, normalization, lifecycle behavior, fake-binary integration, and simulation conformance are exercised, but the repo test suite does not run a live authenticated Claude service call. Treat `/api/v1/compatibility` plus your actual runtime environment as the source of truth for local adapter readiness.
 
+`/api/v1/compatibility` is a runtime diagnostic surface, not a beta-support certificate. It reports current binary availability, simulation mode, and local binding state; it does not promote an adapter into the beta promise by itself.
+
 ### 3. Run Your First Tactical Task
 Submit a task and wait for the bridge to report results. For the full auditing sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
 
@@ -196,6 +223,14 @@ Submit a task and wait for the bridge to report results. For the full auditing s
 # 3. View the Authoritative Truth (The Summary)
 # Note: Use the Step UUID Handle printed after submission
 ./bin/orchestratorctl step result <UUID>
+```
+
+For the repo-proven legacy same-run local parity path, run the six-input smoke directly. If no daemon is already reachable, the script auto-starts a temporary simulation daemon and exercises the current local wait/result contract end to end:
+
+```bash
+./scripts/smoke_test_v1.sh
+./scripts/smoke_test_v1.sh
+make smoke
 ```
 
 ### 3.2 Standard Submission Flows
@@ -340,14 +375,14 @@ Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 
 ---
 
-## ⚠️ Known Limitations (Local/Self-Host Alpha)
+## ⚠️ Known Limitations (Public Beta)
 
-Codencer’s v2 path is materially real for local and self-host use, but it is still alpha-grade in a few places:
+Codencer’s v2 path is beta-track ready for disciplined local and self-host use, but it still has explicit limits:
 - **No Planner In Core**: Codencer never decomposes, prioritizes, or decides strategy. The planner still owns those decisions.
 - **Best-Effort Abort**: `PATCH /api/v1/runs/{id}` and relay abort flows are honest but not universal hard-kill guarantees. A run is only reported cancelled when the adapter actually stops.
 - **Opportunistic Remote Routing**: Relay step, gate, and artifact routing is learned from prior responses. Direct remote lookups can fail until the relay has already seen those IDs.
 - **Bounded Artifact Transport**: Connector transport rejects oversized artifact bodies instead of turning the relay into a bulk file tunnel. Large binary transfer is intentionally limited.
-- **Static Self-Host Auth**: Planner auth is static bearer-token based, suitable for self-host alpha use but not enterprise IAM.
+- **Static Self-Host Auth**: Planner auth is static bearer-token based, suitable for narrow self-host beta use but not enterprise IAM.
 - **Single-Operator Bias**: The current flow is optimized for local/self-host operators, not multi-tenant hosted service use.
 - **No Native Workflow Brain**: Ordered task execution remains wrapper- or planner-driven outside Codencer core.
 
@@ -387,7 +422,15 @@ Codencer distinguishes between different failure modes to help you recover faste
 ## 🧪 Simulation vs. Real Execution
 
 1. **Simulation Mode** (`make start-sim`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
-2. **Real Mode**: Tests the full end-to-end loop with real agents. **Codex-agent** is the primary path exercised in this repo; other adapters are implementation-backed but should still be treated as alpha-grade unless your local runtime proves them ready.
+2. **Real Mode**: Tests the full end-to-end loop with real agents. `codex` is the primary intended local beta adapter, but the checked-in repo proof is still simulation-heavy; other adapters remain implementation-backed and should stay narrow unless your own runtime proves them ready.
+
+Current local adapter proof is intentionally narrow:
+- `codex`: primary intended local beta adapter, but current repo proof is still simulation-heavy rather than live-binary proven.
+- `claude`: strongest adapter-specific wrapper proof in repo, but still fake-binary and non-authenticated.
+- `qwen`: simulation/conformance proof only; kept as secondary.
+- `antigravity` and `antigravity-broker`: secondary, environment-specific proof only.
+- `openclaw-acpx` and `ide-chat`: experimental/deferred, not part of the local beta promise.
+- daemon-local `/mcp/call`: compatibility/admin bridge only, not the public planner MCP contract.
 
 ---
 
@@ -396,10 +439,15 @@ Codencer distinguishes between different failure modes to help you recover faste
 Review the following guides to get started with Codencer.
 
 ### ⚡️ User Guidance (Start Here)
+- **[Public Beta Test Tracks](docs/BETA_TESTING.md)** — Fastest way to choose the right supported test lane and command set.
 - **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)** — The canonical "Day 0" flow for humans.
 - **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** — Canonical rules for AI planners and assistants.
 - **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)** — Machine-safe JSON mode and sequential loops.
 - **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and daemon management.
+- **[Self-Host Relay / Runtime Guide](docs/SELF_HOST_REFERENCE.md)** — End-to-end relay/connector operator flow.
+- **[Self-Host Cloud Control Plane Guide](docs/CLOUD_SELF_HOST.md)** — Bootstrap, smoke, and composed cloud runtime guidance.
+- **[Planner / Client Integration Notes](docs/mcp/integrations.md)** — Relay/cloud HTTP + MCP compatibility matrix.
+- **[Cloud Connector Matrix](docs/CLOUD_CONNECTORS.md)** — Per-provider install/test depth and limitations.
 - **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** — Resolving infrastructure vs goal failures.
 - **[Architecture Overview](docs/02_architecture.md)** — Current daemon, connector, relay, and trust-boundary model.
 - **[WSL / Windows / Antigravity Topology](docs/WSL_WINDOWS_ANTIGRAVITY.md)** — Practical cross-side deployment guidance.

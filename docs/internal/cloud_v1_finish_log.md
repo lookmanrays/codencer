@@ -1,5 +1,9 @@
 # Codencer Cloud V1 Finish Log
 
+> [!WARNING]
+> **HISTORICAL FINISH LOG**: This log records an earlier cloud hardening pass and is not the current release contract.
+> Use the frozen `BETA_*` docs in this directory for current beta truth and remaining work.
+
 Last updated: 2026-04-15
 
 ## Current Cloud Hardening Pass

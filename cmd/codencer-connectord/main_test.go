@@ -91,6 +91,37 @@ func TestRunShareUnshareListAndConfig(t *testing.T) {
 	}
 }
 
+func TestRunShareByInstanceIDRejectsUnresolvableEntryWithoutMutatingConfig(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "connector.json")
+	cfg := &connector.Config{
+		RelayURL:    "http://relay.invalid",
+		ConnectorID: "connector-1",
+		MachineID:   "machine-1",
+		ConfigPath:  configPath,
+	}
+	if err := connector.SaveConfig(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := run(context.Background(), []string{"share", "--config", configPath, "--instance-id", "inst-missing"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected share to fail for unresolved instance id")
+	}
+	if !strings.Contains(err.Error(), "did not resolve to a local daemon url") {
+		t.Fatalf("unexpected share error: %v", err)
+	}
+
+	savedCfg, loadErr := connector.LoadConfig(configPath)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if len(savedCfg.Instances) != 0 {
+		t.Fatalf("expected failed share to leave config unchanged, got %+v", savedCfg.Instances)
+	}
+}
+
 func TestRunStatusTextStaysInformativeAndStatusJSONPassesThrough(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "connector.json")
 	cfg := &connector.Config{

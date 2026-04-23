@@ -1,6 +1,12 @@
 # Codencer Cloud
 
-Codencer Cloud is the alpha cloud control plane for tenant-scoped provider integrations and tenant-scoped Codencer runtime control. It does not execute coding work, but it can now own the cloud-facing registry for claimed Codencer connectors and shared instances when started with an internal relay bridge.
+Codencer Cloud is the beta-track self-host cloud control plane for tenant-scoped provider integrations and tenant-scoped Codencer runtime control. It does not execute coding work, but it can now own the cloud-facing registry for claimed Codencer connectors and shared instances when started with an internal relay bridge.
+
+Use this page for the cloud scope and route contract.
+
+- Use [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md) for bootstrap, Docker baseline, and smoke order.
+- Use [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) for per-provider install/test depth and limitations.
+- Use [mcp/integrations.md](mcp/integrations.md) for the cloud-vs-relay planner/client chooser.
 
 ## What It Does
 
@@ -120,6 +126,7 @@ Those routes exist so the connector can dial the cloud host directly in composed
 The cloud-scoped canonical remote tool surface now exists at `/api/cloud/v1/mcp`.
 
 - It uses cloud bearer tokens, not relay planner tokens.
+- Transport auth only requires a valid cloud token; individual tool calls still enforce their own runtime scopes.
 - It enforces org/workspace/project visibility before any runtime tool can see an instance.
 - It intentionally exposes only the narrow `codencer.*` runtime tool set.
 - It is only useful when `codencer-cloudd` is started with a relay bridge.
@@ -130,6 +137,8 @@ Boundary rule:
 - use relay `/mcp` when operating the self-host relay directly without cloud tenancy
 
 Both surfaces ultimately route through the same local runtime bridge doctrine, but only the cloud surface is tenant-scoped.
+
+For the frozen planner/client compatibility matrix, generic HTTP/MCP examples, and cloud-vs-relay packaging boundary, see [mcp/integrations.md](mcp/integrations.md) and [mcp/cloud_tools.md](mcp/cloud_tools.md).
 
 ## Command Surface
 
@@ -155,14 +164,21 @@ The runtime CLI covers cloud-scoped claim/list/get flows for claimed runtime con
 ## Current Truth
 
 - Cloud runtime control is tenant-scoped over HTTP and cloud-scoped MCP in this pass.
+- Repo tests now cover token revocation denial, event/audit scope filtering, runtime HTTP scope enforcement, and cloud MCP session/scope parity.
+- Connector event history is append-only in the cloud store; repeated source-event IDs are preserved instead of overwriting older rows.
+- Provider action logs now persist request/response payloads plus start/end timestamps, and provider audit rows include richer action outcome details.
 - Raw relay routes are still available from `codencer-relayd` for self-host relay use, but they are not the cloud control-plane contract.
 - Cloud runtime control requires `codencer-cloudd` to be started with `relay_config_path` or `--relay-config`.
 - Cloud runtime connector ownership is explicit. A relay connector must still be claimed into org/workspace/project scope before the cloud API or cloud MCP can use it.
 - Connector enrollment-token issuance remains relay-config backed in this pass. Cloud hosts connector ingress in composed mode, but it does not yet add a cloud-native enrollment-token lifecycle.
-- Jira is polling-first in this alpha pass.
-- Jira webhook ingest is not implemented.
+- Jira is polling-first in the current beta track.
+- Jira webhook ingest remains deferred and routed Jira webhook calls now return `501 webhook_deferred` instead of ingesting payloads.
 - `codencer-cloudworkerd` is the place where Jira polling runs.
-- `cloud_smoke.sh` intentionally exercises the binary-native bootstrap, status, list, create, get, enable, disable, events, and audit flows.
+- `cloud_smoke.sh` now exercises the binary-native bootstrap, status, list, create, get, enable, disable, webhook ingest, events, and audit flows.
+- the provider-shaped binary smoke path is Slack-oriented today; GitHub, GitLab, Jira, and Linear remain narrower operator/package surfaces backed mainly by provider fixture tests plus the generic cloud install/action routes
+- In composed mode, `cloud_smoke.sh` can also prove claimed runtime visibility plus a real cloud runtime HTTP run/start + submit-task path. That composed proof can use either an existing shared connector id or a temporary connector enrolled from `CLOUD_RUNTIME_DAEMON_URL`.
+- In composed mode, `cloud_smoke.sh` can optionally prove cloud MCP initialize/list/call and official Go SDK interoperability.
 - `deploy/cloud/smoke.sh` exercises the Docker-based self-host stack baseline with bootstrap, status, installation create, and audit verification.
+- `make cloud-stack-smoke` is the Docker baseline proof only; the broader runtime/MCP/SDK proof lives in the binary-native `make cloud-smoke` path with composed-mode inputs.
 
 For operator steps and startup ordering, see [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). For provider capability details, see [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md).

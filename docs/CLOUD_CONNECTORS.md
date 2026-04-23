@@ -1,110 +1,300 @@
 # Codencer Cloud Connector Matrix
 
-This document describes the priority provider connectors currently implemented in the cloud alpha. The matrix below separates what exists in code from what is verified in repo tests and what remains intentionally partial.
+This document freezes the current provider connector contract to repo-tested truth.
 
-## Installation State Matrix
+Status labels in the matrix below mean:
 
-Cloud connector installations use the following state model:
+- `proven`: directly exercised by current repo tests or smoke.
+- `partial`: implemented and usable within a narrow scope, but proof or operator packaging is still thin.
+- `expected-only`: code/docs suggest it should work, but the repo does not directly prove it today.
+- `deferred`: intentionally outside the current provider beta promise.
 
-| State | Meaning |
-| --- | --- |
-| `created` | The record exists and has not been disabled. It may still need validation or provider setup. |
-| `active` | The installation is enabled and has passed its latest validation or polling pass. |
-| `disabled` | The operator has explicitly disabled the installation. It is not meant to be processed or routed. |
-| `error` | The last validation, webhook ingest, or worker poll failed. Review `last_error`. |
+## Generic Install And Validate Contract
 
-The enable/disable routes and CLI subcommands are:
+All five providers use the same cloud installation surface:
 
+- `POST /api/cloud/v1/installations`
+- `GET /api/cloud/v1/installations/{id}`
+- `POST /api/cloud/v1/installations/{id}/validate`
 - `POST /api/cloud/v1/installations/{id}/enable`
 - `POST /api/cloud/v1/installations/{id}/disable`
-- `codencer-cloudctl install enable`
-- `codencer-cloudctl install disable`
+- `POST /api/cloud/v1/installations/{id}/actions`
+- `POST /api/cloud/v1/installations/{id}/webhook`
+- `GET /api/cloud/v1/events`
+- `GET /api/cloud/v1/audit`
 
-Installations now also persist:
+Create requests use this shape:
 
-- `owner_membership_id`
-- `health`
-- `last_seen_at`
-- `last_sync_at`
-- `last_validated_at`
-- `last_webhook_at`
-- `last_action_at`
-- `last_error`
+```json
+{
+  "org_id": "org_...",
+  "workspace_id": "ws_...",
+  "project_id": "proj_...",
+  "connector_key": "slack",
+  "external_installation_id": "",
+  "external_account": "",
+  "name": "Slack smoke",
+  "config": {
+    "api_base_url": "https://slack.example",
+    "username": "jira@example.com",
+    "project_key": "PROJ"
+  },
+  "secrets": {
+    "token": "...",
+    "webhook_secret": "..."
+  }
+}
+```
 
-Practical interpretation:
+Generic runtime truth:
 
-- `health=healthy` means the latest validate, webhook, action, or worker poll succeeded
-- `health=degraded` means the latest provider-facing operation failed
-- `health=disabled` means the operator explicitly disabled the installation
-- `health=unknown` is the initial create-time value before any provider check succeeds
+- `config` is stored as installation config JSON.
+- `secrets` are stored separately and encrypted.
+- current provider code only consumes generic `config.api_base_url`, `config.username`, and the raw `config` map, plus `secrets.token` and `secrets.webhook_secret`
+- create does not live-check provider credentials; live validation happens later through `POST /validate`
+- `POST /validate` takes no body and returns:
+
+```json
+{
+  "validation": {},
+  "status": {},
+  "error": ""
+}
+```
+
+- install records start as `status=created`, `enabled=true`, `health=unknown` through the HTTP API
+- `GET /installations/{id}` exposes the persisted installation state
+- `POST /validate` returns a richer provider-derived status result and updates `last_validated_at`, `health`, and `last_error`
+
+## History, Action Logs, And Audit Truth
+
+- connector event history is append-only in the cloud store
+- repeated `source_event_id` values are preserved instead of overwriting earlier rows
+- event listing is newest-first
+- connector action logs now persist request JSON, response JSON, error text, started time, and completed time
+- cloud audit rows for connector actions now include provider, action, status, external ID, URL, status code, and error summary when present
+- webhook verification failures, webhook deferment, and normalization failures now create explicit audit rows instead of only leaving implicit HTTP responses
+
+Current limitation:
+
+- there is still no public API route for listing action-log rows directly; action-log depth is mainly a store/audit truth improvement in this phase
 
 ## Provider Capability Matrix
 
-| Provider | Validation | Webhook ingest | Polling ingest | Actions implemented | Verified in repo tests | Current status |
-| --- | --- | --- | --- | --- | --- | --- |
-| GitHub | Yes, token validation against `/user` with user metadata | Yes, signature-verified webhook events | No | `create_issue_comment`, `create_issue` | validation, issue/PR/push normalization, comment create, issue create | Useful alpha connector; still narrow |
-| GitLab | Yes, token validation against `/user` with user metadata | Yes, token-verified webhook events | No | `create_issue_note`, `create_issue` | validation, issue/MR/push normalization, note create, issue create | Useful alpha connector; still narrow |
-| Jira | Yes, basic-auth validation against `/myself` with polling-mode status details | No | Yes, via `codencer-cloudworkerd` | `add_issue_comment`, `transition_issue` | validation, comment create, transition action, polling snapshot normalization, worker sync | Polling-first by design; webhook ingest intentionally not implemented |
-| Linear | Yes, viewer query validation with stronger identity checks | Yes, signature-verified webhook events | No | `create_issue`, `add_comment` | validation, issue create, comment create, webhook normalization | Useful alpha connector; still narrow |
-| Slack | Yes, `auth.test` validation with stricter identity checks | Yes, signature-verified event, interactive, and slash-command payloads | No | `post_message`, `update_message` | validation, post/update message, event callback, interactive, slash-command normalization | Useful alpha connector for notifications and approvals |
+| Provider | Install/bootstrap | Validation | Ingest | Actions | Status/health | Audit | Local testability | Publishability-preparedness |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GitHub | `partial` | `proven` | `partial` | `proven` | `proven` | `partial` | `partial` | `partial` |
+| GitLab | `partial` | `proven` | `partial` | `proven` | `proven` | `partial` | `partial` | `partial` |
+| Jira | `partial` | `proven` | `partial` | `partial` | `proven` | `partial` | `partial` | `partial` |
+| Linear | `partial` | `proven` | `partial` | `partial` | `partial` | `partial` | `partial` | `partial` |
+| Slack | `proven` | `proven` | `partial` | `partial` | `proven` | `partial` | `proven` | `partial` |
 
-## Provider Notes
+Practical interpretation:
+
+- Slack is the strongest operator-facing connector path in the repo today.
+- Jira is real and supported within a polling-first scope.
+- GitHub, GitLab, and Linear are real connectors with direct mocked-provider proof, but their operator packaging and local end-to-end proof remain thinner than Slack.
+- none of these providers should be described as marketplace-ready, OAuth-install ready, or vendor-depth complete in this phase
+
+## Provider Details
 
 ### GitHub
 
-- normalizes issues, pull requests, and push events
-- supports `create_issue_comment` and `create_issue`
-- tests cover issue, pull request, and push normalization
-- install validation requires token and a valid API base URL; webhook secret is optional for action-only installs
-- status is derived from validation plus webhook verification, with health/timestamp fields persisted on installation records
-- not implemented: PR review actions, labels, state transitions, installation/OAuth app flow
+Current scope:
+
+- validate token against `GET /user`
+- verify webhook signatures and normalize issue, pull request, and push events
+- execute `create_issue_comment`
+- execute `create_issue`
+
+Required config and secrets:
+
+- secret `token`
+- optional `config.api_base_url`
+- secret `webhook_secret` only when webhook ingest is desired
+
+Local testing path:
+
+- `go test ./internal/cloud/connectors -count=1`
+- generic routed proof lives in `go test ./internal/cloud -count=1`
+- no GitHub-specific binary smoke exists in the repo today
+
+Publishability-prepared means:
+
+- operators can see the exact config and endpoint requirements
+- a token must authorize `GET /user`, `POST /repos/{owner}/{repo}/issues`, and `POST /repos/{owner}/{repo}/issues/{n}/comments`
+- webhook callers need a configured webhook secret and a compatible delivery into `/api/cloud/v1/installations/{id}/webhook`
+
+Still missing before broader publication/distribution:
+
+- provider-native app-install or OAuth flow
+- richer issue/PR actions
+- live vendor-account proof in repo automation
 
 ### GitLab
 
-- normalizes issues, merge requests, and push events
-- supports `create_issue_note` and `create_issue`
-- tests cover issue, merge request, and push normalization
-- install validation requires token and a valid API base URL; webhook secret is optional for action-only installs
-- status is derived from validation plus webhook verification, with health/timestamp fields persisted on installation records
-- not implemented: merge request notes, labels, state transitions, app-install flow
+Current scope:
+
+- validate token against `GET /user`
+- verify webhook token and normalize issue, merge request, and push events
+- execute `create_issue_note`
+- execute `create_issue`
+
+Required config and secrets:
+
+- secret `token`
+- optional `config.api_base_url`
+- secret `webhook_secret` only when webhook ingest is desired
+
+Local testing path:
+
+- `go test ./internal/cloud/connectors -count=1`
+- generic routed proof lives in `go test ./internal/cloud -count=1`
+- no GitLab-specific binary smoke exists in the repo today
+
+Publishability-prepared means:
+
+- operators can see the exact config and endpoint requirements
+- a token must authorize `GET /user`, issue create, and issue-note endpoints against the configured GitLab API base
+- webhook callers need a configured webhook secret and a compatible delivery into `/api/cloud/v1/installations/{id}/webhook`
+
+Still missing before broader publication/distribution:
+
+- provider-native app-install or OAuth flow
+- merge-request write surface beyond the current narrow event normalization
+- live vendor-account proof in repo automation
 
 ### Jira
 
-- the cloud worker polls Jira search using `config.jql` or `config.project_key`
-- `config.username` and a provider token are required
-- install validation now also requires one of `config.jql` or `config.project_key` when the installation is intended for polling
-- webhook verification returns an explicit not-implemented message in this alpha pass
-- supports `add_issue_comment` and `transition_issue`
-- status explicitly reports polling-first behavior
-- worker sync updates `last_sync_at`, `last_seen_at`, `health`, and `last_error`
-- use `codencer-cloudworkerd --once` for a safe no-op smoke run or run it continuously for live polling
-- not implemented: webhook ingest, transition discovery, rich sync cursors, live provider-account proof in this repo
+Current scope:
+
+- validate credentials against `GET /rest/api/3/myself`
+- polling-first ingest through `codencer-cloudworkerd`
+- execute `add_issue_comment`
+- execute `transition_issue`
+- derive installation status as polling-first with `webhook_ingest=disabled`
+
+Required config and secrets:
+
+- `config.api_base_url`
+- `config.username`
+- one of `config.jql` or `config.project_key`
+- secret `token`
+
+Important truth:
+
+- Jira webhook ingest is deferred in this phase
+- routed Jira webhook calls now return `501` with `webhook_deferred`
+- Jira webhook requests do not persist events and do not emit false-positive success audit rows
+- the supported ingest path is `codencer-cloudworkerd`, not `/webhook`
+
+Local testing path:
+
+- `go test ./internal/cloud/connectors -count=1`
+- `go test ./internal/cloud -run 'TestJiraWebhookRouteReturnsDeferredWithoutPersistingEvents|TestWorkerRunOncePollsJiraAndPersistsSnapshot' -count=1`
+- `./bin/codencer-cloudworkerd --config .codencer/cloud/config.json --once`
+
+Publishability-prepared means:
+
+- operators can see the exact config and endpoint requirements
+- credentials must authorize `GET /rest/api/3/myself`, `GET /rest/api/3/search`, `POST /rest/api/3/issue/{key}/comment`, and `POST /rest/api/3/issue/{key}/transitions`
+- polling must be configured explicitly through `config.jql` or `config.project_key`
+
+Still missing before broader publication/distribution:
+
+- webhook ingest
+- transition discovery and richer polling cursor semantics
+- live vendor-account proof in repo automation
 
 ### Linear
 
-- normalizes issue webhooks
-- supports `create_issue` and `add_comment`
-- webhook ingest is implemented; polling is not
-- install validation requires token and a valid API base URL; webhook secret is optional for action-only installs
-- status is derived from validation plus webhook verification, with health/timestamp fields persisted on installation records
-- not implemented: state transitions, richer project/team discovery, live provider-account proof in this repo
+Current scope:
+
+- validate through the viewer query
+- verify webhook signatures and normalize issue webhooks
+- execute `create_issue`
+- execute `add_comment`
+
+Required config and secrets:
+
+- `config.api_base_url`
+- secret `token`
+- secret `webhook_secret` only when webhook ingest is desired
+
+Local testing path:
+
+- `go test ./internal/cloud/connectors -count=1`
+- generic routed proof lives in `go test ./internal/cloud -count=1`
+- no Linear-specific binary smoke exists in the repo today
+
+Publishability-prepared means:
+
+- operators can see the exact config and endpoint requirements
+- the configured token must authorize the viewer query plus the issue/comment mutations used by the connector
+- webhook callers need a configured webhook secret and a compatible delivery into `/api/cloud/v1/installations/{id}/webhook`
+
+Still missing before broader publication/distribution:
+
+- richer team/project/state discovery
+- broader issue workflow actions
+- live vendor-account proof in repo automation
 
 ### Slack
 
-- normalizes event callbacks, slash commands, and interactive payloads
-- supports `post_message` and `update_message`
-- webhook ingest is implemented; polling is not
-- install validation requires token and a valid API base URL; webhook secret is optional for action-only installs
-- status is derived from validation plus webhook verification, with health/timestamp fields persisted on installation records
-- not implemented: reactions, view submissions, richer message update/event coverage, live workspace proof in this repo
+Current scope:
 
-## Practical Interpretation
+- validate through `auth.test`
+- verify Slack signatures and normalize event callbacks, slash commands, and interactive payloads
+- execute `post_message`
+- execute `update_message`
 
-- The cloud connector surface is useful for self-host operator use now.
-- Jira is the only provider that is intentionally polling-first.
-- Do not claim external provider coverage beyond the matrix above.
-- If a provider installation is disabled, it should not be processed by the worker or treated as available for control-plane operations.
-- Installation ownership is now attributable to a membership when the create request is made with a membership-linked token.
-- These are still alpha connectors, not full vendor-depth integrations. The strongest proof in this repo is unit/integration-style HTTP coverage against mocked provider APIs.
+Required config and secrets:
 
-For bootstrap and smoke guidance, see [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). For the top-level cloud overview, see [CLOUD.md](CLOUD.md).
+- `config.api_base_url`
+- secret `token`
+- secret `webhook_secret` when webhook ingest is desired
+
+Local testing path:
+
+- `go test ./internal/cloud/connectors -count=1`
+- `go test ./internal/cloud -run 'TestServerAdminAndConnectorFlows|TestWebhookHistoryPreservesRepeatedSourceEventIDs|TestConnectorActionLogsCaptureRequestCompletionAndAuditDetails' -count=1`
+- `make build-cloud && make cloud-smoke`
+
+Publishability-prepared means:
+
+- operators can see the exact config and endpoint requirements
+- the configured token must authorize `auth.test`, `chat.postMessage`, and `chat.update`
+- inbound webhook/event handling requires a signing secret and a compatible delivery into `/api/cloud/v1/installations/{id}/webhook`
+
+Still missing before broader publication/distribution:
+
+- broader Slack action surface such as reactions or view submissions
+- provider-native install flow or workspace app packaging
+- live workspace proof in repo automation
+
+## Local Test Commands
+
+Provider maintainers can use these repo-native checks:
+
+```bash
+go test ./internal/cloud/connectors -count=1
+go test ./internal/cloud -count=1
+make build-cloud
+make cloud-smoke
+```
+
+Practical split:
+
+- `go test ./internal/cloud/connectors -count=1` is the provider fixture/unit suite
+- `go test ./internal/cloud -count=1` adds routed cloud install/webhook/action/worker coverage
+- `make cloud-smoke` proves the generic cloud install/validate/webhook/events/audit path, with Slack as the current provider-shaped binary smoke
+- `make cloud-stack-smoke` remains the Docker deployment proof path and still requires a Docker-capable host
+
+## What This Phase Does Not Claim
+
+- no provider is marketplace-approved, app-store-ready, or vendor-partner complete
+- no provider has a repo-proven OAuth/app-install/bootstrap flow
+- no provider has full live vendor-account proof in the repo
+- GitHub, GitLab, Linear, and Jira do not yet have provider-specific binary smoke equivalent to Slack's current cloud smoke coverage
+
+For the self-host operator workflow, see [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md). For the top-level cloud overview, see [CLOUD.md](CLOUD.md).

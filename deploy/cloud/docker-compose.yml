@@ -3,6 +3,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/cloud/Dockerfile
+      args:
+        VERSION: ${CODENCER_VERSION:-v0.2.0-beta}
     environment:
       CODENCER_CLOUD_HOST: ${CODENCER_CLOUD_HOST:-0.0.0.0}
       CODENCER_CLOUD_PORT: ${CODENCER_CLOUD_INTERNAL_PORT:-8190}
@@ -38,6 +40,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/cloud/Dockerfile
+      args:
+        VERSION: ${CODENCER_VERSION:-v0.2.0-beta}
     entrypoint: ["/usr/local/bin/codencer-cloudworkerd"]
     environment:
       CODENCER_CLOUD_DB_PATH: ${CODENCER_CLOUD_DB_PATH:-/var/lib/codencer/cloud/cloud.db}

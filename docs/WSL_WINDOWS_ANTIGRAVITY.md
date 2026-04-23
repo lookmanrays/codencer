@@ -1,6 +1,8 @@
 # WSL, Windows, and Agent Broker Topology
 
-This document describes the practical v2 operator topology for Codencer when repos and execution live in WSL/Linux while an IDE or agent-broker may live on Windows.
+This document describes the recommended v2 operator topology for Codencer when repos and execution live in WSL/Linux while an IDE or agent-broker may live on Windows.
+
+It is guidance for operators, not an automated smoke-proof matrix.
 
 ## Recommended Default Layout
 

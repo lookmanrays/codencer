@@ -64,8 +64,12 @@ func (h *Hub) RemoveConnectorInstances(connectorID string, instanceIDs []string)
 	defer h.mu.Unlock()
 	session := h.connectors[connectorID]
 	for _, instanceID := range instanceIDs {
-		if current := h.sessions[instanceID]; current == nil || session == nil || current == session {
+		current := h.sessions[instanceID]
+		if current == nil || current.connectorID == connectorID || session == nil || current == session {
 			delete(h.sessions, instanceID)
+		}
+		if current != nil && current.connectorID == connectorID {
+			delete(current.instanceIDs, instanceID)
 		}
 		if session != nil {
 			delete(session.instanceIDs, instanceID)

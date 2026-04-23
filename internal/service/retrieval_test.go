@@ -85,6 +85,87 @@ func TestRunService_Retrieval(t *testing.T) {
 		}
 	})
 
+	t.Run("GetResultByStep - Overlays NeedsApproval After Terminal Attempt", func(t *testing.T) {
+		step.State = domain.StepStateNeedsApproval
+		step.StatusReason = "Policy enforced gate: review required."
+		step.UpdatedAt = time.Now().UTC()
+		if err := stepsRepo.UpdateState(ctx, step); err != nil {
+			t.Fatal(err)
+		}
+
+		attempt := &domain.Attempt{
+			ID:      stepID + "-a2",
+			StepID:  stepID,
+			Number:  2,
+			Adapter: "mock",
+			Result: &domain.ResultSpec{
+				Version: "v1",
+				State:   domain.StepStateCompleted,
+				Summary: "attempt completed before gate",
+			},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := attemptsRepo.Create(ctx, attempt); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := svc.GetResultByStep(ctx, stepID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.State != domain.StepStateNeedsApproval {
+			t.Fatalf("expected needs_approval overlay, got %s", res.State)
+		}
+		if !res.NeedsHumanDecision {
+			t.Fatal("expected needs_human_decision to be true for gated step")
+		}
+		if res.Summary != step.StatusReason {
+			t.Fatalf("expected gated summary %q, got %q", step.StatusReason, res.Summary)
+		}
+	})
+
+	t.Run("GetResultByStep - Overlays Cancelled After Gate Rejection", func(t *testing.T) {
+		step.State = domain.StepStateCancelled
+		step.StatusReason = "Gate rejected by operator."
+		step.UpdatedAt = time.Now().UTC()
+		if err := stepsRepo.UpdateState(ctx, step); err != nil {
+			t.Fatal(err)
+		}
+
+		attempt := &domain.Attempt{
+			ID:      stepID + "-a3",
+			StepID:  stepID,
+			Number:  3,
+			Adapter: "mock",
+			Result: &domain.ResultSpec{
+				Version:   "v1",
+				State:     domain.StepStateCompletedWithWarnings,
+				Summary:   "completed before rejection",
+				Retryable: true,
+			},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := attemptsRepo.Create(ctx, attempt); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := svc.GetResultByStep(ctx, stepID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.State != domain.StepStateCancelled {
+			t.Fatalf("expected cancelled overlay, got %s", res.State)
+		}
+		if res.Retryable {
+			t.Fatal("expected cancelled overlay to clear retryable")
+		}
+		if res.Summary != step.StatusReason {
+			t.Fatalf("expected cancelled summary %q, got %q", step.StatusReason, res.Summary)
+		}
+	})
+
 	t.Run("Validation Retrieval", func(t *testing.T) {
 		vRes := &domain.ValidationResult{
 			Name:    "lint",

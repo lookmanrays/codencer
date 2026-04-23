@@ -2,6 +2,8 @@
 
 The Codencer relay is a narrow self-hostable control plane. It is not a planner, not an executor, and not a remote shell.
 
+If you want the end-to-end operator flow first, start with [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) and return here for route and auth details.
+
 ## Role
 
 The relay does three things:
@@ -61,7 +63,7 @@ Current auth model is intentionally small:
 - static token config
 - explicit scopes
 - optional instance scoping
-- suitable for self-host alpha use
+- suitable for narrow self-host beta use
 
 It is not enterprise IAM.
 
@@ -161,10 +163,13 @@ Supported MCP methods:
 
 Supported tools are the `codencer.*` relay tools documented in [mcp/relay_tools.md](mcp/relay_tools.md).
 
+For the frozen planner/client compatibility matrix, generic HTTP/MCP examples, and client-specific packaging notes, see [mcp/integrations.md](mcp/integrations.md).
+
 Protocol notes:
 - the relay negotiates and returns `MCP-Protocol-Version`
 - the relay can return `MCP-Session-Id` on `initialize`
 - the relay enforces `allowed_origins` for browser-style MCP callers when configured
+- the canonical streamable session path is `/mcp`; use `POST /mcp/call` only as a compatibility POST alias, not as the primary long-lived session endpoint
 - the current relay remains request/response-first; it does not rely on unsolicited long-lived server notifications for planner functionality
 
 The local daemon’s `/mcp/call` surface is separate and should be treated as local compatibility/admin tooling, not as the remote public MCP endpoint.
@@ -187,6 +192,7 @@ Current honest limitations:
 - artifact transfer is bounded and is not intended for bulk binary transport
 - abort semantics remain best-effort unless the local adapter confirms stop; planner callers only get a successful abort when the daemon actually reaches `cancelled`
 - MCP compatibility is intentionally tool-focused; the public planner contract is the explicit `codencer.*` tool set rather than a broader autonomous control surface
+- relay MCP is intentionally not admin-surface-complete; status, audit, enrollment-token creation, and connector enable/disable remain HTTP admin routes
 
 ## Audit Trail
 

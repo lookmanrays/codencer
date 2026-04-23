@@ -30,7 +30,7 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 			Scope:       "instances:read",
 			InputSchema: objectSchema(nil, nil),
 			Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
-				status, _, body, err := server.callPlannerRoute(ctx, authHeaderForPrincipal(principal, server.relay.cfg), http.MethodGet, "/api/v2/instances", nil)
+				status, _, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, "/api/v2/instances", nil)
 				if err != nil {
 					return mcpToolResult{}, err
 				}
@@ -53,7 +53,7 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 				if apiErr != nil {
 					return mcpToolResult{}, apiErr
 				}
-				status, _, body, err := server.callPlannerRoute(ctx, authHeaderForPrincipal(principal, server.relay.cfg), http.MethodGet, fmt.Sprintf("/api/v2/instances/%s", instanceID), nil)
+				status, _, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, fmt.Sprintf("/api/v2/instances/%s", instanceID), nil)
 				if err != nil {
 					return mcpToolResult{}, err
 				}
@@ -193,7 +193,7 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 				if apiErr != nil {
 					return mcpToolResult{}, apiErr
 				}
-				_, headers, body, err := server.callPlannerRoute(ctx, authHeaderForPrincipal(principal, server.relay.cfg), http.MethodGet, fmt.Sprintf("/api/v2/steps/%s/logs", stepID), nil)
+				_, headers, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, fmt.Sprintf("/api/v2/steps/%s/logs", stepID), nil)
 				if err != nil {
 					return mcpToolResult{}, err
 				}
@@ -215,7 +215,7 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 				if apiErr != nil {
 					return mcpToolResult{}, apiErr
 				}
-				_, headers, body, err := server.callPlannerRoute(ctx, authHeaderForPrincipal(principal, server.relay.cfg), http.MethodGet, fmt.Sprintf("/api/v2/artifacts/%s/content", artifactID), nil)
+				_, headers, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, fmt.Sprintf("/api/v2/artifacts/%s/content", artifactID), nil)
 				if err != nil {
 					return mcpToolResult{}, err
 				}
@@ -320,7 +320,7 @@ func plannerProxyTool(server *mcpServer, name, description, scope string, schema
 			if stringsHasSuffix(path, "/abort") || stringsHasSuffix(path, "/approve") || stringsHasSuffix(path, "/reject") || stringsHasSuffix(path, "/retry") || stringsHasSuffix(path, "/wait") {
 				method = http.MethodPost
 			}
-			_, _, responseBody, err := server.callPlannerRoute(ctx, authHeaderForPrincipal(principal, server.relay.cfg), method, path, body)
+			_, _, responseBody, err := server.callPlannerRoute(ctx, principal, method, path, body)
 			if err != nil {
 				return mcpToolResult{}, err
 			}
@@ -374,21 +374,6 @@ func requireInstanceAndGate(args map[string]any) (string, string, *apiError) {
 		return "", "", apiErr
 	}
 	return instanceID, gateID, nil
-}
-
-func authHeaderForPrincipal(principal *plannerPrincipal, cfg *Config) string {
-	if principal == nil {
-		return ""
-	}
-	for _, candidate := range cfg.PlannerTokens {
-		if candidate.Name == principal.Name {
-			return "Bearer " + candidate.Token
-		}
-	}
-	if cfg.PlannerToken != "" {
-		return "Bearer " + cfg.PlannerToken
-	}
-	return ""
 }
 
 func objectSchema(required []string, properties map[string]any) map[string]any {

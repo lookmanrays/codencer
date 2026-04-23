@@ -18,9 +18,28 @@ This guide provides the technical baseline for running the Codencer Orchestratio
 
 ---
 
-## 2. Getting Started (Canonical Path)
+## 2. Choose Your Track
 
-### 2.1 Clone & Build
+Use [BETA_TESTING.md](BETA_TESTING.md) as the repo-level tester guide.
+
+- If you want local-only proof, stay on this page and run the local smoke commands below.
+- If you want the self-host relay/runtime path, start with [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md).
+- If you want the self-host cloud control plane, start with [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md).
+- If you want planner/client compatibility guidance, start with [mcp/integrations.md](mcp/integrations.md).
+- If you want provider connector setup and limitations, start with [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md).
+
+For the repo-level supported verification pass:
+
+```bash
+make build-supported
+make verify-beta
+```
+
+Run `make verify-beta-docker` only on a Docker-capable host when you also want the Docker self-host cloud baseline.
+
+## 3. Common Prerequisites And Build
+
+### 3.1 Clone & Build
 ```bash
 git clone https://github.com/lookmanrays/codencer
 cd codencer
@@ -28,14 +47,16 @@ cd codencer
 # 1. Initialize environment and check requirements
 make setup
 
-# 2. Build the canonical daemon, CLI, connector, and relay binaries
-make build
+# 2. Build the supported beta-track binaries
+make build-supported
 
-# 3. Build the Windows-side agent-broker separately if you need it
+# 3. Build the Windows-side agent-broker separately only if you need it
 make build-broker
 ```
 
-### 2.2 Verify Environment
+If you only need the local and relay tracks, `make build` remains sufficient.
+
+### 3.2 Verify Environment
 The `doctor` tool verifies if your environment is ready for tactical execution.
 ```bash
 ./bin/orchestratorctl doctor
@@ -43,17 +64,17 @@ The `doctor` tool verifies if your environment is ready for tactical execution.
 
 ---
 
-## 3. Daemon Management
+## 4. Daemon Management
 
 The `orchestratord` is the persistent system of record. It must be running to receive tasks.
 
-### 3.1 Simulation Mode (Orchestrator Validation)
+### 4.1 Simulation Mode (Orchestrator Validation)
 Use this mode to test your local setup, CLI, and local daemon surfaces without consuming LLM credits or requiring agent binaries.
 ```bash
 make start-sim
 ```
 
-### 3.2 Real Mode (Tactical Execution)
+### 4.2 Real Mode (Tactical Execution)
 Use this mode for real-world tasks. It requires agents like `codex-agent` or `claude` to be installed.
 ```bash
 # Edit .env to set ALL_ADAPTERS_SIMULATION_MODE=0
@@ -61,6 +82,33 @@ make start
 ```
 
 Claude is executed in headless print mode as `claude -p --output-format json`. Codencer builds the task prompt, writes it to `prompt.txt`, delivers it on `stdin`, and runs the process from the attempt workspace root.
+
+The `/api/v1/compatibility` endpoint is a runtime diagnostic only. It is useful for checking binary availability, simulation mode, and local bindings, but it is not a support-certification surface by itself.
+
+### 4.3 Current Local Adapter Proof Levels
+
+| Surface | Current repo proof | Local beta truth |
+| --- | --- | --- |
+| Local daemon + CLI + simulation lifecycle | direct smoke + repo tests | canonical |
+| `codex` adapter | simulation smoke + conformance only | primary intended local beta adapter, but still simulation-heavy in checked-in proof |
+| `claude` adapter | wrapper, prompt, normalize, and fake-binary tests | supported-beta target with narrow wrapper claims only |
+| `qwen` adapter | conformance/simulation only | secondary |
+| `antigravity` / `antigravity-broker` | mocked integration and environment-specific proof | secondary |
+| `openclaw-acpx` | unit and simulation-only proof | experimental / deferred |
+| `ide-chat` | code/manual handoff only | experimental / deferred |
+| daemon-local `/mcp/call` | compatibility/admin bridge only | compatibility only; not the public planner MCP contract |
+
+### 4.4 Local Smoke And Parity Proof
+
+The canonical local proof paths are:
+
+```bash
+./scripts/smoke_test_v1.sh
+./scripts/smoke_test_v1.sh
+make smoke
+```
+
+`scripts/smoke_test_v1.sh` verifies the legacy six-input same-run path. If no daemon is already reachable, it auto-starts a temporary simulation daemon in the same shell so the local `submit --wait` barrier stays trustworthy for back-to-back submissions.
 
 > [!IMPORTANT]
 > The daemon-local `/mcp/call` endpoint is only a local compatibility/admin surface. The canonical remote MCP surface for planners lives on the relay at `/mcp`.
@@ -70,10 +118,10 @@ Claude is executed in headless print mode as `claude -p --output-format json`. C
 
 ---
 
-## 4. Daemon Management & Targeting
+## 5. Daemon Management & Targeting
 Codencer follows a **One-Repo-One-Instance** model. Each repo clone manages its own database and worktrees.
 
-### 4.1 Explicit Repo Targeting
+### 5.1 Explicit Repo Targeting
 To anchor a daemon to a specific repository regardless of your current directory, use the `--repo-root` flag.
 
 ```bash
@@ -81,7 +129,7 @@ To anchor a daemon to a specific repository regardless of your current directory
 ./bin/orchestratord --repo-root /path/to/my-project
 ```
 
-### 4.2 Port Management
+### 5.2 Port Management
 The daemon listens on port `8085` by default. To run multiple instances on the same machine, use the `PORT` environment variable:
 
 ```bash
@@ -89,7 +137,7 @@ The daemon listens on port `8085` by default. To run multiple instances on the s
 PORT=8086 ./bin/orchestratord --repo-root /path/to/project-b
 ```
 
-### 4.3 Startup Helper
+### 5.3 Startup Helper
 Use the provided script to start and build a daemon instance for a specific project:
 
 ```bash
@@ -97,21 +145,21 @@ Use the provided script to start and build a daemon instance for a specific proj
 ./scripts/start_instance.sh ~/projects/my-api 8085
 ```
 
-### 4.4 Environment Variables
+### 5.4 Environment Variables
 Codencer uses these variables to locate agent binaries and target the daemon:
 - `CODEX_BINARY`: Path to the `codex-agent` binary.
 - `CLAUDE_BINARY`: Path to the `claude` binary. Defaults to `claude`.
 - `OPENCLAW_ACPX_BINARY`: Path to the `acpx` CLI (for OpenClaw support).
 - `ORCHESTRATORD_URL`: URL of the daemon (default: `http://localhost:8085`).
 
-### 4.5 Claude Adapter Notes
+### 5.5 Claude Adapter Notes
 - Install the Claude CLI so the `claude` binary is available on your `$PATH`, or point `CLAUDE_BINARY` at the full path.
 - Codencer does not pass a workspace flag to Claude. The attempt workspace is supplied via process `cwd`.
 - Claude raw output is preserved in `stdout.log`; Codencer parses that JSON and synthesizes the normalized `result.json`.
 
 ---
 
-## 5. OpenClaw Setup (Experimental / Alpha)
+## 6. OpenClaw Setup (Experimental / Alpha)
 
 Codencer provides experimental support for the **Agent Client Protocol (ACP)** via the OpenClaw adapter. This integration is currently in **Alpha** and is intended for early-access testing of OpenClaw-compatible executors.
 
@@ -131,7 +179,7 @@ export OPENCLAW_ACPX_BINARY=/path/to/custom/acpx
 
 ---
 
-## 6. Workspace Provisioning
+## 7. Workspace Provisioning
 Codencer isolates every task attempt in a dedicated Git worktree. You can configure how these worktrees are prepared using `.codencer/workspace.json`.
 
 ### Example `.codencer/workspace.json`
@@ -157,7 +205,7 @@ For advanced provisioning examples, see **[EXAMPLES.md](EXAMPLES.md)**.
 
 ---
 
-## 6. Automation-Friendly Submission Inputs
+## 8. Automation-Friendly Submission Inputs
 
 `orchestratorctl submit` supports both rich canonical task definitions and narrow direct convenience input.
 
@@ -181,7 +229,7 @@ The official v1 ordered-task model is wrapper-based. Use the scripts in `example
 
 ---
 
-## 7. Agent Broker (Cross-Side Execution)
+## 9. Agent Broker (Cross-Side Execution)
 
 Use the `agent-broker` for **cross-side execution** (e.g., Codencer in WSL controlling Antigravity in Windows).
 
@@ -203,7 +251,7 @@ The broker uses a **dual-path model**:
 
 For detailed examples, see **[EXAMPLES.md](EXAMPLES.md)**.
 
-## 8. Self-Host Smoke Path
+## 10. Self-Host Smoke Path
 
 After the daemon and relay are running, you can exercise the current happy path with:
 
@@ -229,7 +277,7 @@ make build-mcp-sdk-smoke
 ./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8090/mcp --token <planner-token> --instance-id <instance-id>
 ```
 
-## 9. Practical Self-Host Order Of Operations
+## 11. Practical Self-Host Order Of Operations
 
 For a fresh self-host setup:
 
@@ -252,7 +300,7 @@ make start
 
 For the practical WSL-first topology, keep the daemon and connector in WSL/Linux next to the repo and worktrees, keep the agent-broker on Windows when Antigravity is in play, and expose the relay instead of the daemon.
 
-## 10. Cloud Control Plane (Alpha)
+## 10. Cloud Control Plane (Beta Track)
 
 Codencer Cloud is a separate control plane for org/workspace/project bootstrap, API tokens, connector installations, and connector audit trails. It does not replace the local daemon or the relay bridge.
 
@@ -267,6 +315,6 @@ Then follow the operator guide in [docs/CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md).
 1. Create a cloud config file with `db_path`, `host`, `port`, and `master_key`.
 2. Run `./bin/codencer-cloudctl bootstrap --config <config> ...` before starting the cloud server or while the SQLite file is idle.
 3. Start `./bin/codencer-cloudd --config <config>` and use `./bin/codencer-cloudctl status|orgs|workspaces|projects|tokens|install|events|audit` against the running control plane.
-4. Run `./bin/codencer-cloudworkerd` only for installations that need background provider polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest is not implemented for Jira in this alpha pass.
+4. Run `./bin/codencer-cloudworkerd` only for installations that need background provider polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest remains deferred in the current beta track.
 
 Cloud connector capability details live in [docs/CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md). For the cloud control-plane overview, see [docs/CLOUD.md](CLOUD.md).

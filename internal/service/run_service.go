@@ -214,13 +214,13 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 		return nil, err
 	}
 	if len(attempts) == 0 {
-		return s.newResultSpec(runID, step, nil, step.State, "No attempts executed for this step yet."), nil
+		return s.overlayResultForStepState(step, s.newResultSpec(runID, step, nil, step.State, "No attempts executed for this step yet.")), nil
 	}
 
 	// ListByStep orders by number ASC. The last one is the latest attempt.
 	latest := attempts[len(attempts)-1]
 	if latest.Result == nil {
-		return s.newResultSpec(runID, step, latest, step.State, fmt.Sprintf("Latest attempt %s is still in progress or failed before result normalization.", latest.ID)), nil
+		return s.overlayResultForStepState(step, s.newResultSpec(runID, step, latest, step.State, fmt.Sprintf("Latest attempt %s is still in progress or failed before result normalization.", latest.ID))), nil
 	}
 
 	// Fetch validations for this attempt
@@ -234,7 +234,7 @@ func (s *RunService) GetResultByStep(ctx context.Context, stepID string) (*domai
 	// Enrichment for terminal consumers
 	s.ensureResultEnvelope(latest.Result, runID, step, latest)
 
-	return latest.Result, nil
+	return s.overlayResultForStepState(step, latest.Result), nil
 }
 
 // GetPhase returns a specific phase.
@@ -437,7 +437,15 @@ func (s *RunService) RetryStep(ctx context.Context, stepID string) error {
 		return fmt.Errorf("phase %s for step %s not found", step.PhaseID, stepID)
 	}
 
-	return s.dispatchStepAsync(ctx, phase.RunID, step, true)
+	if err := s.dispatchStepAsync(ctx, phase.RunID, step, true); err != nil {
+		return err
+	}
+
+	reconcileCtx := ctx
+	if reconcileCtx == nil || reconcileCtx.Err() != nil {
+		reconcileCtx = context.Background()
+	}
+	return s.reconcileRunState(reconcileCtx, phase.RunID)
 }
 
 func (s *RunService) initializeStep(ctx context.Context, runID string, step *domain.Step, allowExisting bool) error {
@@ -1225,6 +1233,58 @@ func (s *RunService) ensureResultEnvelope(result *domain.ResultSpec, runID strin
 		result.CreatedAt = time.Now().UTC()
 	}
 	result.UpdatedAt = time.Now().UTC()
+}
+
+func (s *RunService) overlayResultForStepState(step *domain.Step, result *domain.ResultSpec) *domain.ResultSpec {
+	if step == nil || result == nil {
+		return result
+	}
+
+	switch step.State {
+	case domain.StepStateNeedsApproval, domain.StepStateCancelled, domain.StepStateNeedsManualAttention:
+		overlaid := cloneResultSpec(result)
+		overlaid.State = step.State
+		if step.StatusReason != "" {
+			overlaid.Summary = step.StatusReason
+		}
+		overlaid.UpdatedAt = step.UpdatedAt
+		if step.State == domain.StepStateNeedsApproval {
+			overlaid.NeedsHumanDecision = true
+		}
+		if step.State == domain.StepStateCancelled {
+			overlaid.Retryable = false
+		}
+		return overlaid
+	default:
+		return result
+	}
+}
+
+func cloneResultSpec(result *domain.ResultSpec) *domain.ResultSpec {
+	if result == nil {
+		return nil
+	}
+
+	cloned := *result
+	if result.FilesChanged != nil {
+		cloned.FilesChanged = append([]string(nil), result.FilesChanged...)
+	}
+	if result.Validations != nil {
+		cloned.Validations = append([]domain.ValidationResult(nil), result.Validations...)
+	}
+	if result.Warnings != nil {
+		cloned.Warnings = append([]string(nil), result.Warnings...)
+	}
+	if result.Questions != nil {
+		cloned.Questions = append([]string(nil), result.Questions...)
+	}
+	if result.Artifacts != nil {
+		cloned.Artifacts = make(map[string]string, len(result.Artifacts))
+		for key, value := range result.Artifacts {
+			cloned.Artifacts[key] = value
+		}
+	}
+	return &cloned
 }
 
 func (s *RunService) newResultSpec(runID string, step *domain.Step, attempt *domain.Attempt, state domain.StepState, summary string) *domain.ResultSpec {

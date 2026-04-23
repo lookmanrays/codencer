@@ -255,3 +255,148 @@ func TestRelayConnectorProxyFlow(t *testing.T) {
 		t.Fatal("connector did not stop")
 	}
 }
+
+func TestRelayConnectorUnsharePrunesRoutabilityAndReshareRestoresIt(t *testing.T) {
+	t.Parallel()
+
+	var fakeDaemon *httptest.Server
+	fakeDaemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/instance":
+			_ = json.NewEncoder(w).Encode(domain.InstanceInfo{
+				ID:       "inst-1",
+				RepoRoot: "/repo",
+				BaseURL:  fakeDaemon.URL,
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+			_, _ = w.Write([]byte(`{"id":"run-relay","project_id":"proj","state":"running"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer fakeDaemon.Close()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := relay.NewServer(&relay.Config{
+		Host:                     "127.0.0.1",
+		Port:                     0,
+		DBPath:                   filepath.Join(t.TempDir(), "relay-unused.db"),
+		PlannerToken:             "planner-token",
+		EnrollmentSecret:         "enroll-secret",
+		HeartbeatIntervalSeconds: 1,
+	}, store)
+	relayHTTP := httptest.NewServer(server.Handler())
+	defer relayHTTP.Close()
+
+	configPath := filepath.Join(t.TempDir(), "connector.json")
+	cfg, err := connector.Enroll(context.Background(), relayHTTP.URL, fakeDaemon.URL, "enroll-secret", "test-connector", configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := connector.NewClient(cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- client.Run(ctx) }()
+	defer func() {
+		cancel()
+		select {
+		case err := <-errCh:
+			if err != nil && err != context.Canceled && !strings.Contains(err.Error(), "closed network connection") {
+				t.Fatalf("connector run failed: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("connector did not stop")
+		}
+	}()
+
+	plannerClient := &http.Client{Timeout: 10 * time.Second}
+	auth := "Bearer planner-token"
+
+	waitForInstance := func(expected bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			req, _ := http.NewRequest(http.MethodGet, relayHTTP.URL+"/api/v2/instances", nil)
+			req.Header.Set("Authorization", auth)
+			resp, err := plannerClient.Do(req)
+			if err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				var instances []relay.InstanceRecord
+				if json.Unmarshal(body, &instances) == nil {
+					found := len(instances) == 1 && instances[0].InstanceID == "inst-1"
+					if found == expected {
+						return
+					}
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for relay instance visibility expected=%v", expected)
+	}
+
+	doRunCreate := func(expectedStatus int) []byte {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, relayHTTP.URL+"/api/v2/instances/inst-1/runs", bytes.NewReader([]byte(`{"id":"run-relay","project_id":"proj"}`)))
+		req.Header.Set("Authorization", auth)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := plannerClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != expectedStatus {
+			t.Fatalf("expected status %d, got %d body=%s", expectedStatus, resp.StatusCode, string(body))
+		}
+		return body
+	}
+
+	waitForInstance(true)
+	body := doRunCreate(http.StatusOK)
+	if !bytes.Contains(body, []byte(`"id":"run-relay"`)) {
+		t.Fatalf("unexpected initial run payload: %s", string(body))
+	}
+
+	unsharedCfg, err := connector.LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := connector.UnshareInstance(unsharedCfg, connector.InstanceSelector{InstanceID: "inst-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := connector.SaveConfig(configPath, unsharedCfg); err != nil {
+		t.Fatal(err)
+	}
+
+	waitForInstance(false)
+	denied := doRunCreate(http.StatusNotFound)
+	if !bytes.Contains(denied, []byte(`"code":"instance_not_found"`)) {
+		t.Fatalf("expected unshared instance to stop routing, got %s", string(denied))
+	}
+
+	resharedCfg, err := connector.LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := connector.ShareInstance(context.Background(), resharedCfg, connector.InstanceSelector{InstanceID: "inst-1"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := connector.SaveConfig(configPath, resharedCfg); err != nil {
+		t.Fatal(err)
+	}
+
+	waitForInstance(true)
+	body = doRunCreate(http.StatusOK)
+	if !bytes.Contains(body, []byte(`"id":"run-relay"`)) {
+		t.Fatalf("expected reshared instance to route again, got %s", string(body))
+	}
+}

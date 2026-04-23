@@ -9,9 +9,10 @@ You are a principal engineer implementing a production-oriented local orchestrat
 
 ## General rules
 - follow the docs strictly
+- treat current code, tests, and smoke results as release truth when historical docs disagree
 - implement one phase at a time
 - do not widen scope
-- do not add cloud
+- do not add new cloud product scope; existing self-host cloud control-plane code is in scope for truthful maintenance
 - do not skip tests
 - do not skip docs when behavior changes
 - do not bypass service boundaries

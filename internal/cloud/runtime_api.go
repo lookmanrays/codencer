@@ -292,6 +292,22 @@ func requiredRuntimeScope(parts []string, method string) string {
 	if len(parts) <= 1 {
 		return "runtime_instances:read"
 	}
+	if parts[1] == "runs" && len(parts) >= 4 {
+		switch parts[3] {
+		case "steps":
+			if method == http.MethodPost {
+				return "steps:write"
+			}
+		case "gates":
+			if method == http.MethodGet {
+				return "gates:read"
+			}
+		case "abort":
+			if method == http.MethodPost {
+				return "runs:write"
+			}
+		}
+	}
 	switch parts[1] {
 	case "runs":
 		if method == http.MethodGet {
@@ -401,6 +417,12 @@ func (s *Server) proxyRuntimeInstanceOperation(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) serveRelayProxy(w http.ResponseWriter, r *http.Request, token *APIToken, scopes []string, instanceIDs []string, relayPath, method string, bodyOverride []byte) {
+	for _, scope := range scopes {
+		if !TokenHasScope(token, scope) {
+			writeAPIError(w, http.StatusForbidden, "scope_denied", "token is not allowed to perform this runtime operation")
+			return
+		}
+	}
 	if !s.requireRuntimeBridge(w) {
 		return
 	}

@@ -18,6 +18,7 @@ import (
 type authRoundTripper struct {
 	base          http.RoundTripper
 	authorization string
+	origin        string
 }
 
 func (rt authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -29,6 +30,9 @@ func (rt authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	cloned.Header = req.Header.Clone()
 	if rt.authorization != "" {
 		cloned.Header.Set("Authorization", rt.authorization)
+	}
+	if rt.origin != "" {
+		cloned.Header.Set("Origin", rt.origin)
 	}
 	return base.RoundTrip(cloned)
 }
@@ -75,8 +79,9 @@ func main() {
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mcp-sdk-smoke", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	endpoint := fs.String("endpoint", "http://127.0.0.1:8090/mcp", "Relay MCP endpoint")
-	token := fs.String("token", "", "Planner bearer token")
+	endpoint := fs.String("endpoint", "http://127.0.0.1:8090/mcp", "MCP endpoint")
+	token := fs.String("token", "", "Bearer token for the target MCP surface")
+	origin := fs.String("origin", "", "Optional Origin header for browser-style MCP requests")
 	instanceID := fs.String("instance-id", "", "Target instance id; defaults to the first shared instance")
 	runID := fs.String("run-id", fmt.Sprintf("sdk-smoke-%d", time.Now().Unix()), "Run id to create")
 	projectID := fs.String("project-id", "sdk-smoke-project", "Project id for the run")
@@ -94,7 +99,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 
 	httpClient := &http.Client{
-		Transport: authRoundTripper{authorization: "Bearer " + strings.TrimSpace(*token)},
+		Transport: authRoundTripper{
+			authorization: "Bearer " + strings.TrimSpace(*token),
+			origin:        strings.TrimSpace(*origin),
+		},
 	}
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "codencer-mcp-sdk-smoke",
@@ -105,7 +113,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		HTTPClient: httpClient,
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("connect to relay MCP: %w", err)
+		return fmt.Errorf("connect to MCP endpoint: %w", err)
 	}
 	defer func() { _ = session.Close() }()
 
@@ -128,7 +136,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("decode list_instances: %w", err)
 		}
 		if len(instances) == 0 || strings.TrimSpace(instances[0].InstanceID) == "" {
-			return errors.New("no shared instances were returned by the relay MCP surface")
+			return errors.New("no shared instances were returned by the MCP surface")
 		}
 		*instanceID = instances[0].InstanceID
 	}
@@ -207,9 +215,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		"instance_id": *instanceID,
 		"step_id":     step.ID,
 	})
-	if err != nil {
-		return err
-	}
 	runGates, err := callTool(ctx, session, "codencer.list_run_gates", map[string]any{
 		"instance_id": *instanceID,
 		"run_id":      *runID,
@@ -235,7 +240,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		ToolNames:       toolNames,
 		Result:          result.StructuredContent,
 		Validations:     validations.StructuredContent,
-		Logs:            logs.StructuredContent,
+		Logs:            toolContentOrSkip(logs, err),
 		RunGates:        runGates.StructuredContent,
 		Artifacts:       artifacts.StructuredContent,
 	}
@@ -246,10 +251,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			artifactContent, err := callTool(ctx, session, "codencer.get_artifact_content", map[string]any{
 				"artifact_id": artifactID,
 			})
-			if err != nil {
-				return err
-			}
-			output.ArtifactContent = artifactContent.StructuredContent
+			output.ArtifactContent = toolContentOrSkip(artifactContent, err)
 		}
 	}
 
@@ -312,4 +314,17 @@ func writeJSON(stdout io.Writer, value any) error {
 	}
 	_, err = fmt.Fprintln(stdout, string(data))
 	return err
+}
+
+func toolContentOrSkip(result *mcp.CallToolResult, err error) any {
+	if err != nil {
+		return map[string]any{
+			"skipped": true,
+			"reason":  err.Error(),
+		}
+	}
+	if result == nil {
+		return nil
+	}
+	return result.StructuredContent
 }

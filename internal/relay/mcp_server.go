@@ -525,15 +525,15 @@ func successToolResult(summary string, payload any) mcpToolResult {
 	return result
 }
 
-func (s *mcpServer) callPlannerRoute(ctx context.Context, authHeader, method, path string, body []byte) (int, http.Header, []byte, *apiError) {
+func (s *mcpServer) callPlannerRoute(ctx context.Context, principal *plannerPrincipal, method, path string, body []byte) (int, http.Header, []byte, *apiError) {
 	req, err := http.NewRequest(method, path, bytes.NewReader(body))
 	if err != nil {
 		return 0, nil, nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
 	}
-	req = req.WithContext(ctx)
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
+	if principal != nil {
+		ctx = context.WithValue(ctx, plannerPrincipalKey{}, clonePlannerPrincipal(principal))
 	}
+	req = req.WithContext(ctx)
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -545,6 +545,21 @@ func (s *mcpServer) callPlannerRoute(ctx context.Context, authHeader, method, pa
 		return recorder.statusCode, recorder.header, bodyBytes, decodeAPIError(recorder.statusCode, bodyBytes)
 	}
 	return recorder.statusCode, recorder.header, bodyBytes, nil
+}
+
+func clonePlannerPrincipal(principal *plannerPrincipal) *plannerPrincipal {
+	if principal == nil {
+		return nil
+	}
+	clone := &plannerPrincipal{
+		Name:        principal.Name,
+		Scopes:      append([]string(nil), principal.Scopes...),
+		InstanceIDs: make(map[string]struct{}, len(principal.InstanceIDs)),
+	}
+	for instanceID := range principal.InstanceIDs {
+		clone.InstanceIDs[instanceID] = struct{}{}
+	}
+	return clone
 }
 
 func decodeAPIError(status int, body []byte) *apiError {

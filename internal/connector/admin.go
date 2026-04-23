@@ -67,28 +67,9 @@ func ShareInstance(ctx context.Context, cfg *Config, selector InstanceSelector, 
 		return SharedInstanceConfig{}, err
 	}
 	EnsureLegacySharedInstance(cfg)
-
-	entry := SharedInstanceConfig{
-		InstanceID:   selector.InstanceID,
-		DaemonURL:    selector.DaemonURL,
-		ManifestPath: selector.ManifestPath,
-		Share:        true,
-	}
-	if selector.DaemonURL != "" {
-		if clientFactory == nil {
-			clientFactory = func(baseURL string) *CodencerClient { return NewCodencerClient(baseURL) }
-		}
-		if info, err := clientFactory(selector.DaemonURL).GetInstance(ctx); err == nil {
-			if entry.InstanceID == "" {
-				entry.InstanceID = info.ID
-			}
-			if entry.ManifestPath == "" {
-				entry.ManifestPath = info.ManifestPath
-			}
-			if entry.DaemonURL == "" {
-				entry.DaemonURL = info.BaseURL
-			}
-		}
+	entry, err := resolveShareEntry(ctx, cfg, selector, clientFactory)
+	if err != nil {
+		return SharedInstanceConfig{}, err
 	}
 	cfg.UpsertSharedInstance(entry)
 
@@ -104,6 +85,79 @@ func ShareInstance(ctx context.Context, cfg *Config, selector InstanceSelector, 
 		return SharedInstanceConfig{}, fmt.Errorf("shared instance entry was not persisted")
 	}
 	return cfg.Instances[index], nil
+}
+
+func resolveShareEntry(ctx context.Context, cfg *Config, selector InstanceSelector, clientFactory func(string) *CodencerClient) (SharedInstanceConfig, error) {
+	if clientFactory == nil {
+		clientFactory = func(baseURL string) *CodencerClient { return NewCodencerClient(baseURL) }
+	}
+
+	entry := SharedInstanceConfig{
+		InstanceID:   selector.InstanceID,
+		DaemonURL:    selector.DaemonURL,
+		ManifestPath: selector.ManifestPath,
+		Share:        true,
+	}
+	if index := findSharedInstanceIndex(cfg, selector); index >= 0 {
+		entry = mergeInstanceConfig(cfg.Instances[index], entry)
+		entry.Share = true
+	}
+
+	registry := NewRegistry(cfg.Clone())
+	registry.clientFactory = clientFactory
+	manifests, err := registry.DiscoveredManifests()
+	if err != nil {
+		return SharedInstanceConfig{}, err
+	}
+	if matched := matchManifest(entry, manifests); matched != nil {
+		entry.InstanceID = firstNonEmpty(entry.InstanceID, matched.Info.ID)
+		entry.ManifestPath = firstNonEmpty(entry.ManifestPath, matched.Path, matched.Info.ManifestPath)
+		entry.DaemonURL = firstNonEmpty(entry.DaemonURL, matched.Info.BaseURL)
+	} else if entry.ManifestPath != "" {
+		info, loadErr := loadManifest(entry.ManifestPath)
+		if loadErr != nil {
+			return SharedInstanceConfig{}, fmt.Errorf("load manifest for %s: %w", selectorDescription(selector), loadErr)
+		}
+		entry.InstanceID = firstNonEmpty(entry.InstanceID, info.ID)
+		entry.ManifestPath = firstNonEmpty(entry.ManifestPath, info.ManifestPath)
+		entry.DaemonURL = firstNonEmpty(entry.DaemonURL, info.BaseURL)
+	}
+
+	entry.DaemonURL = strings.TrimRight(strings.TrimSpace(entry.DaemonURL), "/")
+	if entry.DaemonURL == "" {
+		return SharedInstanceConfig{}, fmt.Errorf("%s did not resolve to a local daemon url; discover it first or share by --daemon-url", selectorDescription(selector))
+	}
+
+	info, err := clientFactory(entry.DaemonURL).GetInstance(ctx)
+	if err != nil {
+		return SharedInstanceConfig{}, fmt.Errorf("%s is not reachable through daemon %s: %w", selectorDescription(selector), entry.DaemonURL, err)
+	}
+	if info.ID == "" {
+		return SharedInstanceConfig{}, fmt.Errorf("daemon %s did not report an instance id for %s", entry.DaemonURL, selectorDescription(selector))
+	}
+	if entry.InstanceID != "" && info.ID != entry.InstanceID {
+		return SharedInstanceConfig{}, fmt.Errorf("%s resolved to daemon %s, but that daemon reports instance %s", selectorDescription(selector), entry.DaemonURL, info.ID)
+	}
+
+	entry.InstanceID = info.ID
+	entry.DaemonURL = firstNonEmpty(strings.TrimRight(info.BaseURL, "/"), entry.DaemonURL)
+	entry.ManifestPath = firstNonEmpty(info.ManifestPath, entry.ManifestPath)
+	entry.Share = true
+	return entry, nil
+}
+
+func selectorDescription(selector InstanceSelector) string {
+	selector = selector.normalized()
+	switch {
+	case selector.InstanceID != "":
+		return fmt.Sprintf("instance %s", selector.InstanceID)
+	case selector.ManifestPath != "":
+		return fmt.Sprintf("manifest %s", selector.ManifestPath)
+	case selector.DaemonURL != "":
+		return fmt.Sprintf("daemon %s", selector.DaemonURL)
+	default:
+		return "instance selector"
+	}
 }
 
 func UnshareInstance(cfg *Config, selector InstanceSelector) (SharedInstanceConfig, error) {

@@ -2,6 +2,8 @@
 > [!WARNING]
 > **INTERNAL DEVELOPER DOCUMENT**: This file is for project maintainers and contains technical debt audits, task backlogs, and roadmap tracking.
 > For the official **User Guide**, please refer to the [README.md](../../README.md).
+>
+> **Historical status note**: This file is legacy audit context. It is not the current release contract. Use the frozen `BETA_*` docs in this directory for current beta truth.
 
 ## Current Reality
 - **Repo Status**: [ALIGNED] The current repository truth is **`v0.2.0-alpha`** and **open-source alpha for the v2 local/self-host path**.

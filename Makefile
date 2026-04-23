@@ -1,7 +1,9 @@
-VERSION ?= v0.2.0-alpha
+VERSION ?= v0.2.0-beta
 LDFLAGS := -X agent-bridge/internal/app.Version=$(VERSION)
 
 all: lint test build
+
+build-supported: build build-cloud build-mcp-sdk-smoke
 
 build:
 	@mkdir -p bin
@@ -168,6 +170,12 @@ cloud-stack-config:
 cloud-stack-smoke:
 	@echo "==> Running docker-compose cloud stack smoke test..."
 	@./deploy/cloud/smoke.sh
+
+verify-beta: build-supported
+	@./scripts/verify_beta.sh
+
+verify-beta-docker: build-supported
+	@./scripts/verify_beta.sh --docker
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."

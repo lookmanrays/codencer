@@ -403,21 +403,22 @@ func successToolResult(summary string, payload any) mcpToolResult {
 }
 
 func artifactContentPayload(contentType string, body []byte) map[string]any {
+	contentType = strings.ToLower(strings.TrimSpace(contentType))
 	payload := map[string]any{
 		"content_type": contentType,
 	}
 	if len(body) == 0 {
 		payload["encoding"] = "utf-8"
-		payload["content"] = ""
+		payload["text"] = ""
 		return payload
 	}
-	if strings.HasPrefix(strings.ToLower(contentType), "text/") || strings.Contains(strings.ToLower(contentType), "json") || strings.Contains(strings.ToLower(contentType), "yaml") {
+	if strings.HasPrefix(contentType, "text/") || strings.Contains(contentType, "json") || strings.Contains(contentType, "yaml") {
 		payload["encoding"] = "utf-8"
-		payload["content"] = string(body)
+		payload["text"] = string(body)
 		return payload
 	}
 	payload["encoding"] = "base64"
-	payload["content"] = base64.StdEncoding.EncodeToString(body)
+	payload["base64"] = base64.StdEncoding.EncodeToString(body)
 	return payload
 }
 

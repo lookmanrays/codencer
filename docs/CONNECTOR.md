@@ -2,6 +2,8 @@
 
 Codencer’s connector is the outbound-only bridge between a relay and one or more local Codencer daemons. It is not a planner, not an executor, and not a second orchestration brain.
 
+If you want the full self-host operator sequence first, start with [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) and return here for connector-specific semantics.
+
 ## Role
 
 The connector is responsible for:
@@ -53,7 +55,7 @@ Command semantics:
 - `status` reads the local status snapshot. Plain text is richer and includes configured shared/unshared instances. `--json` still prints the raw status file for machine consumers.
 - `list` shows every configured connector instance, including `share: false` entries.
 - `discover` scans configured `discovery_roots` plus any repeated `--root` overrides and reports `instance_id`, `repo_root`, `manifest_path`, `daemon_url`, and state as `shared`, `known_unshared`, or `discovered_only`. It never changes the allowlist.
-- `share` upserts an allowlist entry and sets `share=true`. When `--daemon-url` is provided, the connector will try to enrich the entry from the daemon’s `/api/v1/instance` response.
+- `share` resolves the selector to a healthy local daemon before it persists `share=true`. `--daemon-url` is the self-sufficient path. `--instance-id` works only when discovery or existing connector metadata can resolve that instance back to a local daemon.
 - `unshare` keeps the entry but flips `share=false`. It does not delete history from the config.
 - `config` prints the persisted config safely by default. `private_key` is redacted unless `--show-secrets` is explicitly passed. `--json` is available for machine-readable output.
 
@@ -119,6 +121,10 @@ Each shared instance entry can identify the local daemon by one or more of:
 - `instance_id`
 - `daemon_url`
 - `manifest_path`
+
+Practical note:
+- `share --instance-id` is only valid when that id is already discoverable from configured discovery roots or from existing connector metadata.
+- `share --daemon-url` is the canonical self-host operator path when you want the connector to prove the target daemon is live before advertising it.
 
 Examples:
 

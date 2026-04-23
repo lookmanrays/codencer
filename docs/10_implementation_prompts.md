@@ -1,5 +1,9 @@
 # Implementation Prompts
 
+> [!WARNING]
+> **HISTORICAL PLANNING ARTIFACT**: This file captures old bootstrap prompts and phase prompts from an earlier repo shape.
+> Do **not** use it as current release truth. Use the frozen beta docs under [docs/internal/BETA_FINALIZATION_PLAN.md](internal/BETA_FINALIZATION_PLAN.md), [docs/internal/BETA_SUPPORT_CLASSIFICATION.md](internal/BETA_SUPPORT_CLASSIFICATION.md), and [docs/internal/BETA_VERIFICATION_MATRIX.md](internal/BETA_VERIFICATION_MATRIX.md) instead.
+
 Use these prompts in Antigravity IDE with Gemini 3.1 Thinking / Flash.
 
 ## Master bootstrap prompt
