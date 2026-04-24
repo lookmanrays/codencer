@@ -1,0 +1,9 @@
+{
+  "name": "codencer-relay",
+  "type": "http",
+  "url": "https://relay.example.com/mcp",
+  "headers": {
+    "Authorization": "Bearer <planner-token>"
+  },
+  "tool_prefix": "codencer."
+}

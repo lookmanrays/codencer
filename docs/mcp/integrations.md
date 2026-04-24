@@ -31,8 +31,9 @@ They are executor-side adapters, not remote planner surfaces.
 | Official Go SDK | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `proven` | MCP server tests + `cmd/mcp-sdk-smoke` + smoke | Proven for MCP only, not for the REST HTTP APIs. |
 | Generic HTTP clients | relay/cloud HTTP surfaces | `proven` | direct `net/http` tests + `curl` smoke | Plain bearer-token JSON callers are the intended HTTP baseline. |
 | Generic MCP clients | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `expected-only` | protocol behavior is repo-proven, but specific client products are not | Do not turn this into a universal desktop/client compatibility claim. |
-| ChatGPT-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | Use the remote MCP surface, not the local daemon. This repo does not directly exercise ChatGPT product setup. |
-| Claude-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | This is separate from the local `claude` execution adapter. This repo does not directly exercise Claude product setup. |
+| ChatGPT-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | Remote MCP only. Use the relay/cloud surface, not the local daemon, and see [integrations/chatgpt.md](integrations/chatgpt.md) for the operator walkthrough. |
+| Claude-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | Planner-side remote connector flow only. Separate from the local `claude` executor-side adapter and from local `claude_desktop_config.json`. See [integrations/claude.md](integrations/claude.md). |
+| Gemini CLI remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `expected-only` | docs only | Use Gemini CLI `httpUrl` plus bearer-token headers against the remote MCP surface, not the local daemon. This repo does not directly exercise Gemini CLI product setup. See [integrations/gemini-cli.md](integrations/gemini-cli.md). |
 | Daemon-local MCP | daemon `/mcp/call` | `compatibility-only` | local package tests only | Local compatibility/admin bridge, not the public planner contract. |
 | Local daemon as a public remote MCP target | none | `unsupported` | none | Keep remote planners on relay or cloud, not on the daemon directly. |
 
@@ -157,15 +158,21 @@ Notes:
 - `DELETE` session close also requires `MCP-Session-Id`.
 - `notifications/initialized` is accepted after `initialize`, but the current repo proof helpers do not depend on it.
 
-## Claude Code / Claude Desktop Examples
+## Checked-In MCP Config Examples
 
-For project-scoped Claude Code or Claude Desktop style HTTP MCP configuration, use the checked-in examples:
+For project-scoped Claude Code style HTTP MCP configuration, use the checked-in examples:
 
 - [examples/claude-code-relay.mcp.json](examples/claude-code-relay.mcp.json)
 - [examples/claude-code-cloud.mcp.json](examples/claude-code-cloud.mcp.json)
 
 Those examples use the relay and cloud canonical MCP URLs, plus environment-variable-driven bearer headers.
 They are packaging examples, not repo-executed Claude product proof.
+
+For the narrow operator flow that uses the repo's actual `codencer.*` MCP tool names in ChatGPT, see [integrations/chatgpt.md](integrations/chatgpt.md). The checked-in [examples/chatgpt-relay.mcp.json](examples/chatgpt-relay.mcp.json) and [examples/chatgpt-cloud.mcp.json](examples/chatgpt-cloud.mcp.json) are value-reference templates for ChatGPT app setup, not direct ChatGPT imports.
+
+For the current Claude Desktop and `claude.ai` operator walkthrough, see [integrations/claude.md](integrations/claude.md). It keeps the planner-side remote connector flow separate from the executor-side adapter story, points operators to Anthropic's current `Customize > Connectors` or organization `Settings > Connectors` flow, and calls out that `claude_desktop_config.json` is the separate local-MCP mechanism rather than the remote connector path.
+
+For Gemini CLI style remote HTTP MCP configuration, see [integrations/gemini-cli.md](integrations/gemini-cli.md) and [examples/gemini-cli-relay.mcp.json](examples/gemini-cli-relay.mcp.json). This remains an `expected-only` packaging path aligned to the current official Gemini CLI docs, not a repo-executed product proof. The local environment for this documentation pass did not have `gemini` installed, so this repo does not claim local Gemini CLI validation here.
 
 ## ChatGPT-Style And Anthropic API Paths
 
@@ -174,8 +181,8 @@ They are documented patterns, not directly exercised repo integrations.
 
 Current external platform references:
 
-- OpenAI ChatGPT developer mode currently documents remote MCP support for SSE and streaming HTTP, and OpenAI Responses API documents remote MCP servers through the `mcp` tool type. Follow the current official OpenAI docs when wiring ChatGPT-style or OpenAI API clients to relay `/mcp` or cloud `/api/cloud/v1/mcp`.
-- Anthropic currently documents remote HTTP MCP configuration in Claude Code and remote MCP usage in the Messages API. Follow the current official Anthropic docs when wiring Claude-style clients to relay `/mcp` or cloud `/api/cloud/v1/mcp`.
+- OpenAI ChatGPT developer mode currently documents remote MCP support and app setup flows through developer mode. Follow the current official OpenAI docs when wiring ChatGPT-style or OpenAI API clients to relay `/mcp` or cloud `/api/cloud/v1/mcp`.
+- Anthropic currently documents remote custom connectors for Claude Desktop and `claude.ai`, plus separate local/project MCP configuration for Claude Code. Follow the current official Anthropic docs when wiring Claude-style clients to relay `/mcp` or cloud `/api/cloud/v1/mcp`.
 
 Keep these claims narrow:
 

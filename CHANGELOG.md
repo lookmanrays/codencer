@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `scripts/smoke_test_v1.sh` for verifying all 6 primary submission modes.
 - Public beta tester guide in `docs/BETA_TESTING.md` with exact local, relay, cloud, planner/client, and provider test-track entrypoints.
 - `make build-supported`, `make verify-beta`, and `make verify-beta-docker` as explicit repo-level verification entrypoints for the supported tracks.
+- Planner-client walkthroughs for ChatGPT, Claude Desktop plus `claude.ai`, and Gemini CLI under `docs/mcp/integrations/`.
+- Per-platform setup walkthroughs for macOS, Windows plus `agent-broker`, WSL, and remote VPS dev-server layouts.
+- Consolidated operator boundary reference in `docs/KNOWN_LIMITATIONS.md`.
+- Operator-facing beta launch notes in `docs/RELEASE_NOTES_v0.2.0-beta.md`.
+- Cross-platform public-testability CI on `macos-latest` and `windows-latest`.
 
 ### Changed
 - Adopted `v0.2.0-beta` as the truthful build/version string for the current v2 local/self-host beta repo state.

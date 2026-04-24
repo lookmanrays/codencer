@@ -1,0 +1,45 @@
+name: Public Testability (macOS)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go build and module directories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/Library/Caches/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install macOS verification prerequisites
+        run: |
+          brew update
+          brew install jq docker docker-compose
+          mkdir -p ~/.docker/cli-plugins
+          ln -sf "$(brew --prefix docker-compose)/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+          docker compose version
+
+      - name: Build supported beta-track binaries
+        run: make build-supported
+
+      - name: Run supported public verification
+        run: make verify-beta

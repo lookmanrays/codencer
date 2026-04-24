@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "codencer-relay": {
+      "httpUrl": "${CODENCER_RELAY_MCP_URL:-http://127.0.0.1:8090/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${CODENCER_PLANNER_TOKEN}"
+      }
+    }
+  }
+}

@@ -1,8 +1,11 @@
-# Codencer: The Tactical Orchestration Bridge
+<a id="codencer-the-tactical-orchestration-bridge"></a>
 
-Codencer is a tactical orchestration bridge that manages execution, isolation, and high-fidelity audit trails for coding agents. It serves as the **system of record** between a high-level **Planner** (human or LLM) and tactical **Coding Agents** (Codex, Claude).
+# Codencer: The Planner-to-Executor Bridge
 
-Designed for **local-first, self-hosted developer toolchains**, Codencer provides the missing "relay" layer that ensures every task attempt is isolated, provisioned, and validated before it ever reaches your production branch.
+Codencer is a planner-to-executor bridge (Tactical Orchestration Bridge) for coding work that needs an honest system of record.
+Its core visible asset is the persisted execution trail: runs, steps, attempts, artifacts, validations, and gates.
+
+Instead of planning for the operator, Codencer keeps execution local, isolates each attempt, records the state machine truth, and exposes the evidence a planner or human needs to decide what happens next.
 
 > [!IMPORTANT]
 > **Project Status: Open-source beta for the v2 local/self-host path (`v0.2.0-beta`)**.
@@ -37,28 +40,41 @@ make verify-beta-docker
 
 ## 🏛 The Bridge Doctrine
 
-Codencer is a **Tactical Orchestration Bridge**, not a strategic planner. It handles the **Execution Layer** (isolation, provisioning, monitoring, and evidence) while the **Brain Layer** (human or LLM) handles strategy and decision-making.
+Codencer keeps the planner-to-executor bridge boundary explicit:
 
-- **What it is**: A system of record, a workspace isolator, a validator, and a provider of immutable artifacts.
-- **What it is not**: A planner, a chat UI, a generic cloud orchestration service, or an AI "agent" that thinks about what to do next.
+- the planner decides what to do
+- the executor does the work
+- Codencer owns the persistent execution truth between them
+
+The state-of-record model is the product surface:
+
+| Record | What it answers |
+| --- | --- |
+| Run | What larger unit of work is being tracked? |
+| Step | What concrete task was submitted? |
+| Attempt | What isolated execution instance tried to satisfy that step? |
+| Artifact | What file, diff, prompt, or result payload was produced? |
+| Validation | What test, lint, or policy check ran, and what happened? |
+| Gate | Where does an operator need to approve, reject, or intervene? |
+
+- **What it is**: A local control plane, state machine, validator, and evidence store for coding execution.
+- **What it is not**: A planner, a chat UI, a workflow brain, or a generic remote shell surface.
 
 ```text
-[ Planner (Brain) ] <---------- (ResultSpec) ---------+
-       |                                              |
-   (TaskSpec)                                   [ Bridge (Codencer) ]
-       |                                              |
-       +-------------------> [ Agent (Worker) ] <-----+
-                              (File Edits)
+[ Planner ] ---- submit task ----> [ Codencer ] ---- execute ----> [ Adapter / Executor ]
+     ^                                  |
+     |                                  v
+     +----- results, artifacts, validations, gates ---- persisted state of record
 ```
 
 ### Core Roles
-- **Planner (Brain)**: You, a Chat UI, or an agentic planner. Decides **what** to do.
-- **Bridge (Codencer)**: Receives the `TaskSpec`, manages workspace isolation (Git Worktrees), enforces policies, and monitors execution.
-- **Coding Agent (Worker)**: The tactical tool performing the actual work (e.g., `codex-agent`, `claude`).
+- **Planner**: Human, script, chat UI, or remote client that decides what to do next.
+- **Codencer**: Accepts the task, creates or locates the run and step, provisions the attempt workspace, enforces the runtime contract, and persists evidence.
+- **Adapter / Executor**: Local execution path such as `codex`, `claude`, `qwen`, `antigravity*`, or `openclaw-acpx`.
 
 ## V2 Remote Path
 
-Codencer now includes the first open-source self-hostable remote path while keeping execution local:
+The v2 path keeps the same control-plane split while adding a self-hostable remote surface:
 
 ```text
 Planner / Chat
@@ -84,24 +100,6 @@ Key constraints remain unchanged:
 - `bin/codencer-cloudd`: cloud control-plane server; can optionally start an internal relay runtime bridge for tenant-scoped Codencer runtime control
 - `bin/codencer-cloudworkerd`: cloud worker for background connector maintenance; Jira is polling-first in the current beta track
 - `bin/agent-broker`: build separately with `make build-broker` when you need the Windows-side agent-broker; it lives under the nested `cmd/broker` module
-
-### Cloud Control Plane (Beta Track)
-
-Codencer also includes a cloud control-plane foundation for provider connector installations, operator bootstrap, and tenant-scoped Codencer runtime control. It is not a replacement for the local daemon, the relay bridge, or the self-host run/step/attempt path.
-
-- Build the cloud binaries with `make build-cloud`.
-- Start the cloud server with `./bin/codencer-cloudd --config .codencer/cloud/config.json`.
-- Start it with `--relay-config` when you want cloud to claim and control Codencer runtime connectors and shared instances through the internal relay bridge.
-- Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, membership, and API token state directly in the cloud store.
-- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|memberships|tokens|install|runtime-connectors|runtime-instances|events|audit` for remote control-plane operations.
-- Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest remains deferred in the current beta track.
-- When cloud is running with the relay bridge, the cloud-scoped remote surface is:
-  - HTTP under `/api/cloud/v1/runtime/*`
-  - MCP under `/api/cloud/v1/mcp` with `/api/cloud/v1/mcp/call` kept as a compatibility alias
-- Relay `/mcp` remains the self-host relay MCP surface. Cloud `/api/cloud/v1/mcp` is the tenant-scoped cloud contract.
-- A Docker-based self-host baseline now lives under `deploy/cloud/` and can be smoke-checked with `make cloud-stack-smoke`.
-
-For the cloud docs and status matrix, see [docs/CLOUD.md](docs/CLOUD.md), [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md), and [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md).
 
 ### Self-Host Quickstart
 
@@ -142,11 +140,38 @@ Daemon discovery and evidence notes:
 - The daemon writes a repo-local instance manifest under `.codencer/instance.json` on startup and after Antigravity bind changes.
 - `PATCH /api/v1/runs/{id}` remains best-effort abort. It returns success only when the active step actually reaches `cancelled`; otherwise Codencer leaves an explicit non-cancelled outcome and returns an error instead of claiming a hard kill.
 
+### Cloud Control Plane (Beta Track)
+
+The cloud surface is subordinate to the core bridge model. It adds tenancy, control-plane state, and provider-installation operations; it does not replace the local daemon, the relay bridge, or the run/step/attempt evidence path.
+
+- Build the cloud binaries with `make build-cloud`.
+- Start the cloud server with `./bin/codencer-cloudd --config .codencer/cloud/config.json`.
+- Start it with `--relay-config` when you want cloud to claim and control Codencer runtime connectors and shared instances through the internal relay bridge.
+- Use `./bin/codencer-cloudctl bootstrap` to seed org, workspace, project, membership, and API token state directly in the cloud store.
+- Use `./bin/codencer-cloudctl status|orgs|workspaces|projects|memberships|tokens|install|runtime-connectors|runtime-instances|events|audit` for remote control-plane operations.
+- Run `./bin/codencer-cloudworkerd` only when you have connector installations that need background polling. Jira is polling-first and requires `config.jql` or `config.project_key`; webhook ingest remains deferred in the current beta track.
+- When cloud is running with the relay bridge, the cloud-scoped remote surface is:
+  - HTTP under `/api/cloud/v1/runtime/*`
+  - MCP under `/api/cloud/v1/mcp` with `/api/cloud/v1/mcp/call` kept as a compatibility alias
+- Relay `/mcp` remains the self-host relay MCP surface. Cloud `/api/cloud/v1/mcp` is the tenant-scoped cloud contract.
+- A Docker-based self-host baseline now lives under `deploy/cloud/` and can be smoke-checked with `make cloud-stack-smoke`.
+
+For the cloud docs and status matrix, see [docs/CLOUD.md](docs/CLOUD.md), [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md), and [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md).
+
 ---
 
 ## 🚀 The Canonical "Day 0" Path (Human-First)
 
-The standard sequence for performing an audited tactical task:
+The shortest honest path is:
+
+1. Clone a real git checkout and build the binaries.
+2. Start the daemon in simulation or real mode.
+3. Start a run.
+4. Submit a step.
+5. Wait for the step result.
+6. Inspect artifacts, validations, and gates before deciding what happens next.
+
+Concrete sequence:
 
 1.  **Clone & Build**: `git clone` the repo → `make setup build`.
 2.  **Start the Bridge**: `make start-sim` (for testing) or `make start` (for real agents).
@@ -167,11 +192,11 @@ The standard sequence for performing an audited tactical task:
 
 ### Core Guarantees
 
-- **Step-Isolation**: Each step executes in its own git worktree, preventing cross-task interference.
+- **Step Isolation**: Each step executes in its own git worktree, preventing cross-task interference.
 - **Immutable Evidence**: All logs, results, and artifacts are namespaced by Run, Step, and Attempt ID under `.codencer/artifacts/<run-id>/<step-id>/<attempt-id>/`, ensuring full auditability of repeated attempts.
-- **Workspace Provisioning**: Automatically prepares attempt worktree environments (copying `.env`, symlinking `node_modules`, running `post_create` hooks). Codencer includes an **optional Grove-compatible subset** for environment preparation; it does not depend on the Grove CLI and is designed to coexist with existing `.groverc.json` or `grove.yaml` files.
-  - *Inspiration*: This layer was inspired in part by [Grove](https://github.com/verbaux/grove).
-  - *Thanks*: Special thanks to [@verbaux](https://github.com/verbaux) for the conceptual foundation of local workspace preparation.
+- **Workspace Provisioning**: Codencer prepares attempt worktrees by copying configured files, wiring allowed symlinks, and running optional hooks.
+- **Deterministic Submission Normalization**: Direct input is normalized into a canonical `TaskSpec`, and both the original input and normalized task are preserved as attempt artifacts.
+- **Operator Control**: Gates, retries, approvals, and best-effort abort outcomes are explicit state transitions rather than hidden side effects.
 
 > **Execution Path Note**: Codencer depends on Git Worktrees for isolating task attempts. Therefore, cloning the repository via `git clone` is the **only supported execution path**. Downloading a ZIP source archive will fail during targeted execution.
 
@@ -179,7 +204,7 @@ The standard sequence for performing an audited tactical task:
 
 ## ⚡️ Quickstart: Local Setup
 
-Get up and running in simulation mode to verify the orchestrator logic.
+Use this path when you want the canonical local beta flow and its evidence surfaces.
 
 ### 1. Build & Setup
 ```bash
@@ -208,7 +233,7 @@ The Claude adapter wrapper path is implemented and test-covered in this repo: pr
 `/api/v1/compatibility` is a runtime diagnostic surface, not a beta-support certificate. It reports current binary availability, simulation mode, and local binding state; it does not promote an adapter into the beta promise by itself.
 
 ### 3. Run Your First Tactical Task
-Submit a task and wait for the bridge to report results. For the full auditing sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
+Submit a task, wait for the step, then inspect the recorded result. For the full local operator sequence, see the **[Canonical Local Runbook](docs/EXAMPLES.md)**.
 
 ```bash
 # 1. Start a new mission (System of Record)
@@ -241,8 +266,8 @@ Codencer supports both structured and convenience input via terminal:
 Ideal for large, human-readable prompts without creating a file:
 ```bash
 cat <<'EOF' | ./bin/orchestratorctl submit run-01 --stdin --title "Fix Lints" --adapter codex --wait --json
-Fix all lint errors in the internal/app package. 
-Exclude the test files. 
+Fix all lint errors in the internal/app package.
+Exclude the test files.
 Use the 'go-lint' tool.
 EOF
 ```
@@ -272,11 +297,11 @@ Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. 
 
 ## 🔍 The Audit Trail (Authoritative Evidence)
 
-Codencer ensures that every tactical execution is backed by high-fidelity evidence. Follow the **Canonical Sequence** in `EXAMPLES.md` to audit your task:
+The fastest way to understand Codencer is to inspect the evidence surfaces in order:
 
-1.  **Authoritative Summary**: `step result <UUID>` (Start here).
-2.  **Raw Execution Trail**: `step logs <UUID>` (The agent's brain).
-3.  **Audit Evidence**: `step artifacts <UUID>` and `step validations <UUID>` (The proof).
+1.  **Authoritative Summary**: `step result <UUID>` shows the persisted run/step outcome.
+2.  **Raw Execution Trail**: `step logs <UUID>` shows the executor output captured for that step attempt.
+3.  **Audit Evidence**: `step artifacts <UUID>` and `step validations <UUID>` show the files and checks Codencer recorded.
 
 - **`completed`**: Goal met, all tests passed.
 - **`completed_with_warnings`**: Success, but with non-critical issues (lint/tests).
@@ -304,7 +329,7 @@ For Claude attempts specifically, the standard evidence set is:
 Codencer supports two submit styles:
 
 1. **Canonical TaskSpec**: submit a full YAML or JSON task definition when you need rich structure.
-2. **Direct convenience input**: submit a prompt/goal directly and let the CLI deterministically normalize it into `TaskSpec`.
+2. **Direct convenience input**: submit a prompt or goal directly and let the CLI deterministically normalize it into `TaskSpec`.
 
 Direct input is intentionally narrow. It does not plan, decompose work, merge multiple sources, or invent strategy.
 
@@ -358,7 +383,7 @@ Official wrapper examples live in [examples/automation](examples/automation):
 - [run_tasks.ps1](examples/automation/run_tasks.ps1)
 - [run_tasks.py](examples/automation/run_tasks.py)
 
-This keeps Codencer sharp and narrow as a bridge rather than a workflow brain.
+This keeps Codencer narrow as a bridge rather than a workflow brain.
 
 For a deeper dive into agent installation and advanced configuration, see the **[Environmental Reference Guide](docs/SETUP.md)**.
 
@@ -366,25 +391,27 @@ For a deeper dive into agent installation and advanced configuration, see the **
 
 ## 🛡 Why Codencer?
 
-Agent-driven coding is non-deterministic. Codencer provides the guardrails:
+Codencer exists to keep tactical coding work inspectable and recoverable:
 
 1. **Workspace Safety**: Agents run in isolated Git Worktrees. Diffs are captured and validated before any commit.
 2. **Audit-Proof Ledger**: Every attempt is recorded in a local SQLite database (embedded via CGO) with SHA-256 hashes of all artifacts.
-3. **Idempotency**: Interrupted tasks can be resumed or securely analyzed post-crash.
-4. **Validation-First**: Tasks only "complete" when your defined validation commands (tests, linters) pass.
+3. **Idempotent Recovery Posture**: Interrupted tasks can be retried or analyzed from persisted run, step, and attempt state.
+4. **Validation-First Outcomes**: Tasks only complete when the recorded validation contract passes.
+5. **Remote Control Without Remote Execution**: Relay and cloud surfaces expose narrow planner APIs while execution and artifacts remain on the daemon side.
 
 ---
 
 ## ⚠️ Known Limitations (Public Beta)
 
-Codencer’s v2 path is beta-track ready for disciplined local and self-host use, but it still has explicit limits:
+Codencer is beta-track ready within the documented surfaces, but the repo keeps several boundaries explicit:
 - **No Planner In Core**: Codencer never decomposes, prioritizes, or decides strategy. The planner still owns those decisions.
 - **Best-Effort Abort**: `PATCH /api/v1/runs/{id}` and relay abort flows are honest but not universal hard-kill guarantees. A run is only reported cancelled when the adapter actually stops.
 - **Opportunistic Remote Routing**: Relay step, gate, and artifact routing still learns and persists route hints opportunistically, but direct remote lookups also probe authorized online shared instances before failing closed.
 - **Bounded Artifact Transport**: Connector transport rejects oversized artifact bodies instead of turning the relay into a bulk file tunnel. Large binary transfer is intentionally limited.
 - **Static Self-Host Auth**: Planner auth is static bearer-token based, suitable for narrow self-host beta use but not enterprise IAM.
-- **Single-Operator Bias**: The current flow is optimized for local/self-host operators, not multi-tenant hosted service use.
-- **No Native Workflow Brain**: Ordered task execution remains wrapper- or planner-driven outside Codencer core.
+- **Ordered Execution Is Wrapper-Based**: Sequential workflows remain wrapper- or planner-driven outside Codencer core.
+
+For the consolidated operator-facing boundary list, see [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
 ### Runtime Capability Truth
 
@@ -421,8 +448,8 @@ Codencer distinguishes between different failure modes to help you recover faste
 
 ## 🧪 Simulation vs. Real Execution
 
-1. **Simulation Mode** (`make start-sim`): Only validates the **Orchestrator**. It tests if the ledger, state machine, and CLI are working. It does **not** test if the agent can actually code.
-2. **Real Mode**: Tests the full end-to-end loop with real agents. `codex` is the primary intended local beta adapter, but the checked-in repo proof is still simulation-heavy; other adapters remain implementation-backed and should stay narrow unless your own runtime proves them ready.
+1. **Simulation Mode** (`make start-sim`): Validates the daemon, state machine, CLI, and evidence path without requiring a live executor.
+2. **Real Mode**: Exercises the end-to-end loop with real agents. `codex` is the primary intended local beta adapter, but the checked-in repo proof remains simulation-heavy; other adapters stay narrower unless your runtime proves them ready.
 
 Current local adapter proof is intentionally narrow:
 - `codex`: primary intended local beta adapter, but current repo proof is still simulation-heavy rather than live-binary proven.
@@ -436,14 +463,15 @@ Current local adapter proof is intentionally narrow:
 
 ## 📖 Documentation
 
-Review the following guides to get started with Codencer.
+Use the following docs to choose the right supported surface quickly.
 
 ### ⚡️ User Guidance (Start Here)
 - **[Public Beta Test Tracks](docs/BETA_TESTING.md)** — Fastest way to choose the right supported test lane and command set.
+- **[Environmental Reference](docs/SETUP.md)** — Setup hub, platform chooser, native Linux guidance, and track routing.
+- **[Known Limitations](docs/KNOWN_LIMITATIONS.md)** — Consolidated operator-grade beta boundaries from current repo truth.
 - **[Operator Runbook](docs/OPERATOR_RUNBOOK.md)** — The canonical "Day 0" flow for humans.
 - **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** — Canonical rules for AI planners and assistants.
 - **[CLI Automation Patterns](docs/CLI_AUTOMATION.md)** — Machine-safe JSON mode and sequential loops.
-- **[Environmental Reference](docs/SETUP.md)** — Prerequisites, configuration, and daemon management.
 - **[Self-Host Relay / Runtime Guide](docs/SELF_HOST_REFERENCE.md)** — End-to-end relay/connector operator flow.
 - **[Self-Host Cloud Control Plane Guide](docs/CLOUD_SELF_HOST.md)** — Bootstrap, smoke, and composed cloud runtime guidance.
 - **[Planner / Client Integration Notes](docs/mcp/integrations.md)** — Relay/cloud HTTP + MCP compatibility matrix.
@@ -461,7 +489,11 @@ Review the following guides to get started with Codencer.
 ---
 
 ## ⚖ License
+
+Codencer is released under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.
+
 ## 🏗 One-Repo-One-Instance Model
+
 Codencer is designed around an explicit, repo-bound execution model:
 - **1 Git Clone = 1 Daemon Instance**: Each repository checkout manages its own ledger and workspaces.
 - **Explicit Targeting**: Start the daemon with `--repo-root <path>` to anchor all relative state (DB, artifacts) to that project, regardless of the startup directory.
@@ -473,5 +505,3 @@ Codencer is designed around an explicit, repo-bound execution model:
 - **Identity Verification**: Always use `./bin/orchestratorctl instance --json` to verify which repository and port a daemon is serving before submitting tasks.
 
 For more details, see **[Setup & Multi-Instance Workflows](docs/SETUP.md)**.
-
-Codencer is released under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.

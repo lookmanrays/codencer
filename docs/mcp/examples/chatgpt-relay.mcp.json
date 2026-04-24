@@ -1,0 +1,6 @@
+{
+  "label": "codencer-relay",
+  "endpoint": "https://<your-relay-host>/mcp",
+  "token": "<your-planner-token>",
+  "usage": "value-reference-only"
+}
