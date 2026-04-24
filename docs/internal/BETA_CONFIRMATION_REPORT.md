@@ -8,42 +8,50 @@ Beta confirmed: `yes`
 
 ## Commands Run
 
-Working tree verification:
+Fresh Phase 7 confirmation evidence:
 
 - `make build-supported`
+- `./scripts/smoke_test_v1.sh`
+- `./scripts/smoke_test_v1.sh`
+- `make smoke`
+- `PLANNER_TOKEN=... RELAY_CONFIG=... RELAY_URL=... DAEMON_URL=... SMOKE_SCENARIOS=status,audit,share-control,multi-instance,mcp,mcp-sdk ./scripts/self_host_smoke.sh`
+- `go test ./internal/cloud/... -count=1`
+- `go test ./internal/relay ./internal/cloud ./cmd/mcp-sdk-smoke -count=1`
+- `make cloud-smoke`
+- `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:18085 CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1 ./scripts/cloud_smoke.sh`
 - `make verify-beta`
-- `docker desktop status && make cloud-stack-smoke`
+- detached temporary `git worktree` run of `make build-supported && make verify-beta`
+- `make cloud-stack-smoke`
 - `make verify-beta-docker`
-
-Clean-ish verification:
-
-- initial plain rsync temp copy of the repo plus `make build-supported && make verify-beta`
-- detached temp worktree overlay of the current repo contents plus `make build-supported && make verify-beta`
 
 ## Outcomes
 
 | Check | Outcome | Notes |
 | --- | --- | --- |
-| Supported build surface | Pass | `make build-supported` rebuilt the main supported binaries plus the MCP SDK smoke helper. |
-| Repo-level supported verification | Pass | `make verify-beta` reran main-module tests, local smoke, self-host relay/runtime MCP+SDK smoke, cloud binary smoke, and Docker compose config validation. |
-| Docker-backed cloud stack proof | Pass | `make cloud-stack-smoke` passed after Docker Desktop was started and the local Docker daemon became available. |
-| Post-promotion repo-level Docker-inclusive verification | Pass | `make verify-beta-docker` reran the supported repo verifier plus the Docker-backed cloud stack baseline after the beta status/version/docs promotion landed. |
-| Clean-ish repo verification | Pass | The supported verification reran successfully from a detached temporary worktree overlaid with the current repo contents. |
+| Supported build surface | Pass | `make build-supported` rebuilt the main supported binaries plus the MCP SDK smoke helper. Local `/usr/local/opt/grpc/lib` linker warnings still appeared, but they were non-blocking. |
+| Local smoke confirmation | Pass | `./scripts/smoke_test_v1.sh` passed twice and `make smoke` passed, preserving the documented local beta proof from the public entrypoints. |
+| Fresh self-host relay/runtime confirmation | Pass | The fresh self-host smoke with `status,audit,share-control,multi-instance,mcp,mcp-sdk` re-proved relay HTTP, share-control, multi-instance routing, canonical relay MCP, and official Go SDK interop. |
+| Cloud regression + smoke confirmation | Pass | `go test ./internal/cloud/... -count=1`, `make cloud-smoke`, and the composed cloud smoke with `CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:18085 CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1` all passed. |
+| Relay/cloud MCP + SDK confirmation | Pass | `go test ./internal/relay ./internal/cloud ./cmd/mcp-sdk-smoke -count=1` re-proved the canonical relay/cloud MCP paths and kept the official Go SDK helper green. |
+| Repo-level supported verification | Pass | `make verify-beta` reran main-module tests, local smoke, self-host relay/runtime MCP+SDK smoke, cloud binary smoke, and Docker compose config validation from the active checkout. |
+| Fresh-location repo verification | Pass | A detached temporary `git worktree` reran `make build-supported && make verify-beta` successfully from a fresh location. |
+| Docker-backed cloud stack proof | Pass | `make cloud-stack-smoke` passed on a host with a live Docker daemon. |
+| Final-tree Docker-inclusive verifier | Pass | `make verify-beta-docker` re-ran the supported repo verifier plus the Docker-backed cloud stack baseline after the Phase 7 doc normalization updates landed. |
 
 ## Notes On Environment And Method
 
-- Docker CLI and Docker Desktop were installed at the start of the run, but the daemon was not initially running.
-- Docker Desktop was started during this confirmation pass, after which `docker desktop status` reported `running` and `make cloud-stack-smoke` completed successfully.
-- A plain rsync-only temp copy without `.git` was not treated as equivalent clean-checkout proof because some worktree-sensitive tests require a real Git repository. That method failed for environment-shape reasons, not because of a repo regression.
-- The clean-ish confirmation proof used a detached temporary `git worktree` plus an overlay of the current repo contents, which preserved Git metadata while still proving the repo from a fresh location.
+- The fresh-location confirmation proof used a detached temporary `git worktree` at the current `HEAD` before running `make build-supported && make verify-beta`.
+- That method preserved the Git metadata required by worktree-sensitive checks while still proving the repo from a fresh location away from the active checkout.
+- `make cloud-stack-smoke` ran on a host with a live Docker daemon.
+- Local `/usr/local/opt/grpc/lib` linker search-path warnings still appeared during build-oriented steps, but they did not block any required proof.
 
 ## Decision Reasoning
 
-Beta is confirmed because all of the frozen Phase 0 through Phase 6 blocker classes are closed and the final required proofs are green:
+Beta is confirmed because all of the frozen Phase 0 through Phase 6 blocker classes are closed and the fresh Phase 7 proofs are green:
 
 - local-only proof is green
 - self-host relay/runtime proof is green
-- self-host cloud binary proof is green
+- self-host cloud binary and composed cloud proof are green
 - Docker-backed cloud stack proof is green
 - planner/client MCP and official Go SDK proof are green
 - provider connector proof remains green within the documented narrow scope

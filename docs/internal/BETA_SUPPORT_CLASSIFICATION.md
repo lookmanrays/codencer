@@ -2,6 +2,8 @@
 
 This matrix separates current repo truth from the frozen beta contract.
 
+This is a final audited classification snapshot after Phase 7 beta confirmation. The beta contract labels below are frozen release truth, not forward-looking intent.
+
 Phase 7 note:
 
 - Beta was confirmed on 2026-04-23.
@@ -10,7 +12,7 @@ Phase 7 note:
 ## Label Legend
 
 - `canonical`: core product surface; must be right for beta.
-- `supported-beta target`: intended to be in the beta promise after follow-up work.
+- `supported-beta target`: included in the frozen beta promise, but not treated as a canonical core surface.
 - `secondary`: useful but not part of the primary beta promise.
 - `compatibility`: kept for compatibility/admin reasons, not as the preferred contract.
 - `experimental`: shallow or intentionally non-primary.
@@ -75,7 +77,7 @@ Phase 7 note:
 | Cloud runtime HTTP proxy | `partial` | `supported-beta target` | Repo tests + composed cloud smoke | Phase 1 hardened nested route scopes and added live run/create/get + submit-task proof. |
 | Cloud MCP | `partial` | `supported-beta target` | Repo tests + composed cloud smoke + SDK smoke | Phase 1 aligned cloud MCP auth/session/origin behavior with the cloud HTTP tenant model. |
 | Cloud worker (`codencer-cloudworkerd`) | `partial` | `supported-beta target` | Repo tests | Jira polling-first only. |
-| Docker self-host baseline (`deploy/cloud`) | `partial` | `supported-beta target` | Compose config + `make cloud-stack-smoke` + `make verify-beta-docker` proof components | Final beta confirmation re-proved the Docker baseline on a live Docker daemon host. The Docker stack remains a narrow self-host baseline rather than a managed SaaS deployment story. |
+| Docker self-host baseline (`deploy/cloud`) | `partial` | `supported-beta target` | Compose config + repo-level `make verify-beta` + direct `make cloud-stack-smoke` proof components | Final beta confirmation re-proved the Docker baseline on a host with a live Docker daemon. The Docker stack remains a narrow self-host baseline rather than a managed SaaS deployment story. |
 
 ## Provider Connectors
 

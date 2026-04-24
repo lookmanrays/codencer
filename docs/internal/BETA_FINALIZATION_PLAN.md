@@ -1,10 +1,12 @@
 # Beta Finalization Plan
 
-Status: Phase 0 freeze document
+Status: Beta-confirmed final audited record
 
 Last audited: 2026-04-23
 
 Source of truth: current repository code, tests, smoke runs, and build surfaces. Older internal docs are historical unless they still match code.
+
+This document preserves the frozen beta phase plan plus the final audited outcomes. Phase ordering below is historical; beta was confirmed in Phase 7 on 2026-04-23.
 
 ## Current State
 
@@ -95,7 +97,7 @@ These can remain in repo without being part of the beta promise:
 - cloud-native runtime enrollment lifecycle
 - vendor-depth provider automation completeness
 
-## Remaining Phases After Phase 0
+## Frozen Phase Plan And Exit Criteria
 
 ### Phase 1: Local Core Finalization
 
@@ -210,22 +212,22 @@ Release-readiness for the beta merge requires:
 - WS-C1 closed the cloud scope/security blockers from Phase 0: token-revocation scope, event scoping, audit scoping, and runtime HTTP under-enforcement.
 - WS-C1 also closed the thin-proof gaps for cloud runtime HTTP, cloud MCP streamable behavior, and official Go SDK access to `/api/cloud/v1/mcp`.
 - Public cloud docs and smoke entrypoints were updated so the documented proof now matches the actual repo behavior.
-- WS-C1 does not promote the whole repo to beta. Remaining relay, local, provider, release, and broader planner/client work still has to finish before beta confirmation.
-- Docker-based packaging proof remains a later release-engineering task because `make cloud-stack-smoke` still depends on a Docker-capable host.
+- WS-C1 did not promote the whole repo to beta. The remaining unfinished areas at that point were relay, local, provider, release, and broader planner/client work.
+- At that point, Docker-based packaging proof remained a later release-engineering task because the Docker-backed smoke proof had not yet run on a Docker-capable host.
 
 ## Phase 2 WS-R1 Outcome (2026-04-23)
 
 - WS-R1 closed the Phase 0 relay/runtime blocker around `share --instance-id` persisting false-positive shared state.
 - WS-R1 also hardened relay/runtime correctness around live-set re-advertise, stale connector-session pruning, and relay MCP principal parity.
 - Public relay/connector/self-host docs and smoke entrypoints were updated so the documented proof now matches the actual self-host relay/runtime behavior.
-- WS-R1 does not promote the whole repo to beta. Local-core proof, broader planner/client freezing, provider work, and release verification still remain before beta confirmation.
+- WS-R1 did not promote the whole repo to beta. The remaining unfinished areas at that point were local-core proof, broader planner/client freezing, provider work, and release verification.
 
 ## Phase 3 WS-L1 Outcome (2026-04-23)
 
 - WS-L1 closed the conflicting local parity evidence from Phase 0 by fixing the local same-run wait/finalization race and re-running the legacy six-input smoke twice successfully.
 - WS-L1 also hardened local truth around step results and retry lifecycle: gated/rejected/manual-attention states now surface correctly in `step result`, and retry moves the parent run back to `running` immediately.
 - Public local docs and internal support labels were updated so the local adapter matrix, compatibility surfaces, and local smoke entrypoints now match the actual repo proof.
-- WS-L1 does not promote the whole repo to beta. Planner/client freezing, provider work, release/public repeatability, and final beta confirmation still remain before beta can be claimed.
+- WS-L1 did not promote the whole repo to beta. The remaining unfinished areas at that point were planner/client freezing, provider work, release/public repeatability, and final beta confirmation.
 
 ## Phase 4 WS-P1 Outcome (2026-04-23)
 
@@ -233,7 +235,7 @@ Release-readiness for the beta merge requires:
 - Relay HTTP, relay MCP, cloud HTTP, cloud MCP, and official Go SDK access to relay/cloud MCP are now explicitly documented as proven within narrow repo-exercised scope.
 - Generic MCP clients remain expected-only, while ChatGPT-style and Claude-style paths remain compatibility-only; the local daemon stays out of the public remote MCP promise.
 - Public planner/client docs now include a cloud MCP tools page, generic HTTP/MCP examples, and checked-in Claude Code style `.mcp.json` examples for local tester packaging.
-- WS-P1 does not promote the whole repo to beta. Provider connector finalization, release/public repeatability, and final beta confirmation still remain before beta can be claimed.
+- WS-P1 did not promote the whole repo to beta. The remaining unfinished areas at that point were provider connector finalization, release/public repeatability, and final beta confirmation.
 
 ## Phase 5 WS-PC1 Outcome (2026-04-23)
 
@@ -242,7 +244,7 @@ Release-readiness for the beta merge requires:
 - Jira remains polling-first by design, and the routed webhook surface now rejects Jira webhook calls truthfully instead of ingesting them as if they were supported.
 - Provider action logs now persist request payloads, response payloads, and completion timestamps, and provider webhook failure/deferment paths now leave explicit audit evidence.
 - Public provider docs and internal support matrices now freeze the provider matrix to narrow, code-backed claims: Slack is the strongest local tester path, while GitHub, GitLab, Jira, and Linear remain intentionally narrower operator/package surfaces.
-- WS-PC1 does not promote the whole repo to beta. Release/public repeatability and final beta confirmation still remain before beta can be claimed.
+- WS-PC1 did not promote the whole repo to beta. The remaining unfinished areas at that point were release/public repeatability and final beta confirmation.
 
 ## Phase 6 WS-RE1 Outcome (2026-04-23)
 
@@ -251,13 +253,14 @@ Release-readiness for the beta merge requires:
 - Public tester routing is now explicit: README, setup, relay, cloud, planner/client, and provider docs all point to the right track instead of forcing testers to infer the repo promise from scattered pages.
 - A new public tester guide (`docs/BETA_TESTING.md`) now freezes the supported track matrix, exact commands, and the current support boundaries in one place.
 - Deployment packaging truth is tighter: the Docker cloud image now takes its version string from compose/build args instead of only a hard-coded Dockerfile literal, and the docs now distinguish Docker baseline proof from binary-native composed proof.
-- WS-RE1 completed a full supported non-Docker verification pass from the active checkout and repeated that same pass from a clean-ish temporary checkout copy.
-- WS-RE1 still does not promote the whole repo to beta. The remaining repo-wide step is final beta confirmation, including a rerun of Docker-backed stack smoke on a Docker-capable host.
+- WS-RE1 completed a full supported non-Docker verification pass from the active checkout and repeated that same pass from a detached temporary `git worktree` at the current `HEAD`.
+- At the WS-RE1 handoff, the remaining repo-wide step was final beta confirmation, including a rerun of Docker-backed stack smoke on a Docker-capable host.
 
 ## Phase 7 Beta Confirmation Outcome (2026-04-23)
 
-- The frozen beta verification matrix was rerun from the working tree and from a clean-ish detached worktree overlay of the current repo contents.
-- `make build-supported`, `make verify-beta`, and `make cloud-stack-smoke` all passed during the final confirmation pass.
-- Docker-backed cloud-stack proof was re-executed on a host with a live Docker daemon after starting Docker Desktop in this environment.
+- The frozen beta verification matrix was rerun from the working tree and from a detached temporary `git worktree` at the current `HEAD`.
+- Fresh Phase 7 confirmation evidence included `make build-supported`, `./scripts/smoke_test_v1.sh` twice, `make smoke`, a fresh self-host smoke with `status,audit,share-control,multi-instance,mcp,mcp-sdk`, `go test ./internal/cloud/... -count=1`, `go test ./internal/relay ./internal/cloud ./cmd/mcp-sdk-smoke -count=1`, `make cloud-smoke`, the composed cloud smoke with `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:18085 CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1`, `make verify-beta`, the detached temporary `git worktree` rerun of `make build-supported && make verify-beta`, `make cloud-stack-smoke`, and the final-tree `make verify-beta-docker` rerun.
+- `make cloud-stack-smoke` passed on a host with a live Docker daemon.
+- Local `/usr/local/opt/grpc/lib` linker warnings still appeared during build-oriented steps, but they remained non-blocking.
 - The repo status, version strings, and public tester docs now agree on `v0.2.0-beta`.
 - Beta is confirmed for the supported local, self-host relay/runtime, self-host cloud, planner/client integration, and provider connector tracks, with the previously frozen compatibility/deferred boundaries unchanged.

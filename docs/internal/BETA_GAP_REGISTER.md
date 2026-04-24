@@ -7,6 +7,10 @@ Severity scale:
 - `medium`: important proof/contract gap
 - `low`: useful cleanup, not a beta gate by itself
 
+This register preserves the historical blocker list plus the phase-by-phase closure record. As of 2026-04-23, no beta-blocking gaps remain open.
+
+References below to WS-specific "remain outside" or "remaining work" notes describe the handoff state at the end of that phase, not current open beta blockers.
+
 | ID | Title | Category | Impact | Severity | Affected files / areas | Beta-blocker | Next phase | Owner / workstream |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | BG-001 | Cloud token revocation ignores tenant scope | Cloud control plane | A scoped token can revoke another tenant token if it knows the ID. | `critical` | `internal/cloud/router.go`, `internal/cloud/store.go` | Yes | Phase 3 | WS-C1 Cloud |
@@ -136,9 +140,9 @@ This section records the release-engineering and public-testability outcomes fro
 
 | Gap | Status after WS-RE1 | Evidence | Notes |
 | --- | --- | --- | --- |
-| BG-014 | `closed` | `.github/workflows/public-testability.yml`, `make verify-beta`, clean-ish copy rerun of `make build-supported && make verify-beta` | The repo now has a visible CI workflow plus explicit supported verification targets and a clean-checkout-friendly verification script. |
+| BG-014 | `closed` | `.github/workflows/public-testability.yml`, `make verify-beta`, detached temporary `git worktree` rerun of `make build-supported && make verify-beta` | The repo now has a visible CI workflow plus explicit supported verification targets and a clean-checkout-friendly verification script. |
 | BG-015 | `closed` | `docs/internal/BETA_*.md`, `docs/10_implementation_prompts.md`, `docs/internal/GAP_AUDIT.md`, `docs/internal/PROGRESS.md`, `docs/internal/TASKS.md`, `docs/internal/IMPLEMENTATION_PLAN.md`, `docs/internal/cloud_v1_finish_log.md`, `docs/internal/v2_finish_log.md` | Frozen beta docs remain the current program truth, and older planning / backlog documents are now marked as historical instead of competing with current release guidance. |
-| BG-020 | `still open` | `make build-supported`, `make verify-beta`, clean-ish copy rerun | Builds and tests stay green, but the local linker environment still emits `/usr/local/opt/grpc/lib` search-path warnings. This remains noisy rather than beta-blocking. |
+| BG-020 | `still open` | `make build-supported`, `make verify-beta`, detached temporary `git worktree` rerun | Builds and tests stay green, but the local linker environment still emits `/usr/local/opt/grpc/lib` search-path warnings. This remains noisy rather than beta-blocking. |
 
 Additional WS-RE1 reductions landed in this round:
 
@@ -147,19 +151,27 @@ Additional WS-RE1 reductions landed in this round:
 - Docker cloud image version metadata is now parameterized through compose/build args instead of living only as a hard-coded string in the Dockerfile.
 - Public README/setup/cloud/self-host docs now route testers to the correct track and state the real proof boundary for Docker baseline vs binary-native composed proof.
 
-Release/public-testability items that remain outside WS-RE1:
+Historical handoff items after WS-RE1:
 
-- final repo-wide beta confirmation still has to rerun the frozen matrix once more without widening scope
-- `make cloud-stack-smoke` still needs a Docker-capable host before the repo can claim Docker-backed packaging proof as directly re-verified in this finalization run
+- final repo-wide beta confirmation had to rerun the frozen matrix once more without widening scope
+- Docker-backed packaging proof still depended on a Docker-capable host before the repo could claim it as directly re-verified in that finalization run
 
 ## Phase 7 Final Confirmation Update (2026-04-23)
 
 Final beta confirmation reran the frozen matrix and closed the last repo-wide proof item:
 
 - `make build-supported` passed
+- `./scripts/smoke_test_v1.sh` passed twice, and `make smoke` passed
+- a fresh self-host smoke with `status,audit,share-control,multi-instance,mcp,mcp-sdk` passed
+- `go test ./internal/cloud/... -count=1` passed
+- `go test ./internal/relay ./internal/cloud ./cmd/mcp-sdk-smoke -count=1` passed
+- `make cloud-smoke` passed
+- the composed cloud smoke with `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:18085 CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1` passed
 - `make verify-beta` passed
-- the supported verification reran successfully from a clean-ish detached worktree overlay of the current repo contents
-- `make cloud-stack-smoke` passed on a live Docker daemon host after Docker Desktop was started in this environment
+- the supported verification reran successfully from a detached temporary `git worktree` at the current `HEAD` via `make build-supported && make verify-beta`
+- `make cloud-stack-smoke` passed on a host with a live Docker daemon
+- the final-tree `make verify-beta-docker` rerun passed after the Phase 7 truth-normalization updates landed
+- local `/usr/local/opt/grpc/lib` linker warnings still appeared during build-oriented steps, but stayed non-blocking
 
 Current blocker truth after Phase 7:
 

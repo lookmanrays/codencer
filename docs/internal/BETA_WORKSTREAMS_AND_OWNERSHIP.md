@@ -1,6 +1,8 @@
 # Beta Workstreams And Ownership
 
-This document defines the merge-safe work split for the post-Phase-0 program.
+This document records the merge-safe work split used for beta finalization. It now serves as a historical ownership record after the Phase 7 beta confirmation pass.
+
+References below to "remaining work" describe the handoff state at the end of that workstream, not current open beta blockers.
 
 ## Workstream Map
 
@@ -66,10 +68,10 @@ WS-C1 is complete for code, focused tests, and binary-native smoke:
 - proved cloud MCP streamable behavior and official Go SDK interoperability in composed mode
 - updated the public cloud docs to match the actual smoke and proof entrypoints
 
-Remaining work that still touches cloud but is not a WS-C1 code blocker:
+Historical handoff items after WS-C1:
 
-- `make cloud-stack-smoke` still needs to run on a Docker-capable host and remains release-engineering/package proof work
-- broader planner/client release wording still belongs to WS-P1 even though the cloud-side MCP/SDK proof is now present
+- Docker-backed packaging proof remained release-engineering/package work pending a Docker-capable host
+- broader planner/client release wording remained with WS-P1 even though the cloud-side MCP/SDK proof was already present
 
 Recommended handoff after WS-C1:
 
@@ -199,13 +201,13 @@ Proof landed in this round:
 
 - `make build-supported`
 - `make verify-beta`
-- `make build-supported && make verify-beta` from a clean-ish temporary checkout copy
+- detached temporary `git worktree` run of `make build-supported && make verify-beta`
 - `make cloud-stack-config`
 
-Remaining work that still touches release/public proof but is not a WS-RE1 blocker:
+Historical handoff items after WS-RE1:
 
-- final beta confirmation still has to rerun the frozen matrix one more time without widening scope
-- `make cloud-stack-smoke` still needs a Docker-capable host before Docker-backed packaging proof can be re-confirmed directly
+- final beta confirmation had to rerun the frozen matrix one more time without widening scope
+- Docker-backed packaging proof still depended on a Docker-capable host for direct re-confirmation
 
 Recommended handoff after WS-RE1:
 
@@ -217,8 +219,17 @@ Recommended handoff after WS-RE1:
 Phase 7 is complete:
 
 - reran the frozen beta matrix from the working tree
-- reran the supported verification from a clean-ish detached worktree overlay
+- reran `./scripts/smoke_test_v1.sh` twice and `make smoke`
+- reran the fresh self-host smoke with `status,audit,share-control,multi-instance,mcp,mcp-sdk`
+- reran `go test ./internal/cloud/... -count=1`
+- reran `go test ./internal/relay ./internal/cloud ./cmd/mcp-sdk-smoke -count=1`
+- reran `make cloud-smoke`
+- reran the composed cloud smoke with `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:18085 CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1`
+- reran `make verify-beta` from the working tree
+- reran the supported verification from a detached temporary `git worktree` at the current `HEAD`
 - reran `make cloud-stack-smoke` successfully on a live Docker daemon host
+- reran `make verify-beta-docker` successfully on the final tree after the Phase 7 truth-normalization updates landed
+- observed the usual local `/usr/local/opt/grpc/lib` linker warnings without any blocking failures
 - confirmed the repo as `v0.2.0-beta`
 
 Program status after beta confirmation:

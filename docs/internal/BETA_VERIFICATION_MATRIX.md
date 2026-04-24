@@ -1,6 +1,6 @@
 # Beta Verification Matrix
 
-This matrix separates what was executed during Phase 0 from what still must be executed before beta confirmation.
+This matrix records the historical phase-by-phase evidence plus the final Phase 7 confirmation pass that locked beta on 2026-04-23.
 
 ## Executed In Phase 0
 
@@ -75,7 +75,7 @@ This matrix separates what was executed during Phase 0 from what still must be e
 | --- | --- | --- | --- | --- |
 | Supported build surface | `make build-supported` | Pass | Direct Phase 6 run | Builds the main local/relay binaries, cloud binaries, and the MCP SDK helper in one public target. |
 | Repo-level supported verification from working tree | `make verify-beta` | Pass | Direct Phase 6 run | Runs main-module tests, local smoke, self-host relay/runtime MCP+SDK smoke, cloud binary smoke, and Docker compose config validation with temporary bootstrap for the relay/runtime slice. |
-| Repo-level supported verification from a clean-ish copy | `make build-supported && make verify-beta` in a temp checkout copy | Pass | Direct Phase 6 run | Re-proved the supported non-Docker path from a tester-style copy of the current workspace instead of only the active checkout. |
+| Repo-level supported verification from a fresh location | detached temporary `git worktree` run of `make build-supported && make verify-beta` | Pass | Direct Phase 6 run | Re-proved the supported non-Docker path away from the active checkout while preserving the Git metadata required by worktree-sensitive checks. |
 | Docker compose config validation after deployment packaging changes | `make cloud-stack-config` | Pass | Direct Phase 6 run | Confirms the compose file still renders cleanly after version/build-arg wiring changes. |
 | Docker compose cloud stack smoke | `make cloud-stack-smoke` | Blocked | Environment-limited in Phase 6 | Docker CLI is available, but the local Docker daemon/socket is unavailable in this environment. This remains the only deployment proof deferred to final beta confirmation on a Docker-capable host. |
 
@@ -83,11 +83,19 @@ This matrix separates what was executed during Phase 0 from what still must be e
 
 | Scenario | Command / method | Result | Proof type | Notes |
 | --- | --- | --- | --- | --- |
-| Supported build surface rerun | `make build-supported` | Pass | Direct Phase 7 run | Rebuilt the primary supported binaries and the MCP SDK helper before final confirmation. |
+| Supported build surface rerun | `make build-supported` | Pass | Direct Phase 7 run | Rebuilt the primary supported binaries and the MCP SDK helper before final confirmation. Local `/usr/local/opt/grpc/lib` linker warnings still appeared, but they were non-blocking. |
+| Legacy six-input local smoke rerun, run 1 | `./scripts/smoke_test_v1.sh` | Pass | Direct Phase 7 run | Re-ran the six-input local parity smoke from the documented entrypoint during final confirmation. |
+| Legacy six-input local smoke rerun, run 2 | `./scripts/smoke_test_v1.sh` | Pass | Direct Phase 7 run | Repeated the same smoke from a fresh daemon lifecycle to preserve the two-run parity proof. |
+| Baseline local smoke rerun | `make smoke` | Pass | Direct Phase 7 run | Re-ran the standard local happy path during final confirmation. |
+| Fresh self-host relay/runtime smoke | `PLANNER_TOKEN=... RELAY_CONFIG=... RELAY_URL=... DAEMON_URL=... SMOKE_SCENARIOS=status,audit,share-control,multi-instance,mcp,mcp-sdk ./scripts/self_host_smoke.sh` | Pass | Direct Phase 7 run | Re-proved relay HTTP, share-control, multi-instance routing isolation, canonical relay MCP, and official Go SDK interop. |
+| Cloud control-plane + provider regression suite rerun | `go test ./internal/cloud/... -count=1` | Pass | Direct Phase 7 run | Re-proved cloud scope, runtime proxy, cloud MCP, provider connector, and worker-path coverage. |
+| Relay/cloud MCP regression suite + SDK helper rerun | `go test ./internal/relay ./internal/cloud ./cmd/mcp-sdk-smoke -count=1` | Pass | Direct Phase 7 run | Re-proved the canonical relay/cloud MCP surfaces and kept the official Go SDK helper green. |
+| Baseline cloud smoke rerun | `make cloud-smoke` | Pass | Direct Phase 7 run | Re-proved bootstrap, status, install, events, audit, and worker-once behavior. |
+| Composed cloud runtime HTTP + MCP + SDK smoke rerun | `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:18085 CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1 ./scripts/cloud_smoke.sh` | Pass | Direct Phase 7 run | Re-proved claimed runtime visibility, cloud HTTP run/create/get + submit-task, canonical cloud MCP, and official Go SDK interoperability on the confirmation daemon URL. |
 | Repo-level supported verification rerun | `make verify-beta` | Pass | Direct Phase 7 run | Re-ran main-module tests, local smoke, self-host relay/runtime MCP+SDK smoke, cloud binary smoke, and Docker compose config validation from the active checkout. |
-| Clean-ish repo verification rerun | detached temp worktree overlay of current repo contents with `make build-supported && make verify-beta` | Pass | Direct Phase 7 run | A plain rsync copy without `.git` was rejected as non-equivalent for this codebase because worktree tests require a real repository; the detached worktree overlay is the clean-ish proof used for the final decision. |
-| Docker compose cloud stack smoke rerun | `make cloud-stack-smoke` | Pass | Direct Phase 7 run | Re-proved the Docker-backed self-host cloud baseline on a host with a live Docker daemon after Docker Desktop was started in this environment. |
-| Post-promotion Docker-inclusive repo verifier | `make verify-beta-docker` | Pass | Direct Phase 7 run | Re-ran the supported public verifier after the beta status/version/docs promotion, confirming the promoted tree still passes the Docker-backed baseline. |
+| Fresh-location repo verification rerun | detached temporary `git worktree` run of `make build-supported && make verify-beta` | Pass | Direct Phase 7 run | Re-proved the supported non-Docker path from a fresh location while preserving the Git metadata required by worktree-sensitive checks. |
+| Docker compose cloud stack smoke rerun | `make cloud-stack-smoke` | Pass | Direct Phase 7 run | Re-proved the Docker-backed self-host cloud baseline on a host with a live Docker daemon. |
+| Final-tree Docker-inclusive repo verifier | `make verify-beta-docker` | Pass | Direct Phase 7 run | Re-ran the supported repo verifier plus the Docker-backed cloud stack baseline after the Phase 7 truth-normalization updates landed. |
 
 ## Repo-Test Proof Already Present
 
@@ -105,7 +113,7 @@ This matrix separates what was executed during Phase 0 from what still must be e
 
 ## Remaining Beta-Gate Work
 
-No additional proof remains required for the frozen beta tracks. Final confirmation reran the working-tree matrix, the clean-ish worktree matrix, and the Docker-backed cloud stack baseline.
+No additional proof remains required for the frozen beta tracks. Final confirmation reran the working-tree matrix, the fresh-location detached `git worktree` matrix, the Docker-backed cloud stack baseline, and the final-tree Docker-inclusive verifier.
 
 ## Out Of Beta Verification Scope
 

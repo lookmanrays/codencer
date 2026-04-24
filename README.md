@@ -380,7 +380,7 @@ Agent-driven coding is non-deterministic. Codencer provides the guardrails:
 Codencer’s v2 path is beta-track ready for disciplined local and self-host use, but it still has explicit limits:
 - **No Planner In Core**: Codencer never decomposes, prioritizes, or decides strategy. The planner still owns those decisions.
 - **Best-Effort Abort**: `PATCH /api/v1/runs/{id}` and relay abort flows are honest but not universal hard-kill guarantees. A run is only reported cancelled when the adapter actually stops.
-- **Opportunistic Remote Routing**: Relay step, gate, and artifact routing is learned from prior responses. Direct remote lookups can fail until the relay has already seen those IDs.
+- **Opportunistic Remote Routing**: Relay step, gate, and artifact routing still learns and persists route hints opportunistically, but direct remote lookups also probe authorized online shared instances before failing closed.
 - **Bounded Artifact Transport**: Connector transport rejects oversized artifact bodies instead of turning the relay into a bulk file tunnel. Large binary transfer is intentionally limited.
 - **Static Self-Host Auth**: Planner auth is static bearer-token based, suitable for narrow self-host beta use but not enterprise IAM.
 - **Single-Operator Bias**: The current flow is optimized for local/self-host operators, not multi-tenant hosted service use.
