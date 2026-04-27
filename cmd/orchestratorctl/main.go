@@ -86,6 +86,7 @@ func printUsage() {
 	fmt.Println("                 direct submissions persist original-input.* and normalized-task.json as attempt evidence")
 	fmt.Println("  step list      <runID> [--json]                                     List all task handles in a mission")
 	fmt.Println("  step state     <handle> [--json]                                    Check a specific UUID state")
+	fmt.Println("  step retry     <handle> [--wait] [--json]                           Re-dispatch an existing UUID")
 	fmt.Println("  step wait      <handle> [--interval d] [--timeout d] [--json]       Poll a specific UUID until completion")
 
 	fmt.Println("\n3. Evidence & Inspection (The Truth):")
@@ -421,7 +422,7 @@ func runWait(runID string, interval, timeout time.Duration, asJSON bool) int {
 
 func handleStepCommand(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: orchestratorctl step <start|list|state|result|artifacts|validations|wait> [args]")
+		fmt.Println("Usage: orchestratorctl step <start|list|state|retry|result|artifacts|validations|wait> [args]")
 		os.Exit(exitCodeUsage)
 	}
 
@@ -453,6 +454,12 @@ func handleStepCommand(args []string) {
 			os.Exit(exitCodeUsage)
 		}
 		stepState(subArgs[1], hasFlag(subArgs[2:], "--json"))
+	case "retry":
+		if len(subArgs) < 2 {
+			fmt.Println("Usage: orchestratorctl step retry <stepID> [--wait] [--json]")
+			os.Exit(exitCodeUsage)
+		}
+		stepRetry(subArgs[1], hasFlag(subArgs[2:], "--wait"), hasFlag(subArgs[2:], "--json"))
 	case "result":
 		if len(subArgs) < 2 {
 			fmt.Println("Usage: orchestratorctl step result <stepID> [--json]")
@@ -816,6 +823,37 @@ func stepValidations(stepID string, asJSON bool) {
 	}
 }
 
+func stepRetry(stepID string, shouldWait, asJSON bool) {
+	req, _ := http.NewRequest(http.MethodPost, orchestratordURL+"/api/v1/steps/"+stepID+"/retry", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		failHTTP(asJSON, resp.StatusCode, body)
+	}
+
+	if shouldWait {
+		fmt.Fprintf(os.Stderr, "==> Auto-waiting for retried Step %s...\n", stepID)
+		os.Exit(stepWait(stepID, 2*time.Second, 0, asJSON))
+	}
+
+	payload := map[string]any{
+		"step_id": stepID,
+		"action":  "retry",
+		"status":  "accepted",
+	}
+	if asJSON {
+		emitJSONDocument(payload)
+		return
+	}
+	fmt.Printf("Retry accepted for step %s\n", stepID)
+	fmt.Printf("[GUIDE] To monitor transition:\n  ./bin/orchestratorctl step wait %s\n", stepID)
+}
+
 func stepWait(stepID string, interval, timeout time.Duration, asJSON bool) int {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -840,27 +878,12 @@ func stepWait(stepID string, interval, timeout time.Duration, asJSON bool) int {
 			}
 			return exitCodeTimeout
 		default:
-			resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
-			if err != nil {
-				failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
-			}
+			step, _ := fetchStep(stepID, asJSON)
 
-			if resp.StatusCode >= 400 {
-				body, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				failHTTP(asJSON, resp.StatusCode, body)
-			}
-
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-
-			var result domain.ResultSpec
-			if err := json.Unmarshal(body, &result); err != nil {
-				failCLI(asJSON, exitCodeInfrastructure, "parsing response", err.Error())
-			}
-
-			// Check for terminal or intervention-required states
-			if result.State.IsTerminal() || result.State == domain.StepStateNeedsApproval || result.State == domain.StepStateNeedsManualAttention {
+			// Wait on the persisted step lifecycle, not an early attempt result snapshot.
+			// This keeps submit --wait from racing the local workspace unlock/finalization path.
+			if step.State.IsTerminal() || step.State == domain.StepStateNeedsApproval || step.State == domain.StepStateNeedsManualAttention {
+				result, body := fetchStepResult(stepID, asJSON)
 				fmt.Fprintf(os.Stderr, "\n[BRIDGE] Mission Handle %s reached terminal condition: %s\n", stepID, result.State)
 
 				switch result.State {
@@ -904,6 +927,44 @@ func stepWait(stepID string, interval, timeout time.Duration, asJSON bool) int {
 			<-ticker.C
 		}
 	}
+}
+
+func fetchStep(stepID string, asJSON bool) (domain.Step, []byte) {
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID)
+	if err != nil {
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		failHTTP(asJSON, resp.StatusCode, body)
+	}
+
+	var step domain.Step
+	if err := json.Unmarshal(body, &step); err != nil {
+		failCLI(asJSON, exitCodeInfrastructure, "parsing response", err.Error())
+	}
+	return step, body
+}
+
+func fetchStepResult(stepID string, asJSON bool) (domain.ResultSpec, []byte) {
+	resp, err := http.Get(orchestratordURL + "/api/v1/steps/" + stepID + "/result")
+	if err != nil {
+		failCLI(asJSON, exitCodeInfrastructure, "connecting to orchestratord", err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		failHTTP(asJSON, resp.StatusCode, body)
+	}
+
+	var result domain.ResultSpec
+	if err := json.Unmarshal(body, &result); err != nil {
+		failCLI(asJSON, exitCodeInfrastructure, "parsing response", err.Error())
+	}
+	return result, body
 }
 
 func runDoctor() {
@@ -1235,6 +1296,7 @@ func handleInstanceCommand(args []string) {
 	}
 
 	fmt.Printf("--- Codencer Instance Identity ---\n")
+	fmt.Printf("Instance ID:   %s\n", info.ID)
 	fmt.Printf("Version:       %s\n", info.Version)
 	fmt.Printf("Repo Root:     %s\n", info.RepoRoot)
 	fmt.Printf("Base URL:      %s\n", info.BaseURL)

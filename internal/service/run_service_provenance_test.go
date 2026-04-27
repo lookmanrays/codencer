@@ -179,7 +179,7 @@ func (a *successProvenanceAdapter) Start(ctx context.Context, step *domain.Step,
 }
 
 func (a *successProvenanceAdapter) Poll(ctx context.Context, attemptID string) (bool, error) {
-	return true, nil
+	return false, nil
 }
 
 func (a *successProvenanceAdapter) Cancel(ctx context.Context, attemptID string) error {

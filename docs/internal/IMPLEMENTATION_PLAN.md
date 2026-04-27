@@ -1,5 +1,9 @@
 # Codencer Implementation Plan
 
+> [!WARNING]
+> **HISTORICAL PLANNING DOCUMENT**: This plan reflects an earlier local-first repo shape and is not current release truth.
+> Use the frozen `BETA_*` docs in this directory for the current beta contract, verification matrix, and workstream state.
+
 ## Overview
 Codencer is a local orchestration bridge for coding agents. It separates architectural planning from implementation execution, acting as a deterministic control plane that manages runs, state, policy gates, and artifacts.
 

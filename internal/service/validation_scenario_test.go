@@ -73,7 +73,7 @@ func TestCodexValidationScenario(t *testing.T) {
 		PhaseID: "phase-01-" + runID,
 		Title:   "Internal Version Bump",
 		Adapter: "codex",
-		Goal:    "Update internal/app/version.go to v0.1.0-alpha",
+		Goal:    "Update internal/app/version.go to v0.2.0-alpha-validation",
 	}
 
 	// 4. Dispatch (Execution)
@@ -140,7 +140,7 @@ type ValidationTestAdapter struct {
 	artifactRoot string
 }
 
-func (v *ValidationTestAdapter) Name() string         { return "codex" }
+func (v *ValidationTestAdapter) Name() string           { return "codex" }
 func (v *ValidationTestAdapter) Capabilities() []string { return v.real.Capabilities() }
 
 func (v *ValidationTestAdapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
@@ -148,16 +148,16 @@ func (v *ValidationTestAdapter) Start(ctx context.Context, step *domain.Step, at
 	if err := os.WriteFile(filepath.Join(artifactRoot, "stdout.log"), []byte("Updating version string...\nDone."), 0644); err != nil {
 		return err
 	}
-	
+
 	res := domain.ResultSpec{
 		State:   domain.StepStateCompleted,
-		Summary: "Updated internal/app/version.go to v0.1.0-alpha",
+		Summary: "Updated internal/app/version.go to v0.2.0-alpha-validation",
 	}
 	data, _ := json.Marshal(res)
 	if err := os.WriteFile(filepath.Join(artifactRoot, "result.json"), data, 0644); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -175,6 +175,6 @@ func (v *ValidationTestAdapter) CollectArtifacts(ctx context.Context, attemptID,
 
 func (v *ValidationTestAdapter) NormalizeResult(ctx context.Context, attemptID string, artifacts []*domain.Artifact) (*domain.ResultSpec, error) {
 	// Call NormalizeCore directly from the codex package to ensure version is set correctly
-	isSim := false 
+	isSim := false
 	return codex.NormalizeCore(attemptID, artifacts, "codex", isSim)
 }

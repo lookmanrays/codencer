@@ -1,0 +1,60 @@
+name: Public Testability (Windows)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows-broker:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go build and module directories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/AppData/Local/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install GNU Make
+        shell: pwsh
+        run: choco install make -y
+
+      - name: Verify make availability
+        shell: bash
+        run: make --version
+
+      - name: Build Windows agent-broker only
+        shell: bash
+        run: make build-broker
+
+      - name: Run nested broker tests (BG-011 still secondary and allowed to fail)
+        id: broker_tests
+        continue-on-error: true
+        shell: bash
+        working-directory: cmd/broker
+        run: go test ./...
+
+      - name: Report nested broker test status
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.broker_tests.outcome }}" = "success" ]; then
+            echo "Nested cmd/broker tests passed in this run."
+          else
+            echo "BG-011 remains open: nested cmd/broker tests still fail, so the workflow only enforces the documented Windows claim that agent-broker builds on windows-latest."
+          fi

@@ -1,0 +1,9 @@
+{
+  "name": "codencer-cloud",
+  "type": "http",
+  "url": "https://cloud.example.com/api/cloud/v1/mcp",
+  "headers": {
+    "Authorization": "Bearer <cloud-token>"
+  },
+  "tool_prefix": "codencer."
+}

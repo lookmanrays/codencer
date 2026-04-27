@@ -17,7 +17,7 @@ type RoutingService struct {
 }
 
 // NOTE: Current routing implementation is a HEURISTIC STATIC FALLBACK CHAIN.
-// While benchmarks are persisted to the database, they are NOT yet used for dynamic 
+// While benchmarks are persisted to the database, they are NOT yet used for dynamic
 // selection or weight-based routing. Performance-based routing is a legacy roadmap item.
 
 func NewRoutingService(benchRepo *sqlite.BenchmarksRepo, adapters map[string]domain.Adapter) *RoutingService {
@@ -28,7 +28,7 @@ func NewRoutingService(benchRepo *sqlite.BenchmarksRepo, adapters map[string]dom
 }
 
 // BuildHeuristicChain calculates the priority ordered slice of adapter IDs given a target profile.
-// NOTE: This currently uses a STATIC hardcoded fallback chain and does NOT yet 
+// NOTE: This currently uses a STATIC hardcoded fallback chain and does NOT yet
 // dynamically evaluate benchmarks for routing decisions.
 func (rs *RoutingService) BuildHeuristicChain(ctx context.Context, requestedProfile string) ([]string, error) {
 	// If a specific adapter was requested, it must be the first in our chain
@@ -60,4 +60,13 @@ func (rs *RoutingService) BuildHeuristicChain(ctx context.Context, requestedProf
 func (rs *RoutingService) GetAdapter(profile string) (domain.Adapter, bool) {
 	adapter, ok := rs.adapters[profile]
 	return adapter, ok
+}
+
+// ListAdapters returns the registered adapters keyed by profile.
+func (rs *RoutingService) ListAdapters() map[string]domain.Adapter {
+	cloned := make(map[string]domain.Adapter, len(rs.adapters))
+	for id, adapter := range rs.adapters {
+		cloned[id] = adapter
+	}
+	return cloned
 }

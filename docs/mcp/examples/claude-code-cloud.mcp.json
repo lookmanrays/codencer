@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codencer-cloud": {
+      "type": "http",
+      "url": "${CODENCER_CLOUD_MCP_URL:-http://127.0.0.1:8190/api/cloud/v1/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${CODENCER_CLOUD_TOKEN}"
+      }
+    }
+  }
+}

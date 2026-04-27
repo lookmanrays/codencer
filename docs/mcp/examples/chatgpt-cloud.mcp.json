@@ -1,0 +1,6 @@
+{
+  "label": "codencer-cloud",
+  "endpoint": "https://<your-cloud-host>/api/cloud/v1/mcp",
+  "token": "<your-cloud-token>",
+  "usage": "value-reference-only"
+}

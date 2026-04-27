@@ -48,6 +48,9 @@ func TestSubmitWaitJSONEmitsSingleTerminalPayload(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-execution-run-123","title":"T","goal":"G","adapter":"codex","created_at":"2026-04-06T00:00:00Z","updated_at":"2026-04-06T00:00:00Z"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-123":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-execution-run-123","title":"T","goal":"G","adapter":"codex","state":"completed","created_at":"2026-04-06T00:00:00Z","updated_at":"2026-04-06T00:00:00Z"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-123/result":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-123","phase_id":"phase-execution-run-123","step_id":"step-123","state":"completed","summary":"done"}`))
@@ -303,6 +306,9 @@ func TestSubmitGoalWaitJSONEmitsSingleTerminalPayload(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-execution-run-123","title":"Direct task","goal":"Fix it","created_at":"2026-04-06T00:00:00Z","updated_at":"2026-04-06T00:00:00Z"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-123":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-execution-run-123","title":"Direct task","goal":"Fix it","state":"completed","created_at":"2026-04-06T00:00:00Z","updated_at":"2026-04-06T00:00:00Z"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-123/result":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-123","phase_id":"phase-execution-run-123","step_id":"step-123","state":"completed","summary":"done"}`))
@@ -362,12 +368,16 @@ func TestStepWaitJSONExitCodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/api/v1/steps/step-123/result" {
+				switch r.URL.Path {
+				case "/api/v1/steps/step-123":
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-1","state":"` + tt.state + `","updated_at":"2026-04-06T00:00:00Z"}`))
+				case "/api/v1/steps/step-123/result":
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"run_id":"run-123","phase_id":"phase-1","step_id":"step-123","state":"` + tt.state + `","summary":"state test"}`))
+				default:
 					http.NotFound(w, r)
-					return
 				}
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"run_id":"run-123","phase_id":"phase-1","step_id":"step-123","state":"` + tt.state + `","summary":"state test"}`))
 			}))
 			defer server.Close()
 
@@ -380,6 +390,85 @@ func TestStepWaitJSONExitCodes(t *testing.T) {
 				t.Fatalf("stdout was polluted: %s", result.stdout)
 			}
 		})
+	}
+}
+
+func TestStepWaitWaitsForPersistedStepStateBeforeReturningResult(t *testing.T) {
+	var stepCalls int
+	var resultCalls int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/steps/step-123":
+			stepCalls++
+			state := "running"
+			if stepCalls >= 3 {
+				state = "completed"
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-1","state":"` + state + `","updated_at":"2026-04-06T00:00:00Z"}`))
+		case "/api/v1/steps/step-123/result":
+			resultCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"run_id":"run-123","phase_id":"phase-1","step_id":"step-123","state":"completed","summary":"done"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	result := runBinary(t, server.URL, "step", "wait", "step-123", "--json", "--interval", "1ms")
+	if result.exitCode != exitCodeSuccess {
+		t.Fatalf("exit code = %d stderr=%s", result.exitCode, result.stderr)
+	}
+	if stepCalls < 3 {
+		t.Fatalf("expected step lifecycle polling before completion, got %d calls", stepCalls)
+	}
+	if resultCalls != 1 {
+		t.Fatalf("expected one terminal result fetch, got %d", resultCalls)
+	}
+	assertSingleJSONDocument(t, result.stdout)
+}
+
+func TestStepRetryJSONWaitsForRetriedStepToFinish(t *testing.T) {
+	var stepCalls int
+	var retryCalls int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/steps/step-123/retry":
+			retryCalls++
+			w.WriteHeader(http.StatusAccepted)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-123":
+			stepCalls++
+			state := "dispatching"
+			if stepCalls >= 3 {
+				state = "completed"
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"step-123","phase_id":"phase-1","state":"` + state + `","updated_at":"2026-04-06T00:00:00Z"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-123/result":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"run_id":"run-123","phase_id":"phase-1","step_id":"step-123","state":"completed","summary":"retried"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	result := runBinary(t, server.URL, "step", "retry", "step-123", "--wait", "--json")
+	if result.exitCode != exitCodeSuccess {
+		t.Fatalf("exit code = %d stderr=%s stdout=%s", result.exitCode, result.stderr, result.stdout)
+	}
+	if retryCalls != 1 {
+		t.Fatalf("expected one retry request, got %d", retryCalls)
+	}
+	if stepCalls < 3 {
+		t.Fatalf("expected retried step to be polled to completion, got %d state calls", stepCalls)
+	}
+	assertSingleJSONDocument(t, result.stdout)
+	if !strings.Contains(result.stdout, "\"summary\": \"retried\"") {
+		t.Fatalf("expected terminal retry payload, got %s", result.stdout)
 	}
 }
 
