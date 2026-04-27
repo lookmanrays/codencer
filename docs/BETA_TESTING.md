@@ -31,7 +31,7 @@ Additional requirement for the Docker self-host baseline:
 | Local-only daemon + CLI | [SETUP.md](SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter proof stays narrow. |
 | Self-host relay + runtime connector | [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) | `make build` | `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path; relay `/mcp` is the public MCP surface. |
 | Self-host cloud control plane | [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Binary-native proof covers bootstrap, tenancy, provider installs, and optional composed runtime/MCP/SDK proof. |
-| Planner / client integrations | [mcp/integrations.md](mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude-style paths remain compatibility-only, not direct product proof. |
+| Planner / client integrations | [mcp/integrations.md](mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled; post-beta flagship: `make flagship-planner-smoke` | ChatGPT-style and Claude Code-style operator paths are packaged around Codencer-side proof; universal product compatibility remains unclaimed. |
 | Provider connectors | [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider-focused tests | Slack is strongest today; Jira is polling-first; the rest stay narrow operator/package surfaces. |
 
 ## Repo-Level Verification Commands
@@ -42,6 +42,14 @@ For a supported non-Docker verification pass from a working checkout:
 make build-supported
 make verify-beta
 ```
+
+For the post-beta flagship external-planner loop:
+
+```bash
+make flagship-planner-smoke
+```
+
+That proof covers the operator loop from relay MCP/HTTP through connector, local daemon, local `codex` adapter profile, structured result/evidence retrieval, gate handling, multi-instance targeting, and reconnect recovery.
 
 What `make verify-beta` covers:
 
@@ -123,8 +131,15 @@ The Docker compose stack does not create a usable runtime instance by itself. Fo
   - cloud HTTP
   - cloud MCP
   - official Go SDK to relay/cloud MCP
+- The post-beta flagship operator proof is:
+
+```bash
+make flagship-planner-smoke
+```
+
 - Generic MCP clients beyond the checked-in proof helpers remain expected-only.
-- ChatGPT-style and Claude-style product integrations remain compatibility-only.
+- ChatGPT-style and Claude Code-style operator paths are now packaged around the repo-proven Codencer-side loop.
+- Universal ChatGPT product support, Claude Desktop/`claude.ai` remote connector auth/setup, and marketplace-style publication remain compatibility-only.
 
 ### Provider connectors
 

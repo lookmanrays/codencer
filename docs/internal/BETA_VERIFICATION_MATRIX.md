@@ -111,6 +111,16 @@ This matrix records the historical phase-by-phase evidence plus the final Phase 
 | Cloud official Go SDK interop | `internal/cloud/mcp_server_test.go`, `cmd/mcp-sdk-smoke` | Strong | Repo tests plus composed smoke now prove official Go SDK access to `/api/cloud/v1/mcp`. |
 | Provider connector mocks + routed provider proof | `internal/cloud/connectors/*_test.go`, `internal/cloud/worker_test.go`, `internal/cloud/router_test.go`, `internal/cloud/store_test.go` | Medium | Stronger than Phase 0 because routed install/webhook/action/history coverage now exists, but still mock/provider-fixture proof rather than live vendor-account proof. |
 
+## Post-Beta Flagship Planner Loop Proof
+
+| Scenario | Command / method | Result | Proof type | Notes |
+| --- | --- | --- | --- | --- |
+| Codex adapter `codex exec` fake-binary proof | `go test ./internal/adapters/codex -count=1` | Pass in post-beta implementation run | Direct repo test | Proves non-simulation CLI invocation, stdin prompt delivery, legacy opt-in args, and result synthesis when Codex writes only a final message. |
+| Connector wait returns at gate decision | `go test ./internal/connector -count=1` | Pass in post-beta implementation run | Direct repo test | `wait_step` now returns with `needs_decision=true` when the local step reaches `needs_approval`. |
+| Cloud HTTP runtime wait/retry/gate parity | `go test ./internal/cloud -run TestCloudRuntimeHTTPProxyStepWaitRetryAndGateActions -count=1` | Pass in post-beta implementation run | Direct repo test | Closes cloud HTTP parity gaps found during the flagship loop audit. MCP remained the primary planner surface. |
+| Official Go SDK multi-step phase-loop capability | `go test ./cmd/mcp-sdk-smoke -count=1` plus helper build/use | Pass in post-beta implementation run | Direct repo build/test + flagship smoke | `mcp-sdk-smoke` now supports `--step-count` for same-run sequential planner loops through MCP. |
+| Flagship relay loop smoke | `make flagship-planner-smoke` | Pass in post-beta implementation run | Scripted smoke | Proves single-step, phase-loop, strict gate, multi-instance, reconnect, MCP, SDK, and evidence retrieval through the relay path. Default proof uses simulation while targeting `codex`; live Codex remains an operator-environment proof path. |
+
 ## Remaining Beta-Gate Work
 
 No additional proof remains required for the frozen beta tracks. Final confirmation reran the working-tree matrix, the fresh-location detached `git worktree` matrix, the Docker-backed cloud stack baseline, and the final-tree Docker-inclusive verifier.

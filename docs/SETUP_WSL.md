@@ -19,7 +19,7 @@ Current repo truth for this guide:
 - Keep the **daemon and connector on the same side as the repo**: inside WSL.
 - The **relay** is the remote planner surface.
 - The daemon-local `/mcp/call` endpoint is **compatibility-only** and is **not** the public remote MCP contract.
-- ChatGPT-style and Claude-style desktop wiring remains **compatibility-only** in this beta. Codencer proves the relay `/mcp` surface, not each product UI flow.
+- ChatGPT-style and Claude Code-style operator wiring is packaged around the relay `/mcp` surface; each vendor product UI/auth flow remains outside repo proof unless explicitly exercised.
 
 Recommended topology:
 
@@ -327,7 +327,7 @@ Current WSL-facing adapter posture:
 
 | Adapter | WSL posture | Beta label | Notes |
 | --- | --- | --- | --- |
-| `codex` | runs inside WSL if the binary is available there | `supported-beta target` | Primary intended local beta adapter, but checked-in proof is still simulation-heavy rather than live-binary proven. |
+| `codex` | runs inside WSL if the binary is available there | `supported-beta target` | Primary intended local beta adapter; checked-in proof covers simulation plus fake-binary `codex exec`, while live authenticated proof remains operator-environment proof. |
 | `claude` / Claude Code | runs inside WSL if the `claude` binary is available there | `supported-beta target` | Wrapper proof is real, but live authenticated proof remains narrow. This is separate from Claude Desktop remote MCP wiring. |
 | `qwen` | runs inside WSL if the binary is available there | `secondary` | Conformance and simulation coverage only; not part of the primary beta promise. |
 | `antigravity` | do not treat as a WSL-native adapter path | `secondary` | Keep Antigravity on Windows. WSL reaches it through `agent-broker`; see [SETUP_WINDOWS.md](SETUP_WINDOWS.md) and [WSL_WINDOWS_ANTIGRAVITY.md](WSL_WINDOWS_ANTIGRAVITY.md). |
@@ -344,7 +344,7 @@ Codencer-side truth stays narrow:
 
 - point Windows-side planner clients at the **relay** on `/mcp`
 - do **not** point them at the WSL daemon
-- product-specific ChatGPT-style and Claude-style setup remains **compatibility-only**; use [mcp/integrations.md](mcp/integrations.md) as the Codencer contract
+- ChatGPT-style and Claude Code-style operator setup is documented in [mcp/integrations.md](mcp/integrations.md); product-specific UI/auth behavior remains outside repo proof
 
 ### 7.1 First Try `localhost`
 

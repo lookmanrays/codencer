@@ -92,7 +92,7 @@ The `/api/v1/compatibility` endpoint is a runtime diagnostic only. It is useful 
 | Surface | Current repo proof | Local beta truth |
 | --- | --- | --- |
 | Local daemon + CLI + simulation lifecycle | direct smoke + repo tests | canonical |
-| `codex` adapter | simulation smoke + conformance only | primary intended local beta adapter, but still simulation-heavy in checked-in proof |
+| `codex` adapter | simulation smoke + conformance + fake-binary `codex exec` proof | primary intended local beta adapter; live authenticated Codex service calls remain operator-environment proof |
 | `claude` adapter | wrapper, prompt, normalize, and fake-binary tests | supported-beta target with narrow wrapper claims only |
 | `qwen` adapter | conformance/simulation only | secondary |
 | `antigravity` / `antigravity-broker` | mocked integration and environment-specific proof | secondary |
@@ -143,7 +143,8 @@ Or use the helper:
 ### 4.5 Environment Variables
 
 Codencer uses these variables to locate executor binaries and target the daemon:
-- `CODEX_BINARY`: Path to the `codex-agent` binary.
+- `CODEX_BINARY`: Path to the `codex` CLI. Defaults to `codex`.
+- `CODEX_ADAPTER_MODE`: Optional. Use `legacy-agent` only for the older `codex-agent` wrapper.
 - `CLAUDE_BINARY`: Path to the `claude` binary. Defaults to `claude`.
 - `OPENCLAW_ACPX_BINARY`: Path to the `acpx` CLI (for OpenClaw support).
 - `ORCHESTRATORD_URL`: URL of the daemon (default: `http://localhost:8085`).
@@ -230,7 +231,7 @@ Use [BETA_TESTING.md](BETA_TESTING.md) as the repo-level tester guide. Pick the 
 | Local-only daemon + CLI | [SETUP.md](SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter proof stays narrow. |
 | Self-host relay + runtime connector | [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) | `make build` | `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path; relay `/mcp` is the public MCP surface. |
 | Self-host cloud control plane | [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Binary-native proof covers bootstrap, tenancy, provider installs, and optional composed runtime/MCP/SDK proof. |
-| Planner / client integrations | [mcp/integrations.md](mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude-style paths remain compatibility-only, not direct product proof. |
+| Planner / client integrations | [mcp/integrations.md](mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | `make flagship-planner-smoke` or self-host/cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude Code-style operator lanes are packaged around canonical remote MCP; universal product UI/auth support remains unclaimed. |
 | Provider connectors | [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider-focused tests | Slack is strongest today; Jira is polling-first; the rest stay narrow operator/package surfaces. |
 
 For the repo-level supported verification pass:

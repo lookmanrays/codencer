@@ -161,7 +161,7 @@ Keep the support claims aligned with [internal/BETA_SUPPORT_CLASSIFICATION.md](i
 
 | Surface | macOS path | Current repo truth | What to verify locally on Mac |
 | --- | --- | --- | --- |
-| `codex` adapter | local daemon path on the Mac | `supported-beta target`, but checked-in proof is still simulation-heavy | Canonical Mac proof is still the local smoke path. For a live Codex binary test, set `CODEX_BINARY` if needed, run real mode, and confirm availability through `/api/v1/compatibility`. |
+| `codex` adapter | local daemon path on the Mac | `supported-beta target`; checked-in proof covers simulation plus fake-binary `codex exec` | Canonical Mac proof is still the local smoke path. For a live Codex binary test, set `CODEX_BINARY` if needed, run real mode, and confirm availability through `/api/v1/compatibility`. |
 | `claude` adapter | local daemon path on the Mac | `supported-beta target`, wrapper path proven, no live authenticated repo proof | Install the `claude` CLI, ensure `CLAUDE_BINARY` or `$PATH` resolves it, then verify with `/api/v1/compatibility` and a real-mode local run. Claude is invoked as `claude -p --output-format json` with `stdin` prompt input and attempt workspace `cwd`. |
 | `antigravity` / `agent-broker` | not applicable on native macOS | `secondary`, Windows/WSL-oriented topology only | Do not treat this as a native Mac path. The documented broker topology is for Windows-side Antigravity with Linux/WSL-side execution boundaries, not a primary macOS local adapter path. |
 | `openclaw-acpx` | local daemon path on the Mac if `acpx` is installed | `experimental` / deferred | Only use this if you are intentionally testing the experimental ACP bridge. Set `OPENCLAW_ACPX_BINARY` if needed and keep claims at experimental status. |
@@ -276,7 +276,7 @@ Keep the planner/client claim narrow:
 
 - use the relay MCP surface at `/mcp`
 - do not point ChatGPT, Claude Desktop, or another planner runtime at the local daemon
-- treat ChatGPT-style and Claude-style product paths as `compatibility-only`, not direct repo proof
+- treat ChatGPT-style and Claude Code-style operator lanes as packaged around the remote MCP surface; keep vendor product UI/auth claims narrow
 
 Codencer-side target on the same Mac:
 
@@ -289,7 +289,7 @@ For ChatGPT-style clients on macOS:
 
 - use the local relay URL, not daemon `/mcp/call`
 - use the relay planner bearer token
-- keep the claim at remote MCP `compatibility-only`
+- keep the claim at the operator-packaged remote MCP lane, not universal ChatGPT product support
 - follow [mcp/integrations/chatgpt.md](mcp/integrations/chatgpt.md) for the operator walkthrough
 
 For Claude Desktop or `claude.ai` on macOS:

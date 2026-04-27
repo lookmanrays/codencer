@@ -315,6 +315,9 @@ func requiredRuntimeScope(parts []string, method string) string {
 		}
 		return "runs:write"
 	case "steps":
+		if len(parts) >= 4 && parts[3] == "retry" && method == http.MethodPost {
+			return "steps:write"
+		}
 		if len(parts) >= 4 && parts[3] == "artifacts" {
 			return "artifacts:read"
 		}
@@ -402,13 +405,18 @@ func (s *Server) proxyRuntimeInstanceOperation(w http.ResponseWriter, r *http.Re
 		if rest[2] == "artifacts" {
 			scope = "artifacts:read"
 		}
+	case len(rest) == 3 && rest[0] == "steps" && rest[2] == "wait" && r.Method == http.MethodPost:
+		relayPath = fmt.Sprintf("/api/v2/steps/%s/wait", rest[1])
+		scope = "steps:read"
+	case len(rest) == 3 && rest[0] == "steps" && rest[2] == "retry" && r.Method == http.MethodPost:
+		relayPath = fmt.Sprintf("/api/v2/steps/%s/retry", rest[1])
+		scope = "steps:write"
 	case len(rest) == 3 && rest[0] == "artifacts" && rest[2] == "content" && r.Method == http.MethodGet:
 		relayPath = fmt.Sprintf("/api/v2/artifacts/%s/content", rest[1])
 		scope = "artifacts:read"
 	case len(rest) == 3 && rest[0] == "gates" && r.Method == http.MethodPost && (rest[2] == "approve" || rest[2] == "reject"):
-		relayPath = fmt.Sprintf("/api/v2/gates/%s", rest[1])
+		relayPath = fmt.Sprintf("/api/v2/gates/%s/%s", rest[1], rest[2])
 		scope = "gates:write"
-		bodyOverride = mustJSON(map[string]string{"action": rest[2]})
 	default:
 		http.NotFound(w, r)
 		return

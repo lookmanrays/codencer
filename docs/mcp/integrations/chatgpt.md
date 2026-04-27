@@ -6,12 +6,13 @@ Use this page together with [Beta Testing](../../BETA_TESTING.md) and [Planner /
 
 ## Status
 
-Codencer status for the ChatGPT path is `compatibility-only`.
+Codencer status for the ChatGPT-style operator path is `operator-packaged`.
 
 What that means in practice:
 
 - Codencer proves the relay/cloud MCP protocol surfaces directly.
-- Codencer does not claim repo-executed proof of the ChatGPT product UI or deployment flow.
+- Codencer now ships a flagship loop smoke for the Codencer side of the path.
+- Codencer does not claim universal proof of the ChatGPT product UI, plan eligibility, approval UX, or deployment flow.
 - ChatGPT must target the remote relay `/mcp` surface or the remote cloud `/api/cloud/v1/mcp` surface.
 - Do not point ChatGPT at the daemon-local `/mcp/call` endpoint.
 
@@ -196,6 +197,26 @@ Record the returned `id` as `step_id`.
 
 If you want a live execution attempt instead of a compatibility smoke, remove `is_simulation` and add the appropriate `adapter_profile`. That is a separate operator decision and is not required for this walkthrough.
 
+For the flagship local Codex loop, use:
+
+```json
+{
+  "instance_id": "<instance-id>",
+  "run_id": "chatgpt-smoke-001",
+  "task": {
+    "version": "v1",
+    "goal": "Make one narrow repository-safe change or inspect the repo and report the result. Do not choose a follow-up task.",
+    "adapter_profile": "codex",
+    "validations": [
+      {
+        "name": "focused-check",
+        "command": "go test ./... -count=1"
+      }
+    ]
+  }
+}
+```
+
 ## Step 7 Wait for completion and inspect the result
 
 Use the real Codencer polling/result tools:
@@ -261,6 +282,12 @@ If you need deeper evidence after that, keep using the Codencer MCP tools alread
 
 ## Verification smoke
 
+Run the Codencer-side flagship proof before doing any ChatGPT product setup:
+
+```bash
+make flagship-planner-smoke
+```
+
 Use this as the repeatable operator smoke for the ChatGPT surface:
 
 1. In ChatGPT, select only the Codencer app for the conversation.
@@ -273,13 +300,13 @@ Use this as the repeatable operator smoke for the ChatGPT surface:
 8. Call `codencer.get_step_result`.
 9. Confirm the final result includes a terminal state and a non-empty `summary`.
 
-This smoke proves the ChatGPT remote MCP wiring narrowly. It does not upgrade the Codencer status on this surface beyond `compatibility-only`.
+This smoke proves the ChatGPT remote MCP wiring narrowly for the operator. It does not claim universal ChatGPT product compatibility.
 
 For the repo-level beta proof boundaries, keep using [Beta Testing](../../BETA_TESTING.md) and [Planner / Client Integration Notes](../integrations.md).
 
 ## Known Limitations on this surface
 
-- This is a compatibility-only Codencer path, not direct ChatGPT product proof.
+- This is an operator-packaged Codencer path for the canonical remote MCP surface, not a universal ChatGPT product-support claim.
 - ChatGPT is documented here only as a remote MCP client. Do not infer local daemon support.
 - OpenAI’s plan-availability wording differs between the two current docs as of 2026-04-24. Verify current eligibility before rollout.
 - OpenAI owns the ChatGPT UI, tool approval UX, draft/publish flow, and any product-side restrictions.

@@ -166,12 +166,17 @@ func (c *CodencerClient) waitStep(ctx context.Context, request relayproto.Comman
 	defer ticker.Stop()
 
 	buildPayload := func(step *domain.Step, result *domain.ResultSpec, timedOut bool) relayproto.CommandResponse {
+		needsDecision := step.State == domain.StepStateNeedsApproval
 		payload := map[string]any{
-			"step_id":   stepID,
-			"state":     step.State,
-			"terminal":  step.State.IsTerminal(),
-			"timed_out": timedOut,
-			"step":      step,
+			"step_id":        stepID,
+			"state":          step.State,
+			"terminal":       step.State.IsTerminal(),
+			"needs_decision": needsDecision,
+			"timed_out":      timedOut,
+			"step":           step,
+		}
+		if needsDecision {
+			payload["decision_kind"] = "gate"
 		}
 		if result != nil {
 			payload["result"] = result
@@ -190,7 +195,7 @@ func (c *CodencerClient) waitStep(ctx context.Context, request relayproto.Comman
 			c.recordStatusError(response.Error)
 			return response
 		}
-		if step.State.IsTerminal() {
+		if step.State.IsTerminal() || step.State == domain.StepStateNeedsApproval {
 			var result *domain.ResultSpec
 			if waitReq.IncludeResult {
 				result, _ = c.fetchResult(ctx, stepID)

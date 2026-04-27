@@ -63,6 +63,8 @@ func startCloudMCPHarness(t *testing.T) *cloudMCPHarness {
 			_, _ = w.Write([]byte(`{"id":"step-1","phase_id":"phase-1","state":"completed"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/steps/step-1/wait":
 			_, _ = w.Write([]byte(`{"step_id":"step-1","state":"completed","terminal":true,"timed_out":false}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/steps/step-1/retry":
+			w.WriteHeader(http.StatusAccepted)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/result":
 			_, _ = w.Write([]byte(`{"version":"v1","run_id":"run-1","step_id":"step-1","state":"completed","summary":"done"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/validations":
@@ -77,6 +79,8 @@ func startCloudMCPHarness(t *testing.T) *cloudMCPHarness {
 			_, _ = w.Write([]byte("artifact-content"))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/gates":
 			_ = json.NewEncoder(w).Encode([]domain.Gate{{ID: "gate-1", RunID: "run-1", StepID: "step-1", Description: "pending", State: domain.GateStatePending}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/gates/gate-1":
+			_ = json.NewEncoder(w).Encode(domain.Gate{ID: "gate-1", RunID: "run-1", StepID: "step-1", Description: "pending", State: domain.GateStatePending})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/gates/gate-1":
 			w.WriteHeader(http.StatusOK)
 		default:

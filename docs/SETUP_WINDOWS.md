@@ -295,10 +295,10 @@ That adapter choice is required for the broker-backed execution path. A repo-sco
 
 ## 6. Wire ChatGPT / Claude Desktop On Windows To The Relay
 
-These product-specific paths remain **compatibility-only** in the current beta contract. Keep the claim narrow:
+ChatGPT-style and Claude Code-style operator lanes are packaged around the relay/cloud MCP surfaces. Keep the product claim narrow:
 
 - Codencer proves the relay/cloud MCP surfaces
-- Codencer does **not** claim direct repo-executed ChatGPT or Claude Desktop product setup
+- Codencer does **not** claim direct repo-executed ChatGPT, Claude Desktop, or `claude.ai` product setup
 - remote clients should target the **relay** `/mcp` endpoint, never the local daemon
 
 ### 6.1 Canonical Codencer-side values
@@ -394,7 +394,7 @@ Keep these limits explicit:
 - the mixed WSL/Windows layout is **operator guidance**, not an automated smoke-proof matrix
 - `agent-broker` is a **secondary / experimental** bridge in the repo support classification
 - `agent-broker` task sessions are **in-memory only**; restarting the broker can orphan active tasks
-- product-specific ChatGPT-style and Claude-style MCP wiring is **compatibility-only**
+- ChatGPT-style and Claude Code-style MCP wiring is packaged for operator use; vendor product UI/auth remains outside repo proof
 - Windows Firewall / Defender may prompt the first time `agent-broker.exe`, `codencer-relayd.exe`, or localhost port forwarding is used; approve only the local/private binding you intend to use
 
 Also remember:

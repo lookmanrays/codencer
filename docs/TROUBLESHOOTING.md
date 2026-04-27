@@ -23,9 +23,10 @@ Always start here to verify your environment:
 
 ### 2.2 "Agent Binary Not Found" (`failed_adapter`)
 **Symptoms**: Submitting a task fails immediately; `doctor` shows `MISSING` for an adapter.
-- **Cause**: The bridge cannot find the `codex-agent` or `claude` binary in your `$PATH`.
+- **Cause**: The bridge cannot find the `codex` or `claude` binary in your `$PATH`.
 - **Fix**:
-  - Export the specific path: `export CODEX_BINARY=/path/to/codex-agent`.
+  - Export the specific path: `export CODEX_BINARY=/path/to/codex`.
+  - For the older wrapper only, set `CODEX_ADAPTER_MODE=legacy-agent` and point `CODEX_BINARY` at `codex-agent`.
   - Or export `CLAUDE_BINARY=/path/to/claude` if the Claude CLI is installed outside your default `$PATH`.
   - Or ensure the binary is in your global `$PATH`.
 

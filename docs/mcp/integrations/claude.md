@@ -2,7 +2,9 @@
 
 ## Status
 
-Codencer treats this surface as `compatibility-only` in `v0.2.0-beta`.
+Codencer now treats the Claude Code-style HTTP MCP operator lane as `operator-packaged`.
+
+Claude Desktop and `claude.ai` remote custom connectors remain `compatibility-only` because product-side auth/setup behavior is outside repo proof.
 
 The only planner-side Codencer surfaces for Anthropic products are:
 
@@ -53,6 +55,52 @@ The compatibility-call routes remain secondary aliases. The canonical session pa
 When the server is reachable and authorized, the tool set exposed to Anthropic clients is the repo-defined `codencer.*` namespace, such as `codencer.list_instances`, `codencer.start_run`, and `codencer.submit_task`.
 
 ## Step 2 Keep the product boundary straight
+
+This section separates two Claude-style lanes.
+
+### Claude Code-Style Operator Lane
+
+Use this lane when your Claude-style planner can consume an HTTP MCP server configuration with bearer headers.
+
+Checked-in examples:
+
+- [claude-code-relay.mcp.json](../examples/claude-code-relay.mcp.json)
+- [claude-code-cloud.mcp.json](../examples/claude-code-cloud.mcp.json)
+
+Relay environment:
+
+```bash
+export CODENCER_RELAY_MCP_URL=https://<your-relay-host>/mcp
+export CODENCER_PLANNER_TOKEN=<planner-token>
+```
+
+Cloud environment:
+
+```bash
+export CODENCER_CLOUD_MCP_URL=https://<your-cloud-host>/api/cloud/v1/mcp
+export CODENCER_CLOUD_TOKEN=<cloud-token>
+```
+
+The planner loop is the same Codencer tool sequence used by ChatGPT-style clients:
+
+1. `codencer.list_instances`
+2. `codencer.get_instance`
+3. `codencer.start_run`
+4. `codencer.submit_task` with `adapter_profile: "codex"`
+5. `codencer.wait_step`
+6. `codencer.get_step_result`
+7. `codencer.get_step_validations`
+8. `codencer.get_step_logs`
+9. `codencer.list_step_artifacts`
+10. `codencer.list_run_gates`
+
+Run the Codencer-side proof first:
+
+```bash
+make flagship-planner-smoke
+```
+
+### Claude Desktop / claude.ai Remote Connector Lane
 
 This walkthrough is for Claude Desktop and `claude.ai` remote custom connectors.
 
@@ -153,6 +201,7 @@ Expected shape:
 
 Run Codencer-side proof before doing any Anthropic product check:
 
+- Flagship relay path: `make flagship-planner-smoke`
 - Relay path: [Public Beta Test Tracks](../../BETA_TESTING.md) and [Planner / Client Integration Notes](../integrations.md) point to `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp`
 - Cloud path: use the composed cloud proof in [Codencer Self-Host Cloud Control Plane Guide](../../CLOUD_SELF_HOST.md)
 
@@ -169,7 +218,7 @@ Keep the claim narrow:
 
 ## Known Limitations on this surface
 
-- This path is `compatibility-only`, not direct product proof.
+- Claude Code-style HTTP MCP operator use is `operator-packaged`; Claude Desktop and `claude.ai` remote connector setup remains `compatibility-only`, not direct product proof.
 - The local `claude` adapter is an executor-side adapter and does not convert this planner-side path into a repo-proven Anthropic integration.
 - Claude Code is separate. Its local/project MCP setup is documented elsewhere and should not be conflated with Claude Desktop or `claude.ai` remote custom connectors.
 - `claude_desktop_config.json` is a separate local-MCP mechanism and is not the configuration source for Anthropic remote custom connectors.

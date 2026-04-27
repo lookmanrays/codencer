@@ -43,6 +43,7 @@ Use `submit --wait --json` for a synchronous hand-off. This simplifies your cont
 
 Runtime note:
 - In real mode, Codencer expects the installed agent CLIs to be reachable through their configured binaries.
+- For Codex, the bridge runs `codex exec`, sends the submitted prompt on `stdin`, and executes from the isolated attempt workspace.
 - For Claude specifically, the bridge runs `claude -p --output-format json`, sends the submitted prompt on `stdin`, and executes from the isolated attempt workspace.
 - Claude evidence is file-backed: review `prompt.txt`, `stdout.log`, `stderr.log`, and the synthesized `result.json` through normal artifact inspection.
 

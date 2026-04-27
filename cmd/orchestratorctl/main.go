@@ -1046,7 +1046,7 @@ func runDoctor() {
 		bin  string
 		env  string
 	}{
-		{"Codex", "codex-agent", "CODEX_BINARY"},
+		{"Codex", "codex", "CODEX_BINARY"},
 		{"Claude", "claude", "CLAUDE_BINARY"},
 		{"Qwen", "qwen-local", "QWEN_BINARY"},
 		{"OpenClaw", "acpx", "OPENCLAW_ACPX_BINARY"},

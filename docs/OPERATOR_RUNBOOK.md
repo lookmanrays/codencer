@@ -24,7 +24,7 @@ cd ~/projects/my-awesome-app
 # Start in Simulation Mode (Default for initial testing)
 make start-sim
 
-# OR Start in Real Mode (Requires agent binaries like codex-agent)
+# OR Start in Real Mode (Requires agent binaries like codex)
 make start
 ```
 

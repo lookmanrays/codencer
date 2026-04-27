@@ -295,16 +295,21 @@ Optional proof paths:
 ```bash
 PLANNER_TOKEN=<planner-token> SMOKE_SCENARIOS=status,audit,share-control,mcp,mcp-sdk make self-host-smoke
 PLANNER_TOKEN=<planner-token> make self-host-smoke-all
+make flagship-planner-smoke
 ```
 
 - `share-control` now proves `unshare` removes relay visibility and blocks routing, then `share --instance-id` restores visibility before the main relay flow runs again.
 - `mcp` proves manual relay MCP initialize, SSE stream bootstrap, compatibility POST alias use, tool calls, and session delete.
-- `mcp-sdk` proves official Go SDK interoperability against relay `/mcp`.
+- `mcp-sdk` proves official Go SDK interoperability against relay `/mcp`; set `MCP_SDK_STEP_COUNT=2` to prove a same-run MCP phase loop.
 - `multi-instance` proves one connector can advertise two local daemons and that explicit instance targeting reaches only the selected daemon.
+- `phase-loop` submits a second step into the same run after reading the first result.
+- `reconnect` stops and restarts the connector with the same config, then proves routing recovers by id.
+- `gate-strict` expects a real gate and fails if none is produced. Use it with a daemon started with `FORCE_GATE_FOR_TESTING=1`, or run `make flagship-planner-smoke`.
+- For slower real-executor proof, tune `WAIT_TIMEOUT_MS`, `MCP_SDK_WAIT_TIMEOUT_MS`, or `FLAGSHIP_PROXY_TIMEOUT_SECONDS`; `FLAGSHIP_LIVE_CODEX=1 make flagship-planner-smoke` defaults those budgets higher than the simulation smoke.
 
 Still outside smoke proof:
 - cold bootstrap of the daemon and relay themselves
-- real non-simulation adapter execution
+- live non-simulation adapter execution unless explicitly enabled with the live Codex flagship option
 - WSL/Windows/Antigravity topology behavior
 - hard guarantees for gate, retry, or abort semantics beyond the statuses captured by the script
 

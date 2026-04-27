@@ -157,6 +157,10 @@ self-host-smoke-mcp: build build-mcp-sdk-smoke
 	@echo "==> Running self-host relay/connector smoke test with MCP coverage..."
 	@SMOKE_SCENARIOS=status,audit,mcp,mcp-sdk ./scripts/self_host_smoke.sh
 
+flagship-planner-smoke: build build-mcp-sdk-smoke
+	@echo "==> Running flagship external-planner-to-local-Codex loop smoke..."
+	@./scripts/flagship_planner_loop_smoke.sh
+
 cloud-smoke: build-cloud
 	@echo "==> Running cloud control-plane smoke test..."
 	@./scripts/cloud_smoke.sh

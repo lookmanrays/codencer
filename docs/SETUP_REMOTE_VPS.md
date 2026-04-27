@@ -13,7 +13,7 @@ Keep the support claim narrow:
 
 - this is the existing self-host relay/runtime path adapted to a VPS-hosted execution machine
 - relay HTTP, relay MCP, connector enrollment, and shared-instance routing are the proven Codencer surfaces
-- ChatGPT-style and Claude Desktop-style planner wiring remain `compatibility-only` as described in [BETA_TESTING.md](BETA_TESTING.md), [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md), and [mcp/integrations.md](mcp/integrations.md)
+- ChatGPT-style and Claude Code-style operator wiring is packaged around the relay/cloud MCP surfaces; Claude Desktop and vendor UI/auth behavior remain outside repo proof as described in [BETA_TESTING.md](BETA_TESTING.md), [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md), and [mcp/integrations.md](mcp/integrations.md)
 
 > [!IMPORTANT]
 > Use a real `git clone` on the VPS. Do not use a ZIP download. Codencer depends on git worktrees for isolated attempts.
@@ -399,7 +399,7 @@ The Codencer-side contract is:
 
 Keep the product claim narrow:
 
-- ChatGPT-style and Claude Desktop-style paths are `compatibility-only`
+- ChatGPT-style and Claude Code-style operator paths are packaged for the canonical remote MCP surface; Claude Desktop product setup remains `compatibility-only`
 - follow [mcp/integrations.md](mcp/integrations.md) for the planner/client contract and the checked-in example files
 - do not point those planner products at the VPS daemon directly
 
@@ -534,7 +534,7 @@ The same repo-wide beta limits still apply here:
 - abort is best-effort; Codencer only reports success when the active step actually reaches `cancelled`
 - artifact transport is bounded and is not a bulk file tunnel
 - connector artifact content transport is capped at `8 MiB`; larger payloads fail as too large for connector transport
-- ChatGPT-style and Claude Desktop-style planner wiring remains `compatibility-only`, not direct repo-proven product setup
+- ChatGPT-style and Claude Code-style planner wiring is packaged for operator use; Claude Desktop and vendor product setup remain outside direct repo proof
 
 Use [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) for the consolidated boundary list.
 

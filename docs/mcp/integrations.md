@@ -22,6 +22,8 @@ They are executor-side adapters, not remote planner surfaces.
 
 ## Compatibility Matrix
 
+`operator-packaged` means the Codencer-side loop, examples, and smoke proof are now concrete for operator use. It is not a universal claim about every vendor UI, plan tier, approval prompt, or publication workflow.
+
 | Path | Canonical surface | Status | Direct repo proof | Notes |
 | --- | --- | --- | --- | --- |
 | Relay HTTP | relay `/api/v2/...` | `proven` | relay integration tests + self-host smoke | Narrow instance-scoped planner API. |
@@ -31,13 +33,22 @@ They are executor-side adapters, not remote planner surfaces.
 | Official Go SDK | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `proven` | MCP server tests + `cmd/mcp-sdk-smoke` + smoke | Proven for MCP only, not for the REST HTTP APIs. |
 | Generic HTTP clients | relay/cloud HTTP surfaces | `proven` | direct `net/http` tests + `curl` smoke | Plain bearer-token JSON callers are the intended HTTP baseline. |
 | Generic MCP clients | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `expected-only` | protocol behavior is repo-proven, but specific client products are not | Do not turn this into a universal desktop/client compatibility claim. |
-| ChatGPT-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | Remote MCP only. Use the relay/cloud surface, not the local daemon, and see [integrations/chatgpt.md](integrations/chatgpt.md) for the operator walkthrough. |
-| Claude-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | Planner-side remote connector flow only. Separate from the local `claude` executor-side adapter and from local `claude_desktop_config.json`. See [integrations/claude.md](integrations/claude.md). |
+| ChatGPT-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged` | Codencer-side flagship smoke + docs | Stronger for the operator's own loop, but not a universal ChatGPT product-support claim. Use the relay/cloud surface, not the local daemon, and see [integrations/chatgpt.md](integrations/chatgpt.md). |
+| Claude Code-style remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged` | Codencer-side flagship smoke + checked-in HTTP MCP config | Stronger for Claude Code-style operator use with bearer headers. Separate from the local `claude` executor-side adapter. See [integrations/claude.md](integrations/claude.md). |
+| Claude Desktop / `claude.ai` remote connector path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `compatibility-only` | docs only | Product-side auth/setup remains outside repo proof. Separate from the local `claude` executor-side adapter and from local `claude_desktop_config.json`. |
 | Gemini CLI remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `expected-only` | docs only | Use Gemini CLI `httpUrl` plus bearer-token headers against the remote MCP surface, not the local daemon. This repo does not directly exercise Gemini CLI product setup. See [integrations/gemini-cli.md](integrations/gemini-cli.md). |
 | Daemon-local MCP | daemon `/mcp/call` | `compatibility-only` | local package tests only | Local compatibility/admin bridge, not the public planner contract. |
 | Local daemon as a public remote MCP target | none | `unsupported` | none | Keep remote planners on relay or cloud, not on the daemon directly. |
 
 ## Repo-Proven Entry Points
+
+Flagship external-planner loop proof:
+
+```bash
+make flagship-planner-smoke
+```
+
+That proof uses the canonical relay MCP/HTTP surfaces, local connector, local daemon, and `codex` adapter profile. It covers single-step, same-run phase loop, gate, multi-instance, reconnect, MCP calls, and official Go SDK MCP with two sequential steps.
 
 Relay-side proof:
 
@@ -176,8 +187,8 @@ For Gemini CLI style remote HTTP MCP configuration, see [integrations/gemini-cli
 
 ## ChatGPT-Style And Anthropic API Paths
 
-These remain `compatibility-only` in Codencer's beta contract.
-They are documented patterns, not directly exercised repo integrations.
+The Codencer-side ChatGPT-style and Claude Code-style operator lanes are now `operator-packaged`: they use the same canonical relay/cloud MCP surfaces as the repo smokes, and `make flagship-planner-smoke` proves the Codencer side of the loop.
+Vendor product UI/auth behavior, marketplace publication, Anthropic remote connector setup, and every other product-specific client flow remain outside repo proof unless explicitly exercised.
 
 Current external platform references:
 
@@ -187,5 +198,5 @@ Current external platform references:
 Keep these claims narrow:
 
 - this repo proves the Codencer relay/cloud MCP protocol surfaces directly
-- this repo does not prove every vendor client UI, approval flow, or publication workflow
+- this repo does not prove every vendor client UI, approval flow, auth setup, or publication workflow
 - this repo does not turn the local daemon into a public remote MCP target

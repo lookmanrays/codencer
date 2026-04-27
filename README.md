@@ -20,7 +20,7 @@ Use [docs/BETA_TESTING.md](docs/BETA_TESTING.md) as the repo-level tester guide.
 | Local-only daemon + CLI | [docs/SETUP.md](docs/SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter claims stay narrow. |
 | Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md) | `make build` | `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path. |
 | Self-host cloud control plane | [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Docker baseline and binary-native composed proof are separate. |
-| Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude-style product paths stay compatibility-only. |
+| Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | `make flagship-planner-smoke` or self-host/cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude Code-style operator lanes are packaged around the canonical remote MCP surfaces; universal product UI/auth support is not claimed. |
 | Provider connectors | [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider tests | Slack is strongest; Jira is polling-first; the rest remain narrower. |
 
 For a supported non-Docker repo pass:
@@ -221,7 +221,7 @@ Choose your execution tier in `.env` (Simulation is enabled by default in `.env.
 # Start in Simulation Mode (Background)
 make start-sim
 
-# OR Start in Real Mode (Requires agent binaries like codex-agent or claude)
+# OR Start in Real Mode (Requires agent binaries like codex or claude)
 # Edit .env: ALL_ADAPTERS_SIMULATION_MODE=0
 make start
 ```
@@ -229,6 +229,8 @@ make start
 For Claude, Codencer invokes the installed CLI as `claude -p --output-format json`, sends the step prompt on `stdin`, and runs from the isolated attempt workspace as the process `cwd`.
 
 The Claude adapter wrapper path is implemented and test-covered in this repo: prompt shaping, normalization, lifecycle behavior, fake-binary integration, and simulation conformance are exercised, but the repo test suite does not run a live authenticated Claude service call. Treat `/api/v1/compatibility` plus your actual runtime environment as the source of truth for local adapter readiness.
+
+For Codex, Codencer invokes the installed CLI as `codex exec` by default, sends the task prompt on `stdin`, and writes a normalized `result.json` from Codex's final message when the CLI does not write one itself. Set `CODEX_BINARY` only if `codex` is outside your `$PATH`; set `CODEX_ADAPTER_MODE=legacy-agent` only for the older `codex-agent` wrapper.
 
 `/api/v1/compatibility` is a runtime diagnostic surface, not a beta-support certificate. It reports current binary availability, simulation mode, and local binding state; it does not promote an adapter into the beta promise by itself.
 
@@ -449,10 +451,10 @@ Codencer distinguishes between different failure modes to help you recover faste
 ## 🧪 Simulation vs. Real Execution
 
 1. **Simulation Mode** (`make start-sim`): Validates the daemon, state machine, CLI, and evidence path without requiring a live executor.
-2. **Real Mode**: Exercises the end-to-end loop with real agents. `codex` is the primary intended local beta adapter, but the checked-in repo proof remains simulation-heavy; other adapters stay narrower unless your runtime proves them ready.
+2. **Real Mode**: Exercises the end-to-end loop with real agents. `codex` is the primary intended local beta adapter; the checked-in proof now covers the default `codex exec` invocation with a fake binary, while live authenticated Codex execution remains operator-environment proof.
 
 Current local adapter proof is intentionally narrow:
-- `codex`: primary intended local beta adapter, but current repo proof is still simulation-heavy rather than live-binary proven.
+- `codex`: primary intended local beta adapter; repo proof covers simulation plus fake-binary `codex exec` invocation, stdin prompt delivery, and result synthesis. Live authenticated Codex service calls are not exercised in repo tests.
 - `claude`: strongest adapter-specific wrapper proof in repo, but still fake-binary and non-authenticated.
 - `qwen`: simulation/conformance proof only; kept as secondary.
 - `antigravity` and `antigravity-broker`: secondary, environment-specific proof only.
