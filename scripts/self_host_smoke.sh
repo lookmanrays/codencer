@@ -53,7 +53,9 @@ for part in expr.strip(".").split("."):
     else:
         value = ""
         break
-if value is None:
+if isinstance(value, bool):
+    value = "true" if value else "false"
+elif value is None:
     value = ""
 print(value)
 PY
@@ -202,11 +204,14 @@ start_secondary_daemon() {
   git worktree add --detach "$SECOND_WORKTREE" HEAD >/dev/null
   SECOND_DAEMON_PID_FILE="$TMP_DIR/daemon-secondary.pid"
   SECOND_DAEMON_LOG="$TMP_DIR/daemon-secondary.log"
-  nohup env ALL_ADAPTERS_SIMULATION_MODE="${ALL_ADAPTERS_SIMULATION_MODE:-1}" PORT="$SECOND_DAEMON_PORT" ./bin/orchestratord --repo-root "$SECOND_WORKTREE" > "$SECOND_DAEMON_LOG" 2>&1 &
+  nohup env ALL_ADAPTERS_SIMULATION_MODE="${ALL_ADAPTERS_SIMULATION_MODE:-1}" CODEX_SIMULATION_MODE="${CODEX_SIMULATION_MODE:-}" PORT="$SECOND_DAEMON_PORT" ./bin/orchestratord --repo-root "$SECOND_WORKTREE" > "$SECOND_DAEMON_LOG" 2>&1 &
   SECOND_DAEMON_PID="$!"
   echo "$SECOND_DAEMON_PID" > "$SECOND_DAEMON_PID_FILE"
   for _ in $(seq 1 20); do
     if curl -fsS "$SECOND_DAEMON_URL/api/v1/instance" >/dev/null 2>&1; then
+      if [[ "${REQUIRE_LIVE_CODEX:-0}" == "1" ]]; then
+        assert_daemon_codex_live "$SECOND_DAEMON_URL" "$TMP_DIR/secondary-compatibility.json"
+      fi
       return 0
     fi
     sleep 1
@@ -238,6 +243,133 @@ curl_best_effort() {
     curl_args+=(-H 'Content-Type: application/json' -d "$data")
   fi
   curl "${curl_args[@]}"
+}
+
+assert_wait_success() {
+  local file="$1"
+  local label="$2"
+  local state terminal timed_out
+  state="$(json_get "$file" '.state')"
+  terminal="$(json_get "$file" '.terminal')"
+  timed_out="$(json_get "$file" '.timed_out')"
+  if [[ "$timed_out" == "true" ]]; then
+    echo "ERROR: $label timed out" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  if [[ "$terminal" != "true" ]]; then
+    echo "ERROR: $label did not reach a successful terminal state" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  case "$state" in
+    completed|completed_with_warnings)
+      ;;
+    *)
+      echo "ERROR: $label reached unsuccessful terminal state $state" >&2
+      cat "$file" >&2
+      exit 1
+      ;;
+  esac
+}
+
+assert_wait_success_or_gate() {
+  local file="$1"
+  local label="$2"
+  local state needs_decision
+  state="$(json_get "$file" '.state')"
+  needs_decision="$(json_get "$file" '.needs_decision')"
+  if [[ "$state" == "needs_approval" && "$needs_decision" == "true" ]]; then
+    return 0
+  fi
+  assert_wait_success "$file" "$label"
+}
+
+assert_result_success() {
+  local file="$1"
+  local label="$2"
+  local state
+  state="$(json_get "$file" '.state')"
+  case "$state" in
+    completed|completed_with_warnings)
+      ;;
+    *)
+      echo "ERROR: $label result state is $state" >&2
+      cat "$file" >&2
+      exit 1
+      ;;
+  esac
+}
+
+assert_result_success_or_gate() {
+  local file="$1"
+  local label="$2"
+  local state needs_decision
+  state="$(json_get "$file" '.state')"
+  needs_decision="$(json_get "$file" '.needs_human_decision')"
+  if [[ "$state" == "needs_approval" && "$needs_decision" == "true" ]]; then
+    return 0
+  fi
+  assert_result_success "$file" "$label"
+}
+
+assert_mcp_tool_ok() {
+  local file="$1"
+  local label="$2"
+  if have_cmd python3; then
+    python3 - "$file" "$label" <<'PY'
+import json
+import sys
+
+path, label = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+if payload.get("error"):
+    raise SystemExit(f"ERROR: {label} returned JSON-RPC error: {payload['error']}")
+result = payload.get("result")
+if not isinstance(result, dict):
+    raise SystemExit(f"ERROR: {label} missing result object: {payload}")
+if result.get("isError") is True:
+    raise SystemExit(f"ERROR: {label} returned MCP tool error: {result}")
+PY
+    return
+  fi
+  if grep -q '"isError"[[:space:]]*:[[:space:]]*true' "$file"; then
+    echo "ERROR: $label returned MCP tool error" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
+assert_daemon_codex_live() {
+  local url="$1"
+  local outfile="$2"
+  curl -fsS "$url/api/v1/compatibility" > "$outfile"
+  if have_cmd python3; then
+    python3 - "$outfile" "$url" <<'PY'
+import json
+import sys
+
+path, url = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+for adapter in payload.get("adapters", []):
+    if adapter.get("id") == "codex":
+        if adapter.get("mode") == "simulation":
+            raise SystemExit(f"ERROR: {url} reports codex adapter in simulation mode")
+        if adapter.get("available") is not True:
+            raise SystemExit(f"ERROR: {url} reports codex adapter unavailable: {adapter}")
+        raise SystemExit(0)
+raise SystemExit(f"ERROR: {url} compatibility payload did not include codex adapter")
+PY
+  else
+    if grep -q '"id"[[:space:]]*:[[:space:]]*"codex"' "$outfile" && ! grep -q '"mode"[[:space:]]*:[[:space:]]*"simulation"' "$outfile"; then
+      return 0
+    fi
+    echo "ERROR: unable to verify live codex adapter for $url without python3" >&2
+    cat "$outfile" >&2
+    exit 1
+  fi
 }
 
 start_connector() {
@@ -316,6 +448,9 @@ if [[ -z "$INSTANCE_ID" ]]; then
   exit 1
 fi
 echo "Local instance: $INSTANCE_ID"
+if [[ "${REQUIRE_LIVE_CODEX:-0}" == "1" ]]; then
+  assert_daemon_codex_live "$DAEMON_URL" "$TMP_DIR/compatibility.json"
+fi
 
 if scenario_enabled status; then
   relay_cli status --json > "$TMP_DIR/relay-status-before.json"
@@ -414,6 +549,7 @@ if scenario_enabled multi-instance; then
     exit 1
   fi
   curl_json POST "$RELAY_URL/api/v2/steps/$SECOND_STEP_ID/wait" "$TMP_DIR/second-wait.json" "{\"timeout_ms\":$WAIT_TIMEOUT_MS,\"interval_ms\":$WAIT_INTERVAL_MS,\"include_result\":false}"
+  assert_wait_success "$TMP_DIR/second-wait.json" "multi-instance step"
   curl_json GET "$RELAY_URL/api/v2/instances/$SECOND_INSTANCE_ID/runs/$SECOND_RUN_ID" "$TMP_DIR/second-run-readback.json"
 
   PRIMARY_MULTI_LOOKUP="$TMP_DIR/primary-multi-lookup.txt"
@@ -484,9 +620,19 @@ fi
 
 WAIT_JSON="$TMP_DIR/wait.json"
 curl_json POST "$RELAY_URL/api/v2/steps/$STEP_ID/wait" "$WAIT_JSON" "{\"timeout_ms\":$WAIT_TIMEOUT_MS,\"interval_ms\":$WAIT_INTERVAL_MS,\"include_result\":false}"
+if scenario_explicitly_enabled gate-strict; then
+  assert_wait_success_or_gate "$WAIT_JSON" "primary step"
+else
+  assert_wait_success "$WAIT_JSON" "primary step"
+fi
 
 RESULT_JSON="$TMP_DIR/result.json"
 curl_json GET "$RELAY_URL/api/v2/steps/$STEP_ID/result" "$RESULT_JSON"
+if scenario_explicitly_enabled gate-strict; then
+  assert_result_success_or_gate "$RESULT_JSON" "primary step"
+else
+  assert_result_success "$RESULT_JSON" "primary step"
+fi
 
 VALIDATIONS_JSON="$TMP_DIR/validations.json"
 curl_json GET "$RELAY_URL/api/v2/steps/$STEP_ID/validations" "$VALIDATIONS_JSON"
@@ -516,7 +662,9 @@ if scenario_enabled phase-loop; then
     exit 1
   fi
   curl_json POST "$RELAY_URL/api/v2/steps/$PHASE_STEP_ID/wait" "$TMP_DIR/phase-wait.json" "{\"timeout_ms\":$WAIT_TIMEOUT_MS,\"interval_ms\":$WAIT_INTERVAL_MS,\"include_result\":true}"
+  assert_wait_success "$TMP_DIR/phase-wait.json" "phase-loop step"
   curl_json GET "$RELAY_URL/api/v2/steps/$PHASE_STEP_ID/result" "$TMP_DIR/phase-result.json"
+  assert_result_success "$TMP_DIR/phase-result.json" "phase-loop step"
   if [[ "$(json_get "$TMP_DIR/phase-wait.json" '.terminal')" != "true" ]]; then
     echo "ERROR: phase-loop step did not reach a terminal state" >&2
     cat "$TMP_DIR/phase-wait.json" >&2
@@ -570,6 +718,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d '{"jsonrpc":"2.0","id":"compat-1","method":"tools/call","params":{"name":"codencer.list_instances","arguments":{}}}' \
       > "$TMP_DIR/mcp-compat-call.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-compat-call.json" "MCP compatibility list_instances"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -577,6 +726,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.list_instances\",\"arguments\":{}}}" \
       > "$TMP_DIR/mcp-list-instances.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-list-instances.json" "MCP list_instances"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -584,6 +734,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.get_step_result\",\"arguments\":{\"step_id\":\"$STEP_ID\"}}}" \
       > "$TMP_DIR/mcp-step-result.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-step-result.json" "MCP get_step_result"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -591,6 +742,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.list_run_gates\",\"arguments\":{\"instance_id\":\"$INSTANCE_ID\",\"run_id\":\"$RUN_ID\"}}}" \
       > "$TMP_DIR/mcp-run-gates.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-run-gates.json" "MCP list_run_gates"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -598,6 +750,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.get_step_logs\",\"arguments\":{\"step_id\":\"$STEP_ID\"}}}" \
       > "$TMP_DIR/mcp-step-logs.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-step-logs.json" "MCP get_step_logs"
   curl -fsS -X DELETE "$RELAY_URL/mcp" \
     -H "Authorization: Bearer $PLANNER_TOKEN" \
     -H "MCP-Session-Id: $MCP_SESSION_ID" \

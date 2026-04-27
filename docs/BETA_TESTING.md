@@ -31,7 +31,7 @@ Additional requirement for the Docker self-host baseline:
 | Local-only daemon + CLI | [SETUP.md](SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter proof stays narrow. |
 | Self-host relay + runtime connector | [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) | `make build` | `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path; relay `/mcp` is the public MCP surface. |
 | Self-host cloud control plane | [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Binary-native proof covers bootstrap, tenancy, provider installs, and optional composed runtime/MCP/SDK proof. |
-| Planner / client integrations | [mcp/integrations.md](mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled; post-beta flagship: `make flagship-planner-smoke` | ChatGPT-style and Claude Code-style operator paths are packaged around Codencer-side proof; universal product compatibility remains unclaimed. |
+| Planner / client integrations | [mcp/integrations.md](mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | self-host or cloud smoke with MCP/SDK enabled; post-beta flagship: `make flagship-planner-smoke` | ChatGPT custom MCP, Claude Code remote MCP, and Anthropic Messages API packaging are built around Codencer-side proof; universal product compatibility remains unclaimed. |
 | Provider connectors | [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider-focused tests | Slack is strongest today; Jira is polling-first; the rest stay narrow operator/package surfaces. |
 
 ## Repo-Level Verification Commands
@@ -113,6 +113,9 @@ PLANNER_TOKEN=<planner-token> make self-host-smoke-all
 
 ```bash
 make build-cloud build-mcp-sdk-smoke
+# For composed cloud runtime proof, configure the relay config public_base_url
+# to the same public origin as CLOUD_URL so the temporary connector attaches to
+# cloud ingress.
 CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
 CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8085 \
 CLOUD_SMOKE_MCP=1 \
@@ -138,8 +141,9 @@ make flagship-planner-smoke
 ```
 
 - Generic MCP clients beyond the checked-in proof helpers remain expected-only.
-- ChatGPT-style and Claude Code-style operator paths are now packaged around the repo-proven Codencer-side loop, including bearer-token proof and OAuth protected-resource MCP metadata/challenges.
-- Universal ChatGPT product support, Claude Desktop/`claude.ai` remote connector setup, full OAuth issuer behavior, and marketplace-style publication remain compatibility-only.
+- ChatGPT custom MCP connector and Claude Code remote HTTP MCP operator paths are now packaged around the repo-proven Codencer-side loop, including bearer-token proof and OAuth protected-resource MCP metadata/challenges.
+- Anthropic Messages API MCP connector examples use the current `mcp-client-2025-11-20` request shape but are not called by repo tests.
+- Universal ChatGPT product support, consumer-plan parity, Claude Desktop/`claude.ai` remote connector UI setup, full OAuth issuer behavior, and marketplace-style publication remain compatibility-only until operator-exercised.
 
 ### Provider connectors
 

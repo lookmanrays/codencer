@@ -23,6 +23,7 @@ const (
 
 	mcpDefaultProtocolVersion = "2025-03-26"
 	mcpLatestProtocolVersion  = "2025-11-25"
+	mcpSessionIdleTTL         = 30 * time.Minute
 )
 
 var supportedMCPProtocolVersions = []string{
@@ -125,6 +126,14 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *mcpServer) HandleCallAlias(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodOptions {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	s.Handle(w, r)
+}
+
 func (s *mcpServer) handleStream(w http.ResponseWriter, r *http.Request, session *mcpSession) {
 	if session == nil {
 		writeAPIError(w, http.StatusBadRequest, "malformed_request", "MCP-Session-Id header is required")
@@ -145,6 +154,7 @@ func (s *mcpServer) handleStream(w http.ResponseWriter, r *http.Request, session
 		return
 	}
 
+	clearMCPStreamWriteDeadline(w)
 	s.applySessionHeaders(w, session, protocolVersion)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -342,7 +352,7 @@ func (s *mcpServer) applyOriginHeaders(w http.ResponseWriter, r *http.Request) *
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, "+mcpHeaderProtocolVersion+", "+mcpHeaderSessionID+", Last-Event-ID")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Expose-Headers", mcpHeaderProtocolVersion+", "+mcpHeaderSessionID)
+	w.Header().Set("Access-Control-Expose-Headers", mcpHeaderProtocolVersion+", "+mcpHeaderSessionID+", WWW-Authenticate")
 	return nil
 }
 
@@ -353,6 +363,7 @@ func (s *mcpServer) sessionFromRequest(r *http.Request, token *APIToken) (*mcpSe
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pruneExpiredSessionsLocked(time.Now().UTC())
 	session, ok := s.sessions[sessionID]
 	if !ok {
 		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
@@ -372,6 +383,7 @@ func (s *mcpServer) ensureSession(existing *mcpSession, token *APIToken, protoco
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pruneExpiredSessionsLocked(now)
 	if existing != nil {
 		session := s.sessions[existing.ID]
 		if session == nil {
@@ -423,6 +435,24 @@ func (s *mcpServer) deleteSession(sessionID string) {
 			}
 		})
 	}
+}
+
+func (s *mcpServer) pruneExpiredSessionsLocked(now time.Time) {
+	for id, session := range s.sessions {
+		if session == nil || session.LastSeenAt.IsZero() || now.Sub(session.LastSeenAt) <= mcpSessionIdleTTL {
+			continue
+		}
+		delete(s.sessions, id)
+		session.closeOnce.Do(func() {
+			if session.done != nil {
+				close(session.done)
+			}
+		})
+	}
+}
+
+func clearMCPStreamWriteDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 }
 
 func (s *mcpServer) resolveProtocolVersion(r *http.Request, session *mcpSession) (string, *apiError) {

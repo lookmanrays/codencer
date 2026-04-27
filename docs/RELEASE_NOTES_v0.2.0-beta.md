@@ -42,7 +42,7 @@ Run `make verify-beta-docker` only on a Docker-capable host when you also want t
 
 ## What's compatibility-only or deferred
 
-- ChatGPT-style and Claude-style planner flows remain `compatibility-only`; use the new walkthroughs as operator guidance, not as direct product proof.
+- At beta cut, ChatGPT-style and Claude-style planner flows were `compatibility-only`. Post-beta hardening now packages narrower operator paths; use [mcp/integrations.md](mcp/integrations.md) and [internal/FLAGSHIP_PLANNER_PRODUCT_PATH.md](internal/FLAGSHIP_PLANNER_PRODUCT_PATH.md) for current truth.
 - Gemini CLI remains `expected-only` in this pass because the docs are aligned to official Gemini CLI references but were not locally validated on this host.
 - Generic MCP clients beyond the repo-proven manual JSON-RPC callers and the official Go SDK helper remain `expected-only`.
 - Daemon-local `/mcp/call` remains a compatibility/admin bridge, not the public remote planner contract.

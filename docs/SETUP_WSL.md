@@ -338,21 +338,23 @@ Antigravity remains a Windows-side concern in this topology:
 - keep `agent-broker` on Windows only when you need the IDE-side bridge
 - do not move the connector to Windows just because Antigravity exists
 
-## 7. Reaching The WSL Relay From Windows-Side ChatGPT Desktop Or Claude Desktop
+## 7. Reaching The WSL Relay From Windows-Side Local Testers
 
 Codencer-side truth stays narrow:
 
-- point Windows-side planner clients at the **relay** on `/mcp`
+- point Windows-side local testers at the **relay** on `/mcp`
 - do **not** point them at the WSL daemon
 - ChatGPT-style and Claude Code-style operator setup is documented in [mcp/integrations.md](mcp/integrations.md); product-specific UI/auth behavior remains outside repo proof
 
 ### 7.1 First Try `localhost`
 
-Microsoft's current WSL networking docs say Windows can usually reach Linux-side services through `localhost`, and WSL's `localhostForwarding` setting is on by default for WSL2. If that holds on your machine, the Windows-side MCP endpoint is simply:
+Microsoft's current WSL networking docs say Windows can usually reach Linux-side services through `localhost`, and WSL's `localhostForwarding` setting is on by default for WSL2. If that holds on your machine, the Windows-side local MCP endpoint is simply:
 
 ```text
 http://localhost:8090/mcp
 ```
+
+Do not use this localhost URL for ChatGPT product custom connectors or Claude remote connectors that originate from vendor cloud infrastructure. Those product paths need a public HTTPS relay/cloud MCP endpoint and the auth packaging in [mcp/OAUTH_FRONT_DOOR.md](mcp/OAUTH_FRONT_DOOR.md).
 
 If your desktop client needs a config file on the Windows side, keep the URL as `http://localhost:8090/mcp`. You can read example files from the repo through `\\wsl$`, but `\\wsl$` is a filesystem path, not an HTTP host.
 

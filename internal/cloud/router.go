@@ -56,7 +56,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cloud/v1/runtime/instances", s.handleRuntimeInstances)
 	mux.HandleFunc("/api/cloud/v1/runtime/instances/", s.handleRuntimeInstanceByID)
 	mux.HandleFunc("/api/cloud/v1/mcp", s.mcp.Handle)
-	mux.HandleFunc("/api/cloud/v1/mcp/call", s.mcp.Handle)
+	mux.HandleFunc("/api/cloud/v1/mcp/call", s.mcp.HandleCallAlias)
 	mux.HandleFunc("/api/cloud/v1/events", s.handleEvents)
 	mux.HandleFunc("/api/cloud/v1/audit", s.handleAudit)
 	mux.HandleFunc("/", s.handleRoot)

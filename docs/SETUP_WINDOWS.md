@@ -303,7 +303,7 @@ ChatGPT-style and Claude Code-style operator lanes are packaged around the relay
 
 ### 6.1 Canonical Codencer-side values
 
-For a relay-backed MCP client on Windows, the Codencer-side values are:
+For curl, MCP Inspector, the SDK smoke, or a local Claude Code process on Windows, the Codencer-side values are:
 
 - URL: `http://127.0.0.1:8090/mcp`
 - auth header: `Authorization: Bearer <planner-token>`
@@ -311,6 +311,8 @@ For a relay-backed MCP client on Windows, the Codencer-side values are:
 - compatibility alias for simple POST callers: `/mcp/call`
 
 If the client asks for a protocol version, use the current repo examples from [mcp/integrations.md](mcp/integrations.md), which show `MCP-Protocol-Version: 2025-11-25`.
+
+For ChatGPT product custom connectors or Claude remote connector UI setup, use a public HTTPS relay/cloud URL and OAuth front-door auth where the product requires OAuth. Do not use `127.0.0.1`/`localhost` as the product connector URL.
 
 ### 6.2 If the relay itself runs on Windows
 

@@ -141,6 +141,9 @@ If you want the scripted composed proof from a local checkout instead of the Doc
 
 ```bash
 make build-cloud build-mcp-sdk-smoke
+# In composed cloud runtime mode, the relay config used by cloud should advertise
+# the public cloud origin as its public_base_url so connectors enroll back through
+# cloud ingress (`/ws/connectors`), not a separate relay admin port.
 CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
 CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8085 \
 CLOUD_SMOKE_MCP=1 \
@@ -171,6 +174,7 @@ Notes:
 
 - `master_key` is required if you want encrypted installation secrets.
 - `relay_config_path` is optional and only needed if you want `codencer-cloudd` to own cloud-scoped runtime control through an internal relay bridge.
+- In composed runtime mode, set the relay config `public_base_url` to the public cloud origin when connectors enroll through cloud. If it points at a separate relay daemon, the connector can appear in storage while cloud cannot proxy live runtime calls through its in-process bridge.
 - `public_base_url`, `allowed_origins`, and the `oauth_*` fields are useful for public product-facing remote MCP deployments.
 - Codencer exposes OAuth protected-resource metadata and bearer challenges, but token issuance still belongs to your OAuth issuer/front door.
 - If you use the environment variables `CODENCER_CLOUD_DB_PATH`, `CODENCER_CLOUD_HOST`, `CODENCER_CLOUD_PORT`, `CODENCER_CLOUD_MASTER_KEY`, `CODENCER_CLOUD_RELAY_CONFIG`, `CODENCER_CLOUD_PUBLIC_BASE_URL`, `CODENCER_CLOUD_ALLOWED_ORIGINS`, `CODENCER_CLOUD_OAUTH_AUTHORIZATION_SERVERS`, `CODENCER_CLOUD_OAUTH_SCOPES_SUPPORTED`, or `CODENCER_CLOUD_OAUTH_RESOURCE_DOCUMENTATION`, they override the file values.
@@ -409,6 +413,8 @@ Example composed-mode proof:
 
 ```bash
 make build-cloud build-mcp-sdk-smoke
+# The relay config's public_base_url should match the public cloud origin used
+# by CLOUD_URL for this composed proof.
 CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
 CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8080 \
 CLOUD_SMOKE_MCP=1 \

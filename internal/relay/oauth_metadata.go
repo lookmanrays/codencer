@@ -13,6 +13,12 @@ const (
 )
 
 func (s *Server) handleOAuthProtectedResource(w http.ResponseWriter, r *http.Request) {
+	if s != nil && s.mcp != nil {
+		if apiErr := s.mcp.applyOriginHeaders(w, r); apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
+	}
 	if r.Method != http.MethodGet {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return

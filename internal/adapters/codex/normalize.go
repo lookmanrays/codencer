@@ -63,11 +63,11 @@ func NormalizeCore(attemptID string, artifacts []*domain.Artifact, adapterName s
 	res.Adapter = adapterName
 	res.IsSimulation = isSimulation
 	res.UpdatedAt = info.ModTime()
-	
+
 	if res.Artifacts == nil {
 		res.Artifacts = make(map[string]string)
 	}
-	
+
 	for _, art := range artifacts {
 		res.Artifacts[art.Name] = art.Path
 		if art.Type == domain.ArtifactTypeStdout {
@@ -79,7 +79,29 @@ func NormalizeCore(attemptID string, artifacts []*domain.Artifact, adapterName s
 	if res.State == "" {
 		res.State = domain.StepStateFailedTerminal
 		res.Summary = "Bridge Interface Error: Codex result spec missing 'state' field."
+	} else if !validCodexResultState(res.State) {
+		originalState := res.State
+		res.State = domain.StepStateFailedTerminal
+		res.Summary = fmt.Sprintf("Bridge Interface Error: Codex result spec used unsupported state %q.", originalState)
 	}
 
 	return &res, nil
+}
+
+func validCodexResultState(state domain.StepState) bool {
+	switch state {
+	case domain.StepStateCompleted,
+		domain.StepStateCompletedWithWarnings,
+		domain.StepStateNeedsManualAttention,
+		domain.StepStateFailedRetryable,
+		domain.StepStateFailedTerminal,
+		domain.StepStateFailedValidation,
+		domain.StepStateFailedAdapter,
+		domain.StepStateFailedBridge,
+		domain.StepStateTimeout,
+		domain.StepStateCancelled:
+		return true
+	default:
+		return false
+	}
 }

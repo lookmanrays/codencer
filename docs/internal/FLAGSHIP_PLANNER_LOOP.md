@@ -2,7 +2,7 @@
 
 Status: post-beta implementation contract
 
-Last audited: 2026-04-27
+Last audited: 2026-04-28
 
 This document freezes the narrow flagship loop for external planners that use Codencer as a bridge to local Codex.
 
@@ -48,6 +48,8 @@ Bearer-token mode is the proven private/self-host mode.
 
 Bearer mode is what the repo tests, MCP SDK helper, self-host smoke, cloud smoke, and flagship smoke use for actual tool calls.
 
+In composed cloud runtime mode, the relay config loaded by cloud should advertise the public cloud origin as `public_base_url` when connectors enroll through cloud ingress. This keeps connector websocket sessions on the same in-process runtime bridge that cloud MCP and cloud runtime HTTP proxy through.
+
 ### OAuth-Capable Protected Resource Mode
 
 OAuth-capable mode is a product-facing resource-server shape, not a built-in Codencer identity provider.
@@ -58,6 +60,7 @@ Codencer exposes OAuth protected-resource metadata and 401 challenges for both c
 - cloud metadata: `GET /.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 - relay challenge: unauthenticated `POST /mcp` returns `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp"`
 - cloud challenge: unauthenticated `POST /api/cloud/v1/mcp` returns `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/api/cloud/v1/mcp"`
+- browser-style clients can read `WWW-Authenticate` because relay/cloud MCP CORS exposes it
 
 Operators configure the externally reachable resource URL and OAuth issuer/front-door metadata with:
 
@@ -258,6 +261,10 @@ Repository proof added or strengthened in this phase:
 - relay wait returns promptly at `needs_approval`
 - cloud HTTP wait/retry/gate proxy parity is covered by tests
 - relay and cloud MCP expose OAuth protected-resource metadata and `WWW-Authenticate` challenges for product-facing remote MCP setup
+- relay and cloud MCP streams clear per-request write deadlines so SSE sessions survive normal server write timeouts
+- relay MCP sessions are bound to a non-secret planner-token fingerprint; cloud MCP sessions are bound to cloud token id
+- relay/cloud `/mcp/call` compatibility aliases are POST-only
+- Codex fallback and normalization now fail loudly when result evidence is missing or state is unsupported
 - `mcp-sdk-smoke --step-count 2` proves a same-run multi-step phase loop through MCP
 - `scripts/self_host_smoke.sh` covers phase-loop, reconnect, strict gate, multi-instance, evidence retrieval, MCP auth metadata, and MCP/SDK flows
 - `scripts/cloud_smoke.sh` proves cloud MCP protected-resource metadata/challenge and, when enabled, composed cloud MCP/SDK runtime access

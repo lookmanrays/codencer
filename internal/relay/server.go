@@ -60,7 +60,7 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/.well-known/oauth-protected-resource", s.handleOAuthProtectedResource)
 	mux.HandleFunc("/.well-known/oauth-protected-resource/", s.handleOAuthProtectedResource)
 	mux.HandleFunc("/mcp", s.mcp.Handle)
-	mux.HandleFunc("/mcp/call", s.mcp.Handle)
+	mux.HandleFunc("/mcp/call", s.mcp.HandleCallAlias)
 
 	s.server = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),

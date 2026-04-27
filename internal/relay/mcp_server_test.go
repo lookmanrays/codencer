@@ -31,6 +31,10 @@ type mcpHarness struct {
 }
 
 func startMCPHarness(t *testing.T) *mcpHarness {
+	return startMCPHarnessWithRelayWriteTimeout(t, 0)
+}
+
+func startMCPHarnessWithRelayWriteTimeout(t *testing.T, relayWriteTimeout time.Duration) *mcpHarness {
 	t.Helper()
 
 	h := &mcpHarness{auth: "Bearer planner-token"}
@@ -102,7 +106,11 @@ func startMCPHarness(t *testing.T) *mcpHarness {
 		PlannerToken:     "planner-token",
 		EnrollmentSecret: "enroll-secret",
 	}, store)
-	h.relayHTTP = httptest.NewServer(server.Handler())
+	h.relayHTTP = httptest.NewUnstartedServer(server.Handler())
+	if relayWriteTimeout > 0 {
+		h.relayHTTP.Config.WriteTimeout = relayWriteTimeout
+	}
+	h.relayHTTP.Start()
 
 	configPath := filepath.Join(t.TempDir(), "connector.json")
 	cfg, err := connector.Enroll(context.Background(), h.relayHTTP.URL, h.daemon.URL, "enroll-secret", "test-connector", configPath)
@@ -249,6 +257,7 @@ func TestRelayMCPExposesOAuthProtectedResourceMetadataAndChallenge(t *testing.T)
 		OAuthAuthorizationServers:  []string{"https://auth.example.test"},
 		OAuthScopesSupported:       []string{"instances:read", "runs:write", "steps:read"},
 		OAuthResourceDocumentation: "https://docs.example.test/codencer-relay-mcp",
+		AllowedOrigins:             []string{"https://planner.example.test"},
 	}, store)
 	relayHTTP := httptest.NewServer(server.Handler())
 	defer relayHTTP.Close()
@@ -276,6 +285,7 @@ func TestRelayMCPExposesOAuthProtectedResourceMetadataAndChallenge(t *testing.T)
 
 	req, _ := http.NewRequest(http.MethodPost, relayHTTP.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"1","method":"initialize"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://planner.example.test")
 	challengeResp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -288,6 +298,9 @@ func TestRelayMCPExposesOAuthProtectedResourceMetadataAndChallenge(t *testing.T)
 	challenge := challengeResp.Header.Get("WWW-Authenticate")
 	if !strings.Contains(challenge, `resource_metadata="https://relay.example.test/.well-known/oauth-protected-resource/mcp"`) {
 		t.Fatalf("missing protected-resource challenge, got %q", challenge)
+	}
+	if expose := challengeResp.Header.Get("Access-Control-Expose-Headers"); !strings.Contains(expose, "WWW-Authenticate") {
+		t.Fatalf("expected CORS exposed challenge header, got %q", expose)
 	}
 }
 
@@ -522,6 +535,14 @@ func TestMCPInitializeStreamAndCompatibilityPath(t *testing.T) {
 	if status := int(compatCall["http_status"].(float64)); status != http.StatusOK {
 		t.Fatalf("expected /mcp/call tools/call compatibility success, got %+v", compatCall)
 	}
+	aliasGet := h.callPath(t, h.auth, http.MethodGet, "/mcp/call", map[string]string{
+		"Accept":               "text/event-stream",
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, nil)
+	if status := int(aliasGet["http_status"].(float64)); status != http.StatusMethodNotAllowed {
+		t.Fatalf("expected /mcp/call GET alias rejection, got %+v", aliasGet)
+	}
 
 	deleted := h.callPath(t, h.auth, http.MethodDelete, "/mcp", map[string]string{
 		"MCP-Session-Id":       sessionID,
@@ -544,6 +565,116 @@ func TestMCPInitializeStreamAndCompatibilityPath(t *testing.T) {
 		t.Fatal("timed out waiting for SSE stream to close after DELETE")
 	}
 	_ = resp.Body.Close()
+}
+
+func TestRelayMCPStreamSurvivesServerWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	h := startMCPHarnessWithRelayWriteTimeout(t, 50*time.Millisecond)
+	initialize := h.callPath(t, h.auth, http.MethodPost, "/mcp", map[string]string{
+		"Content-Type":         "application/json",
+		"MCP-Protocol-Version": "2025-11-25",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "req-init",
+		"method":  "initialize",
+		"params":  map[string]any{"protocolVersion": "2025-11-25"},
+	})
+	sessionID, _ := initialize["session_id"].(string)
+	if sessionID == "" {
+		t.Fatalf("expected initialize to return session id, got %+v", initialize)
+	}
+
+	resp, reader := h.openStream(t, h.auth, sessionID)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected stream success, got %d", resp.StatusCode)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("expected bootstrap line, got %v", err)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("expected bootstrap separator, got %v", err)
+	}
+
+	streamErr := make(chan error, 1)
+	go func() {
+		_, err := reader.ReadString('\n')
+		streamErr <- err
+	}()
+	select {
+	case err := <-streamErr:
+		t.Fatalf("stream closed before explicit session delete: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	deleted := h.callPath(t, h.auth, http.MethodDelete, "/mcp", map[string]string{
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, nil)
+	if status := int(deleted["http_status"].(float64)); status != http.StatusNoContent {
+		t.Fatalf("expected session delete success, got %+v", deleted)
+	}
+	select {
+	case <-streamErr:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for stream to close after session delete")
+	}
+	_ = resp.Body.Close()
+}
+
+func TestRelayMCPSessionsArePlannerTokenBound(t *testing.T) {
+	t.Parallel()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	server := relay.NewServer(&relay.Config{
+		Host:   "127.0.0.1",
+		Port:   0,
+		DBPath: filepath.Join(t.TempDir(), "relay-unused.db"),
+		PlannerTokens: []relay.PlannerTokenConfig{
+			{Name: "planner-a", Token: "planner-token-a", Scopes: []string{"*"}},
+			{Name: "planner-b", Token: "planner-token-b", Scopes: []string{"*"}},
+		},
+	}, store)
+	relayHTTP := httptest.NewServer(server.Handler())
+	defer relayHTTP.Close()
+	h := &mcpHarness{relayHTTP: relayHTTP}
+
+	initialize := h.callPath(t, "Bearer planner-token-a", http.MethodPost, "/mcp", map[string]string{
+		"Content-Type":         "application/json",
+		"MCP-Protocol-Version": "2025-11-25",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "req-init",
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-11-25",
+		},
+	})
+	sessionID, _ := initialize["session_id"].(string)
+	if sessionID == "" {
+		t.Fatalf("expected initialize to return session id, got %+v", initialize)
+	}
+
+	otherDelete := h.callPath(t, "Bearer planner-token-b", http.MethodDelete, "/mcp", map[string]string{
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, nil)
+	if status := int(otherDelete["http_status"].(float64)); status != http.StatusNotFound {
+		t.Fatalf("expected cross-token session delete to be hidden, got %+v", otherDelete)
+	}
+
+	ownerDelete := h.callPath(t, "Bearer planner-token-a", http.MethodDelete, "/mcp", map[string]string{
+		"MCP-Session-Id":       sessionID,
+		"MCP-Protocol-Version": "2025-11-25",
+	}, nil)
+	if status := int(ownerDelete["http_status"].(float64)); status != http.StatusNoContent {
+		t.Fatalf("expected owning token session delete success, got %+v", ownerDelete)
+	}
 }
 
 func TestMCPInternalRoutesHonorAuthenticatedPlannerPrincipal(t *testing.T) {

@@ -54,13 +54,13 @@ type waitRecord struct {
 }
 
 type smokeOutput struct {
-	SessionID       string `json:"session_id"`
-	ProtocolVersion string `json:"protocol_version"`
-	InstanceID      string `json:"instance_id"`
-	RunID           string `json:"run_id"`
-	StepID          string `json:"step_id"`
-	StepState       string `json:"step_state"`
-	ToolNames       []string
+	SessionID       string       `json:"session_id"`
+	ProtocolVersion string       `json:"protocol_version"`
+	InstanceID      string       `json:"instance_id"`
+	RunID           string       `json:"run_id"`
+	StepID          string       `json:"step_id"`
+	StepState       string       `json:"step_state"`
+	ToolNames       []string     `json:"tool_names"`
 	Steps           []stepOutput `json:"steps,omitempty"`
 	Result          any          `json:"result,omitempty"`
 	Validations     any          `json:"validations,omitempty"`
@@ -103,6 +103,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	waitTimeoutMS := fs.Int("wait-timeout-ms", 5000, "wait_step timeout in milliseconds")
 	waitIntervalMS := fs.Int("wait-interval-ms", 50, "wait_step poll interval in milliseconds")
 	stepCount := fs.Int("step-count", 1, "Number of sequential submit_task/wait/result steps to run in one Codencer run")
+	allowFailedTerminal := fs.Bool("allow-failed-terminal", false, "Allow terminal states other than completed or completed_with_warnings")
 	jsonOutput := fs.Bool("json", true, "Print JSON output")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -174,7 +175,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		if *stepCount > 1 {
 			stepGoal = fmt.Sprintf("%s (phase step %d of %d)", *goal, i, *stepCount)
 		}
-		stepResult, err := runPlannerStep(ctx, session, *instanceID, *runID, stepGoal, *adapterProfile, *validationCommand, *waitTimeoutMS, *waitIntervalMS)
+		stepResult, err := runPlannerStep(ctx, session, *instanceID, *runID, stepGoal, *adapterProfile, *validationCommand, *waitTimeoutMS, *waitIntervalMS, *allowFailedTerminal)
 		if err != nil {
 			return err
 		}
@@ -213,7 +214,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	return err
 }
 
-func runPlannerStep(ctx context.Context, session *mcp.ClientSession, instanceID, runID, goal, adapterProfile, validationCommand string, waitTimeoutMS, waitIntervalMS int) (stepOutput, error) {
+func runPlannerStep(ctx context.Context, session *mcp.ClientSession, instanceID, runID, goal, adapterProfile, validationCommand string, waitTimeoutMS, waitIntervalMS int, allowFailedTerminal bool) (stepOutput, error) {
 	task := map[string]any{
 		"version": "v1",
 		"goal":    goal,
@@ -258,6 +259,9 @@ func runPlannerStep(ctx context.Context, session *mcp.ClientSession, instanceID,
 	}
 	if !waitInfo.Terminal {
 		return stepOutput{}, fmt.Errorf("wait_step did not reach a terminal state: %+v", waitInfo)
+	}
+	if !allowFailedTerminal && waitInfo.State != "completed" && waitInfo.State != "completed_with_warnings" {
+		return stepOutput{}, fmt.Errorf("wait_step reached unsuccessful terminal state %q", waitInfo.State)
 	}
 
 	result, err := callTool(ctx, session, "codencer.get_step_result", map[string]any{

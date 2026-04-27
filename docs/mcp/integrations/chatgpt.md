@@ -1,6 +1,6 @@
 # ChatGPT-Style Planner — Codencer Walkthrough
 
-This walkthrough is for the post-beta flagship planner loop and the OpenAI docs linked here as checked on 2026-04-27.
+This walkthrough is for the post-beta flagship planner loop and the OpenAI docs linked here as checked on 2026-04-28.
 
 Use this page together with [Beta Testing](../../BETA_TESTING.md) and [Planner / Client Integration Notes](../integrations.md).
 
@@ -17,6 +17,10 @@ What that means in practice:
 - ChatGPT must target the remote relay `/mcp` surface or the remote cloud `/api/cloud/v1/mcp` surface.
 - Do not point ChatGPT at the daemon-local `/mcp/call` endpoint.
 
+Publishable write-capable target: ChatGPT custom MCP connectors/apps on Business, Enterprise, and Edu workspaces with OAuth front-door auth.
+
+Narrower adjacent paths: OpenAI Responses API remote MCP and read/fetch-only product paths may be useful for testing, but they are not the baseline for write-capable Codencer operation.
+
 ## Prerequisites
 
 Before you open ChatGPT, have all of the following ready:
@@ -25,17 +29,16 @@ Before you open ChatGPT, have all of the following ready:
 - A remote MCP URL:
   - relay: `https://<your-relay-host>/mcp`
   - cloud: `https://<your-cloud-host>/api/cloud/v1/mcp`
-- A Codencer token or OAuth front-door setup for that surface:
-  - relay: planner token
-  - cloud: cloud token
-  - product OAuth mode: an operator-owned OAuth issuer/gateway that produces or forwards a bearer token Codencer accepts
+- Auth for that surface:
+  - private/API testing: relay planner token or cloud token where the client supports bearer credentials
+  - ChatGPT product setup: OAuth front door with an operator-owned issuer/gateway that produces or forwards a bearer token Codencer accepts
 - At least one reachable shared runtime instance:
   - relay path: shared through the connector and visible from relay `/mcp`
   - cloud path: claimed into org/workspace/project scope and visible from cloud `/api/cloud/v1/mcp`
 - For cloud, token scopes that cover runtime discovery and run execution. `codencer.list_instances` requires `runtime_instances:read`.
-- A ChatGPT workspace/account where remote MCP custom app or connector setup is available to your user/workspace.
+- A ChatGPT Business, Enterprise, or Edu workspace when you need write/modify-capable custom MCP connector use.
 
-Treat Business/Enterprise workspace setup as the reliable lane for write-capable operator use unless your current OpenAI account explicitly exposes the needed remote MCP app flow. Verify current eligibility before rollout in the live OpenAI docs:
+Treat Business/Enterprise/Edu workspace setup as the reliable lane for write-capable operator use unless your current OpenAI account explicitly exposes the needed remote MCP app flow. Verify current eligibility before rollout in the live OpenAI docs:
 
 - [Building MCP servers for ChatGPT and API integrations](https://platform.openai.com/docs/mcp/)
 - [ChatGPT Developer mode](https://platform.openai.com/docs/guides/developer-mode)
@@ -57,16 +60,16 @@ Do not use:
 
 Use the current OpenAI UI path for your plan and verify it against the live docs before rollout.
 
-Current OpenAI guidance checked on 2026-04-27:
+Current OpenAI guidance checked on 2026-04-28:
 
 - Admin workspace enablement path in the Help Center:
   - `Workspace Settings -> Permissions & Roles -> Connected Data Developer mode / Create custom MCP connectors`
-- User-level toggle path in the developer guide:
-  - `Settings -> Apps -> Advanced settings -> Developer mode`
+- Developer guide path:
+  - `Settings -> Apps & Connectors -> Advanced settings -> Developer mode`
 - Enterprise/Edu user path in the Help Center:
   - `Settings -> Apps -> Advanced Settings -> Developer mode`
 - Create-app entry point after developer mode is enabled:
-  - `Settings -> Apps -> Create`
+  - `Settings -> Connectors -> Create`
   - or workspace-admin path `Workspace Settings -> Apps -> Create`
 
 OpenAI’s current references:
@@ -91,9 +94,9 @@ Operator inputs:
 
 Auth choices:
 
-- bearer-token mode is repo-proven for private testing and API-style clients that accept bearer credentials
-- OAuth protected-resource mode is repo-proven for discovery and challenges, but the authorization server itself is outside Codencer
-- for ChatGPT product app setup, configure the OAuth issuer/front door required by the current OpenAI flow and have it issue or translate to a bearer token Codencer accepts
+- ChatGPT product connector setup: use OAuth front-door mode. Codencer publishes protected-resource metadata, and the operator-owned issuer/gateway handles the OAuth flow and forwards a Codencer bearer token upstream.
+- Private API-style clients: bearer-token mode is repo-proven where the client supports bearer credentials.
+- No-auth product setup is not appropriate for a write-capable Codencer connector.
 
 The checked-in example files are operator value references only:
 
@@ -314,6 +317,8 @@ For the repo-level beta proof boundaries, keep using [Beta Testing](../../BETA_T
 - This is an operator-packaged Codencer path for the canonical remote MCP surface, not a universal ChatGPT product-support claim.
 - ChatGPT is documented here only as a remote MCP client. Do not infer local daemon support.
 - Product plan availability and UI wording can change. Verify current eligibility before rollout.
+- ChatGPT Agent Mode is not the write-capable custom connector target for this path; use the custom MCP connector/app setup flow documented by OpenAI.
+- ChatGPT custom connectors are remote MCP only; local MCP servers are not the product target.
 - Codencer does not issue OAuth authorization-code tokens; product OAuth flows need an operator-owned OAuth issuer or gateway in front of Codencer.
 - OpenAI owns the ChatGPT UI, tool approval UX, draft/publish flow, and any product-side restrictions.
 - The example `.mcp.json` files in this repo are value-reference templates only, not direct ChatGPT imports.

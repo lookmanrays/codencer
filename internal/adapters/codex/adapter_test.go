@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
 )
 
@@ -114,6 +115,55 @@ fi
 	}
 	if result.Adapter != "codex" || result.IsSimulation {
 		t.Fatalf("expected real codex adapter metadata, got adapter=%s simulation=%v", result.Adapter, result.IsSimulation)
+	}
+}
+
+func TestCodexFallbackWithoutResultOrLastMessageIsFailure(t *testing.T) {
+	artifactRoot := t.TempDir()
+	attempt := &domain.Attempt{ID: "attempt-empty", Adapter: "codex"}
+	step := &domain.Step{ID: "step-empty", Adapter: "codex"}
+
+	writeCodexFallbackResult(step, attempt, artifactRoot, "codex", nil)
+
+	artifacts, err := common.CollectStandardArtifacts(context.Background(), attempt.ID, artifactRoot)
+	if err != nil {
+		t.Fatalf("collect artifacts: %v", err)
+	}
+	result, err := NormalizeCore(attempt.ID, artifacts, "codex", false)
+	if err != nil {
+		t.Fatalf("NormalizeCore failed: %v", err)
+	}
+	if result.State != domain.StepStateFailedTerminal {
+		t.Fatalf("expected missing evidence fallback to fail terminal, got %s", result.State)
+	}
+	if !strings.Contains(result.Summary, "did not write result.json") {
+		t.Fatalf("expected missing evidence summary, got %q", result.Summary)
+	}
+	if _, ok := result.Artifacts["codex_last_message_ref"]; ok {
+		t.Fatalf("did not expect missing codex_last_message_ref artifact, got %+v", result.Artifacts)
+	}
+}
+
+func TestNormalizeCoreRejectsUnknownResultState(t *testing.T) {
+	artifactRoot := t.TempDir()
+	resultPath := filepath.Join(artifactRoot, "result.json")
+	if err := os.WriteFile(resultPath, []byte(`{"version":"v1","state":"success","summary":"not a domain state"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	artifacts, err := common.CollectStandardArtifacts(context.Background(), "attempt-unknown", artifactRoot)
+	if err != nil {
+		t.Fatalf("collect artifacts: %v", err)
+	}
+	result, err := NormalizeCore("attempt-unknown", artifacts, "codex", false)
+	if err != nil {
+		t.Fatalf("NormalizeCore failed: %v", err)
+	}
+	if result.State != domain.StepStateFailedTerminal {
+		t.Fatalf("expected unsupported state to fail terminal, got %s", result.State)
+	}
+	if !strings.Contains(result.Summary, `unsupported state "success"`) {
+		t.Fatalf("expected unsupported state summary, got %q", result.Summary)
 	}
 }
 

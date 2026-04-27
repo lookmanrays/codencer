@@ -38,6 +38,10 @@ type cloudMCPHarness struct {
 }
 
 func startCloudMCPHarness(t *testing.T) *cloudMCPHarness {
+	return startCloudMCPHarnessWithWriteTimeout(t, 0)
+}
+
+func startCloudMCPHarnessWithWriteTimeout(t *testing.T, cloudWriteTimeout time.Duration) *cloudMCPHarness {
 	t.Helper()
 
 	h := &cloudMCPHarness{}
@@ -177,7 +181,11 @@ func startCloudMCPHarness(t *testing.T) *cloudMCPHarness {
 	h.auth = "Bearer " + rawToken
 
 	cloudServer := NewServer(DefaultConfig(), cloudStore, nil, &RelayRuntime{Server: relayServer, Store: relayStore})
-	h.cloudHTTP = httptest.NewServer(cloudServer.Handler())
+	h.cloudHTTP = httptest.NewUnstartedServer(cloudServer.Handler())
+	if cloudWriteTimeout > 0 {
+		h.cloudHTTP.Config.WriteTimeout = cloudWriteTimeout
+	}
+	h.cloudHTTP.Start()
 
 	claimBody, _ := json.Marshal(map[string]any{
 		"org_id":       org.ID,
@@ -259,6 +267,7 @@ func TestCloudMCPExposesOAuthProtectedResourceMetadataChallengeAndCORS(t *testin
 
 	req, _ := http.NewRequest(http.MethodPost, cloudHTTP.URL+"/api/cloud/v1/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"1","method":"initialize"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://planner.example.test")
 	challengeResp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -271,6 +280,9 @@ func TestCloudMCPExposesOAuthProtectedResourceMetadataChallengeAndCORS(t *testin
 	challenge := challengeResp.Header.Get("WWW-Authenticate")
 	if !strings.Contains(challenge, `resource_metadata="https://cloud.example.test/.well-known/oauth-protected-resource/api/cloud/v1/mcp"`) {
 		t.Fatalf("missing protected-resource challenge, got %q", challenge)
+	}
+	if expose := challengeResp.Header.Get("Access-Control-Expose-Headers"); !strings.Contains(expose, "WWW-Authenticate") {
+		t.Fatalf("expected CORS exposed challenge header, got %q", expose)
 	}
 
 	corsReq, _ := http.NewRequest(http.MethodOptions, cloudHTTP.URL+"/api/cloud/v1/mcp", nil)
@@ -434,6 +446,14 @@ func TestCloudMCPSurfaceRuntimeFlow(t *testing.T) {
 	if len(structured) != 1 {
 		t.Fatalf("expected one cloud runtime instance, got %+v", structured)
 	}
+	aliasGet := h.callPath(t, h.auth, http.MethodGet, "/api/cloud/v1/mcp/call", map[string]string{
+		"Accept":                 "text/event-stream",
+		mcpHeaderSessionID:       sessionID,
+		mcpHeaderProtocolVersion: "2025-11-25",
+	}, nil)
+	if mcpHTTPStatus(aliasGet) != http.StatusMethodNotAllowed {
+		t.Fatalf("expected /api/cloud/v1/mcp/call GET alias rejection, got %+v", aliasGet)
+	}
 	instanceID := structured[0].(map[string]any)["instance_id"].(string)
 
 	runResp := h.call(t, h.auth, "tools/call", map[string]any{
@@ -535,6 +555,55 @@ func TestCloudMCPSurfaceRuntimeFlow(t *testing.T) {
 	if artifactPayload["encoding"] != "utf-8" || artifactPayload["text"] != "artifact-content" {
 		t.Fatalf("unexpected artifact payload: %+v", artifactPayload)
 	}
+}
+
+func TestCloudMCPStreamSurvivesServerWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	h := startCloudMCPHarnessWithWriteTimeout(t, 50*time.Millisecond)
+	initialize := h.call(t, h.auth, "initialize", map[string]any{"protocolVersion": "2025-11-25"}, map[string]string{
+		mcpHeaderProtocolVersion: "2025-11-25",
+	})
+	sessionID, _ := initialize["session_id"].(string)
+	if sessionID == "" {
+		t.Fatalf("expected initialize to return session id, got %+v", initialize)
+	}
+
+	resp, reader := h.openStream(t, h.auth, sessionID, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected stream success, got %d", resp.StatusCode)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("expected bootstrap line, got %v", err)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("expected bootstrap separator, got %v", err)
+	}
+
+	streamErr := make(chan error, 1)
+	go func() {
+		_, err := reader.ReadString('\n')
+		streamErr <- err
+	}()
+	select {
+	case err := <-streamErr:
+		t.Fatalf("stream closed before explicit session delete: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	deleted := h.callPath(t, h.auth, http.MethodDelete, "/api/cloud/v1/mcp", map[string]string{
+		mcpHeaderSessionID:       sessionID,
+		mcpHeaderProtocolVersion: "2025-11-25",
+	}, nil)
+	if mcpHTTPStatus(deleted) != http.StatusNoContent {
+		t.Fatalf("expected session delete success, got %+v", deleted)
+	}
+	select {
+	case <-streamErr:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for stream to close after session delete")
+	}
+	_ = resp.Body.Close()
 }
 
 func TestCloudMCPInitializeStreamAndCompatibilityPath(t *testing.T) {

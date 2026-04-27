@@ -56,7 +56,11 @@ for part in expr.strip(".").split("."):
     else:
         value = ""
         break
-print("" if value is None else value)
+if isinstance(value, bool):
+    value = "true" if value else "false"
+elif value is None:
+    value = ""
+print(value)
 PY
 }
 
@@ -116,7 +120,7 @@ start_daemon() {
   local repo_root="$4"
   local -a env_args=("PORT=$port")
   if [[ "${FLAGSHIP_LIVE_CODEX:-0}" == "1" ]]; then
-    env_args+=("CODEX_BINARY=${CODEX_BINARY:-codex}" "ALL_ADAPTERS_SIMULATION_MODE=0")
+    env_args+=("CODEX_BINARY=${CODEX_BINARY:-codex}" "ALL_ADAPTERS_SIMULATION_MODE=0" "CODEX_SIMULATION_MODE=0")
   else
     env_args+=("ALL_ADAPTERS_SIMULATION_MODE=1")
   fi
@@ -187,31 +191,65 @@ DAEMON_PID="$(start_daemon "$DAEMON_PORT" "$DAEMON_LOG" 0 "$PRIMARY_WORKTREE")"
 wait_for_url "$DAEMON_URL/api/v1/instance" "$DAEMON_LOG"
 
 echo "==> Flagship relay planner loop: single-step, phase-loop, multi-instance, reconnect, MCP, SDK"
-PLANNER_TOKEN="$PLANNER_TOKEN" \
-RELAY_CONFIG="$RELAY_CONFIG" \
-RELAY_URL="$RELAY_URL" \
-DAEMON_URL="$DAEMON_URL" \
-CONNECTOR_ADAPTER=codex \
-WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
-MCP_SDK_STEP_COUNT=2 \
-MCP_SDK_WAIT_TIMEOUT_MS="$FLAGSHIP_MCP_SDK_WAIT_TIMEOUT_MS" \
-SMOKE_SCENARIOS=status,audit,share-control,multi-instance,reconnect,phase-loop,mcp-auth-metadata,mcp,mcp-sdk \
-"$ROOT_DIR/scripts/self_host_smoke.sh"
+if [[ "${FLAGSHIP_LIVE_CODEX:-0}" == "1" ]]; then
+  CODEX_BINARY="${CODEX_BINARY:-codex}" \
+  ALL_ADAPTERS_SIMULATION_MODE=0 \
+  CODEX_SIMULATION_MODE=0 \
+  REQUIRE_LIVE_CODEX=1 \
+  PLANNER_TOKEN="$PLANNER_TOKEN" \
+  RELAY_CONFIG="$RELAY_CONFIG" \
+  RELAY_URL="$RELAY_URL" \
+  DAEMON_URL="$DAEMON_URL" \
+  CONNECTOR_ADAPTER=codex \
+  WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
+  MCP_SDK_STEP_COUNT=2 \
+  MCP_SDK_WAIT_TIMEOUT_MS="$FLAGSHIP_MCP_SDK_WAIT_TIMEOUT_MS" \
+  SMOKE_SCENARIOS=status,audit,share-control,multi-instance,reconnect,phase-loop,mcp-auth-metadata,mcp,mcp-sdk \
+  "$ROOT_DIR/scripts/self_host_smoke.sh"
+else
+  PLANNER_TOKEN="$PLANNER_TOKEN" \
+  RELAY_CONFIG="$RELAY_CONFIG" \
+  RELAY_URL="$RELAY_URL" \
+  DAEMON_URL="$DAEMON_URL" \
+  CONNECTOR_ADAPTER=codex \
+  WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
+  MCP_SDK_STEP_COUNT=2 \
+  MCP_SDK_WAIT_TIMEOUT_MS="$FLAGSHIP_MCP_SDK_WAIT_TIMEOUT_MS" \
+  SMOKE_SCENARIOS=status,audit,share-control,multi-instance,reconnect,phase-loop,mcp-auth-metadata,mcp,mcp-sdk \
+  "$ROOT_DIR/scripts/self_host_smoke.sh"
+fi
 
 GATE_WORKTREE="$(create_worktree gate)"
 GATE_DAEMON_PID="$(start_daemon "$GATE_DAEMON_PORT" "$GATE_DAEMON_LOG" 1 "$GATE_WORKTREE")"
 wait_for_url "$GATE_DAEMON_URL/api/v1/instance" "$GATE_DAEMON_LOG"
 
 echo "==> Flagship relay planner loop: strict gate approval"
-PLANNER_TOKEN="$PLANNER_TOKEN" \
-RELAY_CONFIG="$RELAY_CONFIG" \
-RELAY_URL="$RELAY_URL" \
-DAEMON_URL="$GATE_DAEMON_URL" \
-CONNECTOR_ADAPTER=codex \
-WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
-GATE_ACTION=approve \
-RUN_ID="flagship-gate-$(date +%s)" \
-SMOKE_SCENARIOS=gate-strict \
-"$ROOT_DIR/scripts/self_host_smoke.sh"
+if [[ "${FLAGSHIP_LIVE_CODEX:-0}" == "1" ]]; then
+  CODEX_BINARY="${CODEX_BINARY:-codex}" \
+  ALL_ADAPTERS_SIMULATION_MODE=0 \
+  CODEX_SIMULATION_MODE=0 \
+  REQUIRE_LIVE_CODEX=1 \
+  PLANNER_TOKEN="$PLANNER_TOKEN" \
+  RELAY_CONFIG="$RELAY_CONFIG" \
+  RELAY_URL="$RELAY_URL" \
+  DAEMON_URL="$GATE_DAEMON_URL" \
+  CONNECTOR_ADAPTER=codex \
+  WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
+  GATE_ACTION=approve \
+  RUN_ID="flagship-gate-$(date +%s)" \
+  SMOKE_SCENARIOS=gate-strict \
+  "$ROOT_DIR/scripts/self_host_smoke.sh"
+else
+  PLANNER_TOKEN="$PLANNER_TOKEN" \
+  RELAY_CONFIG="$RELAY_CONFIG" \
+  RELAY_URL="$RELAY_URL" \
+  DAEMON_URL="$GATE_DAEMON_URL" \
+  CONNECTOR_ADAPTER=codex \
+  WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
+  GATE_ACTION=approve \
+  RUN_ID="flagship-gate-$(date +%s)" \
+  SMOKE_SCENARIOS=gate-strict \
+  "$ROOT_DIR/scripts/self_host_smoke.sh"
+fi
 
 echo "Flagship planner loop smoke completed successfully."

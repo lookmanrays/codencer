@@ -2,11 +2,13 @@
 
 ## Status
 
-Codencer now treats the Claude Code-style HTTP MCP operator lane as `operator-packaged`.
+Codencer now treats the Claude Code remote HTTP MCP operator lane as `operator-packaged`.
 
 Codencer-side OAuth protected-resource discovery/challenge support is also implemented for relay/cloud MCP.
 
-Claude Desktop and `claude.ai` remote custom connectors remain `compatibility-only` because product-side setup behavior is outside repo proof.
+Anthropic Messages API MCP connector packaging is documented from the current API shape but is not executed against Anthropic by this repo.
+
+Claude Desktop and `claude.ai` remote custom connectors remain `compatibility-only until operator-exercised` because product-side setup behavior is outside repo proof.
 
 The only planner-side Codencer surfaces for Anthropic products are:
 
@@ -31,9 +33,12 @@ For inherited beta support boundaries, start with [Public Beta Test Tracks](../.
   - relay planner token for relay `/mcp`
   - cloud API token for cloud `/api/cloud/v1/mcp`
 - For product OAuth mode, an operator-owned OAuth issuer or gateway that can issue or translate to a bearer token Codencer accepts.
-- A Claude account with access to remote custom connectors in Claude Desktop or `claude.ai`.
+- A Claude account with access to the target surface:
+  - Claude Code for the repo-packaged HTTP MCP bearer lane
+  - Anthropic Messages API for API connector testing
+  - Claude, Cowork, or Claude Desktop remote custom connectors for product UI testing
 
-Anthropic's current help states that remote custom connectors are brokered through your Claude account and connect from Anthropic's cloud infrastructure, not from your local machine. Verify against:
+Anthropic's current help states that remote custom connectors are available on Free, Pro, Max, Team, and Enterprise plans, with Free limited to one custom connector, and that they are brokered through your Claude account from Anthropic's cloud infrastructure, not from your local machine. Verify against:
 
 - [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
 - [Build custom connectors via remote MCP servers](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers)
@@ -105,6 +110,74 @@ Run the Codencer-side proof first:
 make flagship-planner-smoke
 ```
 
+Concrete Claude Code setup options:
+
+```bash
+claude mcp add --transport http codencer-relay https://<your-relay-host>/mcp \
+  --header "Authorization: Bearer <planner-token>"
+
+claude mcp add --transport http codencer-cloud https://<your-cloud-host>/api/cloud/v1/mcp \
+  --header "Authorization: Bearer <cloud-token>"
+```
+
+Project-scoped config:
+
+```bash
+cp docs/mcp/examples/claude-code-relay.mcp.json .mcp.json
+export CODENCER_RELAY_MCP_URL=https://<your-relay-host>/mcp
+export CODENCER_PLANNER_TOKEN=<planner-token>
+claude
+```
+
+JSON import form:
+
+```bash
+claude mcp add-json codencer-relay \
+  '{"type":"http","url":"https://<your-relay-host>/mcp","headers":{"Authorization":"Bearer <planner-token>"}}'
+```
+
+If using OAuth front-door auth instead of a static bearer header, add the HTTP MCP server without the header and authenticate from `/mcp` inside Claude Code, using the OAuth metadata advertised by the front door.
+
+### Anthropic Messages API MCP Connector Lane
+
+Use this lane when your planner is an API caller using Anthropic's Messages API MCP connector.
+
+Current shape checked on 2026-04-28:
+
+- request beta: `mcp-client-2025-11-20`
+- server definitions: `mcp_servers`
+- tool configuration: `tools` with `type: "mcp_toolset"`
+- auth field: `authorization_token`
+- remote public HTTP MCP only; local stdio is not connected directly
+
+Checked-in request-shape examples:
+
+- [anthropic-messages-relay.mcp.json](../examples/anthropic-messages-relay.mcp.json)
+- [anthropic-messages-cloud.mcp.json](../examples/anthropic-messages-cloud.mcp.json)
+
+Minimal relay shape:
+
+```json
+{
+  "mcp_servers": [
+    {
+      "type": "url",
+      "url": "https://<your-relay-host>/mcp",
+      "name": "codencer-relay",
+      "authorization_token": "<oauth-or-codencer-bearer-token>"
+    }
+  ],
+  "tools": [
+    {
+      "type": "mcp_toolset",
+      "mcp_server_name": "codencer-relay"
+    }
+  ]
+}
+```
+
+This repo does not call Anthropic's API in verification. Treat this as operator-packaged request-shape documentation backed by Codencer-side MCP proof.
+
 ### Claude Desktop / claude.ai Remote Connector Lane
 
 This walkthrough is for Claude Desktop and `claude.ai` remote custom connectors.
@@ -145,12 +218,14 @@ Anthropic's help also states that private-network, VPN-only, or firewall-blocked
 
 Use Anthropic's current remote connector flow exactly as documented by Anthropic.
 
-For Pro and Max plans, Anthropic currently documents:
+For Free, Pro, and Max plans, Anthropic currently documents:
 
 1. Open `Customize > Connectors`.
 2. Choose `Add custom connector`.
 3. Enter the remote MCP server URL.
 4. Optionally provide OAuth client settings if your server expects them.
+
+Free users are currently limited to one custom connector.
 
 For Team and Enterprise plans, Anthropic currently documents:
 
@@ -228,7 +303,8 @@ Keep the claim narrow:
 
 ## Known Limitations on this surface
 
-- Claude Code-style HTTP MCP operator use is `operator-packaged`; Claude Desktop and `claude.ai` remote connector setup remains `compatibility-only`, not direct product proof.
+- Claude Code remote HTTP MCP operator use is `operator-packaged`; Claude Desktop and `claude.ai` remote connector setup remains `compatibility-only until operator-exercised`, not direct product proof.
+- Anthropic Messages API MCP connector packaging uses the current request shape but is not called by repo tests.
 - The local `claude` adapter is an executor-side adapter and does not convert this planner-side path into a repo-proven Anthropic product integration.
 - Claude Code is separate. Its local/project MCP setup is documented elsewhere and should not be conflated with Claude Desktop or `claude.ai` remote custom connectors.
 - `claude_desktop_config.json` is a separate local-MCP mechanism and is not the configuration source for Anthropic remote custom connectors.

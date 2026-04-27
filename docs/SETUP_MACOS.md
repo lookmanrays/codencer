@@ -278,23 +278,23 @@ Keep the planner/client claim narrow:
 - do not point ChatGPT, Claude Desktop, or another planner runtime at the local daemon
 - treat ChatGPT-style and Claude Code-style operator lanes as packaged around the remote MCP surface; keep vendor product UI/auth claims narrow
 
-Codencer-side target on the same Mac:
+Codencer-side loopback target for curl, MCP Inspector, the SDK smoke, or a local Claude Code process running on the same Mac:
 
 ```text
 http://127.0.0.1:8090/mcp
 Authorization: Bearer <planner-token>
 ```
 
-For ChatGPT-style clients on macOS:
+For ChatGPT product custom connectors on macOS:
 
-- use the local relay URL, not daemon `/mcp/call`
-- use the relay planner bearer token
+- use a public HTTPS relay/cloud URL, not `127.0.0.1` and not daemon `/mcp/call`
+- use OAuth front-door auth for write-capable product setup
 - keep the claim at the operator-packaged remote MCP lane, not universal ChatGPT product support
 - follow [mcp/integrations/chatgpt.md](mcp/integrations/chatgpt.md) for the operator walkthrough
 
 For Claude Desktop or `claude.ai` on macOS:
 
-- use the relay URL above
+- use a public HTTPS relay/cloud URL because remote connectors originate from Anthropic's cloud
 - keep the planner-side remote connector path separate from the local `claude` executor adapter
 - follow [mcp/integrations/claude.md](mcp/integrations/claude.md) for the current remote connector walkthrough
 - use [mcp/examples/claude-desktop-relay.mcp.json](mcp/examples/claude-desktop-relay.mcp.json) as a value-reference example, not as a direct product import

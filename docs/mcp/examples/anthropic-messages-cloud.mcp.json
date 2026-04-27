@@ -1,0 +1,58 @@
+{
+  "anthropic_beta": "mcp-client-2025-11-20",
+  "mcp_servers": [
+    {
+      "type": "url",
+      "url": "https://<your-cloud-host>/api/cloud/v1/mcp",
+      "name": "codencer-cloud",
+      "authorization_token": "<oauth-or-codencer-bearer-token>"
+    }
+  ],
+  "tools": [
+    {
+      "type": "mcp_toolset",
+      "mcp_server_name": "codencer-cloud",
+      "default_config": {
+        "enabled": false
+      },
+      "configs": {
+        "codencer.list_instances": {
+          "enabled": true
+        },
+        "codencer.get_instance": {
+          "enabled": true
+        },
+        "codencer.start_run": {
+          "enabled": true
+        },
+        "codencer.submit_task": {
+          "enabled": true
+        },
+        "codencer.wait_step": {
+          "enabled": true
+        },
+        "codencer.get_step_result": {
+          "enabled": true
+        },
+        "codencer.get_step_validations": {
+          "enabled": true
+        },
+        "codencer.get_step_logs": {
+          "enabled": true
+        },
+        "codencer.list_step_artifacts": {
+          "enabled": true
+        },
+        "codencer.list_run_gates": {
+          "enabled": true
+        },
+        "codencer.approve_gate": {
+          "enabled": true
+        },
+        "codencer.reject_gate": {
+          "enabled": true
+        }
+      }
+    }
+  ]
+}

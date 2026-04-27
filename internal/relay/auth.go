@@ -2,12 +2,15 @@ package relay
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"strings"
 )
 
 type plannerPrincipal struct {
 	Name        string
+	TokenHash   string
 	Scopes      []string
 	InstanceIDs map[string]struct{}
 }
@@ -56,6 +59,7 @@ func (s *Server) authenticatePlanner(r *http.Request, requiredScope, instanceID 
 		}
 		principal := &plannerPrincipal{
 			Name:        candidate.Name,
+			TokenHash:   plannerTokenHash(token),
 			Scopes:      candidate.Scopes,
 			InstanceIDs: make(map[string]struct{}),
 		}
@@ -76,6 +80,11 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(header[len("Bearer "):])
+}
+
+func plannerTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 func authorizePrincipal(principal *plannerPrincipal, requiredScope, instanceID string) *apiError {

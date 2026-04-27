@@ -198,6 +198,9 @@ func writeCodexFallbackResult(step *domain.Step, attempt *domain.Attempt, attemp
 		summary = "Codex execution failed: " + execErr.Error()
 	} else if text := readCodexLastMessage(attemptArtifactRoot); text != "" {
 		summary = text
+	} else {
+		state = domain.StepStateFailedTerminal
+		summary = "Bridge Interface Error: Codex exited successfully but did not write result.json or codex-last-message.txt."
 	}
 
 	now := time.Now().UTC()
@@ -209,6 +212,16 @@ func writeCodexFallbackResult(step *domain.Step, attempt *domain.Attempt, attemp
 	if attempt != nil {
 		attemptID = attempt.ID
 	}
+	artifactRefs := map[string]string{}
+	for name, path := range map[string]string{
+		"codex_last_message_ref": filepath.Join(attemptArtifactRoot, "codex-last-message.txt"),
+		"stdout_ref":             filepath.Join(attemptArtifactRoot, "stdout.log"),
+	} {
+		if _, err := os.Stat(path); err == nil {
+			artifactRefs[name] = path
+		}
+	}
+
 	result := domain.ResultSpec{
 		Version:          "v1",
 		AttemptID:        attemptID,
@@ -216,14 +229,13 @@ func writeCodexFallbackResult(step *domain.Step, attempt *domain.Attempt, attemp
 		RequestedAdapter: requestedAdapter,
 		State:            state,
 		Summary:          summary,
-		Artifacts: map[string]string{
-			"codex_last_message_ref": filepath.Join(attemptArtifactRoot, "codex-last-message.txt"),
-			"stdout_ref":             filepath.Join(attemptArtifactRoot, "stdout.log"),
-		},
-		RawOutputRef: filepath.Join(attemptArtifactRoot, "stdout.log"),
-		IsSimulation: false,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		Artifacts:        artifactRefs,
+		IsSimulation:     false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if stdoutRef, ok := artifactRefs["stdout_ref"]; ok {
+		result.RawOutputRef = stdoutRef
 	}
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
