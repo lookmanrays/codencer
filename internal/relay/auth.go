@@ -23,6 +23,7 @@ func (s *Server) withPlannerScope(scope string, instanceIDFromRequest func(*http
 		principal := plannerFromContext(r.Context())
 		if principal != nil {
 			if err := authorizePrincipal(principal, scope, instanceID); err != nil {
+				s.addPlannerAuthChallenge(w, r, scope)
 				writeAPIError(w, err.Status, err.Code, err.Message)
 				return
 			}
@@ -31,6 +32,7 @@ func (s *Server) withPlannerScope(scope string, instanceIDFromRequest func(*http
 		}
 		principal, err := s.authenticatePlanner(r, scope, instanceID)
 		if err != nil {
+			s.addPlannerAuthChallenge(w, r, scope)
 			writeAPIError(w, err.Status, err.Code, err.Message)
 			return
 		}
@@ -44,7 +46,7 @@ func plannerFromContext(ctx context.Context) *plannerPrincipal {
 }
 
 func (s *Server) authenticatePlanner(r *http.Request, requiredScope, instanceID string) (*plannerPrincipal, *apiError) {
-	token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	token := bearerToken(r.Header.Get("Authorization"))
 	if token == "" {
 		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "planner bearer token required"}
 	}
@@ -66,6 +68,14 @@ func (s *Server) authenticatePlanner(r *http.Request, requiredScope, instanceID 
 		return principal, nil
 	}
 	return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "planner authorization failed"}
+}
+
+func bearerToken(header string) string {
+	header = strings.TrimSpace(header)
+	if len(header) < len("Bearer ") || !strings.EqualFold(header[:len("Bearer ")], "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(header[len("Bearer "):])
 }
 
 func authorizePrincipal(principal *plannerPrincipal, requiredScope, instanceID string) *apiError {

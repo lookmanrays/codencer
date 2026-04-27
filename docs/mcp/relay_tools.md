@@ -15,6 +15,9 @@ Use the relay MCP endpoint:
 - `GET /mcp`
 - `DELETE /mcp`
 
+OAuth protected-resource metadata:
+- `GET /.well-known/oauth-protected-resource/mcp`
+
 Compatibility path:
 - `POST /mcp/call`
 
@@ -66,6 +69,9 @@ The relay MCP server currently supports:
 - `/mcp` supports session-bound Streamable HTTP `GET`, `POST`, and `DELETE`
 - the relay returns `MCP-Protocol-Version`
 - the relay can return `MCP-Session-Id` on `initialize`
+- unauthenticated MCP calls return a bearer `WWW-Authenticate` challenge with `resource_metadata` pointing at the metadata URL above
+- `public_base_url` controls the public resource URL used in metadata and auth challenges
+- `oauth_authorization_servers`, `oauth_scopes_supported`, and `oauth_resource_documentation` populate the metadata for OAuth-capable product front doors
 - `GET /mcp` keeps an SSE stream open for the negotiated session and emits keepalive comments
 - `POST /mcp/call` remains as a compatibility alias for simple POST callers; `/mcp` is still the canonical session path
 - the Codencer tool model remains intentionally request/response-oriented even though the transport now supports a real SSE session
@@ -74,6 +80,7 @@ The relay MCP server currently supports:
 
 - verified in repo tests against the official Go SDK `StreamableClientTransport`
 - verified for manual JSON-RPC callers using `POST /mcp` and `POST /mcp/call`
+- verified for bearer-token auth, OAuth protected-resource metadata, and 401 bearer challenges
 - not overclaimed as universal client compatibility beyond the integrations directly exercised here
 
 ## Local MCP Distinction

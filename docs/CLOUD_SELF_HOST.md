@@ -158,7 +158,12 @@ Create a cloud config file such as `.codencer/cloud/config.json`:
   "port": 8190,
   "db_path": ".codencer/cloud/cloud.db",
   "master_key": "replace-with-a-long-random-secret",
-  "relay_config_path": ".codencer/relay/config.json"
+  "relay_config_path": ".codencer/relay/config.json",
+  "public_base_url": "https://cloud.example.com",
+  "allowed_origins": ["https://planner.example.com"],
+  "oauth_authorization_servers": ["https://auth.example.com"],
+  "oauth_scopes_supported": ["runtime_instances:read", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "gates:read", "gates:write"],
+  "oauth_resource_documentation": "https://docs.example.com/codencer-cloud-mcp"
 }
 ```
 
@@ -166,7 +171,9 @@ Notes:
 
 - `master_key` is required if you want encrypted installation secrets.
 - `relay_config_path` is optional and only needed if you want `codencer-cloudd` to own cloud-scoped runtime control through an internal relay bridge.
-- If you use the environment variables `CODENCER_CLOUD_DB_PATH`, `CODENCER_CLOUD_HOST`, `CODENCER_CLOUD_PORT`, `CODENCER_CLOUD_MASTER_KEY`, or `CODENCER_CLOUD_RELAY_CONFIG`, they override the file values.
+- `public_base_url`, `allowed_origins`, and the `oauth_*` fields are useful for public product-facing remote MCP deployments.
+- Codencer exposes OAuth protected-resource metadata and bearer challenges, but token issuance still belongs to your OAuth issuer/front door.
+- If you use the environment variables `CODENCER_CLOUD_DB_PATH`, `CODENCER_CLOUD_HOST`, `CODENCER_CLOUD_PORT`, `CODENCER_CLOUD_MASTER_KEY`, `CODENCER_CLOUD_RELAY_CONFIG`, `CODENCER_CLOUD_PUBLIC_BASE_URL`, `CODENCER_CLOUD_ALLOWED_ORIGINS`, `CODENCER_CLOUD_OAUTH_AUTHORIZATION_SERVERS`, `CODENCER_CLOUD_OAUTH_SCOPES_SUPPORTED`, or `CODENCER_CLOUD_OAUTH_RESOURCE_DOCUMENTATION`, they override the file values.
 
 ## Bootstrap Order
 
@@ -211,6 +218,7 @@ Cloud-scoped MCP is also available in composed mode:
 
 - canonical cloud MCP endpoint: `/api/cloud/v1/mcp`
 - compatibility alias: `/api/cloud/v1/mcp/call`
+- OAuth metadata endpoint: `/.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 
 Use relay `/mcp` only when you are operating the self-host relay directly without cloud tenancy.
 

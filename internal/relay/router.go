@@ -31,6 +31,7 @@ type relayStatusResponse struct {
 	Version                   string    `json:"version"`
 	StartedAt                 time.Time `json:"started_at"`
 	PlannerAuthMode           string    `json:"planner_auth_mode"`
+	MCPProtectedResource      bool      `json:"mcp_protected_resource_metadata"`
 	BootstrapEnrollmentSecret bool      `json:"bootstrap_enrollment_secret_enabled"`
 	ConnectorCount            int       `json:"connector_count"`
 	OnlineConnectorCount      int       `json:"online_connector_count"`
@@ -116,7 +117,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, relayStatusResponse{
 		Version:                   appversion.Version,
 		StartedAt:                 s.startedAt,
-		PlannerAuthMode:           "static_bearer_tokens",
+		PlannerAuthMode:           s.plannerAuthMode(),
+		MCPProtectedResource:      true,
 		BootstrapEnrollmentSecret: s.cfg.EnrollmentSecret != "",
 		ConnectorCount:            len(connectors),
 		OnlineConnectorCount:      onlineConnectors,

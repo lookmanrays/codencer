@@ -443,6 +443,33 @@ if scenario_enabled mcp-sdk; then
     --json > "$TMP_DIR/mcp-sdk.json"
 fi
 
+if scenario_enabled mcp-auth-metadata; then
+  MCP_AUTH_METADATA_JSON="$TMP_DIR/mcp-auth-metadata.json"
+  MCP_AUTH_CHALLENGE_HEADERS="$TMP_DIR/mcp-auth-challenge.headers"
+  MCP_AUTH_CHALLENGE_JSON="$TMP_DIR/mcp-auth-challenge.json"
+  curl -fsS "$RELAY_URL/.well-known/oauth-protected-resource/mcp" > "$MCP_AUTH_METADATA_JSON"
+  if ! grep -q "\"resource\":\"$RELAY_URL/mcp\"" "$MCP_AUTH_METADATA_JSON"; then
+    echo "ERROR: relay MCP OAuth protected-resource metadata did not identify $RELAY_URL/mcp." >&2
+    cat "$MCP_AUTH_METADATA_JSON" >&2
+    exit 1
+  fi
+  set +e
+  mcp_auth_status="$(curl -sS -D "$MCP_AUTH_CHALLENGE_HEADERS" -o "$MCP_AUTH_CHALLENGE_JSON" -w "%{http_code}" -X POST "$RELAY_URL/mcp" \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":"auth-1","method":"initialize","params":{"protocolVersion":"2025-11-25"}}')"
+  set -e
+  if [[ "$mcp_auth_status" != "401" ]]; then
+    echo "ERROR: unauthenticated relay MCP call should return 401, got $mcp_auth_status." >&2
+    cat "$MCP_AUTH_CHALLENGE_JSON" >&2 || true
+    exit 1
+  fi
+  if ! grep -qi 'www-authenticate: Bearer .*resource_metadata=".*\.well-known/oauth-protected-resource/mcp"' "$MCP_AUTH_CHALLENGE_HEADERS"; then
+    echo "ERROR: relay MCP 401 did not include OAuth protected-resource challenge." >&2
+    cat "$MCP_AUTH_CHALLENGE_HEADERS" >&2
+    exit 1
+  fi
+fi
+
 RUN_JSON="$TMP_DIR/run.json"
 curl_json POST "$RELAY_URL/api/v2/instances/$INSTANCE_ID/runs" "$RUN_JSON" "{\"id\":\"$RUN_ID\",\"project_id\":\"$PROJECT_ID\"}"
 
@@ -656,4 +683,7 @@ if scenario_enabled phase-loop; then
 fi
 if scenario_enabled mcp-sdk; then
   echo "MCP SDK:     $TMP_DIR/mcp-sdk.json"
+fi
+if scenario_enabled mcp-auth-metadata; then
+  echo "MCP auth:    $TMP_DIR/mcp-auth-metadata.json"
 fi

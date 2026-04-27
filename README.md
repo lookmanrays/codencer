@@ -128,7 +128,7 @@ Key constraints remain unchanged:
    `./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20`
 10. Run the documented smoke path with `make self-host-smoke`, `make self-host-smoke-mcp`, or `make self-host-smoke-all` once the daemon and relay are already running. `self-host-smoke-mcp` includes the official MCP SDK proof helper; `self-host-smoke-all` adds share-control and multi-instance coverage.
 
-Planner-facing relay routes live under `/api/v2`, and the relay-hosted MCP entrypoint is `/mcp` with `/mcp/call` kept as a compatibility path.
+Planner-facing relay routes live under `/api/v2`, and the relay-hosted MCP entrypoint is `/mcp` with `/mcp/call` kept as a compatibility path. Product-facing relay MCP deployments can also expose `/.well-known/oauth-protected-resource/mcp` and bearer `WWW-Authenticate` challenges by configuring `public_base_url` and `oauth_*` relay fields.
 The connector now persists a local Ed25519 identity, `connector_id`, `machine_id`, and an explicit shared-instance allowlist under `.codencer/connector/config.json`.
 The connector also persists a local `.codencer/connector/status.json` snapshot so operators can inspect session state, last heartbeat, and the currently shared instance set without contacting the relay.
 Direct relay lookups for steps, artifacts, and gates now probe only authorized online instances and persist the discovered route, so planner HTTP and MCP flows do not depend on prior observation of those IDs.
@@ -153,6 +153,7 @@ The cloud surface is subordinate to the core bridge model. It adds tenancy, cont
 - When cloud is running with the relay bridge, the cloud-scoped remote surface is:
   - HTTP under `/api/cloud/v1/runtime/*`
   - MCP under `/api/cloud/v1/mcp` with `/api/cloud/v1/mcp/call` kept as a compatibility alias
+  - OAuth protected-resource metadata under `/.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 - Relay `/mcp` remains the self-host relay MCP surface. Cloud `/api/cloud/v1/mcp` is the tenant-scoped cloud contract.
 - A Docker-based self-host baseline now lives under `deploy/cloud/` and can be smoke-checked with `make cloud-stack-smoke`.
 

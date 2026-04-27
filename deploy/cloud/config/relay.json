@@ -5,5 +5,9 @@
   "planner_token": "",
   "enrollment_secret": "",
   "proxy_timeout_seconds": 300,
-  "allowed_origins": []
+  "allowed_origins": [],
+  "public_base_url": "",
+  "oauth_authorization_servers": [],
+  "oauth_scopes_supported": [],
+  "oauth_resource_documentation": ""
 }

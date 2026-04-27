@@ -60,9 +60,15 @@ Minimal relay config example:
     }
   ],
   "proxy_timeout_seconds": 300,
-  "allowed_origins": ["http://127.0.0.1:8090"]
+  "allowed_origins": ["http://127.0.0.1:8090"],
+  "public_base_url": "https://relay.example.com",
+  "oauth_authorization_servers": ["https://auth.example.com"],
+  "oauth_scopes_supported": ["instances:read", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "gates:read", "gates:write"],
+  "oauth_resource_documentation": "https://docs.example.com/codencer-relay-mcp"
 }
 ```
+
+The OAuth fields are only needed for product-facing remote MCP deployments. Codencer remains the resource server and continues to validate bearer tokens; the OAuth issuer/front door is operator-owned.
 
 ### 1. Start the local daemon
 
@@ -206,8 +212,10 @@ For the frozen planner/client compatibility matrix, generic HTTP/MCP examples, a
 Current MCP transport posture:
 - canonical endpoint: `/mcp`
 - compatibility alias: `/mcp/call`
+- OAuth metadata: `/.well-known/oauth-protected-resource/mcp`
 - POST JSON-RPC is supported for straightforward planner integrations
 - Streamable HTTP compatibility is implemented on `/mcp` with `GET`, `POST`, and `DELETE`, `MCP-Protocol-Version`, and `MCP-Session-Id`
+- unauthenticated MCP calls return `WWW-Authenticate` with `resource_metadata`
 - the current relay is still request/response-first and does not emit long-lived unsolicited server notifications
 
 ### 9. Start work and inspect evidence

@@ -137,6 +137,19 @@ cat > "$RELAY_CONFIG" <<EOF
   "port": ${RELAY_PORT},
   "db_path": "${TMP_DIR}/relay.db",
   "planner_tokens": [],
+  "public_base_url": "${RELAY_URL}",
+  "oauth_authorization_servers": ["https://auth.example.invalid"],
+  "oauth_scopes_supported": [
+    "instances:read",
+    "runs:read",
+    "runs:write",
+    "steps:read",
+    "steps:write",
+    "artifacts:read",
+    "gates:read",
+    "gates:write"
+  ],
+  "oauth_resource_documentation": "https://example.invalid/codencer/relay-mcp",
   "proxy_timeout_seconds": ${RELAY_PROXY_TIMEOUT_SECONDS}
 }
 EOF
@@ -182,7 +195,7 @@ CONNECTOR_ADAPTER=codex \
 WAIT_TIMEOUT_MS="$FLAGSHIP_WAIT_TIMEOUT_MS" \
 MCP_SDK_STEP_COUNT=2 \
 MCP_SDK_WAIT_TIMEOUT_MS="$FLAGSHIP_MCP_SDK_WAIT_TIMEOUT_MS" \
-SMOKE_SCENARIOS=status,audit,share-control,multi-instance,reconnect,phase-loop,mcp,mcp-sdk \
+SMOKE_SCENARIOS=status,audit,share-control,multi-instance,reconnect,phase-loop,mcp-auth-metadata,mcp,mcp-sdk \
 "$ROOT_DIR/scripts/self_host_smoke.sh"
 
 GATE_WORKTREE="$(create_worktree gate)"

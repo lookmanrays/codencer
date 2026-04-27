@@ -231,6 +231,66 @@ func (h *mcpHarness) openStream(t *testing.T, auth, sessionID string) (*http.Res
 	return resp, bufio.NewReader(resp.Body)
 }
 
+func TestRelayMCPExposesOAuthProtectedResourceMetadataAndChallenge(t *testing.T) {
+	t.Parallel()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	server := relay.NewServer(&relay.Config{
+		Host:                       "127.0.0.1",
+		Port:                       0,
+		DBPath:                     filepath.Join(t.TempDir(), "relay-unused.db"),
+		PlannerToken:               "planner-token",
+		PublicBaseURL:              "https://relay.example.test",
+		OAuthAuthorizationServers:  []string{"https://auth.example.test"},
+		OAuthScopesSupported:       []string{"instances:read", "runs:write", "steps:read"},
+		OAuthResourceDocumentation: "https://docs.example.test/codencer-relay-mcp",
+	}, store)
+	relayHTTP := httptest.NewServer(server.Handler())
+	defer relayHTTP.Close()
+
+	resp, err := http.Get(relayHTTP.URL + "/.well-known/oauth-protected-resource/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected metadata 200, got %d body=%s", resp.StatusCode, string(body))
+	}
+	var metadata map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata["resource"] != "https://relay.example.test/mcp" {
+		t.Fatalf("unexpected resource metadata: %+v", metadata)
+	}
+	servers, _ := metadata["authorization_servers"].([]any)
+	if len(servers) != 1 || servers[0] != "https://auth.example.test" {
+		t.Fatalf("unexpected authorization servers: %+v", metadata)
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, relayHTTP.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"1","method":"initialize"}`))
+	req.Header.Set("Content-Type", "application/json")
+	challengeResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer challengeResp.Body.Close()
+	if challengeResp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(challengeResp.Body)
+		t.Fatalf("expected unauthenticated MCP call to return 401, got %d body=%s", challengeResp.StatusCode, string(body))
+	}
+	challenge := challengeResp.Header.Get("WWW-Authenticate")
+	if !strings.Contains(challenge, `resource_metadata="https://relay.example.test/.well-known/oauth-protected-resource/mcp"`) {
+		t.Fatalf("missing protected-resource challenge, got %q", challenge)
+	}
+}
+
 type authRoundTripper struct {
 	base          http.RoundTripper
 	authorization string

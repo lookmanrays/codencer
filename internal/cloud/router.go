@@ -21,13 +21,15 @@ type apiError struct {
 }
 
 type cloudStatusResponse struct {
-	Status             string                     `json:"status"`
-	Version            string                     `json:"version"`
-	StartedAt          string                     `json:"started_at"`
-	CloudAPIBase       string                     `json:"cloud_api_base"`
-	CloudMCPBase       string                     `json:"cloud_mcp_base,omitempty"`
-	RelayComposed      bool                       `json:"relay_composed"`
-	ConnectorProviders []cloudconnectors.Provider `json:"connector_providers"`
+	Status               string                     `json:"status"`
+	Version              string                     `json:"version"`
+	StartedAt            string                     `json:"started_at"`
+	CloudAPIBase         string                     `json:"cloud_api_base"`
+	CloudMCPBase         string                     `json:"cloud_mcp_base,omitempty"`
+	PlannerAuthMode      string                     `json:"planner_auth_mode"`
+	MCPProtectedResource bool                       `json:"mcp_protected_resource_metadata"`
+	RelayComposed        bool                       `json:"relay_composed"`
+	ConnectorProviders   []cloudconnectors.Provider `json:"connector_providers"`
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
@@ -37,6 +39,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("/ws/connectors", s.handleRelayConnectorIngress)
 	}
 	mux.HandleFunc("/healthz", s.handleHealth)
+	mux.HandleFunc("/.well-known/oauth-protected-resource", s.handleOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-protected-resource/", s.handleOAuthProtectedResource)
 	mux.HandleFunc("/api/cloud/v1/status", s.handleStatus)
 	mux.HandleFunc("/api/cloud/v1/orgs", s.handleOrgs)
 	mux.HandleFunc("/api/cloud/v1/workspaces", s.handleWorkspaces)
@@ -83,13 +87,15 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		providers = s.connectors.Names()
 	}
 	writeJSON(w, http.StatusOK, cloudStatusResponse{
-		Status:             "ok",
-		Version:            bridgeapp.Version,
-		StartedAt:          s.startedAt.UTC().Format(time.RFC3339),
-		CloudAPIBase:       "/api/cloud/v1",
-		CloudMCPBase:       "/api/cloud/v1/mcp",
-		RelayComposed:      s.runtime != nil && s.runtime.Server != nil && s.runtime.Store != nil,
-		ConnectorProviders: providers,
+		Status:               "ok",
+		Version:              bridgeapp.Version,
+		StartedAt:            s.startedAt.UTC().Format(time.RFC3339),
+		CloudAPIBase:         "/api/cloud/v1",
+		CloudMCPBase:         "/api/cloud/v1/mcp",
+		PlannerAuthMode:      s.authMode(),
+		MCPProtectedResource: true,
+		RelayComposed:        s.runtime != nil && s.runtime.Server != nil && s.runtime.Store != nil,
+		ConnectorProviders:   providers,
 	})
 }
 
@@ -866,6 +872,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) requireToken(w http.ResponseWriter, r *http.Request, scope string) (*APIToken, bool) {
 	token, apiErr := s.authenticateToken(r, scope)
 	if apiErr != nil {
+		s.addTokenAuthChallenge(w, r, scope)
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return nil, false
 	}

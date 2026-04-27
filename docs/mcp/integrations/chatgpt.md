@@ -1,6 +1,6 @@
-# ChatGPT — Codencer Beta Walkthrough
+# ChatGPT-Style Planner — Codencer Walkthrough
 
-This walkthrough is frozen to the Codencer `v0.2.0-beta` Wave 2 contract and the OpenAI docs linked here as checked on 2026-04-24.
+This walkthrough is for the post-beta flagship planner loop and the OpenAI docs linked here as checked on 2026-04-27.
 
 Use this page together with [Beta Testing](../../BETA_TESTING.md) and [Planner / Client Integration Notes](../integrations.md).
 
@@ -11,7 +11,8 @@ Codencer status for the ChatGPT-style operator path is `operator-packaged`.
 What that means in practice:
 
 - Codencer proves the relay/cloud MCP protocol surfaces directly.
-- Codencer now ships a flagship loop smoke for the Codencer side of the path.
+- Codencer ships a flagship loop smoke for the Codencer side of the path.
+- Codencer exposes OAuth protected-resource metadata and bearer challenges for product-facing remote MCP setup.
 - Codencer does not claim universal proof of the ChatGPT product UI, plan eligibility, approval UX, or deployment flow.
 - ChatGPT must target the remote relay `/mcp` surface or the remote cloud `/api/cloud/v1/mcp` surface.
 - Do not point ChatGPT at the daemon-local `/mcp/call` endpoint.
@@ -24,24 +25,20 @@ Before you open ChatGPT, have all of the following ready:
 - A remote MCP URL:
   - relay: `https://<your-relay-host>/mcp`
   - cloud: `https://<your-cloud-host>/api/cloud/v1/mcp`
-- A Codencer token for that surface:
+- A Codencer token or OAuth front-door setup for that surface:
   - relay: planner token
   - cloud: cloud token
+  - product OAuth mode: an operator-owned OAuth issuer/gateway that produces or forwards a bearer token Codencer accepts
 - At least one reachable shared runtime instance:
   - relay path: shared through the connector and visible from relay `/mcp`
   - cloud path: claimed into org/workspace/project scope and visible from cloud `/api/cloud/v1/mcp`
 - For cloud, token scopes that cover runtime discovery and run execution. `codencer.list_instances` requires `runtime_instances:read`.
-- A ChatGPT web account where developer mode is available to your user/workspace.
+- A ChatGPT workspace/account where remote MCP custom app or connector setup is available to your user/workspace.
 
-OpenAI plan availability wording is not fully identical across the two current docs:
+Treat Business/Enterprise workspace setup as the reliable lane for write-capable operator use unless your current OpenAI account explicitly exposes the needed remote MCP app flow. Verify current eligibility before rollout in the live OpenAI docs:
 
-- the developer guide says developer mode is available in beta on ChatGPT web for Pro, Plus, Business, Enterprise, and Education accounts
-- the Help Center article says apps, full MCP support, and developer mode are available for Business and Enterprise/Edu
-
-Verify current eligibility before rollout in the live OpenAI docs:
-
-- [ChatGPT Developer mode](https://developers.openai.com/api/docs/guides/developer-mode)
-- [Developer mode, and MCP apps in ChatGPT [beta]](https://help.openai.com/en/articles/12584461)
+- [Building MCP servers for ChatGPT and API integrations](https://platform.openai.com/docs/mcp/)
+- [ChatGPT Developer mode](https://platform.openai.com/docs/guides/developer-mode)
 
 ## Step 1 Choose the Codencer surface
 
@@ -60,7 +57,7 @@ Do not use:
 
 Use the current OpenAI UI path for your plan and verify it against the live docs before rollout.
 
-Current OpenAI guidance checked on 2026-04-24:
+Current OpenAI guidance checked on 2026-04-27:
 
 - Admin workspace enablement path in the Help Center:
   - `Workspace Settings -> Permissions & Roles -> Connected Data Developer mode / Create custom MCP connectors`
@@ -74,8 +71,8 @@ Current OpenAI guidance checked on 2026-04-24:
 
 OpenAI’s current references:
 
-- [ChatGPT Developer mode](https://developers.openai.com/api/docs/guides/developer-mode)
-- [Developer mode, and MCP apps in ChatGPT [beta]](https://help.openai.com/en/articles/12584461)
+- [Building MCP servers for ChatGPT and API integrations](https://platform.openai.com/docs/mcp/)
+- [ChatGPT Developer mode](https://platform.openai.com/docs/guides/developer-mode)
 
 Keep the claim narrow: OpenAI currently documents ChatGPT as a remote MCP client surface. This Codencer walkthrough does not imply local daemon support in ChatGPT.
 
@@ -89,6 +86,14 @@ Operator inputs:
 - cloud endpoint: `https://<your-cloud-host>/api/cloud/v1/mcp`
 - relay token: `<your-planner-token>`
 - cloud token: `<your-cloud-token>`
+- relay OAuth metadata: `https://<your-relay-host>/.well-known/oauth-protected-resource/mcp`
+- cloud OAuth metadata: `https://<your-cloud-host>/.well-known/oauth-protected-resource/api/cloud/v1/mcp`
+
+Auth choices:
+
+- bearer-token mode is repo-proven for private testing and API-style clients that accept bearer credentials
+- OAuth protected-resource mode is repo-proven for discovery and challenges, but the authorization server itself is outside Codencer
+- for ChatGPT product app setup, configure the OAuth issuer/front door required by the current OpenAI flow and have it issue or translate to a bearer token Codencer accepts
 
 The checked-in example files are operator value references only:
 
@@ -308,7 +313,8 @@ For the repo-level beta proof boundaries, keep using [Beta Testing](../../BETA_T
 
 - This is an operator-packaged Codencer path for the canonical remote MCP surface, not a universal ChatGPT product-support claim.
 - ChatGPT is documented here only as a remote MCP client. Do not infer local daemon support.
-- OpenAI’s plan-availability wording differs between the two current docs as of 2026-04-24. Verify current eligibility before rollout.
+- Product plan availability and UI wording can change. Verify current eligibility before rollout.
+- Codencer does not issue OAuth authorization-code tokens; product OAuth flows need an operator-owned OAuth issuer or gateway in front of Codencer.
 - OpenAI owns the ChatGPT UI, tool approval UX, draft/publish flow, and any product-side restrictions.
 - The example `.mcp.json` files in this repo are value-reference templates only, not direct ChatGPT imports.
 - Cloud mode requires composed runtime mode plus a claimed runtime instance. A relay planner token does not replace a cloud token, and a cloud token does not replace relay planner auth.

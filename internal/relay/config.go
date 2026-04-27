@@ -11,17 +11,21 @@ import (
 
 // Config controls the self-hosted relay server.
 type Config struct {
-	Host                     string               `json:"host"`
-	Port                     int                  `json:"port"`
-	DBPath                   string               `json:"db_path"`
-	PlannerToken             string               `json:"planner_token,omitempty"`
-	PlannerTokens            []PlannerTokenConfig `json:"planner_tokens,omitempty"`
-	EnrollmentSecret         string               `json:"enrollment_secret,omitempty"`
-	HeartbeatIntervalSeconds int                  `json:"heartbeat_interval_seconds,omitempty"`
-	SessionTTLSeconds        int                  `json:"session_ttl_seconds,omitempty"`
-	ChallengeTTLSeconds      int                  `json:"challenge_ttl_seconds,omitempty"`
-	ProxyTimeoutSeconds      int                  `json:"proxy_timeout_seconds,omitempty"`
-	AllowedOrigins           []string             `json:"allowed_origins,omitempty"`
+	Host                       string               `json:"host"`
+	Port                       int                  `json:"port"`
+	DBPath                     string               `json:"db_path"`
+	PlannerToken               string               `json:"planner_token,omitempty"`
+	PlannerTokens              []PlannerTokenConfig `json:"planner_tokens,omitempty"`
+	EnrollmentSecret           string               `json:"enrollment_secret,omitempty"`
+	HeartbeatIntervalSeconds   int                  `json:"heartbeat_interval_seconds,omitempty"`
+	SessionTTLSeconds          int                  `json:"session_ttl_seconds,omitempty"`
+	ChallengeTTLSeconds        int                  `json:"challenge_ttl_seconds,omitempty"`
+	ProxyTimeoutSeconds        int                  `json:"proxy_timeout_seconds,omitempty"`
+	AllowedOrigins             []string             `json:"allowed_origins,omitempty"`
+	PublicBaseURL              string               `json:"public_base_url,omitempty"`
+	OAuthAuthorizationServers  []string             `json:"oauth_authorization_servers,omitempty"`
+	OAuthScopesSupported       []string             `json:"oauth_scopes_supported,omitempty"`
+	OAuthResourceDocumentation string               `json:"oauth_resource_documentation,omitempty"`
 }
 
 type PlannerTokenConfig struct {
@@ -83,6 +87,18 @@ func LoadConfig(path string) (*Config, error) {
 	if value := os.Getenv("RELAY_ALLOWED_ORIGINS"); value != "" {
 		cfg.AllowedOrigins = splitCSV(value)
 	}
+	if value := os.Getenv("RELAY_PUBLIC_BASE_URL"); value != "" {
+		cfg.PublicBaseURL = strings.TrimSpace(value)
+	}
+	if value := os.Getenv("RELAY_OAUTH_AUTHORIZATION_SERVERS"); value != "" {
+		cfg.OAuthAuthorizationServers = splitCSV(value)
+	}
+	if value := os.Getenv("RELAY_OAUTH_SCOPES_SUPPORTED"); value != "" {
+		cfg.OAuthScopesSupported = splitCSV(value)
+	}
+	if value := os.Getenv("RELAY_OAUTH_RESOURCE_DOCUMENTATION"); value != "" {
+		cfg.OAuthResourceDocumentation = strings.TrimSpace(value)
+	}
 	return cfg, cfg.Validate()
 }
 
@@ -117,6 +133,10 @@ func (c *Config) Validate() error {
 	if c.ProxyTimeoutSeconds <= 0 {
 		c.ProxyTimeoutSeconds = 300
 	}
+	c.PublicBaseURL = strings.TrimRight(strings.TrimSpace(c.PublicBaseURL), "/")
+	c.OAuthAuthorizationServers = cleanConfigList(c.OAuthAuthorizationServers)
+	c.OAuthScopesSupported = cleanConfigList(c.OAuthScopesSupported)
+	c.OAuthResourceDocumentation = strings.TrimSpace(c.OAuthResourceDocumentation)
 	return nil
 }
 
@@ -149,6 +169,18 @@ func splitCSV(value string) []string {
 			continue
 		}
 		out = append(out, part)
+	}
+	return out
+}
+
+func cleanConfigList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
 	}
 	return out
 }

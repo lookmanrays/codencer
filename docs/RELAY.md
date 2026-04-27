@@ -44,6 +44,10 @@ The relay config must include at least:
 Useful config keys for practical self-host use:
 - `proxy_timeout_seconds`
 - `allowed_origins`
+- `public_base_url`
+- `oauth_authorization_servers`
+- `oauth_scopes_supported`
+- `oauth_resource_documentation`
 - `heartbeat_interval_seconds`
 - `session_ttl_seconds`
 - `challenge_ttl_seconds`
@@ -63,9 +67,10 @@ Current auth model is intentionally small:
 - static token config
 - explicit scopes
 - optional instance scoping
+- OAuth protected-resource metadata and bearer challenges for product-facing MCP front doors
 - suitable for narrow self-host beta use
 
-It is not enterprise IAM.
+It is not enterprise IAM and does not issue OAuth authorization-code tokens.
 
 Operator helper:
 
@@ -169,6 +174,9 @@ Protocol notes:
 - the relay negotiates and returns `MCP-Protocol-Version`
 - the relay can return `MCP-Session-Id` on `initialize`
 - the relay enforces `allowed_origins` for browser-style MCP callers when configured
+- the relay exposes `GET /.well-known/oauth-protected-resource/mcp`
+- unauthenticated MCP calls return a `WWW-Authenticate` bearer challenge with `resource_metadata`
+- `public_base_url` should be set when the relay is behind a reverse proxy or public tunnel
 - the canonical streamable session path is `/mcp`; use `POST /mcp/call` only as a compatibility POST alias, not as the primary long-lived session endpoint
 - the current relay remains request/response-first; it does not rely on unsolicited long-lived server notifications for planner functionality
 
@@ -187,7 +195,7 @@ The relay does not widen privileges beyond planner token scopes or connector sha
 ## Known Limitations
 
 Current honest limitations:
-- planner auth is static-token based
+- planner execution auth is static-token based; OAuth protected-resource discovery is implemented, but Codencer does not issue OAuth authorization-code tokens
 - relay resolves unknown `step`, `artifact`, and `gate` ids by probing only authorized online shared instances, then persists route hints; lookups still fail closed when no online match exists or multiple instances match
 - artifact transfer is bounded and is not intended for bulk binary transport
 - abort semantics remain best-effort unless the local adapter confirms stop; planner callers only get a successful abort when the daemon actually reaches `cancelled`

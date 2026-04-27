@@ -103,6 +103,7 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 
 	token, apiErr := s.cloud.authenticateToken(r, "")
 	if apiErr != nil {
+		s.cloud.addTokenAuthChallenge(w, r, "")
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
@@ -334,7 +335,7 @@ func (s *mcpServer) applyOriginHeaders(w http.ResponseWriter, r *http.Request) *
 	if origin == "" {
 		return nil
 	}
-	if !originAllowed(origin, r.Host, s.cloud.cfg.Host) {
+	if !originAllowed(origin, r.Host, s.cloud.cfg.Host, s.cloud.cfg.AllowedOrigins) {
 		return &apiError{Status: http.StatusForbidden, Code: "origin_denied", Message: "origin is not allowed for the cloud MCP surface"}
 	}
 	w.Header().Set("Vary", "Origin")
@@ -601,7 +602,16 @@ func newMCPSessionID() string {
 	return fmt.Sprintf("mcp-%d", time.Now().UnixNano())
 }
 
-func originAllowed(origin, requestHost, cfgHost string) bool {
+func originAllowed(origin, requestHost, cfgHost string, allowedOrigins []string) bool {
+	if len(allowedOrigins) > 0 {
+		for _, allowed := range allowedOrigins {
+			allowed = strings.TrimSpace(allowed)
+			if allowed == "*" || strings.EqualFold(allowed, origin) {
+				return true
+			}
+		}
+		return false
+	}
 	parsed, err := url.Parse(origin)
 	if err != nil {
 		return false

@@ -218,6 +218,76 @@ func startCloudMCPHarness(t *testing.T) *cloudMCPHarness {
 	return h
 }
 
+func TestCloudMCPExposesOAuthProtectedResourceMetadataChallengeAndCORS(t *testing.T) {
+	t.Parallel()
+
+	store, err := OpenStore(filepath.Join(t.TempDir(), "cloud.db"), "cloud-master-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "https://cloud.example.test"
+	cfg.OAuthAuthorizationServers = []string{"https://auth.example.test"}
+	cfg.OAuthScopesSupported = []string{"runtime_instances:read", "runs:write", "steps:read"}
+	cfg.OAuthResourceDocumentation = "https://docs.example.test/codencer-cloud-mcp"
+	cfg.AllowedOrigins = []string{"https://planner.example.test"}
+	cloudHTTP := httptest.NewServer(NewServer(cfg, store, nil, nil).Handler())
+	defer cloudHTTP.Close()
+
+	resp, err := http.Get(cloudHTTP.URL + "/.well-known/oauth-protected-resource/api/cloud/v1/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected metadata 200, got %d body=%s", resp.StatusCode, string(body))
+	}
+	var metadata map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata["resource"] != "https://cloud.example.test/api/cloud/v1/mcp" {
+		t.Fatalf("unexpected resource metadata: %+v", metadata)
+	}
+	servers, _ := metadata["authorization_servers"].([]any)
+	if len(servers) != 1 || servers[0] != "https://auth.example.test" {
+		t.Fatalf("unexpected authorization servers: %+v", metadata)
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, cloudHTTP.URL+"/api/cloud/v1/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"1","method":"initialize"}`))
+	req.Header.Set("Content-Type", "application/json")
+	challengeResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer challengeResp.Body.Close()
+	if challengeResp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(challengeResp.Body)
+		t.Fatalf("expected unauthenticated MCP call to return 401, got %d body=%s", challengeResp.StatusCode, string(body))
+	}
+	challenge := challengeResp.Header.Get("WWW-Authenticate")
+	if !strings.Contains(challenge, `resource_metadata="https://cloud.example.test/.well-known/oauth-protected-resource/api/cloud/v1/mcp"`) {
+		t.Fatalf("missing protected-resource challenge, got %q", challenge)
+	}
+
+	corsReq, _ := http.NewRequest(http.MethodOptions, cloudHTTP.URL+"/api/cloud/v1/mcp", nil)
+	corsReq.Header.Set("Origin", "https://planner.example.test")
+	corsResp, err := http.DefaultClient.Do(corsReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer corsResp.Body.Close()
+	if corsResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected CORS preflight 204, got %d", corsResp.StatusCode)
+	}
+	if got := corsResp.Header.Get("Access-Control-Allow-Origin"); got != "https://planner.example.test" {
+		t.Fatalf("unexpected CORS allow origin %q", got)
+	}
+}
+
 func (h *cloudMCPHarness) createScopedToken(t *testing.T, orgID, workspaceID, projectID string, scopes []string) (APIToken, string) {
 	t.Helper()
 	rawToken, err := GenerateAPIToken()

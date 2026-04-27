@@ -138,8 +138,8 @@ make flagship-planner-smoke
 ```
 
 - Generic MCP clients beyond the checked-in proof helpers remain expected-only.
-- ChatGPT-style and Claude Code-style operator paths are now packaged around the repo-proven Codencer-side loop.
-- Universal ChatGPT product support, Claude Desktop/`claude.ai` remote connector auth/setup, and marketplace-style publication remain compatibility-only.
+- ChatGPT-style and Claude Code-style operator paths are now packaged around the repo-proven Codencer-side loop, including bearer-token proof and OAuth protected-resource MCP metadata/challenges.
+- Universal ChatGPT product support, Claude Desktop/`claude.ai` remote connector setup, full OAuth issuer behavior, and marketplace-style publication remain compatibility-only.
 
 ### Provider connectors
 

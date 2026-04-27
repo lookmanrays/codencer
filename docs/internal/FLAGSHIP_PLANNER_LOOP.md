@@ -33,6 +33,39 @@ HTTP remains supported for generic planner automation:
 
 For ChatGPT-style and Claude-style planner packaging, prefer the MCP surface. Use HTTP for scripts, diagnostics, and simple bearer-token clients.
 
+## Auth Modes
+
+Two auth modes are now part of the flagship path.
+
+### Bearer-Token Mode
+
+Bearer-token mode is the proven private/self-host mode.
+
+- relay MCP uses `Authorization: Bearer <planner-token>`
+- cloud MCP uses `Authorization: Bearer <cloud-token>`
+- relay tokens come from `planner_token` or `planner_tokens[]`
+- cloud tokens are hashed `cct_...` API tokens scoped by org/workspace/project and runtime permissions
+
+Bearer mode is what the repo tests, MCP SDK helper, self-host smoke, cloud smoke, and flagship smoke use for actual tool calls.
+
+### OAuth-Capable Protected Resource Mode
+
+OAuth-capable mode is a product-facing resource-server shape, not a built-in Codencer identity provider.
+
+Codencer exposes OAuth protected-resource metadata and 401 challenges for both canonical MCP endpoints:
+
+- relay metadata: `GET /.well-known/oauth-protected-resource/mcp`
+- cloud metadata: `GET /.well-known/oauth-protected-resource/api/cloud/v1/mcp`
+- relay challenge: unauthenticated `POST /mcp` returns `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp"`
+- cloud challenge: unauthenticated `POST /api/cloud/v1/mcp` returns `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/api/cloud/v1/mcp"`
+
+Operators configure the externally reachable resource URL and OAuth issuer/front-door metadata with:
+
+- relay: `public_base_url`, `oauth_authorization_servers`, `oauth_scopes_supported`, `oauth_resource_documentation`
+- cloud: `public_base_url`, `oauth_authorization_servers`, `oauth_scopes_supported`, `oauth_resource_documentation`
+
+Codencer still validates bearer tokens at the MCP resource. If a product client requires a full OAuth authorization-code flow, put Codencer behind an operator-owned OAuth issuer or gateway that mints, translates, or forwards a token Codencer accepts. This keeps Codencer as bridge/resource server, not as an identity provider.
+
 ## Loop Boundary
 
 Inside Codencer:
@@ -224,8 +257,10 @@ Repository proof added or strengthened in this phase:
 - fake-binary Codex adapter test proves non-simulation CLI invocation and result synthesis
 - relay wait returns promptly at `needs_approval`
 - cloud HTTP wait/retry/gate proxy parity is covered by tests
+- relay and cloud MCP expose OAuth protected-resource metadata and `WWW-Authenticate` challenges for product-facing remote MCP setup
 - `mcp-sdk-smoke --step-count 2` proves a same-run multi-step phase loop through MCP
-- `scripts/self_host_smoke.sh` covers phase-loop, reconnect, strict gate, multi-instance, evidence retrieval, and MCP/SDK flows
+- `scripts/self_host_smoke.sh` covers phase-loop, reconnect, strict gate, multi-instance, evidence retrieval, MCP auth metadata, and MCP/SDK flows
+- `scripts/cloud_smoke.sh` proves cloud MCP protected-resource metadata/challenge and, when enabled, composed cloud MCP/SDK runtime access
 - `make flagship-planner-smoke` runs the flagship relay loop proof with local Codex as the selected adapter profile
 
 Still not claimed:
@@ -233,4 +268,5 @@ Still not claimed:
 - universal ChatGPT product compatibility
 - universal Claude product compatibility
 - live authenticated Codex service proof in CI
+- Codencer-native OAuth authorization-code token issuance
 - arbitrary MCP client compatibility beyond repo-proven protocol and helper paths

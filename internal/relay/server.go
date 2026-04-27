@@ -57,6 +57,8 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/api/v2/artifacts/", s.withPlannerScope("artifacts:read", nil, s.handleArtifactScoped))
 	mux.HandleFunc("/api/v2/gates/", s.withPlannerScope("gates:write", nil, s.handleGateScoped))
 	mux.HandleFunc("/ws/connectors", s.handleConnectorWebSocket)
+	mux.HandleFunc("/.well-known/oauth-protected-resource", s.handleOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-protected-resource/", s.handleOAuthProtectedResource)
 	mux.HandleFunc("/mcp", s.mcp.Handle)
 	mux.HandleFunc("/mcp/call", s.mcp.Handle)
 
@@ -118,8 +120,8 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.Relay = relayproto.RelayMetadata{
-		RelayURL:                 relayBaseURL(r),
-		WebsocketURL:             websocketURL(r, "/ws/connectors"),
+		RelayURL:                 s.relayBaseURL(r),
+		WebsocketURL:             s.websocketURL(r, "/ws/connectors"),
 		HeartbeatIntervalSeconds: s.cfg.HeartbeatIntervalSeconds,
 	}
 	s.auditor.Record(r.Context(), AuditEvent{
@@ -152,8 +154,8 @@ func (s *Server) handleChallenge(w http.ResponseWriter, r *http.Request) {
 		ChallengeID: challenge.ChallengeID,
 		Nonce:       challenge.Nonce,
 		Relay: relayproto.RelayMetadata{
-			RelayURL:                 relayBaseURL(r),
-			WebsocketURL:             websocketURL(r, "/ws/connectors"),
+			RelayURL:                 s.relayBaseURL(r),
+			WebsocketURL:             s.websocketURL(r, "/ws/connectors"),
 			HeartbeatIntervalSeconds: s.cfg.HeartbeatIntervalSeconds,
 		},
 	})

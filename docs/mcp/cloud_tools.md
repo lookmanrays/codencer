@@ -14,6 +14,10 @@ Use the cloud MCP endpoint:
 - `GET /api/cloud/v1/mcp`
 - `DELETE /api/cloud/v1/mcp`
 
+OAuth protected-resource metadata:
+
+- `GET /.well-known/oauth-protected-resource/api/cloud/v1/mcp`
+
 Compatibility path:
 
 - `POST /api/cloud/v1/mcp/call`
@@ -68,6 +72,10 @@ The cloud MCP server currently supports:
 - `/api/cloud/v1/mcp` supports session-bound Streamable HTTP `GET`, `POST`, and `DELETE`
 - the cloud daemon returns `MCP-Protocol-Version`
 - the cloud daemon can return `MCP-Session-Id` on `initialize`
+- unauthenticated MCP calls return a bearer `WWW-Authenticate` challenge with `resource_metadata` pointing at the metadata URL above
+- `public_base_url` controls the public resource URL used in metadata and auth challenges
+- `allowed_origins` can explicitly permit browser-style remote MCP origins
+- `oauth_authorization_servers`, `oauth_scopes_supported`, and `oauth_resource_documentation` populate the metadata for OAuth-capable product front doors
 - `GET /api/cloud/v1/mcp` keeps an SSE stream open for the negotiated session and emits keepalive comments
 - `POST /api/cloud/v1/mcp/call` remains as a compatibility alias for simple POST callers; `/api/cloud/v1/mcp` is still the canonical session path
 - the compatibility alias accepts both full JSON-RPC `tools/call` requests and the shorthand top-level `name` / `arguments` form
@@ -77,6 +85,7 @@ The cloud MCP server currently supports:
 ## Proven Compatibility
 
 - verified in repo tests for initialize, tools/list, tools/call, stream bootstrap, session delete, browser-origin handling, compatibility aliasing, token-bound sessions, and revoked-token denial
+- verified in repo tests for OAuth protected-resource metadata, 401 bearer challenges, and configured cloud MCP CORS origins
 - verified in composed cloud smoke for initialize, list, call, and official Go SDK access
 - not overclaimed as universal client compatibility beyond the integrations directly exercised here
 

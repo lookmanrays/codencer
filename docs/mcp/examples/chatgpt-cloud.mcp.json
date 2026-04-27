@@ -1,6 +1,8 @@
 {
   "label": "codencer-cloud",
   "endpoint": "https://<your-cloud-host>/api/cloud/v1/mcp",
+  "oauth_metadata": "https://<your-cloud-host>/.well-known/oauth-protected-resource/api/cloud/v1/mcp",
+  "auth_mode": "oauth-protected-resource-or-bearer",
   "token": "<your-cloud-token>",
   "usage": "value-reference-only"
 }

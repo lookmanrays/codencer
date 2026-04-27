@@ -1,6 +1,8 @@
 {
   "label": "codencer-relay",
   "endpoint": "https://<your-relay-host>/mcp",
+  "oauth_metadata": "https://<your-relay-host>/.well-known/oauth-protected-resource/mcp",
+  "auth_mode": "oauth-protected-resource-or-bearer",
   "token": "<your-planner-token>",
   "usage": "value-reference-only"
 }

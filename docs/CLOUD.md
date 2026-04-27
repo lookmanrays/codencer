@@ -46,6 +46,7 @@ It can also start an internal relay runtime bridge when started with `--relay-co
 - cloud keeps a tenant-scoped runtime connector and runtime instance registry
 - cloud proxies tenant-scoped runtime HTTP operations through the in-process relay server
 - cloud exposes the tenant-scoped MCP surface at `/api/cloud/v1/mcp`
+- cloud exposes OAuth protected-resource metadata at `/.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 - raw relay planner routes and relay MCP are implementation details in composed mode, not the cloud-facing contract
 
 ## Access Model
@@ -108,6 +109,7 @@ This is still intentionally smaller than enterprise IAM. There is no SSO, no ext
 - `POST /api/cloud/v1/runtime/instances/{id}/gates/{gate_id}/reject`
 - `GET|POST|DELETE /api/cloud/v1/mcp`
 - `POST /api/cloud/v1/mcp/call`
+- `GET /.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 - `GET /api/cloud/v1/events`
 - `GET /api/cloud/v1/audit`
 
@@ -127,6 +129,9 @@ The cloud-scoped canonical remote tool surface now exists at `/api/cloud/v1/mcp`
 
 - It uses cloud bearer tokens, not relay planner tokens.
 - Transport auth only requires a valid cloud token; individual tool calls still enforce their own runtime scopes.
+- It exposes OAuth protected-resource metadata and 401 bearer challenges for product-facing remote MCP deployments.
+- It does not issue OAuth authorization-code tokens; use an operator-owned OAuth issuer/front door when product setup requires that flow.
+- `public_base_url`, `allowed_origins`, `oauth_authorization_servers`, `oauth_scopes_supported`, and `oauth_resource_documentation` configure the public MCP metadata/CORS shape.
 - It enforces org/workspace/project visibility before any runtime tool can see an instance.
 - It intentionally exposes only the narrow `codencer.*` runtime tool set.
 - It is only useful when `codencer-cloudd` is started with a relay bridge.

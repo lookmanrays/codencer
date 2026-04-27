@@ -60,6 +60,28 @@ mkdir -p .codencer/relay
   --scope '*'
 ```
 
+For a public product-facing MCP endpoint, add the public URL and OAuth protected-resource metadata to `.codencer/relay/config.json`:
+
+```json
+{
+  "public_base_url": "https://<your-relay-host>",
+  "oauth_authorization_servers": ["https://<your-oauth-issuer-or-gateway>"],
+  "oauth_scopes_supported": [
+    "instances:read",
+    "runs:read",
+    "runs:write",
+    "steps:read",
+    "steps:write",
+    "artifacts:read",
+    "gates:read",
+    "gates:write"
+  ],
+  "oauth_resource_documentation": "https://<your-docs>/codencer-relay-mcp"
+}
+```
+
+Codencer remains the MCP resource server. Bearer tokens are the proven execution credential; a full product OAuth authorization flow needs your OAuth issuer/front door to issue or translate to a token Codencer accepts.
+
 4. Start the relay:
 
 ```bash
@@ -105,7 +127,9 @@ Canonical endpoint:
 - relay: `https://<your-relay-host>/mcp`
 - cloud: `https://<your-cloud-host>/api/cloud/v1/mcp`
 
-Use the ChatGPT developer/app setup flow for a remote MCP server, then ask ChatGPT to use only the Codencer tool/app and run this sequence:
+Use the ChatGPT developer/app setup flow for a remote MCP server. For private API-style testing, use bearer-token auth where the client supports it. For ChatGPT product app setup, configure the OAuth protected-resource metadata above and put an OAuth-capable issuer or gateway in front of Codencer when the product flow requires OAuth.
+
+Then ask ChatGPT to use only the Codencer tool/app and run this sequence:
 
 1. `codencer.list_instances`
 2. `codencer.get_instance`
@@ -117,7 +141,7 @@ Use the ChatGPT developer/app setup flow for a remote MCP server, then ask ChatG
 8. `codencer.get_step_logs`
 9. `codencer.list_step_artifacts`
 
-Status: materially stronger than compatibility-only for the operator's Codencer-side loop, but not a universal ChatGPT product-support claim.
+Status: materially stronger than compatibility-only for the operator's Codencer-side loop. Direct product proof remains limited to the operator's own setup; this repo does not claim universal ChatGPT product support.
 
 ## Claude-Style Path
 
@@ -129,12 +153,15 @@ Best current operator lane:
 
 For Claude Desktop or `claude.ai` remote custom connectors, keep the existing auth caveat: Codencer's self-host planner auth is static bearer-token based, while Anthropic's remote connector UI may require OAuth-oriented setup. That remains product-side compatibility territory.
 
-Status: materially stronger than compatibility-only for Claude Code-style HTTP MCP operator use; Claude Desktop/`claude.ai` remote connector product setup remains compatibility-only.
+For Claude Desktop, `claude.ai`, or Anthropic Messages API remote MCP connector setup, use the public relay/cloud MCP URL. Bearer-token mode is proven for direct clients and Claude Code-style configs; OAuth protected-resource metadata is implemented for product-facing flows that expect OAuth bearer auth, but an OAuth issuer/front door remains operator-owned.
+
+Status: materially stronger than compatibility-only for Claude Code-style HTTP MCP operator use and for Codencer-side OAuth-capable MCP discovery; Claude Desktop/`claude.ai` product UI setup remains compatibility-only until exercised in that product.
 
 ## Troubleshooting
 
 - No instances: confirm the connector is running and the instance is shared or cloud-claimed.
 - Auth failures: verify the relay planner token or cloud token and scopes.
+- OAuth product setup cannot complete: verify `/.well-known/oauth-protected-resource/...` is public and points at your OAuth issuer/front door; Codencer does not issue OAuth authorization-code tokens itself.
 - `codex` missing: set `CODEX_BINARY=/full/path/to/codex` and run `./bin/orchestratorctl doctor`.
 - Gate returned: inspect `codencer.list_run_gates`, ask the human/operator, then call approve or reject.
 - Reconnect happened: reinitialize MCP, call `codencer.list_instances`, then continue from saved `run_id` and `step_id`.

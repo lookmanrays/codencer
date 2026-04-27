@@ -254,7 +254,21 @@ cat > "$CLOUD_CONFIG" <<EOF
   "host": "$CLOUD_HOST",
   "port": $CLOUD_PORT,
   "db_path": "$CLOUD_DB",
-  "master_key": "$CLOUD_MASTER_KEY"
+  "master_key": "$CLOUD_MASTER_KEY",
+  "public_base_url": "$CLOUD_URL",
+  "allowed_origins": ["$CLOUD_MCP_ORIGIN"],
+  "oauth_authorization_servers": ["https://auth.example.invalid"],
+  "oauth_scopes_supported": [
+    "runtime_instances:read",
+    "runs:read",
+    "runs:write",
+    "steps:read",
+    "steps:write",
+    "artifacts:read",
+    "gates:read",
+    "gates:write"
+  ],
+  "oauth_resource_documentation": "https://example.invalid/codencer/cloud-mcp"
 }
 EOF
 
@@ -380,6 +394,9 @@ MCP_INIT_JSON="$TMP_DIR/cloud-mcp-init.json"
 MCP_TOOLS_JSON="$TMP_DIR/cloud-mcp-tools.json"
 MCP_LIST_JSON="$TMP_DIR/cloud-mcp-list.json"
 MCP_SDK_JSON="$TMP_DIR/cloud-mcp-sdk.json"
+MCP_AUTH_METADATA_JSON="$TMP_DIR/cloud-mcp-auth-metadata.json"
+MCP_AUTH_CHALLENGE_HEADERS="$TMP_DIR/cloud-mcp-auth-challenge.headers"
+MCP_AUTH_CHALLENGE_JSON="$TMP_DIR/cloud-mcp-auth-challenge.json"
 WORKER_LOG="$TMP_DIR/cloud-worker.log"
 
 "$BIN_DIR/codencer-cloudctl" status --cloud-url "$CLOUD_URL" --token "$BOOTSTRAP_TOKEN" --json > "$STATUS_JSON"
@@ -415,6 +432,28 @@ fi
 if ! grep -q "$BOOTSTRAP_TOKEN_ID" "$TOKENS_JSON"; then
   echo "ERROR: token listing did not include the bootstrap token record." >&2
   cat "$TOKENS_JSON" >&2
+  exit 1
+fi
+
+curl -fsS "$CLOUD_URL/.well-known/oauth-protected-resource/api/cloud/v1/mcp" > "$MCP_AUTH_METADATA_JSON"
+if ! grep -q "\"resource\":\"$CLOUD_URL/api/cloud/v1/mcp\"" "$MCP_AUTH_METADATA_JSON"; then
+  echo "ERROR: cloud MCP OAuth protected-resource metadata did not identify $CLOUD_URL/api/cloud/v1/mcp." >&2
+  cat "$MCP_AUTH_METADATA_JSON" >&2
+  exit 1
+fi
+set +e
+cloud_mcp_auth_status="$(curl -sS -D "$MCP_AUTH_CHALLENGE_HEADERS" -o "$MCP_AUTH_CHALLENGE_JSON" -w "%{http_code}" -X POST "$CLOUD_URL/api/cloud/v1/mcp" \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":"auth-1","method":"initialize","params":{"protocolVersion":"2025-11-25"}}')"
+set -e
+if [[ "$cloud_mcp_auth_status" != "401" ]]; then
+  echo "ERROR: unauthenticated cloud MCP call should return 401, got $cloud_mcp_auth_status." >&2
+  cat "$MCP_AUTH_CHALLENGE_JSON" >&2 || true
+  exit 1
+fi
+if ! grep -qi 'www-authenticate: Bearer .*resource_metadata=".*\.well-known/oauth-protected-resource/api/cloud/v1/mcp"' "$MCP_AUTH_CHALLENGE_HEADERS"; then
+  echo "ERROR: cloud MCP 401 did not include OAuth protected-resource challenge." >&2
+  cat "$MCP_AUTH_CHALLENGE_HEADERS" >&2
   exit 1
 fi
 
@@ -661,4 +700,7 @@ if [[ -s "$MCP_LIST_JSON" ]]; then
 fi
 if [[ -s "$MCP_SDK_JSON" ]]; then
   echo "  cloud_mcp_sdk_json: $MCP_SDK_JSON"
+fi
+if [[ -s "$MCP_AUTH_METADATA_JSON" ]]; then
+  echo "  cloud_mcp_auth_metadata_json: $MCP_AUTH_METADATA_JSON"
 fi

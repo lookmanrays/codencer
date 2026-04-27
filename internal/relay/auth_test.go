@@ -94,6 +94,30 @@ func TestPlannerAdminScopeRequiredForRelayStatus(t *testing.T) {
 	}
 }
 
+func TestPlannerBearerSchemeIsCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	store, err := relay.OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := relay.NewServer(&relay.Config{
+		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
+		PlannerToken: "planner-token",
+	}, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/status", nil)
+	req.Header.Set("Authorization", "bearer planner-token")
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestServeAsPlannerAllowsTrustedInProcessPrincipal(t *testing.T) {
 	t.Parallel()
 

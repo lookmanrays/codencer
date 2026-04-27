@@ -104,6 +104,7 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 
 	principal, err := s.relay.authenticatePlanner(r, "", "")
 	if err != nil {
+		s.relay.addPlannerAuthChallenge(w, r, "")
 		writeAPIError(w, err.Status, err.Code, err.Message)
 		return
 	}
