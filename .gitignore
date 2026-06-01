@@ -1,5 +1,9 @@
 # Build artifacts
 bin/
+dist/*.tar.gz
+dist/*.zip
+dist/.work-*/
+cmd/broker/dist/
 node_modules/
 extension/out/
 orchestratorctl
