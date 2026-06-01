@@ -215,25 +215,27 @@ func (c *Client) fetchChallenge(ctx context.Context) (*relayproto.ChallengeRespo
 
 func (c *Client) advertise(ctx context.Context, conn *websocket.Conn) (string, error) {
 	cfg := c.currentConfig()
-	instances, instanceIDs, err := c.registryForConfig(cfg).Advertisements(ctx)
+	advertisements, err := c.registryForConfig(cfg).Advertisements(ctx)
 	if err != nil {
 		return "", err
 	}
-	if err := c.writeAdvertise(cfg, conn, instances, instanceIDs); err != nil {
+	if err := c.writeAdvertise(cfg, conn, advertisements); err != nil {
 		return "", err
 	}
-	return advertisedInstanceSignature(instanceIDs), nil
+	return advertisedSetSignature(advertisements.InstanceIDs, advertisements.ProjectIDs), nil
 }
 
-func (c *Client) writeAdvertise(cfg *Config, conn *websocket.Conn, instances []relayproto.InstanceAdvertisement, instanceIDs []string) error {
+func (c *Client) writeAdvertise(cfg *Config, conn *websocket.Conn, advertisements AdvertisementSet) error {
 	if err := conn.WriteJSON(relayproto.AdvertiseMessage{
 		Type:      "advertise",
-		Instances: instances,
+		Instances: advertisements.Instances,
+		Projects:  advertisements.Projects,
+		Warnings:  advertisements.Warnings,
 	}); err != nil {
 		return err
 	}
 	if c.status != nil {
-		_ = c.status.MarkConnected(cfg, instanceIDs, time.Now().UTC())
+		_ = c.status.MarkConnectedWithProjects(cfg, advertisements.InstanceIDs, advertisements.ProjectIDs, advertisements.Warnings, time.Now().UTC())
 	}
 	return nil
 }
@@ -259,16 +261,16 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAd
 				ticker.Reset(nextInterval)
 				currentInterval = nextInterval
 			}
-			instances, instanceIDs, advertiseErr := c.registryForConfig(cfg).Advertisements(ctx)
+			advertisements, advertiseErr := c.registryForConfig(cfg).Advertisements(ctx)
 			if advertiseErr != nil {
 				if c.status != nil {
 					_ = c.status.MarkFailure(cfg, advertiseErr.Error(), time.Now().UTC())
 				}
 				continue
 			}
-			currentAdvertisedSignature := advertisedInstanceSignature(instanceIDs)
+			currentAdvertisedSignature := advertisedSetSignature(advertisements.InstanceIDs, advertisements.ProjectIDs)
 			if currentAdvertisedSignature != lastAdvertisedSignature {
-				if err := c.writeAdvertise(cfg, conn, instances, instanceIDs); err != nil {
+				if err := c.writeAdvertise(cfg, conn, advertisements); err != nil {
 					if c.status != nil {
 						_ = c.status.MarkFailure(cfg, err.Error(), time.Now().UTC())
 					}
@@ -281,7 +283,8 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAd
 				Type:        "heartbeat",
 				ConnectorID: cfg.ConnectorID,
 				MachineID:   cfg.MachineID,
-				InstanceIDs: instanceIDs,
+				InstanceIDs: advertisements.InstanceIDs,
+				ProjectIDs:  advertisements.ProjectIDs,
 				SentAt:      time.Now().UTC().Format(time.RFC3339),
 			}); err != nil {
 				if c.status != nil {
@@ -291,7 +294,7 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAd
 				return
 			}
 			if c.status != nil {
-				_ = c.status.MarkHeartbeat(cfg, instanceIDs, time.Now().UTC())
+				_ = c.status.MarkHeartbeatWithProjects(cfg, advertisements.InstanceIDs, advertisements.ProjectIDs, advertisements.Warnings, time.Now().UTC())
 			}
 		}
 	}
@@ -299,6 +302,9 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAd
 
 func (c *Client) handleRequest(ctx context.Context, request relayproto.CommandRequest) relayproto.CommandResponse {
 	cfg := c.currentConfig()
+	if strings.HasPrefix(request.Path, "/codencer/v1/projects/") {
+		return c.handleProjectRequest(ctx, cfg, request)
+	}
 	instance, err := c.registryForConfig(cfg).ResolveInstance(ctx, request.InstanceID)
 	if err != nil {
 		if c.status != nil {
@@ -381,6 +387,10 @@ func advertisedInstanceSignature(instanceIDs []string) string {
 	normalized := append([]string(nil), instanceIDs...)
 	sort.Strings(normalized)
 	return strings.Join(normalized, "\n")
+}
+
+func advertisedSetSignature(instanceIDs, projectIDs []string) string {
+	return "instances:\n" + advertisedInstanceSignature(instanceIDs) + "\nprojects:\n" + advertisedInstanceSignature(projectIDs)
 }
 
 func httpToWebsocket(rawURL string) string {

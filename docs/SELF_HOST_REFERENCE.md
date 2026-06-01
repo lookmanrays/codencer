@@ -17,6 +17,10 @@ Planner / Chat
 
 Execution still stays local. The relay is transport, auth, and audit. The connector is an outbound bridge. The daemon remains the local system of record.
 
+Project-aware Relay/MCP is the preferred Sprint 3 remote planner surface. Instance routes remain for compatibility, but new planner integrations should list and target shared projects.
+
+Sprint 4 adds a local runtime supervisor for the daemon, relay, and connector. It can render and manage macOS LaunchAgents or Linux systemd user units, run watchdog checks, and perform conservative recovery. See [runtime-supervisor.md](runtime-supervisor.md) for service install/start/status/logs, WSL fallback behavior, and recovery boundaries.
+
 ## Public Surfaces
 
 - Local daemon API: `/api/v1`
@@ -25,6 +29,7 @@ Execution still stays local. The relay is transport, auth, and audit. The connec
 - Relay MCP: `/mcp`
 - Relay MCP compatibility path: `/mcp/call`
 - Relay connector websocket: `/ws/connectors`
+- Relay project API: `/api/v2/projects`
 
 The local daemon is not the public remote MCP server.
 
@@ -63,12 +68,14 @@ Minimal relay config example:
   "allowed_origins": ["http://127.0.0.1:8090"],
   "public_base_url": "https://relay.example.com",
   "oauth_authorization_servers": ["https://auth.example.com"],
-  "oauth_scopes_supported": ["instances:read", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "gates:read", "gates:write"],
+  "oauth_scopes_supported": ["projects:read", "projects:write", "reports:read", "instances:read", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "gates:read", "gates:write"],
   "oauth_resource_documentation": "https://docs.example.com/codencer-relay-mcp"
 }
 ```
 
 The OAuth fields are only needed for product-facing remote MCP deployments. Codencer remains the resource server and continues to validate bearer tokens; the OAuth issuer/front door is operator-owned.
+
+For project-first planners, include `projects:read`, `projects:write`, and `reports:read` in scoped token policies. Planner token entries can also include `project_ids` to restrict access to specific shared projects.
 
 ### 1. Start the local daemon
 
@@ -106,6 +113,14 @@ Run the relay with the config you created:
 
 ```bash
 ./bin/codencer-relayd --config .codencer/relay/config.json
+```
+
+With Sprint 4 service supervision, use the same config path through the local config and inspect the generated unit before installing:
+
+```bash
+./bin/codencer service render relay --format launchd
+./bin/codencer service render relay --format systemd
+./bin/codencer service install relay --dry-run --json
 ```
 
 The relay is the public remote control plane. Do not expose the daemon directly.
@@ -185,11 +200,33 @@ You can also inspect the relay-side view of shared instances with:
 ./bin/codencer-relayd audit --config .codencer/relay/config.json --limit 20
 ```
 
+### 6.1 Share projects
+
+Project sharing uses the user-level registry created by `codencer init`.
+
+```bash
+export CODENCER_HOME="$HOME/.codencer"
+./bin/codencer project init \
+  --id codencer \
+  --repo /path/to/repo \
+  --adapter codex \
+  --profile codex-workspace \
+  --daemon-url http://127.0.0.1:8085 \
+  --share-to-relay
+
+./bin/codencer project share codencer --daemon-url http://127.0.0.1:8085
+./bin/codencer project unshare codencer
+```
+
+Set `codencer_home` in `.codencer/connector/config.json`, or enroll with `--codencer-home`, when the connector should read a non-default registry. The connector advertises only `shared_to_relay:true` projects whose daemon is reachable. If a project pins `relay_instance_id`, the live daemon must report that same instance id.
+
 ### 7. Run the connector
 
 ```bash
 ./bin/codencer-connectord run
 ```
+
+The runtime supervisor can manage the connector only after `connector_config_path` is set in `$CODENCER_HOME/config.json`. Missing connector config is reported as `not_configured`, not silently generated.
 
 The connector opens an outbound authenticated websocket session to the relay and advertises only the explicitly shared local instances.
 
@@ -221,7 +258,7 @@ Current MCP transport posture:
 ### 9. Start work and inspect evidence
 
 Typical remote sequence:
-1. list instances
+1. list projects
 2. start run
 3. submit task
 4. wait for step or poll step/result
@@ -234,6 +271,29 @@ Remote artifact access is ID-based:
 - artifact content is fetched by `artifact_id`
 - there is no arbitrary path browsing tool
 - large binary transport is intentionally bounded
+
+Project HTTP examples:
+
+```bash
+curl -fsS -H "Authorization: Bearer <planner-token>" \
+  https://relay.example.com/api/v2/projects
+
+curl -fsS \
+  -H "Authorization: Bearer <planner-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Verify the project relay path","profile":"fake-success","wait":true}' \
+  https://relay.example.com/api/v2/projects/codencer/submit
+```
+
+Project MCP tools include `codencer.list_projects`, `codencer.get_project`, `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.submit_project_task_and_wait`, `codencer.run_project_manifest`, `codencer.get_execution_report`, `codencer.get_project_blocker`, and project step evidence tools.
+
+Sprint 5 adds an opt-in live Relay/MCP proof command:
+
+```bash
+CODENCER_LIVE_RELAY_MCP=1 ./bin/codencer live relay-mcp --json --bin-dir ./bin --repo .
+```
+
+It starts temporary daemon, relay, and connector processes, shares a disposable fake project, calls project-aware MCP tools, verifies reports/evidence, and records a live matrix report. Use `codencer.get_run_report` as a read-only alias for `codencer.get_execution_report` when a client prefers shorter report tool names.
 
 ### 10. Operate the run honestly
 
@@ -266,6 +326,7 @@ The connector only proxies a narrow allowlist:
 - gate approve/reject
 - instance read
 - artifact content read
+- project list/read/run/submit/run-plan/report/evidence through `/codencer/v1/projects/...` connector commands
 
 The relay and connector do not expose:
 - raw shell
@@ -278,13 +339,14 @@ Once the daemon and relay are already running, use the repo smoke helper for the
 
 ```bash
 PLANNER_TOKEN=<planner-token> make self-host-smoke
+make verify-local-relay-mcp
 ```
 
 The smoke flow:
 1. reads the local daemon instance identity
 2. creates a one-time relay enrollment token through `codencer-relayd enrollment-token create`
 3. enrolls and runs a temporary connector
-4. waits for instance advertisement
+4. waits for instance and project advertisement
 5. starts a run through the relay
 6. submits a real `TaskSpec`-compatible task
 7. waits for the step
@@ -347,3 +409,23 @@ This is recommended operator topology, not an automated smoke proof. See [WSL / 
 
 - Self-host mode is implemented in this repo and uses your own relay config, sqlite state, and tokens.
 - A future default or managed relay can speak the same connector session model, but self-host does not depend on that future service.
+
+## Sprint 6 Setup Short Path
+
+```bash
+make build
+./bin/codencer setup relay \
+  --base-url https://relay.example.com \
+  --mcp-url https://relay.example.com/mcp \
+  --generate-planner-token \
+  --json
+./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
+./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
+./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+```
+
+`setup relay` writes runnable relay and connector config only when a planner token is already present or explicitly supplied/generated. Generated tokens are stored under `$CODENCER_HOME/tokens` and redacted from output. Service install/start remains explicit.
+
+Remote project descriptors do not expose absolute local repository paths by default. The local registry and relay storage keep routing data; planner-facing project payloads use safe labels and hashes.
+
+Use `docs/quickstart-self-host-relay.md` for the shortest operator flow and `docs/release-checklist.md` for release acceptance evidence.

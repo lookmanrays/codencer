@@ -53,9 +53,17 @@ type InstanceAdvertisement struct {
 	Instance json.RawMessage `json:"instance"`
 }
 
+type ProjectAdvertisement struct {
+	ProjectID  string          `json:"project_id"`
+	InstanceID string          `json:"instance_id"`
+	Project    json.RawMessage `json:"project"`
+}
+
 type AdvertiseMessage struct {
 	Type      string                  `json:"type"`
 	Instances []InstanceAdvertisement `json:"instances"`
+	Projects  []ProjectAdvertisement  `json:"projects,omitempty"`
+	Warnings  []string                `json:"warnings,omitempty"`
 }
 
 type HeartbeatMessage struct {
@@ -63,6 +71,7 @@ type HeartbeatMessage struct {
 	ConnectorID string   `json:"connector_id"`
 	MachineID   string   `json:"machine_id"`
 	InstanceIDs []string `json:"instance_ids,omitempty"`
+	ProjectIDs  []string `json:"project_ids,omitempty"`
 	SentAt      string   `json:"sent_at"`
 }
 

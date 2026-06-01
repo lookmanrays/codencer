@@ -29,6 +29,26 @@ The relay MCP server currently supports:
 
 ## Tool List
 
+Project-aware tools:
+
+- `codencer.list_projects`
+- `codencer.get_project`
+- `codencer.start_project_run`
+- `codencer.list_project_runs`
+- `codencer.get_project_run`
+- `codencer.submit_project_task`
+- `codencer.submit_project_task_and_wait`
+- `codencer.run_project_manifest`
+- `codencer.get_execution_report`
+- `codencer.get_run_report` (read-only alias)
+- `codencer.get_project_blocker`
+- `codencer.get_project_step_result`
+- `codencer.get_project_step_artifacts`
+- `codencer.get_project_step_logs`
+- `codencer.get_project_step_validations`
+
+Compatibility instance tools:
+
 - `codencer.list_instances`
 - `codencer.get_instance`
 - `codencer.start_run`
@@ -49,6 +69,12 @@ The relay MCP server currently supports:
 
 ## Tool Rules
 
+- Project-aware tools are preferred for remote planners.
+- Project tools require projects shared from the user-level registry with `shared_to_relay:true`.
+- Planner tokens can restrict project tools with `project_ids`, `instance_ids`, and scopes such as `projects:read`, `runs:write`, `steps:write`, `reports:read`, and `artifacts:read`.
+- Project task and manifest tools call the same Sprint 2 local execution contract as `codencer submit` and `codencer run-plan`.
+- Project blockers are returned as structured report data with `exit_code`; they are not converted into transport errors.
+- Remote manifest payloads accept `manifest` or `manifest_text`; `prompt_file` is rejected for remote manifests because planner-side file paths are not local execution paths.
 - Mutating tools require explicit `instance_id`.
 - Tool calls respect the same planner auth scopes as the relay HTTP API.
 - Tool calls do not bypass connector sharing or instance routing.
@@ -75,6 +101,18 @@ The relay MCP server currently supports:
 - `GET /mcp` keeps an SSE stream open for the negotiated session and emits keepalive comments
 - `POST /mcp/call` remains as a compatibility alias for simple POST callers; `/mcp` is still the canonical session path
 - the Codencer tool model remains intentionally request/response-oriented even though the transport now supports a real SSE session
+
+## Client Snippets
+
+Generate current client setup snippets:
+
+```bash
+./bin/codencer-relayd mcp-config --client codex --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN
+./bin/codencer-relayd mcp-config --client claude-code --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN
+./bin/codencer-relayd mcp-config --client chatgpt --endpoint https://relay.example.com/mcp
+```
+
+ChatGPT custom MCP connector setup requires public HTTPS, OAuth protected-resource metadata, and an eligible workspace with developer mode. Codencer exposes the resource-server metadata and bearer challenge hooks; token issuance belongs to the operator-owned OAuth front door.
 
 ## Proven Compatibility
 

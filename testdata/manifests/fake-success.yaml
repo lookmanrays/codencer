@@ -1,0 +1,16 @@
+version: codencer.io/v1alpha1
+kind: RunManifest
+metadata:
+  name: fake-success
+project:
+  id: codencer
+execution:
+  adapter: fake
+  profile: fake-success
+policy:
+  stop_on_blocker: true
+  stop_on_failure: true
+tasks:
+  - id: fake-success
+    title: Fake success
+    goal: Complete a deterministic fake success task.

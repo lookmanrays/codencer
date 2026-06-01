@@ -77,6 +77,49 @@ func TestHandleAdvertiseReplacesSharedInstancesAndPrunesRoutes(t *testing.T) {
 	}
 }
 
+func TestHandleAdvertiseStoresSharedProjects(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := NewServer(&Config{
+		Host:         "127.0.0.1",
+		Port:         0,
+		DBPath:       filepath.Join(t.TempDir(), "unused.db"),
+		PlannerToken: "planner-token",
+	}, store)
+	session := &session{
+		connectorID: "connector-1",
+		instanceIDs: map[string]struct{}{},
+		projectIDs:  map[string]struct{}{},
+		pending:     make(map[string]chan relayproto.CommandResponse),
+	}
+	server.hub.RegisterConnector(session)
+
+	instanceJSON, _ := json.Marshal(domain.InstanceInfo{ID: "inst-1", RepoRoot: "/repo", BaseURL: "http://127.0.0.1:8085"})
+	projectJSON := []byte(`{"id":"proj","repo_root":"/repo","default_adapter":"fake","adapter_profile":"fake-success","shared_to_relay":true}`)
+	message, err := json.Marshal(relayproto.AdvertiseMessage{
+		Type:      "advertise",
+		Instances: []relayproto.InstanceAdvertisement{{Instance: instanceJSON}},
+		Projects:  []relayproto.ProjectAdvertisement{{ProjectID: "proj", InstanceID: "inst-1", Project: projectJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.handleAdvertise(context.Background(), session, message); err != nil {
+		t.Fatal(err)
+	}
+	projects, err := store.ListProjectsByID(context.Background(), "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 || projects[0].ConnectorID != "connector-1" || projects[0].InstanceID != "inst-1" {
+		t.Fatalf("expected stored project advertisement, got %+v", projects)
+	}
+}
+
 func TestResolveResourceRouteIgnoresOfflineHint(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	if err != nil {

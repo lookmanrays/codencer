@@ -26,6 +26,8 @@ type Status struct {
 	LastHeartbeatAt  string   `json:"last_heartbeat_at,omitempty"`
 	LastError        string   `json:"last_error,omitempty"`
 	SharedInstances  []string `json:"shared_instances,omitempty"`
+	SharedProjects   []string `json:"shared_projects,omitempty"`
+	ProjectWarnings  []string `json:"project_warnings,omitempty"`
 }
 
 type StatusStore struct {
@@ -78,12 +80,35 @@ func (s *StatusStore) MarkConnected(cfg *Config, sharedInstances []string, now t
 	})
 }
 
+func (s *StatusStore) MarkConnectedWithProjects(cfg *Config, sharedInstances, sharedProjects, warnings []string, now time.Time) error {
+	return s.update(func(status *Status) {
+		seedStatus(status, cfg)
+		status.SessionState = SessionStateConnected
+		status.LastConnectAt = formatStatusTime(now)
+		status.SharedInstances = uniqueStrings(sharedInstances)
+		status.SharedProjects = uniqueStrings(sharedProjects)
+		status.ProjectWarnings = uniqueStrings(warnings)
+		status.LastError = ""
+	})
+}
+
 func (s *StatusStore) MarkHeartbeat(cfg *Config, sharedInstances []string, now time.Time) error {
 	return s.update(func(status *Status) {
 		seedStatus(status, cfg)
 		status.SessionState = SessionStateConnected
 		status.LastHeartbeatAt = formatStatusTime(now)
 		status.SharedInstances = uniqueStrings(sharedInstances)
+	})
+}
+
+func (s *StatusStore) MarkHeartbeatWithProjects(cfg *Config, sharedInstances, sharedProjects, warnings []string, now time.Time) error {
+	return s.update(func(status *Status) {
+		seedStatus(status, cfg)
+		status.SessionState = SessionStateConnected
+		status.LastHeartbeatAt = formatStatusTime(now)
+		status.SharedInstances = uniqueStrings(sharedInstances)
+		status.SharedProjects = uniqueStrings(sharedProjects)
+		status.ProjectWarnings = uniqueStrings(warnings)
 	})
 }
 

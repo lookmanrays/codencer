@@ -46,7 +46,8 @@ This is OAuth-capable resource-server behavior, not Codencer-native OAuth token 
 | Path | Canonical surface | Status | Direct repo proof | Notes |
 | --- | --- | --- | --- | --- |
 | Relay HTTP | relay `/api/v2/...` | `proven` | relay integration tests + self-host smoke | Narrow instance-scoped planner API. |
-| Relay MCP | relay `/mcp` | `proven` | relay MCP tests + self-host MCP smoke | Session-bound Streamable HTTP plus JSON-RPC POST. |
+| Relay project HTTP | relay `/api/v2/projects/...` | `proven` | `make verify-local-relay-mcp` | Project-aware local execution via connector and Sprint 2 `localexec`. |
+| Relay MCP | relay `/mcp` | `proven` | relay MCP tests + self-host MCP smoke + `make verify-local-relay-mcp` | Session-bound Streamable HTTP plus JSON-RPC POST, with project-aware tools preferred. |
 | Cloud HTTP | cloud `/api/cloud/v1/runtime/...` | `proven` | cloud runtime tests + composed cloud smoke | Tenant-scoped only in composed mode. |
 | Cloud MCP | cloud `/api/cloud/v1/mcp` | `proven` | cloud MCP tests + composed cloud smoke | Tenant-scoped only in composed mode. |
 | Official Go SDK | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `proven` | MCP server tests + `cmd/mcp-sdk-smoke` + smoke | Proven for MCP only, not for the REST HTTP APIs. |
@@ -97,6 +98,12 @@ Standalone official Go SDK proof:
 make build-mcp-sdk-smoke
 ./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8090/mcp --token <planner-token> --instance-id <instance-id>
 ./bin/mcp-sdk-smoke --endpoint http://127.0.0.1:8190/api/cloud/v1/mcp --token <cloud-token> --instance-id <instance-id>
+```
+
+Project-aware local Relay/MCP proof:
+
+```bash
+make verify-local-relay-mcp
 ```
 
 ## Generic HTTP Examples
@@ -161,6 +168,26 @@ curl -fsS \
   -d '{"jsonrpc":"2.0","id":2,"name":"codencer.list_instances","arguments":{}}' \
   http://127.0.0.1:8090/mcp/call
 ```
+
+Project-aware MCP call:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer <planner-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"name":"codencer.list_projects","arguments":{}}' \
+  http://127.0.0.1:8090/mcp/call
+```
+
+Sprint 5 live proof commands:
+
+```bash
+./bin/codencer live codex-mcp --json --endpoint https://relay.example.com/mcp
+./bin/codencer live claude-mcp --json --endpoint https://relay.example.com/mcp
+CODENCER_LIVE_RELAY_MCP=1 ./bin/codencer live relay-mcp --json --bin-dir ./bin --repo .
+```
+
+The Codex and Claude Code MCP proof commands generate config snippets and distinguish `config_generated`, `endpoint_verified`, and product-client proof. They do not write user-level client config unless explicit config-write environment variables are set. ChatGPT product UI proof remains manual; use [ChatGPT Custom MCP Live Checklist](chatgpt-live-checklist.md).
 
 Minimal cloud initialize plus compatibility-call flow:
 
@@ -227,3 +254,15 @@ Keep these claims narrow:
 - this repo proves the Codencer relay/cloud MCP protocol surfaces directly
 - this repo does not prove every vendor client UI, approval flow, auth setup, or publication workflow
 - this repo does not turn the local daemon into a public remote MCP target
+
+## Sprint 6 Setup Commands
+
+Use the unified CLI for current MCP snippets:
+
+```bash
+./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN --json
+./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN --json
+./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+```
+
+These commands reuse the same generator as `codencer-relayd mcp-config` and do not write user-level client files. Literal tokens, if supplied for an operator-run proof, are redacted from setup reports. ChatGPT remains an OAuth-front-door/product-UI proof path; keep it pending until a real workspace connector has been exercised.

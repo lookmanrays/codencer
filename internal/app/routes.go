@@ -17,10 +17,11 @@ import (
 
 // APIHandler holds dependencies for exposing REST routes.
 type APIHandler struct {
-	RunSvc  *service.RunService
-	GateSvc *service.GateService
-	AGSvc   *service.AntigravityService
-	AppCtx  *AppContext
+	RunSvc      *service.RunService
+	GateSvc     *service.GateService
+	AGSvc       *service.AntigravityService
+	RecoverySvc *service.RecoveryService
+	AppCtx      *AppContext
 }
 
 // RegisterRoutes attaches the API to the given mux.
@@ -33,6 +34,7 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/compatibility", h.handleCompatibility)
 	mux.HandleFunc("/api/v1/benchmarks", h.handleBenchmarks)
 	mux.HandleFunc("/api/v1/routing", h.handleRouting)
+	mux.HandleFunc("/api/v1/recovery/runs/", h.handleRecoveryRun)
 	mux.HandleFunc("/api/v1/instance", h.handleInstance)
 	mux.HandleFunc("/api/v1/antigravity/instances", h.handleAGInstances)
 	mux.HandleFunc("/api/v1/antigravity/status", h.handleAGStatus)
@@ -42,6 +44,35 @@ func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Remote planner integrations should use the relay MCP surface instead.
 	mcpServer := mcp.NewServer(h.RunSvc, h.GateSvc)
 	mux.HandleFunc("/mcp/call", mcpServer.HandleCall)
+}
+
+func (h *APIHandler) handleRecoveryRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.RecoverySvc == nil {
+		http.Error(w, "recovery service unavailable", http.StatusInternalServerError)
+		return
+	}
+	runID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/recovery/runs/"), "/")
+	if runID == "" {
+		http.Error(w, "run ID required", http.StatusBadRequest)
+		return
+	}
+	var req struct {
+		DryRun bool `json:"dry_run"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	report, err := h.RecoverySvc.RecoverRun(r.Context(), runID, req.DryRun)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(report)
 }
 
 func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {

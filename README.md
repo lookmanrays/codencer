@@ -8,8 +8,38 @@ Its core visible asset is the persisted execution trail: runs, steps, attempts, 
 Instead of planning for the operator, Codencer keeps execution local, isolates each attempt, records the state machine truth, and exposes the evidence a planner or human needs to decide what happens next.
 
 > [!IMPORTANT]
-> **Project Status: Open-source beta for the v2 local/self-host path (`v0.2.0-beta`)**.
-> Codencer is publicly testable for the supported local, relay/runtime, cloud, planner/client, and provider tracks documented in [docs/BETA_TESTING.md](docs/BETA_TESTING.md). Compatibility-only and deferred surfaces remain explicitly outside that beta promise.
+> **Project Status: local/self-host production release-candidate track (`v0.3.0-local-prod-rc.1`) plus the existing public beta tracks**.
+> The Sprint 6 local production path is installable, setup-guided, acceptance-reportable, and release-snapshot packaged. Codencer still is not the planner: it runs approved tasks/manifests, captures state/evidence, and lets the planner decide.
+
+## Local Production Quickstart
+
+```bash
+make build
+./bin/codencer setup local --json
+./bin/codencer demo local --json --bin-dir ./bin
+./bin/codencer accept local-production --json --bin-dir ./bin --repo .
+./bin/codencer proof bundle --json
+```
+
+Self-host Relay/MCP setup is similarly guided:
+
+```bash
+./bin/codencer setup relay --base-url https://relay.example.com --generate-planner-token --json
+./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
+./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
+./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+```
+
+Install and release helpers are user-level and safe by default:
+
+```bash
+scripts/install.sh --dry-run
+scripts/uninstall.sh --dry-run
+scripts/upgrade.sh --dry-run
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+```
+
+Windows production execution remains WSL2-first rather than Windows-native daemon support. Live Codex, live Claude, ChatGPT product UI, and installed-service smokes are opt-in and must not be marked passed without real evidence.
 
 ## Supported Beta Test Tracks
 
@@ -17,8 +47,9 @@ Use [docs/BETA_TESTING.md](docs/BETA_TESTING.md) as the repo-level tester guide.
 
 | Track | Start doc | Build | Proof command | Current boundary |
 | --- | --- | --- | --- | --- |
+| Local production foundation | [docs/quickstart-local.md](docs/quickstart-local.md), [docs/local-production.md](docs/local-production.md), [docs/runtime-supervisor.md](docs/runtime-supervisor.md), [docs/live-execution-matrix.md](docs/live-execution-matrix.md) | `make build` | `make verify-local-prod` and `make acceptance-local-production` | Unified `codencer` CLI, setup UX, user-level registry, daemon execution, manifest runner, Relay/MCP proof, supervisor/watchdog/recovery, live matrix/readiness, acceptance reports, proof bundles, and release snapshots. |
 | Local-only daemon + CLI | [docs/SETUP.md](docs/SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter claims stay narrow. |
-| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md) | `make build` | `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path. |
+| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md) | `make build` | `make verify-local-relay-mcp` or `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path with project-aware Relay/MCP. |
 | Self-host cloud control plane | [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Docker baseline and binary-native composed proof are separate. |
 | Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | `make flagship-planner-smoke` or self-host/cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude Code-style operator lanes are packaged around the canonical remote MCP surfaces; universal product UI/auth support is not claimed. |
 | Provider connectors | [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider tests | Slack is strongest; Jira is polling-first; the rest remain narrower. |

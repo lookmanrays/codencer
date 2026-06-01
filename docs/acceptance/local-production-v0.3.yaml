@@ -1,0 +1,141 @@
+version: 1
+name: local-production-v0.3
+goal: hands-off autonomous production without commercial Codencer Cloud
+principles:
+  - Codencer surfaces structured state and evidence; the planner decides next actions.
+  - Execution remains local unless a project is explicitly shared through self-host Relay/MCP.
+  - Live checks must be reported truthfully as passed, pending, skipped, warning, or failed.
+  - No gate may emit suggested_next_action.
+profiles:
+  required_deterministic:
+    status: implemented
+    gates:
+      - id: build_and_doctor
+        status: passed_when_verified
+        commands:
+          - make build-codencer
+          - ./bin/codencer version --json
+          - ./bin/codencer doctor --json
+          - ./bin/codencer doctor toolchain --json
+      - id: setup_local
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer setup local --json
+          - ./bin/codencer setup local --project-id codencer --repo . --adapter codex --profile codex-workspace --json
+      - id: project_registry
+        status: implemented
+        commands:
+          - ./bin/codencer project init --id codencer --repo . --adapter codex --profile codex-workspace --json
+          - ./bin/codencer project list --json
+          - ./bin/codencer project get codencer --json
+      - id: local_cli_manifest_execution
+        status: implemented
+        commands:
+          - make verify-local-execution
+          - ./bin/codencer demo local --json --bin-dir ./bin
+      - id: fake_blocker_and_validation
+        status: implemented
+        commands:
+          - ./bin/codencer demo local --json --bin-dir ./bin
+      - id: relay_mcp_fake_execution
+        status: implemented
+        commands:
+          - make verify-local-relay-mcp
+          - CODENCER_LIVE_RELAY_MCP=1 ./bin/codencer live relay-mcp --json --bin-dir ./bin --repo .
+      - id: service_supervisor_deterministic
+        status: implemented
+        commands:
+          - make verify-runtime-recovery
+          - ./bin/codencer service install --all --dry-run --json
+      - id: watchdog_recover_dry_run
+        status: implemented
+        commands:
+          - ./bin/codencer watchdog once --json
+          - ./bin/codencer recover --dry-run --json
+      - id: readiness_and_live_matrix
+        status: implemented
+        commands:
+          - ./bin/codencer readiness --json
+          - ./bin/codencer live matrix --json
+      - id: acceptance_report
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer accept local-production --json --bin-dir ./bin --repo .
+          - ./bin/codencer accept reports --json
+      - id: proof_bundle
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer proof bundle --json
+      - id: setup_mcp_snippets
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
+          - ./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
+          - ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+      - id: security_hardening_checks
+        status: sprint_6_implemented
+        notes: Acceptance includes checks for explicit project sharing, remote path sanitization, relay auth, dangerous bypass guardrails, log path control, uninstall purge safety, and report redaction.
+      - id: install_upgrade_uninstall_dry_run
+        status: sprint_6_implemented
+        commands:
+          - scripts/install.sh --dry-run
+          - scripts/uninstall.sh --dry-run
+          - scripts/upgrade.sh --dry-run
+      - id: release_snapshot
+        status: sprint_6_implemented
+        commands:
+          - make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+        notes: CGO cross-build gaps are represented honestly as not_built/skipped in dist/manifest.json.
+  optional_live:
+    status: opt_in
+    gates:
+      - id: relay_mcp_live_fake_executor
+        status: implemented_opt_in
+        commands:
+          - CODENCER_LIVE_RELAY_MCP=1 make live-relay-mcp-smoke
+      - id: restart_reconnect_live_fake
+        status: implemented_opt_in
+        commands:
+          - CODENCER_LIVE_SERVICE_RESTART=1 make live-restart-reconnect-smoke
+      - id: live_codex_executor
+        status: pending_unless_run
+        commands:
+          - CODENCER_LIVE_CODEX=1 make live-codex-smoke
+      - id: live_claude_executor
+        status: pending_unless_run
+        commands:
+          - CODENCER_LIVE_CLAUDE=1 make live-claude-smoke
+      - id: wsl_live_path
+        status: pending_unless_run_inside_wsl
+        commands:
+          - CODENCER_LIVE_WSL=1 make live-wsl-smoke
+      - id: live_installed_services
+        status: pending_unless_run
+        commands:
+          - CODENCER_LIVE_SERVICE_SMOKE=1 make live-service-macos-smoke
+          - CODENCER_LIVE_SERVICE_SMOKE=1 make live-service-linux-smoke
+  manual_product_client_proof:
+    status: pending_manual
+    gates:
+      - id: chatgpt_product_ui_proof
+        status: pending_manual
+        notes: Requires public HTTPS, OAuth front door, eligible workspace developer mode, real tool call, and saved evidence.
+      - id: claude_desktop_or_claude_ai_remote_connector
+        status: pending_manual
+        notes: Claude Code HTTP MCP snippets are generated; product UI proof is separate.
+      - id: signed_notarized_macos_release
+        status: not_claimed
+      - id: windows_native_daemon_production
+        status: not_claimed_wsl2_is_documented_path
+verification:
+  non_live_release_candidate:
+    - go test ./...
+    - make build-codencer
+    - make verify-local-execution
+    - make verify-local-relay-mcp
+    - make verify-runtime-recovery
+    - make verify-live-matrix
+    - make acceptance-local-production
+    - make verify-release
+    - make verify-local-prod
+    - make release-snapshot VERSION=v0.3.0-local-prod-rc.1

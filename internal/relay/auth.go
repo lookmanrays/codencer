@@ -13,6 +13,7 @@ type plannerPrincipal struct {
 	TokenHash   string
 	Scopes      []string
 	InstanceIDs map[string]struct{}
+	ProjectIDs  map[string]struct{}
 }
 
 type plannerPrincipalKey struct{}
@@ -62,9 +63,13 @@ func (s *Server) authenticatePlanner(r *http.Request, requiredScope, instanceID 
 			TokenHash:   plannerTokenHash(token),
 			Scopes:      candidate.Scopes,
 			InstanceIDs: make(map[string]struct{}),
+			ProjectIDs:  make(map[string]struct{}),
 		}
 		for _, allowed := range candidate.InstanceIDs {
 			principal.InstanceIDs[allowed] = struct{}{}
+		}
+		for _, allowed := range candidate.ProjectIDs {
+			principal.ProjectIDs[allowed] = struct{}{}
 		}
 		if err := authorizePrincipal(principal, requiredScope, instanceID); err != nil {
 			return nil, err
@@ -102,6 +107,25 @@ func authorizePrincipal(principal *plannerPrincipal, requiredScope, instanceID s
 	return nil
 }
 
+func authorizeProject(principal *plannerPrincipal, requiredScope string, project *ProjectRecord) *apiError {
+	if project == nil {
+		return &apiError{Status: http.StatusNotFound, Code: "project_not_found", Message: "project not found"}
+	}
+	if err := authorizePrincipal(principal, requiredScope, project.InstanceID); err != nil {
+		return err
+	}
+	if len(principal.ProjectIDs) > 0 {
+		if _, ok := principal.ProjectIDs[project.ProjectID]; !ok {
+			return &apiError{Status: http.StatusForbidden, Code: "project_denied", Message: "planner token is not authorized for this project"}
+		}
+	}
+	return nil
+}
+
+func projectAllowed(principal *plannerPrincipal, requiredScope string, project ProjectRecord) bool {
+	return authorizeProject(principal, requiredScope, &project) == nil
+}
+
 func scopeAllowed(scopes []string, required string) bool {
 	if required == "" {
 		return true
@@ -132,6 +156,7 @@ func (s *Server) ServeAsPlanner(w http.ResponseWriter, r *http.Request, name str
 		Name:        name,
 		Scopes:      append([]string(nil), scopes...),
 		InstanceIDs: make(map[string]struct{}, len(instanceIDs)),
+		ProjectIDs:  make(map[string]struct{}),
 	}
 	for _, instanceID := range instanceIDs {
 		instanceID = strings.TrimSpace(instanceID)

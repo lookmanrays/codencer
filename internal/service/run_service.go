@@ -806,7 +806,7 @@ func (s *RunService) executeAttempt(
 		failed := 0
 		anyFailed := false
 		for _, cmd := range step.Validations {
-			vres, verr := s.validationRunner.Run(ctx, cmd, workspaceRoot)
+			vres, verr := s.validationRunner.RunWithArtifacts(ctx, cmd, workspaceRoot, attemptArtifactRoot)
 			if verr != nil {
 				slog.Error("Validation runner system error", "error", verr, "cmd", cmd.Name)
 			}
@@ -1028,6 +1028,9 @@ func (s *RunService) finalizeStep(
 			step.State = finalResult.State
 			step.StatusReason = finalResult.Summary
 		}
+	} else if finalResult != nil && finalResult.State == domain.StepStateNeedsManualAttention {
+		step.State = finalResult.State
+		step.StatusReason = finalResult.Summary
 	} else if eval.ShouldGate {
 		step.State = domain.StepStateNeedsApproval
 		gate := &domain.Gate{

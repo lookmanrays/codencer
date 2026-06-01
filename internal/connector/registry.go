@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"agent-bridge/internal/domain"
+	"agent-bridge/internal/local"
+	projectpkg "agent-bridge/internal/project"
 	"agent-bridge/internal/relayproto"
 )
 
@@ -17,6 +19,20 @@ type SharedInstance struct {
 	Info         domain.InstanceInfo
 	DaemonURL    string
 	ManifestPath string
+}
+
+type SharedProject struct {
+	Project   projectpkg.Project
+	Info      domain.InstanceInfo
+	DaemonURL string
+}
+
+type AdvertisementSet struct {
+	Instances   []relayproto.InstanceAdvertisement
+	Projects    []relayproto.ProjectAdvertisement
+	InstanceIDs []string
+	ProjectIDs  []string
+	Warnings    []string
 }
 
 type DiscoveredManifest struct {
@@ -76,22 +92,140 @@ func (r *Registry) ResolveInstance(ctx context.Context, instanceID string) (*Sha
 	return nil, fmt.Errorf("instance %s is not shared by this connector", instanceID)
 }
 
-func (r *Registry) Advertisements(ctx context.Context) ([]relayproto.InstanceAdvertisement, []string, error) {
+func (r *Registry) SharedProjects(ctx context.Context) ([]SharedProject, []string, error) {
+	paths, err := r.localPaths()
+	if err != nil {
+		return nil, []string{err.Error()}, nil
+	}
+	cfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return nil, []string{err.Error()}, nil
+	}
+	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	if err != nil {
+		return nil, []string{err.Error()}, nil
+	}
+
+	out := make([]SharedProject, 0, len(registry.Projects))
+	warnings := []string{}
+	seen := map[string]struct{}{}
+	for _, candidate := range projectpkg.ListProjects(registry) {
+		if !candidate.SharedToRelay {
+			continue
+		}
+		daemonURL := strings.TrimRight(strings.TrimSpace(candidate.DaemonURL), "/")
+		if daemonURL == "" {
+			daemonURL = strings.TrimRight(strings.TrimSpace(cfg.DefaultDaemonURL), "/")
+		}
+		if daemonURL == "" {
+			warnings = append(warnings, fmt.Sprintf("project %s is shared but has no daemon url", candidate.ID))
+			continue
+		}
+		info, err := r.clientFactory(daemonURL).GetInstance(ctx)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("project %s skipped: daemon %s unavailable: %v", candidate.ID, daemonURL, err))
+			continue
+		}
+		if info.ID == "" {
+			warnings = append(warnings, fmt.Sprintf("project %s skipped: daemon %s did not report an instance id", candidate.ID, daemonURL))
+			continue
+		}
+		if candidate.RelayInstanceID != "" && candidate.RelayInstanceID != info.ID {
+			warnings = append(warnings, fmt.Sprintf("project %s skipped: relay_instance_id %s does not match live instance %s", candidate.ID, candidate.RelayInstanceID, info.ID))
+			continue
+		}
+		key := candidate.ID + "|" + info.ID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, SharedProject{Project: candidate, Info: *info, DaemonURL: daemonURL})
+	}
+	return out, warnings, nil
+}
+
+func (r *Registry) ResolveProject(ctx context.Context, projectID string) (*SharedProject, error) {
+	projects, warnings, err := r.SharedProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, shared := range projects {
+		if shared.Project.ID == projectID {
+			return &shared, nil
+		}
+	}
+	if len(warnings) > 0 {
+		return nil, fmt.Errorf("project %s is not shared by this connector; warnings: %s", projectID, strings.Join(warnings, "; "))
+	}
+	return nil, fmt.Errorf("project %s is not shared by this connector", projectID)
+}
+
+func (r *Registry) ConfiguredSharedProject(projectID string) (projectpkg.Project, error) {
+	paths, err := r.localPaths()
+	if err != nil {
+		return projectpkg.Project{}, err
+	}
+	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	if err != nil {
+		return projectpkg.Project{}, err
+	}
+	project, err := projectpkg.GetProject(registry, projectID)
+	if err != nil {
+		return projectpkg.Project{}, err
+	}
+	if !project.SharedToRelay {
+		return projectpkg.Project{}, fmt.Errorf("project %s is not shared by this connector", projectID)
+	}
+	return project, nil
+}
+
+func (r *Registry) Advertisements(ctx context.Context) (AdvertisementSet, error) {
 	instances, err := r.SharedInstances(ctx)
 	if err != nil {
-		return nil, nil, err
+		return AdvertisementSet{}, err
 	}
+	projects, warnings, err := r.SharedProjects(ctx)
+	if err != nil {
+		return AdvertisementSet{}, err
+	}
+	set := AdvertisementSet{Warnings: warnings}
 	ads := make([]relayproto.InstanceAdvertisement, 0, len(instances))
 	instanceIDs := make([]string, 0, len(instances))
 	for _, instance := range instances {
 		payload, err := json.Marshal(instance.Info)
 		if err != nil {
-			return nil, nil, err
+			return AdvertisementSet{}, err
 		}
 		ads = append(ads, relayproto.InstanceAdvertisement{Instance: payload})
 		instanceIDs = append(instanceIDs, instance.Info.ID)
 	}
-	return ads, instanceIDs, nil
+	projectAds := make([]relayproto.ProjectAdvertisement, 0, len(projects))
+	projectIDs := make([]string, 0, len(projects))
+	for _, shared := range projects {
+		payload, err := json.Marshal(shared.Project)
+		if err != nil {
+			return AdvertisementSet{}, err
+		}
+		projectAds = append(projectAds, relayproto.ProjectAdvertisement{
+			ProjectID:  shared.Project.ID,
+			InstanceID: shared.Info.ID,
+			Project:    payload,
+		})
+		projectIDs = append(projectIDs, shared.Project.ID)
+	}
+	set.Instances = ads
+	set.Projects = projectAds
+	set.InstanceIDs = instanceIDs
+	set.ProjectIDs = projectIDs
+	return set, nil
+}
+
+func (r *Registry) localPaths() (local.Paths, error) {
+	home := ""
+	if r != nil && r.cfg != nil {
+		home = r.cfg.CodencerHome
+	}
+	return local.ResolvePathsForHome("", "", home)
 }
 
 func (r *Registry) resolveInstance(ctx context.Context, candidate SharedInstanceConfig, discovered map[string]string) (SharedInstance, error) {

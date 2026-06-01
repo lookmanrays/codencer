@@ -14,6 +14,7 @@ type mcpTool struct {
 	Description string
 	Scope       string
 	InputSchema map[string]any
+	Annotations map[string]any
 	Invoke      func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError)
 }
 
@@ -23,7 +24,7 @@ func (t mcpTool) instanceID(args map[string]any) string {
 }
 
 func buildMCPTools(server *mcpServer) map[string]mcpTool {
-	return map[string]mcpTool{
+	tools := map[string]mcpTool{
 		"codencer.list_instances": {
 			Name:        "codencer.list_instances",
 			Description: "List shared Codencer instances available through the relay.",
@@ -297,6 +298,8 @@ func buildMCPTools(server *mcpServer) map[string]mcpTool {
 				return instanceID, fmt.Sprintf("/api/v2/steps/%s/retry", stepID), nil, nil
 			}),
 	}
+	addProjectMCPTools(server, tools)
+	return tools
 }
 
 func plannerProxyTool(server *mcpServer, name, description, scope string, schema map[string]any, route func(args map[string]any) (string, string, []byte, *apiError)) mcpTool {
@@ -333,6 +336,214 @@ func plannerProxyTool(server *mcpServer, name, description, scope string, schema
 			return successToolResult(description, payload), nil
 		},
 	}
+}
+
+func addProjectMCPTools(server *mcpServer, tools map[string]mcpTool) {
+	tools["codencer.list_projects"] = mcpTool{
+		Name:        "codencer.list_projects",
+		Description: "List shared Codencer projects available through the relay.",
+		Scope:       "projects:read",
+		InputSchema: objectSchema(nil, nil),
+		Annotations: readOnlyAnnotations(),
+		Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
+			return callProjectTool(server, ctx, principal, http.MethodGet, "/api/v2/projects", nil, "Listed shared projects.")
+		},
+	}
+	tools["codencer.get_project"] = mcpTool{
+		Name:        "codencer.get_project",
+		Description: "Get one shared Codencer project descriptor.",
+		Scope:       "projects:read",
+		InputSchema: objectSchema([]string{"project_id"}, map[string]any{"project_id": stringSchema("Shared project identifier.")}),
+		Annotations: readOnlyAnnotations(),
+		Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
+			projectID, apiErr := requiredString(args, "project_id")
+			if apiErr != nil {
+				return mcpToolResult{}, apiErr
+			}
+			return callProjectTool(server, ctx, principal, http.MethodGet, fmt.Sprintf("/api/v2/projects/%s", projectID), nil, "Fetched project descriptor.")
+		},
+	}
+	tools["codencer.start_project_run"] = projectRouteTool(server, "codencer.start_project_run", "Start a run for a shared project.", "runs:write", objectSchema([]string{"project_id"}, map[string]any{
+		"project_id": stringSchema("Shared project identifier."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		return fmt.Sprintf("/api/v2/projects/%s/runs", projectID), []byte(`{}`), nil
+	})
+	tools["codencer.list_project_runs"] = projectRouteTool(server, "codencer.list_project_runs", "List runs for a shared project.", "runs:read", objectSchema([]string{"project_id"}, map[string]any{
+		"project_id": stringSchema("Shared project identifier."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		return fmt.Sprintf("/api/v2/projects/%s/runs", projectID), nil, nil
+	})
+	setToolReadOnly(tools, "codencer.list_project_runs")
+	tools["codencer.get_project_run"] = projectRouteTool(server, "codencer.get_project_run", "Get a run for a shared project.", "runs:read", objectSchema([]string{"project_id", "run_id"}, map[string]any{
+		"project_id": stringSchema("Shared project identifier."),
+		"run_id":     stringSchema("Run identifier."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		runID, apiErr := requiredString(args, "run_id")
+		if apiErr != nil {
+			return "", nil, apiErr
+		}
+		return fmt.Sprintf("/api/v2/projects/%s/runs/%s", projectID, runID), nil, nil
+	})
+	setToolReadOnly(tools, "codencer.get_project_run")
+	tools["codencer.submit_project_task"] = projectSubmitTool(server, "codencer.submit_project_task", false)
+	tools["codencer.submit_project_task_and_wait"] = projectSubmitTool(server, "codencer.submit_project_task_and_wait", true)
+	tools["codencer.run_project_manifest"] = projectRouteTool(server, "codencer.run_project_manifest", "Run a project manifest sequentially for a shared project.", "runs:write", objectSchema([]string{"project_id"}, map[string]any{
+		"project_id":    stringSchema("Shared project identifier."),
+		"manifest":      objectSchema(nil, nil),
+		"manifest_text": stringSchema("YAML or JSON manifest text."),
+		"manifest_name": stringSchema("Optional manifest display name."),
+		"wait":          boolSchema("Wait for manifest completion."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		payload := map[string]any{}
+		copyOptional(payload, args, "manifest", "manifest_text", "manifest_name", "wait")
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return "", nil, &apiError{Status: http.StatusBadRequest, Code: "malformed_request", Message: err.Error()}
+		}
+		return fmt.Sprintf("/api/v2/projects/%s/run-plan", projectID), body, nil
+	})
+	tools["codencer.get_execution_report"] = projectRouteTool(server, "codencer.get_execution_report", "Get a persisted run-plan execution report for a shared project.", "reports:read", objectSchema([]string{"project_id", "run_id"}, map[string]any{
+		"project_id": stringSchema("Shared project identifier."),
+		"run_id":     stringSchema("Run identifier."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		runID, apiErr := requiredString(args, "run_id")
+		if apiErr != nil {
+			return "", nil, apiErr
+		}
+		return fmt.Sprintf("/api/v2/projects/%s/reports/run-plans/%s", projectID, runID), nil, nil
+	})
+	setToolReadOnly(tools, "codencer.get_execution_report")
+	tools["codencer.get_run_report"] = projectRouteTool(server, "codencer.get_run_report", "Alias for codencer.get_execution_report.", "reports:read", objectSchema([]string{"project_id", "run_id"}, map[string]any{
+		"project_id": stringSchema("Shared project identifier."),
+		"run_id":     stringSchema("Run identifier."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		runID, apiErr := requiredString(args, "run_id")
+		if apiErr != nil {
+			return "", nil, apiErr
+		}
+		return fmt.Sprintf("/api/v2/projects/%s/reports/run-plans/%s", projectID, runID), nil, nil
+	})
+	setToolReadOnly(tools, "codencer.get_run_report")
+	tools["codencer.get_project_blocker"] = mcpTool{
+		Name:        "codencer.get_project_blocker",
+		Description: "Get the top-level blocker from a persisted project execution report.",
+		Scope:       "reports:read",
+		InputSchema: objectSchema([]string{"project_id", "run_id"}, map[string]any{
+			"project_id": stringSchema("Shared project identifier."),
+			"run_id":     stringSchema("Run identifier."),
+		}),
+		Annotations: readOnlyAnnotations(),
+		Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
+			projectID, apiErr := requiredString(args, "project_id")
+			if apiErr != nil {
+				return mcpToolResult{}, apiErr
+			}
+			runID, apiErr := requiredString(args, "run_id")
+			if apiErr != nil {
+				return mcpToolResult{}, apiErr
+			}
+			_, _, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, fmt.Sprintf("/api/v2/projects/%s/reports/run-plans/%s", projectID, runID), nil)
+			if err != nil {
+				return mcpToolResult{}, err
+			}
+			payload := map[string]any{"project_id": projectID, "run_id": runID, "blocker": nil}
+			var report map[string]any
+			if decodeErr := json.Unmarshal(body, &report); decodeErr == nil {
+				if blocker, ok := report["blocker"]; ok {
+					payload["blocker"] = blocker
+				}
+				payload["report_status"] = report["status"]
+			}
+			return successToolResult("Fetched project blocker.", payload), nil
+		},
+	}
+	for _, resource := range []string{"result", "artifacts", "logs", "validations"} {
+		name := "codencer.get_project_step_" + resource
+		scope := scopeForProjectEvidence(resource)
+		description := "Get project step " + resource + " evidence."
+		routeResource := resource
+		tools[name] = projectRouteTool(server, name, description, scope, objectSchema([]string{"project_id", "step_id"}, map[string]any{
+			"project_id": stringSchema("Shared project identifier."),
+			"step_id":    stringSchema("Step identifier."),
+		}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+			stepID, apiErr := requiredString(args, "step_id")
+			if apiErr != nil {
+				return "", nil, apiErr
+			}
+			return fmt.Sprintf("/api/v2/projects/%s/steps/%s/%s", projectID, stepID, routeResource), nil, nil
+		})
+		setToolReadOnly(tools, name)
+	}
+}
+
+func projectSubmitTool(server *mcpServer, name string, wait bool) mcpTool {
+	description := "Submit a task to a shared project."
+	if wait {
+		description = "Submit a task to a shared project and wait for structured evidence."
+	}
+	return projectRouteTool(server, name, description, "steps:write", objectSchema([]string{"project_id"}, map[string]any{
+		"project_id":      stringSchema("Shared project identifier."),
+		"run_id":          stringSchema("Optional run identifier."),
+		"goal":            stringSchema("Direct goal text."),
+		"prompt":          stringSchema("Prompt text."),
+		"task":            taskSpecSchema(),
+		"profile":         stringSchema("Planner-facing profile id."),
+		"adapter_profile": stringSchema("Daemon-facing adapter profile override."),
+		"title":           stringSchema("Task title."),
+		"timeout_seconds": intSchema("Optional timeout in seconds."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		payload := map[string]any{"wait": wait}
+		copyOptional(payload, args, "run_id", "goal", "prompt", "task", "profile", "adapter_profile", "title", "timeout_seconds")
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return "", nil, &apiError{Status: http.StatusBadRequest, Code: "malformed_request", Message: err.Error()}
+		}
+		return fmt.Sprintf("/api/v2/projects/%s/submit", projectID), body, nil
+	})
+}
+
+func projectRouteTool(server *mcpServer, name, description, scope string, schema map[string]any, route func(projectID string, args map[string]any) (string, []byte, *apiError)) mcpTool {
+	return mcpTool{
+		Name:        name,
+		Description: description,
+		Scope:       scope,
+		InputSchema: schema,
+		Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
+			projectID, apiErr := requiredString(args, "project_id")
+			if apiErr != nil {
+				return mcpToolResult{}, apiErr
+			}
+			path, body, apiErr := route(projectID, args)
+			if apiErr != nil {
+				return mcpToolResult{}, apiErr
+			}
+			method := http.MethodGet
+			if body != nil {
+				method = http.MethodPost
+			}
+			return callProjectTool(server, ctx, principal, method, path, body, description)
+		},
+	}
+}
+
+func callProjectTool(server *mcpServer, ctx context.Context, principal *plannerPrincipal, method, path string, body []byte, summary string) (mcpToolResult, *apiError) {
+	_, _, responseBody, err := server.callPlannerRoute(ctx, principal, method, path, body)
+	if err != nil {
+		return mcpToolResult{}, err
+	}
+	var payload any
+	if len(responseBody) == 0 {
+		payload = map[string]any{"ok": true}
+	} else if decodeErr := json.Unmarshal(responseBody, &payload); decodeErr != nil {
+		payload = map[string]any{"raw": string(responseBody)}
+	}
+	return successToolResult(summary, payload), nil
+}
+
+func setToolReadOnly(tools map[string]mcpTool, name string) {
+	tool := tools[name]
+	tool.Annotations = readOnlyAnnotations()
+	tools[name] = tool
 }
 
 func toolOrder(tools map[string]mcpTool) []mcpTool {
@@ -397,6 +608,10 @@ func intSchema(description string) map[string]any {
 
 func boolSchema(description string) map[string]any {
 	return map[string]any{"type": "boolean", "description": description}
+}
+
+func readOnlyAnnotations() map[string]any {
+	return map[string]any{"readOnlyHint": true}
 }
 
 func taskSpecSchema() map[string]any {

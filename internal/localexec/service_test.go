@@ -1,0 +1,182 @@
+package localexec
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"agent-bridge/internal/domain"
+	"agent-bridge/internal/local"
+	projectpkg "agent-bridge/internal/project"
+)
+
+func TestSubmitDaemonNotRunningBlocker(t *testing.T) {
+	base := setupProject(t, "http://127.0.0.1:1", "fake", "fake-success")
+	service := NewService()
+	report, err := service.Submit(context.Background(), SubmitOptions{
+		BaseOptions: base,
+		Goal:        "do a fake task",
+		Wait:        true,
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+	if report.ExitCode != ExitDaemonFailed || report.Blocker == nil || report.Blocker.Type != BlockerDaemonNotRunning {
+		t.Fatalf("expected daemon_not_running exit, got %+v", report)
+	}
+}
+
+func TestRunStartListGetStatusViaHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+			writeTestJSON(t, w, http.StatusCreated, domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs":
+			if r.URL.Query().Get("project_id") != "proj" {
+				t.Fatalf("project filter = %q", r.URL.Query().Get("project_id"))
+			}
+			writeTestJSON(t, w, http.StatusOK, []*domain.Run{{ID: "run-1", ProjectID: "proj", State: domain.RunStateCompleted}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1":
+			writeTestJSON(t, w, http.StatusOK, domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCompleted})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/steps":
+			writeTestJSON(t, w, http.StatusOK, []*domain.Step{{ID: "step-1", State: domain.StepStateCompleted}})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	started, err := service.StartRun(context.Background(), RunOptions{BaseOptions: base})
+	if err != nil {
+		t.Fatalf("StartRun error: %v", err)
+	}
+	if !started.OK || started.Run.ID != "run-1" {
+		t.Fatalf("unexpected start report: %+v", started)
+	}
+	listed, err := service.ListRuns(context.Background(), RunOptions{BaseOptions: base})
+	if err != nil {
+		t.Fatalf("ListRuns error: %v", err)
+	}
+	if len(listed.Runs) != 1 || listed.Runs[0].ID != "run-1" {
+		t.Fatalf("unexpected list report: %+v", listed)
+	}
+	got, err := service.GetRun(context.Background(), RunOptions{BaseOptions: base, RunID: "run-1"})
+	if err != nil {
+		t.Fatalf("GetRun error: %v", err)
+	}
+	if got.Status != string(domain.RunStateCompleted) || len(got.Steps) != 1 {
+		t.Fatalf("unexpected get report: %+v", got)
+	}
+}
+
+func TestSubmitWaitMapsCompletedAndQuestionBlocker(t *testing.T) {
+	tests := []struct {
+		name      string
+		state     domain.StepState
+		questions []string
+		exitCode  int
+		blocker   string
+	}{
+		{name: "completed", state: domain.StepStateCompleted, exitCode: ExitSuccess},
+		{name: "question", state: domain.StepStateNeedsManualAttention, questions: []string{"choose"}, exitCode: ExitBlocked, blocker: BlockerQuestion},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+					writeTestJSON(t, w, http.StatusCreated, domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning})
+				case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-1/steps":
+					var task domain.TaskSpec
+					if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+						t.Fatalf("decode task: %v", err)
+					}
+					if task.AdapterProfile != "fake-success" {
+						t.Fatalf("adapter profile = %q", task.AdapterProfile)
+					}
+					writeTestJSON(t, w, http.StatusAccepted, domain.Step{ID: "step-1", Title: task.Title, State: domain.StepStateRunning, Adapter: task.AdapterProfile})
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1":
+					writeTestJSON(t, w, http.StatusOK, domain.Step{ID: "step-1", State: tc.state, Adapter: "fake-success"})
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/result":
+					writeTestJSON(t, w, http.StatusOK, domain.ResultSpec{StepID: "step-1", State: tc.state, Summary: string(tc.state), Questions: tc.questions, NeedsHumanDecision: len(tc.questions) > 0})
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/artifacts":
+					writeTestJSON(t, w, http.StatusOK, []*domain.Artifact{})
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/validations":
+					writeTestJSON(t, w, http.StatusOK, map[string][]*domain.ValidationResult{})
+				case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/logs":
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte("logs"))
+				default:
+					t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+			}))
+			defer server.Close()
+
+			base := setupProject(t, server.URL, "fake", "fake-success")
+			service := NewService()
+			service.PollInterval = time.Millisecond
+			report, err := service.Submit(context.Background(), SubmitOptions{BaseOptions: base, Goal: "do it", Wait: true})
+			if err != nil {
+				t.Fatalf("Submit error: %v", err)
+			}
+			if report.ExitCode != tc.exitCode {
+				t.Fatalf("exit = %d, want %d: %+v", report.ExitCode, tc.exitCode, report)
+			}
+			if tc.blocker != "" && (report.Blocker == nil || report.Blocker.Type != tc.blocker) {
+				t.Fatalf("blocker = %+v, want %s", report.Blocker, tc.blocker)
+			}
+		})
+	}
+}
+
+func setupProject(t *testing.T, daemonURL, adapter, adapterProfile string) BaseOptions {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv(local.HomeEnvName, home)
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := local.ResolvePaths(repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	registry := projectpkg.EmptyRegistry()
+	project, _, err := projectpkg.NewProject(projectpkg.ProjectOptions{
+		ID:             "proj",
+		RepoRoot:       repo,
+		DefaultAdapter: adapter,
+		AdapterProfile: adapterProfile,
+		DaemonURL:      daemonURL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := projectpkg.UpsertProject(registry, project, false, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
+		t.Fatal(err)
+	}
+	return BaseOptions{ProjectID: "proj", RepoRoot: repo}
+}
+
+func writeTestJSON(t *testing.T, w http.ResponseWriter, status int, value any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+}

@@ -14,6 +14,7 @@ import (
 	appversion "agent-bridge/internal/app"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/relayproto"
+	"agent-bridge/internal/security"
 )
 
 type plannerInstance struct {
@@ -27,6 +28,20 @@ type plannerInstance struct {
 	Instance    json.RawMessage `json:"instance,omitempty"`
 }
 
+type plannerProject struct {
+	ProjectID      string          `json:"project_id"`
+	ConnectorID    string          `json:"connector_id"`
+	InstanceID     string          `json:"instance_id"`
+	RepoLabel      string          `json:"repo_label,omitempty"`
+	RepoRootHash   string          `json:"repo_root_hash,omitempty"`
+	DefaultAdapter string          `json:"default_adapter,omitempty"`
+	AdapterProfile string          `json:"adapter_profile,omitempty"`
+	Online         bool            `json:"online"`
+	Status         string          `json:"status"`
+	LastSeenAt     time.Time       `json:"last_seen_at"`
+	Project        json.RawMessage `json:"project,omitempty"`
+}
+
 type relayStatusResponse struct {
 	Version                   string    `json:"version"`
 	StartedAt                 time.Time `json:"started_at"`
@@ -37,6 +52,8 @@ type relayStatusResponse struct {
 	OnlineConnectorCount      int       `json:"online_connector_count"`
 	InstanceCount             int       `json:"instance_count"`
 	OnlineInstanceCount       int       `json:"online_instance_count"`
+	ProjectCount              int       `json:"project_count"`
+	OnlineProjectCount        int       `json:"online_project_count"`
 }
 
 type plannerConnector struct {
@@ -48,6 +65,7 @@ type plannerConnector struct {
 	Status            string    `json:"status"`
 	LastSeenAt        time.Time `json:"last_seen_at,omitempty"`
 	SharedInstanceIDs []string  `json:"shared_instance_ids,omitempty"`
+	SharedProjectIDs  []string  `json:"shared_project_ids,omitempty"`
 }
 
 func (s *Server) handleInstances(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +100,77 @@ func (s *Server) handleInstances(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	records, err := s.store.ListProjects(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+		return
+	}
+	principal := plannerFromContext(r.Context())
+	response := make([]plannerProject, 0, len(records))
+	for _, record := range records {
+		if !projectAllowed(principal, "projects:read", record) {
+			continue
+		}
+		payload, err := s.projectPayload(r.Context(), &record)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		response = append(response, payload)
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleProjectScoped(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v2/projects/")
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", "project_id is required")
+		return
+	}
+	projectID := parts[0]
+	principal := plannerFromContext(r.Context())
+	record, apiErr := s.resolveProjectRecord(r.Context(), principal, projectID, scopeForProjectRoute(parts, r.Method))
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+
+	switch {
+	case len(parts) == 1 && r.Method == http.MethodGet:
+		payload, err := s.projectPayload(r.Context(), record)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+	case len(parts) == 2 && parts[1] == "runs" && r.Method == http.MethodGet:
+		s.projectProxyAndWrite(w, r, record, http.MethodGet, fmt.Sprintf("/codencer/v1/projects/%s/runs", projectID), "", nil, "list_project_runs", "runs:read")
+	case len(parts) == 2 && parts[1] == "runs" && r.Method == http.MethodPost:
+		body, _ := io.ReadAll(r.Body)
+		s.projectProxyAndWrite(w, r, record, http.MethodPost, fmt.Sprintf("/codencer/v1/projects/%s/runs", projectID), "", body, "start_project_run", "runs:write")
+	case len(parts) == 3 && parts[1] == "runs" && r.Method == http.MethodGet:
+		s.projectProxyAndWrite(w, r, record, http.MethodGet, fmt.Sprintf("/codencer/v1/projects/%s/runs/%s", projectID, parts[2]), "", nil, "get_project_run", "runs:read")
+	case len(parts) == 2 && parts[1] == "submit" && r.Method == http.MethodPost:
+		body, _ := io.ReadAll(r.Body)
+		s.projectProxyAndWrite(w, r, record, http.MethodPost, fmt.Sprintf("/codencer/v1/projects/%s/submit", projectID), "", body, "submit_project_task", "steps:write")
+	case len(parts) == 2 && parts[1] == "run-plan" && r.Method == http.MethodPost:
+		body, _ := io.ReadAll(r.Body)
+		s.projectProxyAndWrite(w, r, record, http.MethodPost, fmt.Sprintf("/codencer/v1/projects/%s/run-plan", projectID), "", body, "run_project_manifest", "runs:write")
+	case len(parts) == 4 && parts[1] == "reports" && parts[2] == "run-plans" && r.Method == http.MethodGet:
+		s.projectProxyAndWrite(w, r, record, http.MethodGet, fmt.Sprintf("/codencer/v1/projects/%s/reports/run-plans/%s", projectID, parts[3]), "", nil, "get_execution_report", "reports:read")
+	case len(parts) == 4 && parts[1] == "steps" && r.Method == http.MethodGet:
+		s.projectProxyAndWrite(w, r, record, http.MethodGet, fmt.Sprintf("/codencer/v1/projects/%s/steps/%s/%s", projectID, parts[2], parts[3]), "", nil, "get_project_step_"+parts[3], scopeForProjectEvidence(parts[3]))
+	default:
+		writeAPIError(w, http.StatusNotFound, "malformed_request", "unsupported project route")
+	}
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -93,6 +182,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	instances, err := s.store.ListInstances(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+		return
+	}
+	projects, err := s.store.ListProjects(r.Context())
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
 		return
@@ -114,6 +208,17 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			onlineInstances++
 		}
 	}
+	onlineProjects := 0
+	for _, project := range projects {
+		status, err := s.projectStatus(r.Context(), &project)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
+			return
+		}
+		if status.Online {
+			onlineProjects++
+		}
+	}
 	writeJSON(w, http.StatusOK, relayStatusResponse{
 		Version:                   appversion.Version,
 		StartedAt:                 s.startedAt,
@@ -124,6 +229,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		OnlineConnectorCount:      onlineConnectors,
 		InstanceCount:             len(instances),
 		OnlineInstanceCount:       onlineInstances,
+		ProjectCount:              len(projects),
+		OnlineProjectCount:        onlineProjects,
 	})
 }
 
@@ -237,9 +344,17 @@ func (s *Server) connectorPayload(ctx context.Context, connector ConnectorRecord
 	if err != nil {
 		return plannerConnector{}, err
 	}
+	projects, err := s.store.ListProjectsByConnector(ctx, connector.ConnectorID)
+	if err != nil {
+		return plannerConnector{}, err
+	}
 	sharedIDs := make([]string, 0, len(instances))
 	for _, instance := range instances {
 		sharedIDs = append(sharedIDs, instance.InstanceID)
+	}
+	sharedProjectIDs := make([]string, 0, len(projects))
+	for _, project := range projects {
+		sharedProjectIDs = append(sharedProjectIDs, project.ProjectID)
 	}
 	status := s.connectorStatus(&connector)
 	return plannerConnector{
@@ -251,6 +366,7 @@ func (s *Server) connectorPayload(ctx context.Context, connector ConnectorRecord
 		Status:            status.Status,
 		LastSeenAt:        connector.LastSeenAt,
 		SharedInstanceIDs: sharedIDs,
+		SharedProjectIDs:  sharedProjectIDs,
 	}, nil
 }
 
@@ -531,6 +647,122 @@ func (s *Server) proxyAndWrite(w http.ResponseWriter, r *http.Request, instanceI
 	})
 }
 
+func (s *Server) projectProxyAndWrite(w http.ResponseWriter, r *http.Request, project *ProjectRecord, method, path, query string, body []byte, action, scope string) {
+	principal := plannerFromContext(r.Context())
+	actorID := ""
+	if principal != nil {
+		actorID = principal.Name
+	}
+	if err := authorizeProject(principal, scope, project); err != nil {
+		s.auditor.Record(r.Context(), AuditEvent{
+			ActorType:         "planner",
+			ActorID:           actorID,
+			Action:            action,
+			Method:            method,
+			Scope:             scope,
+			ResourceKind:      "project",
+			ResourceID:        project.ProjectID,
+			TargetConnectorID: project.ConnectorID,
+			TargetInstanceID:  project.InstanceID,
+			Outcome:           "error",
+			ErrorCode:         err.Code,
+		})
+		writeAPIError(w, err.Status, err.Code, err.Message)
+		return
+	}
+	response, apiErr := s.proxyProjectRequest(r.Context(), project, method, path, query, body)
+	if apiErr != nil {
+		s.auditor.Record(r.Context(), AuditEvent{
+			ActorType:         "planner",
+			ActorID:           actorID,
+			Action:            action,
+			Method:            method,
+			Scope:             scope,
+			ResourceKind:      "project",
+			ResourceID:        project.ProjectID,
+			TargetConnectorID: project.ConnectorID,
+			TargetInstanceID:  project.InstanceID,
+			Outcome:           "error",
+			ErrorCode:         apiErr.Code,
+		})
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if response.ContentType != "" {
+		w.Header().Set("Content-Type", response.ContentType)
+	}
+	payload := decodeRelayBody(response)
+	payload = security.SanitizeRemoteJSON(payload)
+	if len(payload) > 0 && response.ContentEncoding == "" {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+	}
+	w.WriteHeader(response.StatusCode)
+	if len(payload) > 0 {
+		_, _ = w.Write(payload)
+	}
+	s.auditor.Record(r.Context(), AuditEvent{
+		ActorType:         "planner",
+		ActorID:           actorID,
+		Action:            action,
+		Method:            method,
+		Scope:             scope,
+		ResourceKind:      "project",
+		ResourceID:        project.ProjectID,
+		TargetConnectorID: project.ConnectorID,
+		TargetInstanceID:  project.InstanceID,
+		Outcome:           "ok",
+	})
+}
+
+func (s *Server) proxyProjectRequest(ctx context.Context, project *ProjectRecord, method, path, query string, body []byte) (*relayproto.CommandResponse, *apiError) {
+	if project == nil {
+		return nil, &apiError{Status: http.StatusNotFound, Code: "project_not_found", Message: "project not found"}
+	}
+	connectorRecord, err := s.store.GetConnector(ctx, project.ConnectorID)
+	if err != nil {
+		return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	if connectorRecord != nil && connectorRecord.Disabled {
+		return nil, &apiError{Status: http.StatusForbidden, Code: "connector_disabled", Message: "connector for this project is disabled"}
+	}
+	session := s.hub.Connector(project.ConnectorID)
+	if session == nil {
+		return nil, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "connector for this project is offline"}
+	}
+	requestID, err := randomID("req")
+	if err != nil {
+		return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	timeout := s.proxyTimeout(path, body)
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	response, err := session.proxy(requestCtx, relayproto.CommandRequest{
+		Type:        "request",
+		RequestID:   requestID,
+		InstanceID:  project.InstanceID,
+		Method:      method,
+		Path:        path,
+		Query:       query,
+		Body:        body,
+		ContentType: contentTypeForBody(body),
+		TimeoutMs:   int(timeout / time.Millisecond),
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "timed out") || strings.Contains(err.Error(), "deadline exceeded") {
+			return nil, &apiError{Status: http.StatusGatewayTimeout, Code: "upstream_timeout", Message: err.Error()}
+		}
+		return nil, &apiError{Status: http.StatusBadGateway, Code: "connector_offline", Message: err.Error()}
+	}
+	if response.StatusCode >= 400 {
+		return nil, &apiError{
+			Status:  translateUpstreamStatus(response.StatusCode),
+			Code:    upstreamErrorCode(response.StatusCode, response.Error),
+			Message: strings.TrimSpace(response.Error),
+		}
+	}
+	return response, nil
+}
+
 func (s *Server) proxyRequest(ctx context.Context, instanceID, method, path, query string, body []byte, _ string) (*relayproto.CommandResponse, *InstanceRecord, *apiError) {
 	record, err := s.store.GetInstance(ctx, instanceID)
 	if err != nil {
@@ -736,6 +968,108 @@ func (s *Server) instanceStatus(ctx context.Context, record *InstanceRecord) (In
 		return InstanceStatus{Online: true, Status: "online"}, nil
 	}
 	return InstanceStatus{Online: false, Status: "offline"}, nil
+}
+
+func (s *Server) projectStatus(ctx context.Context, record *ProjectRecord) (InstanceStatus, error) {
+	if record == nil {
+		return InstanceStatus{Online: false, Status: "not_found"}, nil
+	}
+	connectorRecord, err := s.store.GetConnector(ctx, record.ConnectorID)
+	if err != nil {
+		return InstanceStatus{}, err
+	}
+	if connectorRecord != nil && connectorRecord.Disabled {
+		return InstanceStatus{Online: false, Status: "disabled"}, nil
+	}
+	if s.hub.Connector(record.ConnectorID) != nil {
+		return InstanceStatus{Online: true, Status: "online"}, nil
+	}
+	return InstanceStatus{Online: false, Status: "offline"}, nil
+}
+
+func (s *Server) projectPayload(ctx context.Context, record *ProjectRecord) (plannerProject, error) {
+	status, err := s.projectStatus(ctx, record)
+	if err != nil {
+		return plannerProject{}, err
+	}
+	repoLabel, repoHash := security.SafePathLabel(record.RepoRoot)
+	return plannerProject{
+		ProjectID:      record.ProjectID,
+		ConnectorID:    record.ConnectorID,
+		InstanceID:     record.InstanceID,
+		RepoLabel:      repoLabel,
+		RepoRootHash:   repoHash,
+		DefaultAdapter: record.DefaultAdapter,
+		AdapterProfile: record.AdapterProfile,
+		Online:         status.Online,
+		Status:         status.Status,
+		LastSeenAt:     record.LastSeenAt,
+		Project:        json.RawMessage(security.SanitizeRemoteJSON([]byte(record.ProjectJSON))),
+	}, nil
+}
+
+func (s *Server) resolveProjectRecord(ctx context.Context, principal *plannerPrincipal, projectID, scope string) (*ProjectRecord, *apiError) {
+	records, err := s.store.ListProjectsByID(ctx, projectID)
+	if err != nil {
+		return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	candidates := make([]ProjectRecord, 0, len(records))
+	for _, record := range records {
+		if projectAllowed(principal, scope, record) {
+			candidates = append(candidates, record)
+		}
+	}
+	switch len(candidates) {
+	case 0:
+		if len(records) == 0 {
+			return nil, &apiError{Status: http.StatusNotFound, Code: "project_not_found", Message: "project not found"}
+		}
+		return nil, &apiError{Status: http.StatusForbidden, Code: "project_denied", Message: "planner token is not authorized for this project"}
+	case 1:
+		return &candidates[0], nil
+	default:
+		connectors := make([]string, 0, len(candidates))
+		for _, candidate := range candidates {
+			connectors = append(connectors, candidate.ConnectorID)
+		}
+		sort.Strings(connectors)
+		return nil, &apiError{Status: http.StatusConflict, Code: "project_ambiguous", Message: fmt.Sprintf("project %s is shared by multiple connectors: %s", projectID, strings.Join(connectors, ", "))}
+	}
+}
+
+func scopeForProjectRoute(parts []string, method string) string {
+	if len(parts) <= 1 {
+		return "projects:read"
+	}
+	switch parts[1] {
+	case "runs":
+		if method == http.MethodPost {
+			return "runs:write"
+		}
+		return "runs:read"
+	case "submit":
+		return "steps:write"
+	case "run-plan":
+		return "runs:write"
+	case "reports":
+		return "reports:read"
+	case "steps":
+		if len(parts) > 3 {
+			return scopeForProjectEvidence(parts[3])
+		}
+		return "steps:read"
+	default:
+		return "projects:read"
+	}
+}
+
+func scopeForProjectEvidence(resource string) string {
+	switch resource {
+	case "artifacts":
+		return "artifacts:read"
+	default:
+		return "steps:read"
+	}
 }
 
 func parseAuditLimit(raw string) int {

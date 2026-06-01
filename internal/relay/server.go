@@ -51,6 +51,8 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/api/v2/connectors", s.withPlannerScope("admin:read", nil, s.handleConnectors))
 	mux.HandleFunc("/api/v2/connectors/", s.withPlannerScope("", nil, s.handleConnectorScoped))
 	mux.HandleFunc("/api/v2/audit", s.withPlannerScope("admin:read", nil, s.handleAudit))
+	mux.HandleFunc("/api/v2/projects", s.withPlannerScope("projects:read", nil, s.handleProjects))
+	mux.HandleFunc("/api/v2/projects/", s.withPlannerScope("", nil, s.handleProjectScoped))
 	mux.HandleFunc("/api/v2/instances", s.withPlannerScope("instances:read", nil, s.handleInstances))
 	mux.HandleFunc("/api/v2/instances/", s.withPlannerScope("", relayInstanceIDFromRequest, s.handleInstanceScoped))
 	mux.HandleFunc("/api/v2/steps/", s.withPlannerScope("", nil, s.handleStepScoped))
@@ -74,7 +76,13 @@ func NewServer(cfg *Config, store *Store) *Server {
 func (s *Server) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.cfg.TLSCertFile != "" && s.cfg.TLSKeyFile != "" {
+			err = s.server.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+		} else {
+			err = s.server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
@@ -197,6 +205,7 @@ func (s *Server) handleConnectorWebSocket(w http.ResponseWriter, r *http.Request
 		connectorID: hello.ConnectorID,
 		machineID:   hello.MachineID,
 		instanceIDs: make(map[string]struct{}),
+		projectIDs:  make(map[string]struct{}),
 		pending:     make(map[string]chan relayproto.CommandResponse),
 		lastSeenAt:  time.Now().UTC(),
 	}
@@ -253,7 +262,9 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 	s.hub.Touch(session)
 	now := time.Now().UTC()
 	records := make([]InstanceRecord, 0, len(advertise.Instances))
+	projectRecords := make([]ProjectRecord, 0, len(advertise.Projects))
 	next := make(map[string]struct{})
+	nextProjects := make(map[string]struct{})
 	for _, advertised := range advertise.Instances {
 		var info domain.InstanceInfo
 		if err := json.Unmarshal(advertised.Instance, &info); err != nil {
@@ -273,8 +284,43 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 		s.hub.Register(info.ID, session)
 		next[info.ID] = struct{}{}
 	}
+	for _, advertised := range advertise.Projects {
+		var project struct {
+			ID             string `json:"id"`
+			RepoRoot       string `json:"repo_root"`
+			DefaultAdapter string `json:"default_adapter"`
+			AdapterProfile string `json:"adapter_profile"`
+		}
+		if err := json.Unmarshal(advertised.Project, &project); err != nil {
+			return err
+		}
+		projectID := advertised.ProjectID
+		if projectID == "" {
+			projectID = project.ID
+		}
+		if projectID == "" {
+			return fmt.Errorf("advertised project is missing id")
+		}
+		if advertised.InstanceID == "" {
+			return fmt.Errorf("advertised project %s is missing instance_id", projectID)
+		}
+		projectRecords = append(projectRecords, ProjectRecord{
+			ProjectID:      projectID,
+			ConnectorID:    session.connectorID,
+			InstanceID:     advertised.InstanceID,
+			RepoRoot:       project.RepoRoot,
+			DefaultAdapter: project.DefaultAdapter,
+			AdapterProfile: project.AdapterProfile,
+			ProjectJSON:    string(advertised.Project),
+			LastSeenAt:     now,
+		})
+		nextProjects[projectID] = struct{}{}
+	}
 	pruned, err := s.store.ReplaceConnectorInstances(ctx, session.connectorID, records)
 	if err != nil {
+		return err
+	}
+	if _, err := s.store.ReplaceConnectorProjects(ctx, session.connectorID, projectRecords); err != nil {
 		return err
 	}
 	if len(pruned) > 0 {
@@ -286,6 +332,7 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 		}
 	}
 	session.instanceIDs = next
+	session.projectIDs = nextProjects
 	return nil
 }
 

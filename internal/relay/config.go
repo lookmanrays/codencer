@@ -26,6 +26,8 @@ type Config struct {
 	OAuthAuthorizationServers  []string             `json:"oauth_authorization_servers,omitempty"`
 	OAuthScopesSupported       []string             `json:"oauth_scopes_supported,omitempty"`
 	OAuthResourceDocumentation string               `json:"oauth_resource_documentation,omitempty"`
+	TLSCertFile                string               `json:"tls_cert_file,omitempty"`
+	TLSKeyFile                 string               `json:"tls_key_file,omitempty"`
 }
 
 type PlannerTokenConfig struct {
@@ -33,6 +35,7 @@ type PlannerTokenConfig struct {
 	Token       string   `json:"token"`
 	Scopes      []string `json:"scopes,omitempty"`
 	InstanceIDs []string `json:"instance_ids,omitempty"`
+	ProjectIDs  []string `json:"project_ids,omitempty"`
 }
 
 func DefaultConfig() *Config {
@@ -99,6 +102,12 @@ func LoadConfig(path string) (*Config, error) {
 	if value := os.Getenv("RELAY_OAUTH_RESOURCE_DOCUMENTATION"); value != "" {
 		cfg.OAuthResourceDocumentation = strings.TrimSpace(value)
 	}
+	if value := os.Getenv("RELAY_TLS_CERT_FILE"); value != "" {
+		cfg.TLSCertFile = strings.TrimSpace(value)
+	}
+	if value := os.Getenv("RELAY_TLS_KEY_FILE"); value != "" {
+		cfg.TLSKeyFile = strings.TrimSpace(value)
+	}
 	return cfg, cfg.Validate()
 }
 
@@ -137,6 +146,11 @@ func (c *Config) Validate() error {
 	c.OAuthAuthorizationServers = cleanConfigList(c.OAuthAuthorizationServers)
 	c.OAuthScopesSupported = cleanConfigList(c.OAuthScopesSupported)
 	c.OAuthResourceDocumentation = strings.TrimSpace(c.OAuthResourceDocumentation)
+	c.TLSCertFile = strings.TrimSpace(c.TLSCertFile)
+	c.TLSKeyFile = strings.TrimSpace(c.TLSKeyFile)
+	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
+		return fmt.Errorf("tls_cert_file and tls_key_file must be configured together")
+	}
 	return nil
 }
 

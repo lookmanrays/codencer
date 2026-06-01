@@ -365,11 +365,20 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 func (s *mcpServer) listTools() []map[string]any {
 	tools := make([]map[string]any, 0, len(s.tools))
 	for _, tool := range toolOrder(s.tools) {
-		tools = append(tools, map[string]any{
+		payload := map[string]any{
 			"name":        tool.Name,
 			"description": tool.Description,
 			"inputSchema": tool.InputSchema,
-		})
+		}
+		if len(tool.Annotations) > 0 {
+			payload["annotations"] = tool.Annotations
+		}
+		if tool.Scope != "" {
+			payload["_meta"] = map[string]any{
+				"codencer/securityScopes": []string{tool.Scope},
+			}
+		}
+		tools = append(tools, payload)
 	}
 	return tools
 }
@@ -574,6 +583,14 @@ func successToolResult(summary string, payload any) mcpToolResult {
 			"text": summary,
 		}}
 	}
+	if payload != nil {
+		if data, err := json.Marshal(payload); err == nil {
+			result.Content = append(result.Content, map[string]string{
+				"type": "text",
+				"text": string(data),
+			})
+		}
+	}
 	return result
 }
 
@@ -607,9 +624,13 @@ func clonePlannerPrincipal(principal *plannerPrincipal) *plannerPrincipal {
 		Name:        principal.Name,
 		Scopes:      append([]string(nil), principal.Scopes...),
 		InstanceIDs: make(map[string]struct{}, len(principal.InstanceIDs)),
+		ProjectIDs:  make(map[string]struct{}, len(principal.ProjectIDs)),
 	}
 	for instanceID := range principal.InstanceIDs {
 		clone.InstanceIDs[instanceID] = struct{}{}
+	}
+	for projectID := range principal.ProjectIDs {
+		clone.ProjectIDs[projectID] = struct{}{}
 	}
 	return clone
 }

@@ -27,6 +27,17 @@ type InstanceRecord struct {
 	LastSeenAt   time.Time `json:"last_seen_at"`
 }
 
+type ProjectRecord struct {
+	ProjectID      string    `json:"project_id"`
+	ConnectorID    string    `json:"connector_id"`
+	InstanceID     string    `json:"instance_id"`
+	RepoRoot       string    `json:"repo_root"`
+	DefaultAdapter string    `json:"default_adapter,omitempty"`
+	AdapterProfile string    `json:"adapter_profile,omitempty"`
+	ProjectJSON    string    `json:"project_json,omitempty"`
+	LastSeenAt     time.Time `json:"last_seen_at"`
+}
+
 type ConnectorRecord struct {
 	ConnectorID         string
 	MachineID           string
@@ -133,6 +144,17 @@ CREATE TABLE IF NOT EXISTS instances (
   instance_json TEXT,
   last_seen_at DATETIME NOT NULL
 );
+CREATE TABLE IF NOT EXISTS projects (
+  connector_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  instance_id TEXT NOT NULL,
+  repo_root TEXT NOT NULL,
+  default_adapter TEXT,
+  adapter_profile TEXT,
+  project_json TEXT,
+  last_seen_at DATETIME NOT NULL,
+  PRIMARY KEY (connector_id, project_id)
+);
 CREATE TABLE IF NOT EXISTS resource_routes (
   resource_kind TEXT NOT NULL,
   resource_id TEXT NOT NULL,
@@ -168,6 +190,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
 		"ALTER TABLE connectors ADD COLUMN updated_at DATETIME",
 		"ALTER TABLE connectors ADD COLUMN last_seen_at DATETIME",
 		"ALTER TABLE instances ADD COLUMN instance_json TEXT",
+		"ALTER TABLE projects ADD COLUMN default_adapter TEXT",
+		"ALTER TABLE projects ADD COLUMN adapter_profile TEXT",
+		"ALTER TABLE projects ADD COLUMN project_json TEXT",
 		"ALTER TABLE audit_events ADD COLUMN actor_type TEXT",
 		"ALTER TABLE audit_events ADD COLUMN actor_id TEXT",
 		"ALTER TABLE audit_events ADD COLUMN method TEXT",
@@ -570,6 +595,147 @@ func (s *Store) ListInstancesByConnector(ctx context.Context, connectorID string
 	for rows.Next() {
 		var record InstanceRecord
 		if err := rows.Scan(&record.InstanceID, &record.ConnectorID, &record.RepoRoot, &record.BaseURL, &record.InstanceJSON, &record.LastSeenAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func (s *Store) ReplaceConnectorProjects(ctx context.Context, connectorID string, records []ProjectRecord) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	keep := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		if record.ProjectID == "" || record.InstanceID == "" {
+			continue
+		}
+		if record.LastSeenAt.IsZero() {
+			record.LastSeenAt = time.Now().UTC()
+		}
+		record.ConnectorID = connectorID
+		if _, execErr := tx.ExecContext(ctx, `
+			INSERT INTO projects (connector_id, project_id, instance_id, repo_root, default_adapter, adapter_profile, project_json, last_seen_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(connector_id, project_id) DO UPDATE SET
+				instance_id = excluded.instance_id,
+				repo_root = excluded.repo_root,
+				default_adapter = excluded.default_adapter,
+				adapter_profile = excluded.adapter_profile,
+				project_json = excluded.project_json,
+				last_seen_at = excluded.last_seen_at
+		`, record.ConnectorID, record.ProjectID, record.InstanceID, record.RepoRoot, record.DefaultAdapter, record.AdapterProfile, record.ProjectJSON, record.LastSeenAt.UTC()); execErr != nil {
+			err = execErr
+			return nil, err
+		}
+		keep[record.ProjectID] = struct{}{}
+	}
+
+	rows, queryErr := tx.QueryContext(ctx, `
+		SELECT project_id
+		FROM projects
+		WHERE connector_id = ?
+	`, connectorID)
+	if queryErr != nil {
+		err = queryErr
+		return nil, err
+	}
+	var pruneIDs []string
+	for rows.Next() {
+		var projectID string
+		if scanErr := rows.Scan(&projectID); scanErr != nil {
+			_ = rows.Close()
+			err = scanErr
+			return nil, err
+		}
+		if _, ok := keep[projectID]; !ok {
+			pruneIDs = append(pruneIDs, projectID)
+		}
+	}
+	if closeErr := rows.Close(); closeErr != nil {
+		err = closeErr
+		return nil, err
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		err = rowsErr
+		return nil, err
+	}
+	for _, projectID := range pruneIDs {
+		if _, execErr := tx.ExecContext(ctx, `DELETE FROM projects WHERE project_id = ? AND connector_id = ?`, projectID, connectorID); execErr != nil {
+			err = execErr
+			return nil, err
+		}
+	}
+	err = tx.Commit()
+	return pruneIDs, err
+}
+
+func (s *Store) ListProjects(ctx context.Context) ([]ProjectRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT connector_id, project_id, instance_id, repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
+		FROM projects
+		ORDER BY project_id, connector_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []ProjectRecord
+	for rows.Next() {
+		var record ProjectRecord
+		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func (s *Store) ListProjectsByConnector(ctx context.Context, connectorID string) ([]ProjectRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT connector_id, project_id, instance_id, repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
+		FROM projects
+		WHERE connector_id = ?
+		ORDER BY project_id
+	`, connectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []ProjectRecord
+	for rows.Next() {
+		var record ProjectRecord
+		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func (s *Store) ListProjectsByID(ctx context.Context, projectID string) ([]ProjectRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT connector_id, project_id, instance_id, repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
+		FROM projects
+		WHERE project_id = ?
+		ORDER BY connector_id
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []ProjectRecord
+	for rows.Next() {
+		var record ProjectRecord
+		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
 			return nil, err
 		}
 		records = append(records, record)
