@@ -352,6 +352,10 @@ func TestMCPToolsListIncludesRequiredCodencerTools(t *testing.T) {
 		"codencer.reject_gate",
 		"codencer.abort_run",
 		"codencer.retry_step",
+		"codencer.list_projects",
+		"codencer.run_project_manifest",
+		"codencer.get_project_blocker",
+		"codencer.get_blocker",
 	}
 	for _, name := range required {
 		if _, ok := names[name]; !ok {

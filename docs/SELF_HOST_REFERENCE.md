@@ -73,7 +73,7 @@ Minimal relay config example:
 }
 ```
 
-The OAuth fields are only needed for product-facing remote MCP deployments. Codencer remains the resource server and continues to validate bearer tokens; the OAuth issuer/front door is operator-owned.
+The OAuth fields are only needed for product-facing remote MCP deployments. Codencer remains the resource server and continues to validate bearer tokens. Sprint 7 also includes a minimal single-user OAuth dev issuer for self-host ChatGPT testing; production IAM can still use an operator-owned OAuth front door.
 
 For project-first planners, include `projects:read`, `projects:write`, and `reports:read` in scoped token policies. Planner token entries can also include `project_ids` to restrict access to specific shared projects.
 
@@ -285,7 +285,7 @@ curl -fsS \
   https://relay.example.com/api/v2/projects/codencer/submit
 ```
 
-Project MCP tools include `codencer.list_projects`, `codencer.get_project`, `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.submit_project_task_and_wait`, `codencer.run_project_manifest`, `codencer.get_execution_report`, `codencer.get_project_blocker`, and project step evidence tools.
+Project MCP tools include `codencer.list_projects`, `codencer.get_project`, `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.submit_project_task_and_wait`, `codencer.run_project_manifest`, `codencer.get_execution_report`, `codencer.get_project_blocker`, `codencer.get_blocker`, and project step evidence tools.
 
 Sprint 5 adds an opt-in live Relay/MCP proof command:
 
@@ -410,7 +410,7 @@ This is recommended operator topology, not an automated smoke proof. See [WSL / 
 - Self-host mode is implemented in this repo and uses your own relay config, sqlite state, and tokens.
 - A future default or managed relay can speak the same connector session model, but self-host does not depend on that future service.
 
-## Sprint 6 Setup Short Path
+## Sprint 7 Setup And Activation Short Path
 
 ```bash
 make build
@@ -419,13 +419,21 @@ make build
   --mcp-url https://relay.example.com/mcp \
   --generate-planner-token \
   --json
+./bin/codencer setup relay \
+  --base-url https://relay.example.com \
+  --mcp-url https://relay.example.com/mcp \
+  --generate-planner-token \
+  --enable-chatgpt-oauth-dev \
+  --json
 ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
 ./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
 ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+./bin/codencer activation check --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --check-oauth --json
 ```
 
 `setup relay` writes runnable relay and connector config only when a planner token is already present or explicitly supplied/generated. Generated tokens are stored under `$CODENCER_HOME/tokens` and redacted from output. Service install/start remains explicit.
 
 Remote project descriptors do not expose absolute local repository paths by default. The local registry and relay storage keep routing data; planner-facing project payloads use safe labels and hashes.
 
-Use `docs/quickstart-self-host-relay.md` for the shortest operator flow and `docs/release-checklist.md` for release acceptance evidence.
+Use `docs/quickstart-self-host-relay.md` for the shortest operator flow, `docs/activation-vps-relay.md` and `docs/activation-local-connector.md` for Sprint 7 activation, and `docs/release-checklist.md` for release acceptance evidence.

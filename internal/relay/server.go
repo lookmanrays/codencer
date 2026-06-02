@@ -23,6 +23,7 @@ type Server struct {
 	enrollment *EnrollmentService
 	auditor    *Auditor
 	mcp        *mcpServer
+	oauthDev   *oauthDevService
 }
 
 func NewServer(cfg *Config, store *Store) *Server {
@@ -41,6 +42,7 @@ func NewServer(cfg *Config, store *Store) *Server {
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
+	s.oauthDev = newOAuthDevService(cfg)
 	s.mcp = newMCPServer(s)
 
 	mux := http.NewServeMux()
@@ -61,6 +63,10 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/ws/connectors", s.handleConnectorWebSocket)
 	mux.HandleFunc("/.well-known/oauth-protected-resource", s.handleOAuthProtectedResource)
 	mux.HandleFunc("/.well-known/oauth-protected-resource/", s.handleOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-authorization-server", s.handleOAuthAuthorizationServer)
+	mux.HandleFunc("/.well-known/openid-configuration", s.handleOpenIDConfiguration)
+	mux.HandleFunc("/oauth/authorize", s.handleOAuthAuthorize)
+	mux.HandleFunc("/oauth/token", s.handleOAuthToken)
 	mux.HandleFunc("/mcp", s.mcp.Handle)
 	mux.HandleFunc("/mcp/call", s.mcp.HandleCallAlias)
 

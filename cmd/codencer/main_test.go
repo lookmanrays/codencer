@@ -339,8 +339,48 @@ func TestSetupAcceptProofCommandsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setup mcp failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
-	if !strings.Contains(stdout, `"client": "chatgpt"`) || !strings.Contains(stdout, "oauth-front-door") {
+	if !strings.Contains(stdout, `"client": "chatgpt"`) || !strings.Contains(stdout, "oauth-dev-or-front-door") {
 		t.Fatalf("setup mcp output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("setup", "relay", "--base-url", "https://relay.example.com", "--generate-planner-token", "--enable-chatgpt-oauth-dev", "--oauth-client-secret", "client-secret", "--chatgpt-dev-noauth", "--json")
+	if err != nil {
+		t.Fatalf("setup relay OAuth failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"chatgpt_oauth_dev"`) || strings.Contains(stdout, "client-secret") {
+		t.Fatalf("setup relay OAuth output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("activation", "package", "--relay", "https://relay.example.com", "--project", "codencer", "--token", "literal-token", "--json")
+	if err != nil {
+		t.Fatalf("activation package failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"mode": "package"`) || !strings.Contains(stdout, `"package_path"`) || strings.Contains(stdout, "literal-token") {
+		t.Fatalf("activation package output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("activation", "chatgpt", "--relay", "https://relay.example.com", "--project", "codencer", "--auth", "oauth", "--json")
+	if err != nil {
+		t.Fatalf("activation chatgpt failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"client": "chatgpt"`) || !strings.Contains(stdout, "pending_manual_product_proof") {
+		t.Fatalf("activation chatgpt output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("activation", "codex", "--relay", "https://relay.example.com", "--token-env", "CODENCER_MCP_TOKEN", "--json")
+	if err != nil {
+		t.Fatalf("activation codex failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "codex mcp add") {
+		t.Fatalf("activation codex output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("activation", "claude-code", "--relay", "https://relay.example.com", "--token-env", "CODENCER_MCP_TOKEN", "--json")
+	if err != nil {
+		t.Fatalf("activation claude-code failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "claude mcp add") {
+		t.Fatalf("activation claude-code output wrong: %s", stdout)
 	}
 
 	stdout, stderr, err = runCLI("accept", "reports", "--json")

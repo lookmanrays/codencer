@@ -20,7 +20,7 @@ They are executor-side adapters, not remote planner surfaces.
 - Use cloud `/api/cloud/v1/runtime/...` and cloud `/api/cloud/v1/mcp` when cloud tenancy is the public control plane.
 - Treat relay `/mcp/call`, cloud `/api/cloud/v1/mcp/call`, and daemon `/mcp/call` as compatibility POST aliases rather than the primary session contract.
 
-For the frozen post-beta product path contract, see [Flagship Planner Product Path](../internal/FLAGSHIP_PLANNER_PRODUCT_PATH.md). For the deployable OAuth resource-server/front-door pattern, see [OAuth Front Door](OAUTH_FRONT_DOOR.md).
+For the frozen post-beta product path contract, see [Flagship Planner Product Path](../internal/FLAGSHIP_PLANNER_PRODUCT_PATH.md). For the deployable OAuth resource-server/front-door pattern, see [OAuth Front Door](OAUTH_FRONT_DOOR.md). For Sprint 7 activation, see [VPS Relay Activation](../activation-vps-relay.md), [Local Connector Activation](../activation-local-connector.md), [ChatGPT App Setup](chatgpt-app-setup.md), [ChatGPT OAuth Dev Mode](chatgpt-oauth-dev.md), [Codex MCP Activation](codex-mcp-live.md), and [Claude Code MCP Activation](claude-code-mcp-live.md).
 
 ## Auth Modes
 
@@ -37,7 +37,14 @@ For the frozen post-beta product path contract, see [Flagship Planner Product Pa
 - unauthenticated relay/cloud MCP calls include a `WWW-Authenticate` bearer challenge with `resource_metadata`
 - configure `public_base_url`, `oauth_authorization_servers`, `oauth_scopes_supported`, and `oauth_resource_documentation`
 
-This is OAuth-capable resource-server behavior, not Codencer-native OAuth token issuance. If ChatGPT, Claude, or an API connector requires a full OAuth authorization flow, run an operator-owned OAuth issuer or gateway in front of Codencer and have it issue or translate to a bearer token Codencer accepts. The concrete deployment contract is [OAuth Front Door](OAUTH_FRONT_DOOR.md).
+Sprint 7 also provides a minimal single-user OAuth dev issuer for self-host ChatGPT testing:
+
+- authorization server metadata: `GET /.well-known/oauth-authorization-server`
+- OpenID metadata: `GET /.well-known/openid-configuration`
+- authorization code + PKCE S256: `GET|POST /oauth/authorize`
+- token exchange: `POST /oauth/token`
+
+Enable it with `codencer setup relay --enable-chatgpt-oauth-dev`. This is not enterprise IAM and does not implement refresh tokens. Production IAM can still use an operator-owned OAuth issuer or gateway in front of Codencer.
 
 ## Compatibility Matrix
 
@@ -53,7 +60,7 @@ This is OAuth-capable resource-server behavior, not Codencer-native OAuth token 
 | Official Go SDK | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `proven` | MCP server tests + `cmd/mcp-sdk-smoke` + smoke | Proven for MCP only, not for the REST HTTP APIs. |
 | Generic HTTP clients | relay/cloud HTTP surfaces | `proven` | direct `net/http` tests + `curl` smoke | Plain bearer-token JSON callers are the intended HTTP baseline. |
 | Generic MCP clients | relay `/mcp` and cloud `/api/cloud/v1/mcp` | `expected-only` | protocol behavior is repo-proven, but specific client products are not | Do not turn this into a universal desktop/client compatibility claim. |
-| ChatGPT custom MCP connector path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged` | Codencer-side flagship smoke + bearer/OAuth protected-resource metadata tests | Publishable target is ChatGPT Business/Enterprise/Edu for write-capable custom MCP connector use with OAuth front door. Product UI publication is operator-exercised, not repo-clicked. See [integrations/chatgpt.md](integrations/chatgpt.md). |
+| ChatGPT custom MCP connector path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged` | Codencer-side activation package + bearer/OAuth protected-resource metadata tests + OAuth dev endpoint tests | Publishable target is ChatGPT Business/Enterprise/Edu for write-capable custom MCP connector use with OAuth dev or an OAuth front door. Product UI publication is operator-exercised, not repo-clicked. See [chatgpt-app-setup.md](chatgpt-app-setup.md). |
 | OpenAI Responses API remote MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged expected` | Codencer-side MCP proof + examples | API callers provide `server_url` and authorization as supported by OpenAI's API. This is not the ChatGPT workspace app publish lane. |
 | Claude Code remote HTTP MCP path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged` | Codencer-side flagship smoke + checked-in HTTP MCP config + bearer auth proof | Stronger for Claude Code operator use with bearer headers. Separate from the local `claude` executor-side adapter. See [integrations/claude.md](integrations/claude.md). |
 | Anthropic Messages API MCP connector path | relay `/mcp` or cloud `/api/cloud/v1/mcp` | `operator-packaged expected` | Current request-shape examples + Codencer-side MCP proof | Uses `mcp-client-2025-11-20`, `mcp_servers`, and `mcp_toolset`; not executed against Anthropic's API by repo tests. |
@@ -189,6 +196,16 @@ CODENCER_LIVE_RELAY_MCP=1 ./bin/codencer live relay-mcp --json --bin-dir ./bin -
 
 The Codex and Claude Code MCP proof commands generate config snippets and distinguish `config_generated`, `endpoint_verified`, and product-client proof. They do not write user-level client config unless explicit config-write environment variables are set. ChatGPT product UI proof remains manual; use [ChatGPT Custom MCP Live Checklist](chatgpt-live-checklist.md).
 
+Sprint 7 activation commands:
+
+```bash
+make activation-preflight
+./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
+./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json
+./bin/codencer activation claude-code --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json
+```
+
 Minimal cloud initialize plus compatibility-call flow:
 
 ```bash
@@ -265,4 +282,4 @@ Use the unified CLI for current MCP snippets:
 ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
 ```
 
-These commands reuse the same generator as `codencer-relayd mcp-config` and do not write user-level client files. Literal tokens, if supplied for an operator-run proof, are redacted from setup reports. ChatGPT remains an OAuth-front-door/product-UI proof path; keep it pending until a real workspace connector has been exercised.
+These commands reuse the same generator as `codencer-relayd mcp-config` and do not write user-level client files. Literal tokens, if supplied for an operator-run proof, are redacted from setup reports. ChatGPT remains an OAuth-dev-or-front-door product-UI proof path; keep it pending until a real workspace connector has been exercised.

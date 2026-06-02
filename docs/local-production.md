@@ -1,6 +1,6 @@
 # Local Production Foundation
 
-Sprint 1 added the local production foundation for Codencer as a hands-off local automation bridge. Sprint 2 added project-aware local execution through the existing daemon HTTP API. Sprint 3 adds project-aware self-host Relay/MCP routing for remote planners. Sprint 4 adds a conservative user-level runtime supervisor, watchdog, and recovery surface. Sprint 5 adds a live execution matrix and readiness reports that distinguish deterministic checks, skipped live proof, and actual live executor/client evidence. Codencer accepts approved work, routes it to a local project/runtime/executor, captures structured state and evidence, and returns that state to the planner. Codencer surfaces state; planner decides.
+Sprint 1 added the local production foundation for Codencer as a hands-off local automation bridge. Sprint 2 added project-aware local execution through the existing daemon HTTP API. Sprint 3 adds project-aware self-host Relay/MCP routing for remote planners. Sprint 4 adds a conservative user-level runtime supervisor, watchdog, and recovery surface. Sprint 5 adds a live execution matrix and readiness reports that distinguish deterministic checks, skipped live proof, and actual live executor/client evidence. Sprint 7 adds activation packages, client preflight artifacts, and a minimal single-user OAuth dev front-door for ChatGPT testing. Codencer accepts approved work, routes it to a local project/runtime/executor, captures structured state and evidence, and returns that state to the planner. Codencer surfaces state; planner decides.
 
 Commercial Codencer Cloud is out of scope for this local production mode. The existing self-host relay and cloud-control-plane code remains in the repository, but this page focuses on the local production and self-host Relay/MCP foundation.
 
@@ -15,6 +15,8 @@ In Sprint 3, Relay is project-aware. The connector reads the user-level project 
 Runtime supervisor mode manages local daemon, relay, and connector processes as user services when the host supports launchd or systemd user units. It never requires sudo and does not auto-generate relay or connector secrets. Missing relay/connector config is reported as `not_configured`.
 
 Live matrix mode reports what is installed, configured, skipped, blocked, or actually exercised. It is safe by default and does not call paid/authenticated live agents unless explicit `CODENCER_LIVE_*` variables or command flags enable those checks. See [Live Execution Matrix](live-execution-matrix.md).
+
+Activation mode prepares self-host operators for real client setup. `codencer activation package` writes a package under `$CODENCER_HOME/artifacts/activation/`; `codencer activation check` validates local or remote relay readiness; and `codencer activation chatgpt|codex|claude-code` emits client-specific setup guidance without writing user client config. See [VPS Relay Activation](activation-vps-relay.md), [Local Connector Activation](activation-local-connector.md), and [MCP integration notes](mcp/integrations.md).
 
 ## Sprint 1 Capabilities
 
@@ -68,6 +70,20 @@ Live matrix mode reports what is installed, configured, skipped, blocked, or act
 - Disposable live workspace harnesses that do not mutate the real repository.
 - Relay/MCP live proof using real temp daemon, relay, and connector processes with fake executor profiles.
 - MCP client config proof that distinguishes generated config, endpoint proof, actual client proof, and manual proof requirements.
+
+## Sprint 7 Capabilities
+
+- `codencer activation check|package|chatgpt|codex|claude-code --json`.
+- Activation packages with README, curl smoke, Codex config, Claude Code command, and ChatGPT setup artifacts.
+- Relay OAuth dev endpoints for single-user ChatGPT testing:
+  - `GET /.well-known/oauth-authorization-server`
+  - `GET /.well-known/openid-configuration`
+  - `GET|POST /oauth/authorize`
+  - `POST /oauth/token`
+- Explicit `setup relay --enable-chatgpt-oauth-dev` and `--chatgpt-dev-noauth` modes.
+- MCP read-only alias `codencer.get_blocker`.
+
+OAuth dev mode is for self-host testing, not enterprise IAM. Dev no-auth is private-test only and is read-only/fake-project restricted unless `--allow-real-projects-in-dev-noauth` is explicit.
 
 ## Build
 

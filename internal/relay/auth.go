@@ -52,6 +52,12 @@ func plannerFromContext(ctx context.Context) *plannerPrincipal {
 func (s *Server) authenticatePlanner(r *http.Request, requiredScope, instanceID string) (*plannerPrincipal, *apiError) {
 	token := bearerToken(r.Header.Get("Authorization"))
 	if token == "" {
+		if principal := s.devNoAuthPrincipal(); principal != nil {
+			if err := authorizePrincipal(principal, requiredScope, instanceID); err != nil {
+				return nil, err
+			}
+			return principal, nil
+		}
 		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "planner bearer token required"}
 	}
 	for _, candidate := range s.cfg.PlannerTokens {
@@ -76,7 +82,33 @@ func (s *Server) authenticatePlanner(r *http.Request, requiredScope, instanceID 
 		}
 		return principal, nil
 	}
+	if s.oauthDev != nil {
+		principal, apiErr := s.oauthDev.Authenticate(token)
+		if apiErr == nil && principal != nil {
+			if err := authorizePrincipal(principal, requiredScope, instanceID); err != nil {
+				return nil, err
+			}
+			return principal, nil
+		}
+	}
 	return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "planner authorization failed"}
+}
+
+func (s *Server) devNoAuthPrincipal() *plannerPrincipal {
+	if s == nil || s.cfg == nil || !s.cfg.ChatGPTDevNoAuth.Enabled {
+		return nil
+	}
+	principal := &plannerPrincipal{
+		Name:        "chatgpt-dev-noauth",
+		TokenHash:   plannerTokenHash("chatgpt-dev-noauth"),
+		Scopes:      append([]string(nil), s.cfg.ChatGPTDevNoAuth.Scopes...),
+		InstanceIDs: make(map[string]struct{}),
+		ProjectIDs:  make(map[string]struct{}),
+	}
+	for _, projectID := range s.cfg.ChatGPTDevNoAuth.ProjectIDs {
+		principal.ProjectIDs[projectID] = struct{}{}
+	}
+	return principal
 }
 
 func bearerToken(header string) string {

@@ -34,7 +34,7 @@ Only `shared_to_relay:true` projects are advertised. The connector skips unreach
 
 ## MCP Auth Fails
 
-Relay MCP requires bearer auth or an OAuth front door that forwards a token Codencer accepts. Generate current snippets without writing client config:
+Relay MCP requires bearer auth, Sprint 7 OAuth dev mode, or an OAuth front door that forwards a token Codencer accepts. Generate current snippets without writing client config:
 
 ```bash
 ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
@@ -42,7 +42,7 @@ Relay MCP requires bearer auth or an OAuth front door that forwards a token Code
 ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
 ```
 
-ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and an eligible workspace. Keep it pending until the actual product flow is exercised.
+ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and an eligible workspace. For self-host testing, generate the server-side activation artifacts with `codencer activation chatgpt --relay https://relay.example.com --auth oauth --json`. Keep product proof pending until the actual product flow is exercised.
 
 ## Release Snapshot Misses Some Targets
 

@@ -73,6 +73,18 @@ profiles:
           - ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
           - ./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
           - ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+      - id: activation_package_and_preflight
+        status: sprint_7_implemented
+        commands:
+          - make activation-preflight
+          - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+          - ./bin/codencer activation check --json
+        notes: Default activation preflight is deterministic and does not claim product-client proof.
+      - id: relay_oauth_dev_endpoints
+        status: sprint_7_implemented
+        commands:
+          - ./bin/codencer setup relay --base-url https://relay.example.com --generate-planner-token --enable-chatgpt-oauth-dev --json
+        notes: OAuth dev mode is single-user self-host testing with hashed client/operator secrets and opaque in-memory access tokens; it is not enterprise IAM.
       - id: security_hardening_checks
         status: sprint_6_implemented
         notes: Acceptance includes checks for explicit project sharing, remote path sanitization, relay auth, dangerous bypass guardrails, log path control, uninstall purge safety, and report redaction.
@@ -135,7 +147,13 @@ profiles:
     gates:
       - id: chatgpt_product_ui_proof
         status: pending_manual
-        notes: Requires public HTTPS, OAuth front door, eligible workspace developer mode, real tool call, and saved evidence.
+        notes: Requires public HTTPS, OAuth dev mode or an OAuth front door, eligible workspace developer mode, real tool call, and saved evidence.
+      - id: codex_mcp_product_client_proof
+        status: pending_manual
+        notes: Activation emits Codex snippets and prompts, but Codex must actually connect and call a tool before this passes.
+      - id: claude_code_mcp_product_client_proof
+        status: pending_manual
+        notes: Activation emits Claude Code command/.mcp.json snippets, but Claude Code must actually connect and call a tool before this passes.
       - id: claude_desktop_or_claude_ai_remote_connector
         status: pending_manual
         notes: Claude Code HTTP MCP snippets are generated; product UI proof is separate.
@@ -163,6 +181,7 @@ verification:
     - make verify-local-relay-mcp
     - make verify-runtime-recovery
     - make verify-live-matrix
+    - make activation-preflight
     - make acceptance-local-production
     - make verify-release
     - make verify-local-prod

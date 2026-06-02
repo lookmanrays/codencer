@@ -36,7 +36,11 @@ func TestGenerateChatGPTConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if payload["mode"] != "oauth-front-door" {
+	if payload["mode"] != "oauth-dev-or-front-door" {
 		t.Fatalf("mode = %v", payload["mode"])
+	}
+	values := payload["connector_values"].(map[string]any)
+	if !strings.Contains(values["authorization_server"].(string), "/.well-known/oauth-authorization-server") {
+		t.Fatalf("authorization server metadata missing: %+v", values)
 	}
 }

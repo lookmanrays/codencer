@@ -66,17 +66,17 @@ func Generate(opts Options) (map[string]any, error) {
 			},
 		}
 	case "chatgpt":
-		payload["mode"] = "oauth-front-door"
+		payload["mode"] = "oauth-dev-or-front-door"
 		payload["notes"] = []string{
 			"ChatGPT custom MCP connectors require a public HTTPS endpoint and eligible workspace developer mode.",
-			"Use an OAuth front door or issuer that exchanges product OAuth tokens for a relay planner bearer token.",
+			"Use codencer setup relay --enable-chatgpt-oauth-dev for a single-user self-host test issuer, or place an operator-owned OAuth front door in front of the relay.",
 			"Do not claim ChatGPT live proof until the product connector is exercised.",
 		}
 		payload["connector_values"] = map[string]any{
 			"label":                name,
 			"endpoint":             endpointValue,
 			"oauth_metadata":       baseURL + "/.well-known/oauth-protected-resource/mcp",
-			"authorization_server": "https://<your-oauth-issuer-or-gateway>",
+			"authorization_server": baseURL + "/.well-known/oauth-authorization-server",
 			"upstream_token":       "<relay-planner-token-held-by-front-door>",
 		}
 	default:

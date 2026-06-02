@@ -173,6 +173,7 @@ verify-local-prod: build-codencer
 	@$(MAKE) verify-local-relay-mcp
 	@$(MAKE) verify-runtime-recovery
 	@$(MAKE) verify-live-matrix
+	@$(MAKE) activation-preflight
 	@$(MAKE) acceptance-local-production
 
 verify-local-execution: build-codencer build-orchestratord
@@ -238,6 +239,40 @@ verify-live-matrix: build-codencer
 	CODENCER_HOME="$$tmpdir" ./bin/codencer live reports --json >/dev/null; \
 	CODENCER_HOME="$$tmpdir" ./bin/codencer readiness reports --json >/dev/null
 
+activation-preflight: build-codencer
+	@echo "==> Running activation package/client preflight..."
+	@tmpdir=$$(mktemp -d "$${TMPDIR:-/tmp}/codencer-activation.XXXXXX"); \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	CODENCER_HOME="$$tmpdir" ./bin/codencer activation check --json >/dev/null; \
+	CODENCER_HOME="$$tmpdir" ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json >/dev/null; \
+	CODENCER_HOME="$$tmpdir" ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json >/dev/null; \
+	CODENCER_HOME="$$tmpdir" ./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json >/dev/null; \
+	CODENCER_HOME="$$tmpdir" ./bin/codencer activation claude-code --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json >/dev/null
+
+activation-package: build-codencer
+	@tmpdir=$$(mktemp -d "$${TMPDIR:-/tmp}/codencer-activation-package.XXXXXX"); \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	CODENCER_HOME="$$tmpdir" ./bin/codencer activation package --relay "$${CODENCER_ACTIVATION_RELAY_URL:-https://relay.example.com}" --project "$${CODENCER_ACTIVATION_PROJECT:-codencer}" --token-env "$${CODENCER_ACTIVATION_TOKEN_ENV:-CODENCER_MCP_TOKEN}" --json
+
+activation-relay-smoke: build-codencer
+	@if [ -z "$${CODENCER_ACTIVATION_RELAY_URL:-}" ]; then \
+		echo "SKIP: set CODENCER_ACTIVATION_RELAY_URL to run remote activation relay smoke."; \
+		tmpdir=$$(mktemp -d "$${TMPDIR:-/tmp}/codencer-activation-smoke.XXXXXX"); \
+		trap 'rm -rf "$$tmpdir"' EXIT; \
+		CODENCER_HOME="$$tmpdir" ./bin/codencer activation check --json >/dev/null; \
+	else \
+		./bin/codencer activation check --relay "$${CODENCER_ACTIVATION_RELAY_URL}" --project "$${CODENCER_ACTIVATION_PROJECT:-}" --token-env "$${CODENCER_ACTIVATION_TOKEN_ENV:-CODENCER_MCP_TOKEN}" --check-oauth --json; \
+	fi
+
+activation-chatgpt-preflight: build-codencer
+	@./bin/codencer activation chatgpt --relay "$${CODENCER_ACTIVATION_RELAY_URL:-https://relay.example.com}" --project "$${CODENCER_ACTIVATION_PROJECT:-codencer}" --auth oauth --json
+
+activation-codex-mcp-preflight: build-codencer
+	@./bin/codencer activation codex --relay "$${CODENCER_ACTIVATION_RELAY_URL:-https://relay.example.com}" --token-env "$${CODENCER_ACTIVATION_TOKEN_ENV:-CODENCER_MCP_TOKEN}" --json
+
+activation-claude-code-mcp-preflight: build-codencer
+	@./bin/codencer activation claude-code --relay "$${CODENCER_ACTIVATION_RELAY_URL:-https://relay.example.com}" --token-env "$${CODENCER_ACTIVATION_TOKEN_ENV:-CODENCER_MCP_TOKEN}" --json
+
 acceptance-local-production: build
 	@echo "==> Running local production acceptance..."
 	@tmpdir=$$(mktemp -d "$${TMPDIR:-/tmp}/codencer-acceptance.XXXXXX"); \
@@ -294,6 +329,7 @@ verify-release:
 	@$(MAKE) verify-local-relay-mcp
 	@$(MAKE) verify-runtime-recovery
 	@$(MAKE) verify-live-matrix
+	@$(MAKE) activation-preflight
 	@$(MAKE) acceptance-local-production
 	@$(MAKE) demo-local
 	@./scripts/install.sh --dry-run --json >/dev/null

@@ -136,7 +136,7 @@ claude mcp add-json codencer-relay \
   '{"type":"http","url":"https://<your-relay-host>/mcp","headers":{"Authorization":"Bearer <planner-token>"}}'
 ```
 
-If using OAuth front-door auth instead of a static bearer header, add the HTTP MCP server without the header and authenticate from `/mcp` inside Claude Code, using the OAuth metadata advertised by the front door.
+If using OAuth auth instead of a static bearer header, add the HTTP MCP server without the header and authenticate from `/mcp` inside Claude Code, using the OAuth metadata advertised by the Sprint 7 dev issuer or by the operator-owned front door.
 
 ### Anthropic Messages API MCP Connector Lane
 

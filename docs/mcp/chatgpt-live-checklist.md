@@ -42,4 +42,4 @@ Sprint 6 setup generates values for the product flow without claiming a pass:
 ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
 ```
 
-The command is configuration proof only. A passed ChatGPT gate requires an actual eligible workspace, public HTTPS, OAuth front door, saved connector configuration, a real tool call, and saved result evidence.
+The command is configuration proof only. A passed ChatGPT gate requires an actual eligible workspace, public HTTPS, OAuth dev mode or an operator-owned OAuth front door, saved connector configuration, a real tool call, and saved result evidence.

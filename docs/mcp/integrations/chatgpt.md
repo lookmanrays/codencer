@@ -17,7 +17,7 @@ What that means in practice:
 - ChatGPT must target the remote relay `/mcp` surface or the remote cloud `/api/cloud/v1/mcp` surface.
 - Do not point ChatGPT at the daemon-local `/mcp/call` endpoint.
 
-Publishable write-capable target: ChatGPT custom MCP connectors/apps on Business, Enterprise, and Edu workspaces with OAuth front-door auth.
+Publishable write-capable target: ChatGPT custom MCP connectors/apps on Business, Enterprise, and Edu workspaces with OAuth dev auth for self-host testing or an operator-owned OAuth front door for production IAM.
 
 Narrower adjacent paths: OpenAI Responses API remote MCP and read/fetch-only product paths may be useful for testing, but they are not the baseline for write-capable Codencer operation.
 
@@ -31,7 +31,7 @@ Before you open ChatGPT, have all of the following ready:
   - cloud: `https://<your-cloud-host>/api/cloud/v1/mcp`
 - Auth for that surface:
   - private/API testing: relay planner token or cloud token where the client supports bearer credentials
-  - ChatGPT product setup: OAuth front door with an operator-owned issuer/gateway that produces or forwards a bearer token Codencer accepts
+  - ChatGPT product setup: Sprint 7 OAuth dev mode for self-host testing, or an operator-owned issuer/gateway that produces or forwards a bearer token Codencer accepts
 - At least one reachable shared runtime instance:
   - relay path: shared through the connector and visible from relay `/mcp`
   - cloud path: claimed into org/workspace/project scope and visible from cloud `/api/cloud/v1/mcp`
@@ -94,7 +94,7 @@ Operator inputs:
 
 Auth choices:
 
-- ChatGPT product connector setup: use OAuth front-door mode. Codencer publishes protected-resource metadata, and the operator-owned issuer/gateway handles the OAuth flow and forwards a Codencer bearer token upstream.
+- ChatGPT product connector setup: use OAuth mode. For self-host testing, `codencer setup relay --enable-chatgpt-oauth-dev` exposes authorization metadata and PKCE token exchange. For production IAM, use an operator-owned issuer/gateway that forwards a Codencer bearer token upstream.
 - Private API-style clients: bearer-token mode is repo-proven where the client supports bearer credentials.
 - No-auth product setup is not appropriate for a write-capable Codencer connector.
 

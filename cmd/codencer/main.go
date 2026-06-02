@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agent-bridge/internal/acceptance"
+	"agent-bridge/internal/activation"
 	"agent-bridge/internal/app"
 	"agent-bridge/internal/buildinfo"
 	"agent-bridge/internal/live"
@@ -93,6 +94,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runReadiness(args[1:], stdout)
 	case "setup":
 		return runSetup(args[1:], stdout)
+	case "activation":
+		return runActivation(args[1:], stdout)
 	case "accept":
 		return runAccept(args[1:], stdout)
 	case "proof":
@@ -1162,7 +1165,7 @@ func runSetup(args []string, stdout io.Writer) error {
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "relay":
-		parsed, err := parseArgs(args[1:], []string{"json", "generate-planner-token", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "relay-config", "connector-config", "planner-token", "planner-token-env", "manager", "bin-dir"})
+		parsed, err := parseArgs(args[1:], []string{"json", "generate-planner-token", "enable-chatgpt-oauth-dev", "chatgpt-dev-noauth", "allow-real-projects-in-dev-noauth", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "relay-config", "connector-config", "planner-token", "planner-token-env", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
 		if err != nil {
 			return err
 		}
@@ -1170,18 +1173,24 @@ func runSetup(args []string, stdout io.Writer) error {
 			return usageError(parsed.bool("json"), stdout, "setup relay does not accept positional arguments")
 		}
 		report, err := setuppkg.Relay(contextBackground(), setuppkg.RelayOptions{
-			BaseURL:              parsed.value("base-url"),
-			MCPURL:               parsed.value("mcp-url"),
-			RelayConfigPath:      parsed.value("relay-config"),
-			ConnectorConfigPath:  parsed.value("connector-config"),
-			PlannerToken:         parsed.value("planner-token"),
-			GeneratePlannerToken: parsed.bool("generate-planner-token"),
-			PlannerTokenEnv:      parsed.value("planner-token-env"),
-			InstallServices:      parsed.bool("install-services"),
-			StartServices:        parsed.bool("start-services"),
-			Manager:              parsed.value("manager"),
-			BinDir:               parsed.value("bin-dir"),
-			Strict:               parsed.bool("strict"),
+			BaseURL:                      parsed.value("base-url"),
+			MCPURL:                       parsed.value("mcp-url"),
+			RelayConfigPath:              parsed.value("relay-config"),
+			ConnectorConfigPath:          parsed.value("connector-config"),
+			PlannerToken:                 parsed.value("planner-token"),
+			GeneratePlannerToken:         parsed.bool("generate-planner-token"),
+			PlannerTokenEnv:              parsed.value("planner-token-env"),
+			EnableChatGPTOAuthDev:        parsed.bool("enable-chatgpt-oauth-dev"),
+			OAuthIssuer:                  parsed.value("oauth-issuer"),
+			OAuthClientID:                parsed.value("oauth-client-id"),
+			OAuthClientSecret:            parsed.value("oauth-client-secret"),
+			ChatGPTDevNoAuth:             parsed.bool("chatgpt-dev-noauth"),
+			AllowRealProjectsInDevNoAuth: parsed.bool("allow-real-projects-in-dev-noauth"),
+			InstallServices:              parsed.bool("install-services"),
+			StartServices:                parsed.bool("start-services"),
+			Manager:                      parsed.value("manager"),
+			BinDir:                       parsed.value("bin-dir"),
+			Strict:                       parsed.bool("strict"),
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
@@ -1204,6 +1213,46 @@ func runSetup(args []string, stdout io.Writer) error {
 	default:
 		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown setup command %q", args[0]))
 	}
+}
+
+func runActivation(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer activation <check|package|chatgpt|codex|claude-code> [--json]")
+	}
+	parsed, err := parseArgs(args[1:], []string{"json", "run-fake-manifest", "check-oauth", "check-chatgpt-readiness"}, []string{"relay", "mcp-url", "token-env", "token", "project", "auth"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "activation command does not accept positional arguments")
+	}
+	opts := activation.Options{
+		Relay:                 parsed.value("relay"),
+		MCPURL:                parsed.value("mcp-url"),
+		TokenEnv:              parsed.value("token-env"),
+		Token:                 parsed.value("token"),
+		ProjectID:             parsed.value("project"),
+		RunFakeManifest:       parsed.bool("run-fake-manifest"),
+		CheckOAuth:            parsed.bool("check-oauth"),
+		CheckChatGPTReadiness: parsed.bool("check-chatgpt-readiness"),
+		AuthMode:              parsed.value("auth"),
+	}
+	var report activation.Report
+	switch args[0] {
+	case "check":
+		report, err = activation.CheckActivation(contextBackground(), opts)
+	case "package":
+		report, err = activation.Package(contextBackground(), opts)
+	case "chatgpt":
+		report, err = activation.ChatGPT(opts)
+	case "codex":
+		report, err = activation.Codex(opts)
+	case "claude-code":
+		report, err = activation.ClaudeCode(opts)
+	default:
+		return usageError(parsed.bool("json"), stdout, fmt.Sprintf("unknown activation command %q", args[0]))
+	}
+	return finishActivationReport(stdout, parsed.bool("json"), report, err)
 }
 
 func runAccept(args []string, stdout io.Writer) error {
@@ -1334,6 +1383,23 @@ func finishSetupReport(stdout io.Writer, asJSON bool, report setuppkg.Report, er
 	return nil
 }
 
+func finishActivationReport(stdout io.Writer, asJSON bool, report activation.Report, err error) error {
+	if err != nil {
+		return jsonAwareError(asJSON, stdout, exitFailed, err.Error())
+	}
+	if asJSON {
+		if err := writeJSON(stdout, report); err != nil {
+			return err
+		}
+	} else {
+		printActivationReport(stdout, report)
+	}
+	if report.ExitCode != exitSuccess {
+		return exitError{code: report.ExitCode, message: "activation check failed", printed: true}
+	}
+	return nil
+}
+
 func serviceNameFromPositionals(positionals []string, all bool) (string, error) {
 	if all {
 		if len(positionals) != 0 {
@@ -1366,7 +1432,7 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func printPaths(w io.Writer, paths local.Paths) {
@@ -1469,6 +1535,22 @@ func printLiveReport(w io.Writer, report live.Report) {
 	fmt.Fprintf(w, "summary: passed=%d failed=%d blocked=%d skipped=%d\n", report.Summary.Passed, report.Summary.Failed, report.Summary.Blocked, report.Summary.Skipped)
 	if report.ReportPath != "" {
 		fmt.Fprintf(w, "report: %s\n", report.ReportPath)
+	}
+}
+
+func printActivationReport(w io.Writer, report activation.Report) {
+	fmt.Fprintf(w, "mode: %s\nok: %t\n", report.Mode, report.OK)
+	if report.Relay != "" {
+		fmt.Fprintf(w, "relay: %s\n", report.Relay)
+	}
+	if report.MCPURL != "" {
+		fmt.Fprintf(w, "mcp: %s\n", report.MCPURL)
+	}
+	for _, check := range report.Checks {
+		fmt.Fprintf(w, "%-14s %-32s %s\n", strings.ToUpper(check.Status), check.ID, check.Detail)
+	}
+	if report.PackagePath != "" {
+		fmt.Fprintf(w, "package: %s\n", report.PackagePath)
 	}
 }
 

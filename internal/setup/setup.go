@@ -3,7 +3,9 @@ package setup
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -63,19 +65,25 @@ type LocalOptions struct {
 }
 
 type RelayOptions struct {
-	BaseURL              string
-	MCPURL               string
-	RelayConfigPath      string
-	ConnectorConfigPath  string
-	PlannerToken         string
-	GeneratePlannerToken bool
-	PlannerTokenEnv      string
-	InstallServices      bool
-	StartServices        bool
-	Manager              string
-	BinDir               string
-	Strict               bool
-	Now                  func() time.Time
+	BaseURL                      string
+	MCPURL                       string
+	RelayConfigPath              string
+	ConnectorConfigPath          string
+	PlannerToken                 string
+	GeneratePlannerToken         bool
+	PlannerTokenEnv              string
+	EnableChatGPTOAuthDev        bool
+	OAuthIssuer                  string
+	OAuthClientID                string
+	OAuthClientSecret            string
+	ChatGPTDevNoAuth             bool
+	AllowRealProjectsInDevNoAuth bool
+	InstallServices              bool
+	StartServices                bool
+	Manager                      string
+	BinDir                       string
+	Strict                       bool
+	Now                          func() time.Time
 }
 
 type MCPOptions struct {
@@ -256,8 +264,65 @@ func Relay(ctx context.Context, opts RelayOptions) (Report, error) {
 	cfg.PlannerTokens = []relay.PlannerTokenConfig{{
 		Name:   "operator",
 		Token:  token,
-		Scopes: []string{"projects:read", "projects:write", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "reports:read", "connectors:read", "connectors:write", "connectors:enroll"},
+		Scopes: []string{"admin:read", "projects:read", "projects:write", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "reports:read", "connectors:read", "connectors:write", "connectors:enroll"},
 	}}
+	oauthOutput := map[string]any{}
+	if opts.EnableChatGPTOAuthDev {
+		clientSecret := strings.TrimSpace(opts.OAuthClientSecret)
+		if clientSecret == "" {
+			clientSecret, err = randomToken()
+			if err != nil {
+				return Report{}, err
+			}
+			clientSecretPath := filepath.Join(paths.TokensDir, "chatgpt-oauth-client-secret")
+			if err := os.WriteFile(clientSecretPath, []byte(clientSecret+"\n"), 0600); err != nil {
+				return Report{}, err
+			}
+			report.add("chatgpt_oauth_client_secret_generated", "passed", clientSecretPath)
+			oauthOutput["client_secret_file"] = clientSecretPath
+		} else {
+			report.add("chatgpt_oauth_client_secret_supplied", "passed", "literal client secret accepted and redacted from output")
+		}
+		operatorCode, err := randomToken()
+		if err != nil {
+			return Report{}, err
+		}
+		operatorCodePath := filepath.Join(paths.TokensDir, "chatgpt-oauth-operator-code")
+		if err := os.WriteFile(operatorCodePath, []byte(operatorCode+"\n"), 0600); err != nil {
+			return Report{}, err
+		}
+		report.add("chatgpt_oauth_operator_code_generated", "passed", operatorCodePath)
+		issuer := strings.TrimRight(firstNonEmpty(opts.OAuthIssuer, baseURL), "/")
+		cfg.ChatGPTOAuthDev = relay.OAuthDevConfig{
+			Enabled:          true,
+			Issuer:           issuer,
+			ClientID:         firstNonEmpty(opts.OAuthClientID, "codencer-chatgpt-dev"),
+			ClientSecretHash: sha256Hex(clientSecret),
+			OperatorCodeHash: sha256Hex(operatorCode),
+			Scopes:           []string{"projects:read", "projects:write", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "reports:read"},
+			TokenTTLSeconds:  3600,
+		}
+		cfg.OAuthAuthorizationServers = []string{issuer}
+		cfg.OAuthScopesSupported = append([]string(nil), cfg.ChatGPTOAuthDev.Scopes...)
+		oauthOutput["enabled"] = true
+		oauthOutput["issuer"] = issuer
+		oauthOutput["client_id"] = cfg.ChatGPTOAuthDev.ClientID
+		oauthOutput["operator_code_file"] = operatorCodePath
+	}
+	if opts.ChatGPTDevNoAuth {
+		cfg.ChatGPTDevNoAuth = relay.DevNoAuthConfig{
+			Enabled:           true,
+			AllowRealProjects: opts.AllowRealProjectsInDevNoAuth,
+		}
+		if opts.AllowRealProjectsInDevNoAuth {
+			cfg.ChatGPTDevNoAuth.Scopes = []string{"projects:read", "projects:write", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "reports:read"}
+			report.add("chatgpt_dev_noauth", "passed", "dev-noauth enabled with real project write tools; use only on private test relays")
+		} else {
+			cfg.ChatGPTDevNoAuth.Scopes = []string{"projects:read", "runs:read", "steps:read", "artifacts:read", "reports:read"}
+			cfg.ChatGPTDevNoAuth.ProjectIDs = []string{"fake", "fake-success", "codencer-fake", "chatgpt-fake"}
+			report.add("chatgpt_dev_noauth", "passed", "dev-noauth enabled read-only for fake/test project ids only")
+		}
+	}
 	if err := relay.SaveConfig(relayConfigPath, cfg); err != nil {
 		report.add("relay_config", "failed", err.Error())
 		return report.finish(localexec.ExitInvalidInput), nil
@@ -317,6 +382,11 @@ func Relay(ctx context.Context, opts RelayOptions) (Report, error) {
 		"relay_config":        relayConfigPath,
 		"connector_config":    connectorConfigPath,
 		"token_was_generated": opts.GeneratePlannerToken,
+		"chatgpt_oauth_dev":   oauthOutput,
+		"chatgpt_dev_noauth": map[string]any{
+			"enabled":             opts.ChatGPTDevNoAuth,
+			"allow_real_projects": opts.AllowRealProjectsInDevNoAuth,
+		},
 	}
 	return report.finish(exitForSteps(report.Steps, opts.Strict)), nil
 }
@@ -569,6 +639,11 @@ func randomToken() (string, error) {
 		return "", err
 	}
 	return "codencer_" + base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func sha256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func defaultProfile(adapter string) string {

@@ -42,6 +42,7 @@ Project-aware tools:
 - `codencer.get_execution_report`
 - `codencer.get_run_report` (read-only alias)
 - `codencer.get_project_blocker`
+- `codencer.get_blocker` (read-only alias)
 - `codencer.get_project_step_result`
 - `codencer.get_project_step_artifacts`
 - `codencer.get_project_step_logs`
@@ -98,6 +99,7 @@ Compatibility instance tools:
 - unauthenticated MCP calls return a bearer `WWW-Authenticate` challenge with `resource_metadata` pointing at the metadata URL above
 - `public_base_url` controls the public resource URL used in metadata and auth challenges
 - `oauth_authorization_servers`, `oauth_scopes_supported`, and `oauth_resource_documentation` populate the metadata for OAuth-capable product front doors
+- Sprint 7 self-host OAuth dev mode also exposes `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`, `/oauth/authorize`, and `/oauth/token` for single-user ChatGPT testing
 - `GET /mcp` keeps an SSE stream open for the negotiated session and emits keepalive comments
 - `POST /mcp/call` remains as a compatibility alias for simple POST callers; `/mcp` is still the canonical session path
 - the Codencer tool model remains intentionally request/response-oriented even though the transport now supports a real SSE session
@@ -112,7 +114,16 @@ Generate current client setup snippets:
 ./bin/codencer-relayd mcp-config --client chatgpt --endpoint https://relay.example.com/mcp
 ```
 
-ChatGPT custom MCP connector setup requires public HTTPS, OAuth protected-resource metadata, and an eligible workspace with developer mode. Codencer exposes the resource-server metadata and bearer challenge hooks; token issuance belongs to the operator-owned OAuth front door.
+ChatGPT custom MCP connector setup requires public HTTPS, OAuth protected-resource metadata, and an eligible workspace with developer mode. For self-host testing, `codencer setup relay --enable-chatgpt-oauth-dev` enables a minimal OAuth dev issuer. For production IAM, use an operator-owned OAuth front door.
+
+Activation artifacts:
+
+```bash
+./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
+./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json
+./bin/codencer activation claude-code --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json
+```
 
 ## Proven Compatibility
 

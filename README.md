@@ -25,9 +25,11 @@ Self-host Relay/MCP setup is similarly guided:
 
 ```bash
 ./bin/codencer setup relay --base-url https://relay.example.com --generate-planner-token --json
+./bin/codencer setup relay --base-url https://relay.example.com --generate-planner-token --enable-chatgpt-oauth-dev --json
 ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
 ./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
 ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
 ```
 
 Install and release helpers are user-level and safe by default:
@@ -51,9 +53,9 @@ Use [docs/BETA_TESTING.md](docs/BETA_TESTING.md) as the repo-level tester guide.
 | --- | --- | --- | --- | --- |
 | Local production foundation | [docs/quickstart-local.md](docs/quickstart-local.md), [docs/local-production.md](docs/local-production.md), [docs/runtime-supervisor.md](docs/runtime-supervisor.md), [docs/live-execution-matrix.md](docs/live-execution-matrix.md) | `make build` | `make verify-local-prod` and `make acceptance-local-production` | Unified `codencer` CLI, setup UX, user-level registry, daemon execution, manifest runner, Relay/MCP proof, supervisor/watchdog/recovery, live matrix/readiness, acceptance reports, proof bundles, and release snapshots. |
 | Local-only daemon + CLI | [docs/SETUP.md](docs/SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter claims stay narrow. |
-| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md) | `make build` | `make verify-local-relay-mcp` or `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path with project-aware Relay/MCP. |
+| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md), [docs/activation-vps-relay.md](docs/activation-vps-relay.md), [docs/activation-local-connector.md](docs/activation-local-connector.md) | `make build` | `make verify-local-relay-mcp` or `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path with project-aware Relay/MCP and Sprint 7 activation artifacts. |
 | Self-host cloud control plane | [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Docker baseline and binary-native composed proof are separate. |
-| Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md) | `make build build-cloud build-mcp-sdk-smoke` | `make flagship-planner-smoke` or self-host/cloud smoke with MCP/SDK enabled | ChatGPT-style and Claude Code-style operator lanes are packaged around the canonical remote MCP surfaces; universal product UI/auth support is not claimed. |
+| Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md), [docs/mcp/chatgpt-app-setup.md](docs/mcp/chatgpt-app-setup.md), [docs/mcp/codex-mcp-live.md](docs/mcp/codex-mcp-live.md), [docs/mcp/claude-code-mcp-live.md](docs/mcp/claude-code-mcp-live.md) | `make build build-cloud build-mcp-sdk-smoke` | `make flagship-planner-smoke` or self-host/cloud smoke with MCP/SDK enabled plus `make activation-preflight` | ChatGPT-style, Codex, and Claude Code operator lanes are packaged around the canonical remote MCP surfaces; product UI proof remains manual unless exercised. |
 | Provider connectors | [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider tests | Slack is strongest; Jira is polling-first; the rest remain narrower. |
 
 For a supported non-Docker repo pass:

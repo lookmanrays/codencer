@@ -457,6 +457,10 @@ func addProjectMCPTools(server *mcpServer, tools map[string]mcpTool) {
 			return successToolResult("Fetched project blocker.", payload), nil
 		},
 	}
+	blockerAlias := tools["codencer.get_project_blocker"]
+	blockerAlias.Name = "codencer.get_blocker"
+	blockerAlias.Description = "Read-only alias for codencer.get_project_blocker."
+	tools["codencer.get_blocker"] = blockerAlias
 	for _, resource := range []string{"result", "artifacts", "logs", "validations"} {
 		name := "codencer.get_project_step_" + resource
 		scope := scopeForProjectEvidence(resource)
