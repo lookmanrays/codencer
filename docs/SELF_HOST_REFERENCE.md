@@ -151,11 +151,15 @@ Local helper commands are available too:
 ### 5. Enroll the connector
 
 ```bash
-./bin/codencer-connectord enroll \
+./bin/codencer connector enroll \
   --relay-url <relay> \
   --daemon-url <local-daemon> \
-  --enrollment-token <token>
+  --enrollment-token <token> \
+  --config "$CODENCER_HOME/runtime/connector/config.json" \
+  --json
 ```
+
+Use `codencer-connectord enroll` with the same values only as the low-level fallback.
 
 The connector persists:
 - `relay_url`

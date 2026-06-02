@@ -21,6 +21,26 @@ ChatGPT product proof is manual and workspace-gated. This repository can prepare
 
 Save the generated client secret and operator approval code from `$CODENCER_HOME/tokens`.
 
+`codencer activation chatgpt --json` emits a top-level setup sheet with:
+
+- `mcp_endpoint`
+- `auth_mode`
+- `client_id`
+- `client_secret_file`
+- `operator_code_file`
+- `authorization_server_metadata`
+- `openid_configuration`
+- `authorization_endpoint`
+- `token_endpoint`
+- `protected_resource_metadata`
+- `scopes`
+- `expected_tools`
+- `chatgpt_ui_steps`
+- `test_prompts`
+- `evidence_checklist`
+
+Literal secrets are redacted. File paths are shown only for local token files.
+
 ## App Values
 
 - MCP endpoint: `https://relay.example.com/mcp`
@@ -28,6 +48,7 @@ Save the generated client secret and operator approval code from `$CODENCER_HOME
 - OpenID configuration: `https://relay.example.com/.well-known/openid-configuration`
 - Protected resource metadata: `https://relay.example.com/.well-known/oauth-protected-resource/mcp`
 - Required behavior: use `codencer.list_projects` first.
+- OAuth dev redirect behavior: valid redirect URIs are accepted for self-host dev testing. Production must use redirect allowlisting or an external IdP. OAuth dev mode is not public multi-user production.
 
 Expected project-aware tools include:
 

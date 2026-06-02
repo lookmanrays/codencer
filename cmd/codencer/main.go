@@ -15,6 +15,7 @@ import (
 	"agent-bridge/internal/activation"
 	"agent-bridge/internal/app"
 	"agent-bridge/internal/buildinfo"
+	"agent-bridge/internal/connectorops"
 	"agent-bridge/internal/live"
 	"agent-bridge/internal/local"
 	"agent-bridge/internal/localexec"
@@ -74,6 +75,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runStatus(args[1:], stdout)
 	case "project":
 		return runProject(args[1:], stdout)
+	case "connector":
+		return runConnector(args[1:], stdout)
 	case "run":
 		return runRun(args[1:], stdout)
 	case "submit":
@@ -322,6 +325,97 @@ func runProject(args []string, stdout io.Writer) error {
 		return runProjectRemove(args[1:], stdout)
 	default:
 		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown project command %q", args[0]))
+	}
+}
+
+func runConnector(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer connector <enroll|run|status|config show> [flags]")
+	}
+	switch args[0] {
+	case "enroll":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"relay-url", "daemon-url", "enrollment-token", "config", "codencer-home", "label"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "connector enroll does not accept positional arguments")
+		}
+		if strings.TrimSpace(parsed.value("relay-url")) == "" {
+			return usageError(parsed.bool("json"), stdout, "connector enroll requires --relay-url")
+		}
+		if strings.TrimSpace(parsed.value("enrollment-token")) == "" {
+			return usageError(parsed.bool("json"), stdout, "connector enroll requires --enrollment-token")
+		}
+		report, err := connectorops.Enroll(contextBackground(), connectorops.EnrollOptions{
+			RelayURL:        parsed.value("relay-url"),
+			DaemonURL:       parsed.value("daemon-url"),
+			EnrollmentToken: parsed.value("enrollment-token"),
+			ConfigPath:      parsed.value("config"),
+			CodencerHome:    parsed.value("codencer-home"),
+			Label:           parsed.value("label"),
+		})
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+		if parsed.bool("json") {
+			if err := writeJSON(stdout, report); err != nil {
+				return err
+			}
+		} else {
+			printConnectorEnrollReport(stdout, report)
+		}
+		if report.ExitCode != exitSuccess {
+			return exitError{code: report.ExitCode, message: "connector enrollment failed", printed: true}
+		}
+		return nil
+	case "run":
+		parsed, err := parseArgs(args[1:], nil, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(false, stdout, "connector run does not accept positional arguments")
+		}
+		return connectorops.Run(contextBackground(), parsed.value("config"), "")
+	case "status":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "connector status does not accept positional arguments")
+		}
+		report, err := connectorops.LoadStatus(parsed.value("config"), "")
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+		if parsed.bool("json") {
+			return writeJSON(stdout, report)
+		}
+		printConnectorStatusReport(stdout, report)
+		return nil
+	case "config":
+		if len(args) < 2 || args[1] != "show" {
+			return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer connector config show [--config <path>] [--json] [--show-secrets]")
+		}
+		parsed, err := parseArgs(args[2:], []string{"json", "show-secrets"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "connector config show does not accept positional arguments")
+		}
+		report, err := connectorops.LoadConfig(parsed.value("config"), "", parsed.bool("show-secrets"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+		if parsed.bool("json") {
+			return writeJSON(stdout, report)
+		}
+		return writeJSON(stdout, report.Config)
+	default:
+		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown connector command %q", args[0]))
 	}
 }
 
@@ -1245,6 +1339,18 @@ func runActivation(args []string, stdout io.Writer) error {
 		report, err = activation.Package(contextBackground(), opts)
 	case "chatgpt":
 		report, err = activation.ChatGPT(opts)
+		if err != nil {
+			return finishActivationReport(stdout, parsed.bool("json"), report, err)
+		}
+		if parsed.bool("json") {
+			if err := writeJSON(stdout, report.Output); err != nil {
+				return err
+			}
+			if report.ExitCode != exitSuccess {
+				return exitError{code: report.ExitCode, message: "activation check failed", printed: true}
+			}
+			return nil
+		}
 	case "codex":
 		report, err = activation.Codex(opts)
 	case "claude-code":
@@ -1432,7 +1538,7 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|connector|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func printPaths(w io.Writer, paths local.Paths) {
@@ -1460,6 +1566,31 @@ func printProject(w io.Writer, p projectpkg.Project) {
 	fmt.Fprintf(w, "shared_to_relay: %t\n", p.SharedToRelay)
 	if p.RelayInstanceID != "" {
 		fmt.Fprintf(w, "relay_instance:  %s\n", p.RelayInstanceID)
+	}
+}
+
+func printConnectorEnrollReport(w io.Writer, report *connectorops.EnrollReport) {
+	fmt.Fprintf(w, "connector_id: %s\n", report.ConnectorID)
+	fmt.Fprintf(w, "machine_id:   %s\n", report.MachineID)
+	fmt.Fprintf(w, "relay_url:    %s\n", report.RelayURL)
+	fmt.Fprintf(w, "config:       %s\n", report.ConfigPath)
+	fmt.Fprintf(w, "home:         %s\n", report.CodencerHome)
+	for _, warning := range report.Warnings {
+		fmt.Fprintf(w, "warning:      %s\n", warning)
+	}
+}
+
+func printConnectorStatusReport(w io.Writer, report *connectorops.StatusReport) {
+	if report.Status == nil {
+		fmt.Fprintf(w, "config: %s\n", report.ConfigPath)
+		return
+	}
+	fmt.Fprintf(w, "connector_id: %s\n", report.Status.ConnectorID)
+	fmt.Fprintf(w, "machine_id:   %s\n", report.Status.MachineID)
+	fmt.Fprintf(w, "relay_url:    %s\n", report.Status.RelayURL)
+	fmt.Fprintf(w, "state:        %s\n", report.Status.SessionState)
+	if report.Status.LastError != "" {
+		fmt.Fprintf(w, "last_error:   %s\n", report.Status.LastError)
 	}
 }
 

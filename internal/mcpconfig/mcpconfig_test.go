@@ -19,12 +19,23 @@ func TestGenerateCodexConfig(t *testing.T) {
 }
 
 func TestGenerateClaudeCodeConfig(t *testing.T) {
-	payload, err := Generate(Options{Client: "claude-code", Endpoint: "https://relay.example.com/mcp", Token: "secret"})
+	payload, err := Generate(Options{Client: "claude-code", Endpoint: "https://relay.example.com/mcp", TokenEnv: "CODENCER_MCP_TOKEN", Name: "codencer"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if command, _ := payload["command"].(string); !strings.Contains(command, "claude mcp add") || !strings.Contains(command, "Authorization: Bearer secret") {
+	command, _ := payload["command"].(string)
+	expected := `claude mcp add --transport http --header "Authorization: Bearer $CODENCER_MCP_TOKEN" codencer https://relay.example.com/mcp`
+	if command != expected {
 		t.Fatalf("unexpected command: %s", command)
+	}
+	headerIndex := strings.Index(command, "--header")
+	nameIndex := strings.Index(command, " codencer ")
+	if headerIndex < 0 || nameIndex < 0 || headerIndex > nameIndex {
+		t.Fatalf("expected --header before server name: %s", command)
+	}
+	payload, err = Generate(Options{Client: "claude-code", Endpoint: "https://relay.example.com/mcp", Token: "secret"})
+	if err != nil {
+		t.Fatal(err)
 	}
 	if payload["token_included"] != true {
 		t.Fatalf("token_included = %v", payload["token_included"])

@@ -53,7 +53,7 @@ Use [docs/BETA_TESTING.md](docs/BETA_TESTING.md) as the repo-level tester guide.
 | --- | --- | --- | --- | --- |
 | Local production foundation | [docs/quickstart-local.md](docs/quickstart-local.md), [docs/local-production.md](docs/local-production.md), [docs/runtime-supervisor.md](docs/runtime-supervisor.md), [docs/live-execution-matrix.md](docs/live-execution-matrix.md) | `make build` | `make verify-local-prod` and `make acceptance-local-production` | Unified `codencer` CLI, setup UX, user-level registry, daemon execution, manifest runner, Relay/MCP proof, supervisor/watchdog/recovery, live matrix/readiness, acceptance reports, proof bundles, and release snapshots. |
 | Local-only daemon + CLI | [docs/SETUP.md](docs/SETUP.md) | `make build` | `./scripts/smoke_test_v1.sh` then `make smoke` | Canonical local proof is simulation-first; live adapter claims stay narrow. |
-| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md), [docs/activation-vps-relay.md](docs/activation-vps-relay.md), [docs/activation-local-connector.md](docs/activation-local-connector.md) | `make build` | `make verify-local-relay-mcp` or `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path with project-aware Relay/MCP and Sprint 7 activation artifacts. |
+| Self-host relay / runtime | [docs/SELF_HOST_REFERENCE.md](docs/SELF_HOST_REFERENCE.md), [docs/activation-vps-relay.md](docs/activation-vps-relay.md), [docs/activation-local-connector.md](docs/activation-local-connector.md), [docs/architecture/mcp-gateway-model.md](docs/architecture/mcp-gateway-model.md) | `make build` | `make verify-local-relay-mcp` or `PLANNER_TOKEN=<planner-token> make self-host-smoke-mcp` | Canonical remote self-host path with project-aware Relay/MCP, connector facade, and activation artifacts. |
 | Self-host cloud control plane | [docs/CLOUD_SELF_HOST.md](docs/CLOUD_SELF_HOST.md) | `make build-cloud` | `make cloud-smoke` | Docker baseline and binary-native composed proof are separate. |
 | Planner / client integrations | [docs/mcp/integrations.md](docs/mcp/integrations.md), [docs/mcp/chatgpt-app-setup.md](docs/mcp/chatgpt-app-setup.md), [docs/mcp/codex-mcp-live.md](docs/mcp/codex-mcp-live.md), [docs/mcp/claude-code-mcp-live.md](docs/mcp/claude-code-mcp-live.md) | `make build build-cloud build-mcp-sdk-smoke` | `make flagship-planner-smoke` or self-host/cloud smoke with MCP/SDK enabled plus `make activation-preflight` | ChatGPT-style, Codex, and Claude Code operator lanes are packaged around the canonical remote MCP surfaces; product UI proof remains manual unless exercised. |
 | Provider connectors | [docs/CLOUD_CONNECTORS.md](docs/CLOUD_CONNECTORS.md) | `make build-cloud` | `make cloud-smoke` plus provider tests | Slack is strongest; Jira is polling-first; the rest remain narrower. |
@@ -148,8 +148,9 @@ Key constraints remain unchanged:
 6. Mint a one-time enrollment token from the running relay:
    `./bin/codencer-relayd enrollment-token create --config .codencer/relay/config.json --label local-dev --json`
 7. Enroll and run the connector in WSL/Linux next to the daemon:
-   `./bin/codencer-connectord enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token>`
-   `./bin/codencer-connectord run`
+   `./bin/codencer connector enroll --relay-url http://127.0.0.1:8090 --daemon-url http://127.0.0.1:8085 --enrollment-token <token> --config "$CODENCER_HOME/runtime/connector/config.json" --json`
+   `./bin/codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"`
+   Low-level fallback remains `./bin/codencer-connectord enroll ...` and `./bin/codencer-connectord run`.
 8. Inspect and control sharing explicitly:
    `./bin/codencer-connectord discover --config .codencer/connector/config.json`
    `./bin/codencer-connectord list`

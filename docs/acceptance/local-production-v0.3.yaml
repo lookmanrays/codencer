@@ -80,6 +80,42 @@ profiles:
           - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
           - ./bin/codencer activation check --json
         notes: Default activation preflight is deterministic and does not claim product-client proof.
+      - id: connector_enrollment_documented
+        status: sprint_7_1_implemented
+        commands:
+          - test -f docs/activation-local-connector.md
+          - test -f docs/activation-vps-relay.md
+        notes: Operator docs prefer codencer connector enroll/run/status/config show and keep codencer-connectord as the low-level fallback.
+      - id: activation_package_contains_connector_enrollment
+        status: sprint_7_1_implemented
+        commands:
+          - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+        notes: Package must include connector-enrollment.sh plus README, curl smoke, Codex config, Claude Code command, ChatGPT setup, and activation-package.json.
+      - id: claude_code_command_order_valid
+        status: sprint_7_1_implemented
+        commands:
+          - go test ./internal/mcpconfig ./internal/activation ./cmd/codencer
+        notes: Canonical order is claude mcp add --transport http --header "Authorization: Bearer $CODENCER_MCP_TOKEN" codencer https://relay.example.com/mcp.
+      - id: chatgpt_setup_sheet_complete
+        status: sprint_7_1_implemented
+        commands:
+          - ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
+        notes: JSON setup sheet includes endpoint, auth mode, client id, local token file paths, OAuth endpoints/metadata, scopes, expected tools, UI steps, test prompts, and evidence checklist.
+      - id: curl_smoke_real_mcp_flow
+        status: sprint_7_1_implemented
+        commands:
+          - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+        notes: curl-smoke.sh initializes MCP, captures/reuses MCP-Session-Id, lists tools, calls codencer.list_projects, and has an opt-in fake manifest call.
+      - id: site_update_pack_present
+        status: sprint_7_1_implemented
+        commands:
+          - test -f docs/site-update-codencer-dev.md
+        notes: The codencer.dev website source is not present in this repository; site repo update remains pending.
+      - id: mcp_gateway_model_doc_present
+        status: sprint_7_1_implemented
+        commands:
+          - test -f docs/architecture/mcp-gateway-model.md
+        notes: Documents one MCP toolset, one connector, self-host Relay, future Gateway/Cloud mode, and no separate ChatGPT/Claude/Codex agents.
       - id: relay_oauth_dev_endpoints
         status: sprint_7_implemented
         commands:

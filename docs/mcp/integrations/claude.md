@@ -113,11 +113,11 @@ make flagship-planner-smoke
 Concrete Claude Code setup options:
 
 ```bash
-claude mcp add --transport http codencer-relay https://<your-relay-host>/mcp \
-  --header "Authorization: Bearer <planner-token>"
+claude mcp add --transport http --header "Authorization: Bearer <planner-token>" \
+  codencer-relay https://<your-relay-host>/mcp
 
-claude mcp add --transport http codencer-cloud https://<your-cloud-host>/api/cloud/v1/mcp \
-  --header "Authorization: Bearer <cloud-token>"
+claude mcp add --transport http --header "Authorization: Bearer <cloud-token>" \
+  codencer-cloud https://<your-cloud-host>/api/cloud/v1/mcp
 ```
 
 Project-scoped config:

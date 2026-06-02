@@ -53,7 +53,7 @@ func Generate(opts Options) (map[string]any, error) {
 		payload["command"] = fmt.Sprintf("codex mcp add %s --url %s --bearer-token-env-var %s", shellQuote(name), shellQuote(endpointValue), shellQuote(tokenEnv))
 		payload["config_toml"] = fmt.Sprintf("[mcp_servers.%s]\nurl = %q\nbearer_token_env_var = %q\n", name, endpointValue, tokenEnv)
 	case "claude-code":
-		payload["command"] = fmt.Sprintf("claude mcp add --transport http %s %s --header %q", shellQuote(name), shellQuote(endpointValue), "Authorization: Bearer "+authValue)
+		payload["command"] = fmt.Sprintf("claude mcp add --transport http --header %q %s %s", "Authorization: Bearer "+authValue, shellQuote(name), shellQuote(endpointValue))
 		payload["mcp_json"] = map[string]any{
 			"mcpServers": map[string]any{
 				name: map[string]any{

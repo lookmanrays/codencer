@@ -158,6 +158,71 @@ func TestProfileAndDaemonNotRunningJSON(t *testing.T) {
 	}
 }
 
+func TestConnectorFacadeJSON(t *testing.T) {
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v2/connectors/enroll" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		writeHTTPJSON(t, w, http.StatusOK, map[string]any{
+			"connector_id": "conn-1",
+			"machine_id":   "machine-1",
+			"relay": map[string]any{
+				"relay_url":                  relayURLFromRequest(r),
+				"websocket_url":              "ws://relay.example.com/api/v2/connectors/ws",
+				"heartbeat_interval_seconds": 5,
+			},
+		})
+	}))
+	defer relay.Close()
+
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+	configPath := filepath.Join(home, "runtime", "connector", "config.json")
+	stdout, stderr, err := runCLI("connector", "enroll",
+		"--relay-url", relay.URL,
+		"--daemon-url", "http://127.0.0.1:1",
+		"--enrollment-token", "enroll-secret",
+		"--config", configPath,
+		"--codencer-home", home,
+		"--label", "test-connector",
+		"--json")
+	if err != nil {
+		t.Fatalf("connector enroll failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	var enroll map[string]any
+	decodeJSON(t, stdout, &enroll)
+	if enroll["connector_id"] != "conn-1" || enroll["local_config_updated"] != true {
+		t.Fatalf("unexpected enroll report: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("connector", "status", "--config", configPath, "--json")
+	if err != nil {
+		t.Fatalf("connector status failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"connector_id": "conn-1"`) {
+		t.Fatalf("status missing connector id: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("connector", "config", "show", "--config", configPath, "--json")
+	if err != nil {
+		t.Fatalf("connector config show failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if strings.Contains(stdout, "PRIVATE KEY") || strings.Contains(stdout, "enroll-secret") {
+		t.Fatalf("config show leaked secret: %s", stdout)
+	}
+	if !strings.Contains(stdout, `"codencer_home": "`+home+`"`) {
+		t.Fatalf("config show missing codencer_home: %s", stdout)
+	}
+}
+
+func relayURLFromRequest(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
 func TestServiceWatchdogAndRecoverJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -363,7 +428,9 @@ func TestSetupAcceptProofCommandsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("activation chatgpt failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
-	if !strings.Contains(stdout, `"client": "chatgpt"`) || !strings.Contains(stdout, "pending_manual_product_proof") {
+	if !strings.Contains(stdout, `"mcp_endpoint": "https://relay.example.com/mcp"`) ||
+		!strings.Contains(stdout, `"chatgpt_ui_steps"`) ||
+		!strings.Contains(stdout, `"evidence_checklist"`) {
 		t.Fatalf("activation chatgpt output wrong: %s", stdout)
 	}
 
@@ -379,7 +446,7 @@ func TestSetupAcceptProofCommandsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("activation claude-code failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "claude mcp add") {
+	if !strings.Contains(stdout, `claude mcp add --transport http --header \"Authorization: Bearer $CODENCER_MCP_TOKEN\" codencer https://relay.example.com/mcp`) {
 		t.Fatalf("activation claude-code output wrong: %s", stdout)
 	}
 

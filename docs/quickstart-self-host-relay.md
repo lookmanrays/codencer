@@ -42,6 +42,31 @@ Generated OAuth client/operator secrets are stored only under `$CODENCER_HOME/to
 
 Remote project descriptors use safe labels/hashes instead of absolute local paths. The local registry keeps full paths for local execution.
 
+## Enroll Local Connector
+
+Create the enrollment token on the relay host:
+
+```bash
+export CODENCER_MCP_TOKEN=<planner-token-with-connectors-enroll-scope>
+./bin/codencer-relayd enrollment-token create --relay-url https://relay.example.com --token "$CODENCER_MCP_TOKEN" --label local-connector --json
+```
+
+Then enroll and run the local connector:
+
+```bash
+export CODENCER_CONNECTOR_ENROLLMENT_TOKEN=<enrollment-token>
+./bin/codencer connector enroll \
+  --relay-url https://relay.example.com \
+  --daemon-url http://127.0.0.1:8085 \
+  --enrollment-token "$CODENCER_CONNECTOR_ENROLLMENT_TOKEN" \
+  --config "$CODENCER_HOME/runtime/connector/config.json" \
+  --label local-connector \
+  --json
+./bin/codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
+```
+
+Use `codencer-connectord enroll` and `codencer-connectord run` only as low-level fallbacks.
+
 ## MCP Client Snippets
 
 ```bash

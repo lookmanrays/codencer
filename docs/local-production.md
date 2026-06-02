@@ -74,7 +74,8 @@ Activation mode prepares self-host operators for real client setup. `codencer ac
 ## Sprint 7 Capabilities
 
 - `codencer activation check|package|chatgpt|codex|claude-code --json`.
-- Activation packages with README, curl smoke, Codex config, Claude Code command, and ChatGPT setup artifacts.
+- Activation packages with README, real MCP curl smoke, Codex config, Claude Code command, ChatGPT setup sheet, and connector enrollment artifacts.
+- `codencer connector enroll|run|status|config show` facade over the low-level connector binary.
 - Relay OAuth dev endpoints for single-user ChatGPT testing:
   - `GET /.well-known/oauth-authorization-server`
   - `GET /.well-known/openid-configuration`
@@ -288,7 +289,7 @@ Example MCP setup snippets:
 ./bin/codencer-relayd mcp-config --client chatgpt --endpoint https://relay.example.com/mcp
 ```
 
-ChatGPT custom MCP connector use requires a public HTTPS endpoint, OAuth-front-door style authentication, and an eligible Business/Enterprise/Edu workspace with developer mode. This repository does not claim ChatGPT live product proof unless that product flow is explicitly exercised.
+ChatGPT custom MCP connector use requires a public HTTPS endpoint, OAuth dev/front-door style authentication, and an eligible Business/Enterprise/Edu workspace with developer mode. The self-host OAuth dev mode accepts valid redirect URIs for development; production must use redirect allowlisting or an external IdP. This repository does not claim ChatGPT live product proof unless that product flow is explicitly exercised.
 
 ## Inspect
 

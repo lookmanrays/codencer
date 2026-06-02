@@ -20,6 +20,8 @@ Generated secrets are written only under `$CODENCER_HOME/tokens` with `0600` per
 
 The relay config stores only hashes, issuer/client metadata, scopes, and TTLs.
 
+OAuth dev accepts syntactically valid redirect URIs so an operator can test ChatGPT/custom-MCP setup without running a full IdP. Production deployments must use redirect allowlisting or an external IdP/front door. This dev issuer is not public multi-user production.
+
 ## Endpoints
 
 - `GET /.well-known/oauth-authorization-server`

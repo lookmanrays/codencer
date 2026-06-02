@@ -62,6 +62,34 @@ Use your preferred user-level process manager or Sprint 4 supervisor:
 
 Public ChatGPT/Codex/Claude clients require HTTPS. Use a reverse proxy or native relay TLS config.
 
+## Create Connector Enrollment Token
+
+On the VPS, generate a short-lived connector enrollment token and copy only that token to the local machine:
+
+```bash
+export CODENCER_MCP_TOKEN=<planner-token-with-connectors-enroll-scope>
+./bin/codencer-relayd enrollment-token create \
+  --relay-url https://relay.example.com \
+  --token "$CODENCER_MCP_TOKEN" \
+  --label local-macbook \
+  --json
+```
+
+On the local machine, prefer the facade:
+
+```bash
+./bin/codencer connector enroll \
+  --relay-url https://relay.example.com \
+  --daemon-url http://127.0.0.1:8085 \
+  --enrollment-token "$CODENCER_CONNECTOR_ENROLLMENT_TOKEN" \
+  --config "$CODENCER_HOME/runtime/connector/config.json" \
+  --label local-macbook \
+  --json
+./bin/codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
+```
+
+Fallback remains available through `codencer-connectord enroll` and `codencer-connectord run` when the facade is not installed.
+
 ## Activation Package
 
 Generate operator artifacts:
@@ -74,7 +102,7 @@ Generate operator artifacts:
   --json
 ```
 
-The package contains `README.md`, `curl-smoke.sh`, `codex-config.toml`, `claude-code-command.sh`, `chatgpt-app-setup.md`, and `activation-package.json`.
+The package contains `README.md`, `curl-smoke.sh`, `codex-config.toml`, `claude-code-command.sh`, `chatgpt-app-setup.md`, `connector-enrollment.sh`, and `activation-package.json`.
 
 ## Remote Check
 

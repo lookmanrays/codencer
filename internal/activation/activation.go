@@ -192,25 +192,30 @@ func Package(ctx context.Context, opts Options) (Report, error) {
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return Report{}, err
 	}
-	files := map[string]string{
-		"README.md":              readmeContent(opts, relayURL, mcpURL),
-		"curl-smoke.sh":          curlSmokeContent(opts, relayURL, mcpURL),
-		"codex-config.toml":      codexConfigContent(opts, mcpURL),
-		"claude-code-command.sh": claudeCommandContent(opts, mcpURL),
-		"chatgpt-app-setup.md":   chatGPTContent(opts, relayURL, mcpURL),
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"README.md", readmeContent(opts, relayURL, mcpURL)},
+		{"curl-smoke.sh", curlSmokeContent(opts, relayURL, mcpURL)},
+		{"codex-config.toml", codexConfigContent(opts, mcpURL)},
+		{"claude-code-command.sh", claudeCommandContent(opts, mcpURL)},
+		{"chatgpt-app-setup.md", chatGPTContent(opts, relayURL, mcpURL)},
+		{"connector-enrollment.sh", connectorEnrollmentContent(opts, relayURL)},
 	}
 	written := make([]string, 0, len(files)+1)
-	for name, content := range files {
+	for _, file := range files {
 		perm := os.FileMode(0600)
-		if strings.HasSuffix(name, ".sh") {
+		if strings.HasSuffix(file.name, ".sh") {
 			perm = 0700
 		}
-		if err := os.WriteFile(filepath.Join(root, name), []byte(content), perm); err != nil {
-			report.add("package_write_"+name, StatusFailed, err.Error())
+		if err := os.WriteFile(filepath.Join(root, file.name), []byte(file.content), perm); err != nil {
+			report.add("package_write_"+file.name, StatusFailed, err.Error())
 			return finish(report, opts), nil
 		}
-		written = append(written, name)
+		written = append(written, file.name)
 	}
+	manifestFiles := append(append([]string(nil), written...), "activation-package.json")
 	artifact := packageArtifact{
 		OK:        true,
 		CreatedAt: now(opts),
@@ -218,7 +223,7 @@ func Package(ctx context.Context, opts Options) (Report, error) {
 		MCPURL:    mcpURL,
 		ProjectID: strings.TrimSpace(opts.ProjectID),
 		AuthMode:  authMode(opts),
-		Files:     append([]string(nil), written...),
+		Files:     manifestFiles,
 		States: []string{
 			"server_ready",
 			"client_config_generated",
@@ -233,7 +238,7 @@ func Package(ctx context.Context, opts Options) (Report, error) {
 		report.add("package_write_activation_package", StatusFailed, err.Error())
 		return finish(report, opts), nil
 	}
-	written = append(written, "activation-package.json")
+	written = manifestFiles
 	report.add("activation_package", StatusPassed, "activation package generated", written...)
 	report.PackagePath = root
 	report.Output = security.RedactJSON(map[string]any{

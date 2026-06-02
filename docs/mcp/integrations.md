@@ -20,7 +20,7 @@ They are executor-side adapters, not remote planner surfaces.
 - Use cloud `/api/cloud/v1/runtime/...` and cloud `/api/cloud/v1/mcp` when cloud tenancy is the public control plane.
 - Treat relay `/mcp/call`, cloud `/api/cloud/v1/mcp/call`, and daemon `/mcp/call` as compatibility POST aliases rather than the primary session contract.
 
-For the frozen post-beta product path contract, see [Flagship Planner Product Path](../internal/FLAGSHIP_PLANNER_PRODUCT_PATH.md). For the deployable OAuth resource-server/front-door pattern, see [OAuth Front Door](OAUTH_FRONT_DOOR.md). For Sprint 7 activation, see [VPS Relay Activation](../activation-vps-relay.md), [Local Connector Activation](../activation-local-connector.md), [ChatGPT App Setup](chatgpt-app-setup.md), [ChatGPT OAuth Dev Mode](chatgpt-oauth-dev.md), [Codex MCP Activation](codex-mcp-live.md), and [Claude Code MCP Activation](claude-code-mcp-live.md).
+For the frozen post-beta product path contract, see [Flagship Planner Product Path](../internal/FLAGSHIP_PLANNER_PRODUCT_PATH.md). For the deployable OAuth resource-server/front-door pattern, see [OAuth Front Door](OAUTH_FRONT_DOOR.md). For the one-toolset Relay/Gateway architecture, see [MCP Gateway Model](../architecture/mcp-gateway-model.md). For activation, see [VPS Relay Activation](../activation-vps-relay.md), [Local Connector Activation](../activation-local-connector.md), [ChatGPT App Setup](chatgpt-app-setup.md), [ChatGPT OAuth Dev Mode](chatgpt-oauth-dev.md), [Codex MCP Activation](codex-mcp-live.md), and [Claude Code MCP Activation](claude-code-mcp-live.md).
 
 ## Auth Modes
 

@@ -44,6 +44,22 @@ Relay MCP requires bearer auth, Sprint 7 OAuth dev mode, or an OAuth front door 
 
 ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and an eligible workspace. For self-host testing, generate the server-side activation artifacts with `codencer activation chatgpt --relay https://relay.example.com --auth oauth --json`. Keep product proof pending until the actual product flow is exercised.
 
+## Connector Enrollment Fails
+
+Use the facade first so `$CODENCER_HOME/config.json` records the connector config path:
+
+```bash
+./bin/codencer connector enroll \
+  --relay-url https://relay.example.com \
+  --daemon-url http://127.0.0.1:8085 \
+  --enrollment-token "$CODENCER_CONNECTOR_ENROLLMENT_TOKEN" \
+  --config "$CODENCER_HOME/runtime/connector/config.json" \
+  --json
+./bin/codencer connector status --config "$CODENCER_HOME/runtime/connector/config.json" --json
+```
+
+If the facade is unavailable, fall back to `codencer-connectord enroll` with the same relay URL, daemon URL, enrollment token, and config path. Enrollment tokens are one-time/short-lived; generate a fresh token on the relay host before retrying.
+
 ## Release Snapshot Misses Some Targets
 
 `go-sqlite3` requires CGO. Sprint 6.1 release snapshots default to required `darwin/arm64`, `darwin/amd64`, and `linux/amd64` targets. From macOS, Linux builds use Docker. If Docker is unavailable or the Linux build fails, the default release snapshot should fail.

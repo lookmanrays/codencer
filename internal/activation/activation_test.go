@@ -26,7 +26,7 @@ func TestPackageGenerationRedactsTokensAndWritesExpectedFiles(t *testing.T) {
 	if !report.OK || report.PackagePath == "" {
 		t.Fatalf("expected package success, got %+v", report)
 	}
-	expected := []string{"activation-package.json", "README.md", "curl-smoke.sh", "codex-config.toml", "claude-code-command.sh", "chatgpt-app-setup.md"}
+	expected := []string{"activation-package.json", "README.md", "curl-smoke.sh", "codex-config.toml", "claude-code-command.sh", "chatgpt-app-setup.md", "connector-enrollment.sh"}
 	for _, name := range expected {
 		data, err := os.ReadFile(filepath.Join(report.PackagePath, name))
 		if err != nil {
@@ -41,6 +41,18 @@ func TestPackageGenerationRedactsTokensAndWritesExpectedFiles(t *testing.T) {
 	}
 	if info, err := os.Stat(filepath.Join(report.PackagePath, "curl-smoke.sh")); err != nil || info.Mode().Perm() != 0700 {
 		t.Fatalf("curl-smoke.sh mode mismatch: info=%v err=%v", info, err)
+	}
+	curlSmoke, _ := os.ReadFile(filepath.Join(report.PackagePath, "curl-smoke.sh"))
+	for _, want := range []string{"initialize", "tools/list", "codencer.list_projects", "MCP-Session-Id", "RUN_FAKE_MANIFEST", "codencer.run_project_manifest"} {
+		if !strings.Contains(string(curlSmoke), want) {
+			t.Fatalf("curl-smoke.sh missing %q:\n%s", want, curlSmoke)
+		}
+	}
+	connectorEnrollment, _ := os.ReadFile(filepath.Join(report.PackagePath, "connector-enrollment.sh"))
+	for _, want := range []string{"codencer-relayd enrollment-token create", "codencer connector enroll", "codencer-connectord enroll", "codencer project share"} {
+		if !strings.Contains(string(connectorEnrollment), want) {
+			t.Fatalf("connector-enrollment.sh missing %q:\n%s", want, connectorEnrollment)
+		}
 	}
 }
 
@@ -70,6 +82,55 @@ func TestClientOutputsContainExpectedActivationGuidance(t *testing.T) {
 				t.Fatalf("literal token leaked: %s", data)
 			}
 		})
+	}
+}
+
+func TestChatGPTSetupSheetIncludesRequiredFields(t *testing.T) {
+	home := t.TempDir()
+	report, err := ChatGPT(Options{
+		Relay:        "https://relay.example.com",
+		Token:        "literal-secret-token",
+		ProjectID:    "codencer",
+		AuthMode:     "oauth",
+		CodencerHome: home,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sheet, ok := report.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected output: %#v", report.Output)
+	}
+	for _, key := range []string{
+		"mcp_endpoint",
+		"auth_mode",
+		"client_id",
+		"client_secret_file",
+		"operator_code_file",
+		"authorization_server_metadata",
+		"openid_configuration",
+		"authorization_endpoint",
+		"token_endpoint",
+		"protected_resource_metadata",
+		"scopes",
+		"expected_tools",
+		"chatgpt_ui_steps",
+		"test_prompts",
+		"evidence_checklist",
+	} {
+		if _, ok := sheet[key]; !ok {
+			t.Fatalf("ChatGPT setup sheet missing %q: %#v", key, sheet)
+		}
+	}
+	data, _ := json.Marshal(sheet)
+	if strings.Contains(string(data), "literal-secret-token") {
+		t.Fatalf("literal token leaked: %s", data)
+	}
+	if !strings.Contains(string(data), filepath.Join(home, "tokens", "chatgpt-oauth-client-secret")) {
+		t.Fatalf("client secret file path missing: %s", data)
+	}
+	if !strings.Contains(string(data), "valid redirect URIs are accepted for dev") {
+		t.Fatalf("redirect behavior missing: %s", data)
 	}
 }
 

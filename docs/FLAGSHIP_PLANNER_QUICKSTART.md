@@ -157,8 +157,8 @@ Best current operator lanes:
 Claude Code setup:
 
 ```bash
-claude mcp add --transport http codencer-relay https://<your-relay-host>/mcp \
-  --header "Authorization: Bearer <planner-token>"
+claude mcp add --transport http --header "Authorization: Bearer <planner-token>" \
+  codencer-relay https://<your-relay-host>/mcp
 ```
 
 For Claude Desktop or `claude.ai` remote custom connectors, keep the existing auth caveat: Codencer's private planner auth is bearer-token based, while Anthropic's remote connector UI may require OAuth-oriented setup. Use the OAuth front-door pattern for that product setup.

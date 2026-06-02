@@ -14,7 +14,7 @@ Claude Code MCP activation generates setup artifacts only. It does not write `.m
 
 The output includes:
 
-- `claude mcp add --transport http ... --header "Authorization: Bearer ..."`
+- `claude mcp add --transport http --header "Authorization: Bearer $CODENCER_MCP_TOKEN" codencer https://relay.example.com/mcp`
 - `.mcp.json` alternative
 - endpoint check
 - prompts and evidence checklist

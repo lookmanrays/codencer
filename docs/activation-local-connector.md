@@ -26,21 +26,52 @@ Start the local daemon by your existing operator flow or the Sprint 4 supervisor
 
 Sharing is explicit. The user-level registry keeps full local paths; relay planner payloads expose safe labels and hashes.
 
-## Connect To Relay
+## Enroll Connector
 
-Create relay and connector config:
+On the VPS, create a short-lived connector enrollment token:
 
 ```bash
-./bin/codencer setup relay \
-  --base-url https://relay.example.com \
-  --generate-planner-token \
+export CODENCER_MCP_TOKEN=<planner-token-with-connectors-enroll-scope>
+./bin/codencer-relayd enrollment-token create \
+  --relay-url https://relay.example.com \
+  --token "$CODENCER_MCP_TOKEN" \
+  --label local-macbook \
   --json
 ```
 
-Run the connector with the generated connector config:
+Copy only the enrollment token to the local machine, then use the `codencer` facade first:
 
 ```bash
-./bin/codencer-connectord run --config "$CODENCER_HOME/runtime/connector/config.json"
+export CODENCER_CONNECTOR_ENROLLMENT_TOKEN=<enrollment-token>
+./bin/codencer connector enroll \
+  --relay-url https://relay.example.com \
+  --daemon-url http://127.0.0.1:8085 \
+  --enrollment-token "$CODENCER_CONNECTOR_ENROLLMENT_TOKEN" \
+  --config "$CODENCER_HOME/runtime/connector/config.json" \
+  --label local-macbook \
+  --json
+```
+
+Enrollment persists `codencer_home` into the connector config and records the connector config path in `$CODENCER_HOME/config.json` when possible.
+
+Low-level fallback:
+
+```bash
+./bin/codencer-connectord enroll \
+  --relay-url https://relay.example.com \
+  --daemon-url http://127.0.0.1:8085 \
+  --enrollment-token "$CODENCER_CONNECTOR_ENROLLMENT_TOKEN" \
+  --config "$CODENCER_HOME/runtime/connector/config.json" \
+  --label local-macbook \
+  --json
+```
+
+Run and inspect the connector through the facade:
+
+```bash
+./bin/codencer connector status --config "$CODENCER_HOME/runtime/connector/config.json" --json
+./bin/codencer connector config show --config "$CODENCER_HOME/runtime/connector/config.json" --json
+./bin/codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
 ```
 
 ## Verify Advertisement
