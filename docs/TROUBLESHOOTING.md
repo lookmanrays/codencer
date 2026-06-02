@@ -46,7 +46,19 @@ ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and a
 
 ## Release Snapshot Misses Some Targets
 
-`go-sqlite3` requires CGO. If your host lacks cross compilers, `dist/manifest.json` will honestly mark those targets `not_built`. Build missing targets on native or properly provisioned hosts; do not fake archives or claim Windows-native daemon production support from WSL guidance.
+`go-sqlite3` requires CGO. Sprint 6.1 release snapshots default to required `darwin/arm64`, `darwin/amd64`, and `linux/amd64` targets. From macOS, Linux builds use Docker. If Docker is unavailable or the Linux build fails, the default release snapshot should fail.
+
+Use one of these explicit paths:
+
+```bash
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=host
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1 ALLOW_PARTIAL=1
+```
+
+`ALLOW_PARTIAL=1` is an honest partial artifact set, not a final multi-platform production release. Do not fake archives. Do not claim Windows-native daemon production support; use WSL2/Linux with the Linux artifact or a Linux source build.
+
+If `codencer accept local-production` reports `release_artifacts_present` failed, regenerate the release snapshot or remove stale generated `dist/manifest.json`/`dist/checksums.txt` files. A source ZIP is not a release artifact.
 
 ## Never Do These By Default
 

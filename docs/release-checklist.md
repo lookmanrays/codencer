@@ -23,7 +23,30 @@ make verify-local-prod
 make release-snapshot VERSION=v0.3.0-local-prod-rc.1
 ```
 
-The snapshot writes `dist/manifest.json` and `dist/checksums.txt`. Because Codencer uses `go-sqlite3` and CGO, local machines may not cross-compile every OS/arch target. The release manifest is the source of truth: buildable targets are `built`, unavailable targets are `not_built` or `skipped`, and no signed/notarized claim is made.
+The snapshot writes real `dist/codencer_*.tar.gz` archives, `dist/manifest.json`, and `dist/checksums.txt`. A GitHub source ZIP is not a release artifact.
+
+Default required RC targets are:
+
+```text
+darwin/arm64,darwin/amd64,linux/amd64
+```
+
+Linux/WSL production requires a `linux/amd64` artifact or a source build on Linux/WSL. From macOS, the release helper uses Docker for Linux targets. If Docker or the Linux build is unavailable, the default release command must fail truthfully. Use partial mode only when intentionally producing a partial artifact set:
+
+```bash
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1 ALLOW_PARTIAL=1
+```
+
+Partial mode is not a final multi-platform production release. Windows-native daemon binaries are not claimed in this RC; Windows operators should use WSL2/Linux. No signed/notarized claim is made.
+
+Useful target overrides:
+
+```bash
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=host
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=darwin/arm64,linux/amd64 REQUIRE_TARGETS=darwin/arm64,linux/amd64
+```
+
+Every artifact with `status:"built"` in the manifest must exist on disk and match `checksums.txt`. `make verify-release` fails if this is not true.
 
 ## Acceptance Evidence
 

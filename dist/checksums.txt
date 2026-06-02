@@ -1,2 +1,0 @@
-a382c30f652cf0aa7bef71f1442c10d59f4d8523f69647c8e161cb7282f3f054  codencer_v0.3.0-local-prod-rc.1_darwin_arm64.tar.gz
-3bf76dc191a36badf70ca23b0ae1c757f72318b693242aceaf0f1d0f04af48ea  codencer_v0.3.0-local-prod-rc.1_darwin_amd64.tar.gz

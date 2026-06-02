@@ -22,6 +22,7 @@ const (
 	mcpDefaultProtocolVersion = "2025-03-26"
 	mcpLatestProtocolVersion  = "2025-11-25"
 	mcpSessionIdleTTL         = 30 * time.Minute
+	mcpInstructions           = "Codencer is a bridge, not a planner. Use codencer.list_projects first. Use codencer.run_project_manifest for approved multi-step work. Use codencer.submit_project_task_and_wait for one approved task. If a blocker has planner_decision_required, stop and return blocker details. Do not infer next action from logs."
 )
 
 var supportedMCPProtocolVersions = []string{
@@ -296,6 +297,7 @@ func (s *mcpServer) handleInitialize(w http.ResponseWriter, r *http.Request, req
 				"name":    "codencer-relay",
 				"version": "v2",
 			},
+			"instructions": mcpInstructions,
 		},
 	}, session, protocolVersion)
 }

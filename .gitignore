@@ -3,6 +3,8 @@ bin/
 dist/*.tar.gz
 dist/*.zip
 dist/.work-*/
+dist/manifest.json
+dist/checksums.txt
 cmd/broker/dist/
 node_modules/
 extension/out/

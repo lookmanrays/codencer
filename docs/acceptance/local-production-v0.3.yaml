@@ -48,10 +48,11 @@ profiles:
           - make verify-runtime-recovery
           - ./bin/codencer service install --all --dry-run --json
       - id: watchdog_recover_dry_run
-        status: implemented
+        status: sprint_6_1_corrected
         commands:
           - ./bin/codencer watchdog once --json
           - ./bin/codencer recover --dry-run --json
+        notes: Acceptance splits command execution from health/safety. watchdog_command_runs and recover_dry_run_command_runs prove the commands executed; watchdog_health_ok and recover_dry_run_safe fail or block when reports contain runtime blockers.
       - id: readiness_and_live_matrix
         status: implemented
         commands:
@@ -82,10 +83,24 @@ profiles:
           - scripts/uninstall.sh --dry-run
           - scripts/upgrade.sh --dry-run
       - id: release_snapshot
-        status: sprint_6_implemented
+        status: sprint_6_1_corrected
         commands:
           - make release-snapshot VERSION=v0.3.0-local-prod-rc.1
-        notes: CGO cross-build gaps are represented honestly as not_built/skipped in dist/manifest.json.
+        notes: Default required targets are darwin/arm64, darwin/amd64, and linux/amd64. Missing required targets make the release report fail unless ALLOW_PARTIAL=1 is explicit. Windows-native daemon binaries are not claimed; Windows production path is WSL2/Linux.
+      - id: release_artifacts_present
+        status: sprint_6_1_implemented
+        commands:
+          - test -f dist/manifest.json
+          - test -f dist/checksums.txt
+          - make verify-release
+        notes: Every manifest artifact with status built must exist on disk and match checksums.txt. Source ZIPs are not release artifacts.
+      - id: install_upgrade_truthfulness
+        status: sprint_6_1_corrected
+        commands:
+          - rm -rf bin
+          - scripts/install.sh --dry-run --json
+          - scripts/upgrade.sh --dry-run --json
+        notes: Missing required binaries must return ok false, include missing_binaries, and exit nonzero unless --allow-missing is explicit.
   optional_live:
     status: opt_in
     gates:
@@ -109,6 +124,7 @@ profiles:
         status: pending_unless_run_inside_wsl
         commands:
           - CODENCER_LIVE_WSL=1 make live-wsl-smoke
+        notes: WSL production uses the linux/amd64 artifact or a Linux/WSL source build; Windows-native daemon support is not claimed.
       - id: live_installed_services
         status: pending_unless_run
         commands:
@@ -127,6 +143,18 @@ profiles:
         status: not_claimed
       - id: windows_native_daemon_production
         status: not_claimed_wsl2_is_documented_path
+release_gates:
+  required_for_final_go:
+    - id: full_required_release_targets_built
+      status: required
+      targets:
+        - darwin/arm64
+        - darwin/amd64
+        - linux/amd64
+      notes: A Darwin-only snapshot is partial and must not be labeled a final multi-platform production release.
+    - id: release_artifacts_present
+      status: required
+      notes: Built artifacts must be present outside source ZIPs and checksum-verified.
 verification:
   non_live_release_candidate:
     - go test ./...
@@ -139,3 +167,4 @@ verification:
     - make verify-release
     - make verify-local-prod
     - make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+    - make release-snapshot VERSION=v0.3.0-local-prod-rc.1 ALLOW_PARTIAL=1

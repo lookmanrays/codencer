@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	Version = "v0.2.0-beta"
+	Version = "v0.3.0-local-prod-rc.1"
 	Commit  = ""
 	Date    = ""
 	Dirty   = ""

@@ -1,8 +1,12 @@
-VERSION ?= v0.2.0-beta
+VERSION ?= v0.3.0-local-prod-rc.1
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIRTY ?= $(shell test -z "$$(git status --porcelain 2>/dev/null)" && echo false || echo true)
 LDFLAGS := -X agent-bridge/internal/app.Version=$(VERSION) -X agent-bridge/internal/buildinfo.Version=$(VERSION) -X agent-bridge/internal/buildinfo.Commit=$(COMMIT) -X agent-bridge/internal/buildinfo.Date=$(BUILD_DATE) -X agent-bridge/internal/buildinfo.Dirty=$(DIRTY)
+TARGETS ?= darwin/arm64,darwin/amd64,linux/amd64
+REQUIRE_TARGETS ?=
+ALLOW_PARTIAL ?= 0
+RELEASE_DOCKER_IMAGE ?= golang:1.25-bookworm
 
 all: lint test build
 
@@ -252,11 +256,20 @@ demo-local: build
 release-snapshot:
 	@if [ -z "$(VERSION)" ]; then echo "VERSION is required"; exit 2; fi
 	@echo "==> Creating release snapshot $(VERSION)..."
-	@go run ./internal/release/cmd --version "$(VERSION)" --dist dist --json
+	@partial_flag=""; \
+	if [ "$(ALLOW_PARTIAL)" = "1" ]; then partial_flag="--allow-partial"; fi; \
+	go run ./internal/release/cmd \
+		--version "$(VERSION)" \
+		--dist dist \
+		--targets "$(TARGETS)" \
+		--require-targets "$(REQUIRE_TARGETS)" \
+		--docker-image "$(RELEASE_DOCKER_IMAGE)" \
+		$$partial_flag \
+		--json
 
 verify-release:
 	@echo "==> Checking Sprint 6 formatting..."
-	@fmt=$$(gofmt -l internal/buildinfo internal/security internal/setup internal/acceptance internal/proof internal/release cmd/codencer internal/relay/router.go); \
+	@fmt=$$(gofmt -l internal/buildinfo internal/security internal/setup internal/acceptance internal/proof internal/release cmd/codencer internal/relay/router.go internal/relay/mcp_server.go internal/relay/mcp_server_test.go); \
 	if [ -n "$$fmt" ]; then \
 		echo "$$fmt"; \
 		echo "ERROR: gofmt required for release hardening files."; \
@@ -265,6 +278,18 @@ verify-release:
 	@echo "==> Running full Go test suite..."
 	@go test ./...
 	@$(MAKE) build
+	@echo "==> Checking install/upgrade missing binary failures..."
+	@missing=$$(mktemp -d "$${TMPDIR:-/tmp}/codencer-missing-bin.XXXXXX"); \
+	trap 'rm -rf "$$missing"' EXIT; \
+	if ./scripts/install.sh --bin-dir "$$missing" --dry-run --json >/dev/null 2>&1; then \
+		echo "ERROR: install dry-run should fail when required binaries are missing."; \
+		exit 1; \
+	fi; \
+	if ./scripts/upgrade.sh --bin-dir "$$missing" --dry-run --json >/dev/null 2>&1; then \
+		echo "ERROR: upgrade dry-run should fail when required binaries are missing."; \
+		exit 1; \
+	fi
+	@$(MAKE) release-snapshot VERSION=v0.3.0-local-prod-verify
 	@$(MAKE) verify-local-execution
 	@$(MAKE) verify-local-relay-mcp
 	@$(MAKE) verify-runtime-recovery
@@ -274,7 +299,6 @@ verify-release:
 	@./scripts/install.sh --dry-run --json >/dev/null
 	@./scripts/uninstall.sh --dry-run --json >/dev/null
 	@./scripts/upgrade.sh --dry-run --json >/dev/null
-	@$(MAKE) release-snapshot VERSION=v0.3.0-local-prod-verify
 
 live-service-macos-smoke: build
 	@if [ "$${CODENCER_LIVE_SERVICE_SMOKE:-0}" != "1" ]; then \

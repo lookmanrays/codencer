@@ -3,9 +3,11 @@ set -euo pipefail
 
 DRY_RUN=0
 JSON=0
+ALLOW_MISSING=0
 BIN_DIR="bin"
 INSTALL_DIR="${CODENCER_INSTALL_DIR:-$HOME/.local/bin}"
 CODENCER_HOME_VALUE="${CODENCER_HOME:-$HOME/.codencer}"
+BINS=(codencer orchestratord codencer-relayd codencer-connectord)
 
 json_string() {
   local value="$1"
@@ -17,10 +19,26 @@ json_string() {
   printf '"%s"' "$value"
 }
 
+json_bool() {
+  if [ "$1" = "1" ]; then printf 'true'; else printf 'false'; fi
+}
+
+json_array() {
+  local first=1
+  printf '['
+  for value in "$@"; do
+    [ "$first" = "1" ] || printf ','
+    first=0
+    json_string "$value"
+  done
+  printf ']'
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --json) JSON=1; shift ;;
+    --allow-missing) ALLOW_MISSING=1; shift ;;
     --bin-dir) BIN_DIR="${2:?--bin-dir requires a value}"; shift 2 ;;
     --install-dir) INSTALL_DIR="${2:?--install-dir requires a value}"; shift 2 ;;
     --codencer-home) CODENCER_HOME_VALUE="${2:?--codencer-home requires a value}"; shift 2 ;;
@@ -28,54 +46,75 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-BINS=(codencer orchestratord codencer-relayd codencer-connectord)
 ACTIONS=()
+MISSING=()
 for bin in "${BINS[@]}"; do
   src="$BIN_DIR/$bin"
   dst="$INSTALL_DIR/$bin"
   if [ ! -f "$src" ]; then
     ACTIONS+=("missing:$src")
+    MISSING+=("$bin")
   else
     ACTIONS+=("install:$src:$dst")
-    if [ "$DRY_RUN" != "1" ]; then
-      mkdir -p "$INSTALL_DIR"
-      install -m 0755 "$src" "$dst"
-    fi
   fi
 done
 
-if [ "$DRY_RUN" != "1" ]; then
-  mkdir -p "$CODENCER_HOME_VALUE"
-  if command -v "$INSTALL_DIR/codencer" >/dev/null 2>&1 || [ -x "$INSTALL_DIR/codencer" ]; then
-    CODENCER_HOME="$CODENCER_HOME_VALUE" "$INSTALL_DIR/codencer" init --json >/dev/null || true
+OK=1
+PARTIAL=0
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  OK=0
+  PARTIAL=1
+fi
+
+if [ "${#MISSING[@]}" -eq 0 ] || [ "$ALLOW_MISSING" = "1" ]; then
+  if [ "$DRY_RUN" != "1" ]; then
+    mkdir -p "$INSTALL_DIR"
+    for bin in "${BINS[@]}"; do
+      src="$BIN_DIR/$bin"
+      dst="$INSTALL_DIR/$bin"
+      if [ -f "$src" ]; then
+        install -m 0755 "$src" "$dst"
+      fi
+    done
+    mkdir -p "$CODENCER_HOME_VALUE"
+    if [ -x "$INSTALL_DIR/codencer" ]; then
+      CODENCER_HOME="$CODENCER_HOME_VALUE" "$INSTALL_DIR/codencer" init --json >/dev/null || true
+    fi
   fi
 fi
 
 if [ "$JSON" = "1" ]; then
-  printf '{"ok":true,"dry_run":%s,"bin_dir":%s,"install_dir":%s,"codencer_home":%s,"actions":[' \
-    "$([ "$DRY_RUN" = "1" ] && echo true || echo false)" \
+  missing_json="[]"
+  if [ "${#MISSING[@]}" -gt 0 ]; then
+    missing_json="$(json_array "${MISSING[@]}")"
+  fi
+  actions_json="$(json_array "${ACTIONS[@]}")"
+  printf '{"ok":%s,"partial":%s,"dry_run":%s,"allow_missing":%s,"bin_dir":%s,"install_dir":%s,"codencer_home":%s,"missing_binaries":%s,"actions":%s,"next_commands":["codencer setup local --json","codencer readiness --json"]}\n' \
+    "$(json_bool "$OK")" \
+    "$(json_bool "$PARTIAL")" \
+    "$(json_bool "$DRY_RUN")" \
+    "$(json_bool "$ALLOW_MISSING")" \
     "$(json_string "$BIN_DIR")" \
     "$(json_string "$INSTALL_DIR")" \
-    "$(json_string "$CODENCER_HOME_VALUE")"
-  first=1
+    "$(json_string "$CODENCER_HOME_VALUE")" \
+    "$missing_json" \
+    "$actions_json"
+else
+  echo "Codencer install"
+  echo "  dry_run:       $DRY_RUN"
+  echo "  bin_dir:       $BIN_DIR"
+  echo "  install_dir:   $INSTALL_DIR"
+  echo "  codencer_home: $CODENCER_HOME_VALUE"
+  echo "  allow_missing: $ALLOW_MISSING"
   for action in "${ACTIONS[@]}"; do
-    [ "$first" = "1" ] || printf ','
-    first=0
-    json_string "$action"
+    echo "  $action"
   done
-  printf '],"next_commands":["codencer setup local --json","codencer readiness --json"]}\n'
-  exit 0
+  echo
+  echo "Next:"
+  echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+  echo "  codencer setup local --json"
 fi
 
-echo "Codencer install"
-echo "  dry_run:       $DRY_RUN"
-echo "  bin_dir:       $BIN_DIR"
-echo "  install_dir:   $INSTALL_DIR"
-echo "  codencer_home: $CODENCER_HOME_VALUE"
-for action in "${ACTIONS[@]}"; do
-  echo "  $action"
-done
-echo
-echo "Next:"
-echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
-echo "  codencer setup local --json"
+if [ "${#MISSING[@]}" -gt 0 ] && [ "$ALLOW_MISSING" != "1" ]; then
+  exit 30
+fi

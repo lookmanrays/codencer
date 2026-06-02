@@ -485,6 +485,11 @@ func TestMCPInitializeStreamAndCompatibilityPath(t *testing.T) {
 	if sessionID == "" {
 		t.Fatalf("expected initialize to return session id, got %+v", initialize)
 	}
+	result := initialize["result"].(map[string]any)
+	instructions, _ := result["instructions"].(string)
+	if !strings.Contains(instructions, "Codencer is a bridge, not a planner") || !strings.Contains(instructions, "codencer.list_projects") {
+		t.Fatalf("initialize instructions missing operator guidance: %+v", result)
+	}
 
 	resp, reader := h.openStream(t, h.auth, sessionID)
 	if resp.StatusCode != http.StatusOK {

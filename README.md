@@ -39,7 +39,9 @@ scripts/upgrade.sh --dry-run
 make release-snapshot VERSION=v0.3.0-local-prod-rc.1
 ```
 
-Windows production execution remains WSL2-first rather than Windows-native daemon support. Live Codex, live Claude, ChatGPT product UI, and installed-service smokes are opt-in and must not be marked passed without real evidence.
+Release snapshots produce actual `dist/codencer_*.tar.gz` archives, `dist/manifest.json`, and `dist/checksums.txt`. A GitHub source ZIP is not a Codencer release artifact. Default RC targets are `darwin/arm64`, `darwin/amd64`, and `linux/amd64`; missing required targets make the release report fail unless `ALLOW_PARTIAL=1` is explicit. Darwin-only output is a partial artifact set, not a final multi-platform production release.
+
+Windows production execution remains WSL2-first through the Linux artifact or a Linux/WSL source build, rather than Windows-native daemon support. Live Codex, live Claude, ChatGPT product UI, WSL live, and installed-service smokes are opt-in and must not be marked passed without real evidence.
 
 ## Supported Beta Test Tracks
 

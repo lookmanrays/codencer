@@ -48,3 +48,7 @@ CODENCER_LIVE_RELAY_MCP=1 ./bin/codencer live relay-mcp --json --bin-dir ./bin -
 ```
 
 Live Codex/Claude executor proof and ChatGPT product UI proof remain pending unless explicitly run in the target product environment.
+
+## Platform Notes
+
+Self-host Linux and WSL2 deployments use the `linux/amd64` release artifact or a source build performed on Linux/WSL. Windows-native daemon binaries are not part of the Sprint 6.1 production claim. ChatGPT product UI proof remains manual and pending until exercised through public HTTPS plus the required product auth/front-door setup.

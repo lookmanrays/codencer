@@ -56,3 +56,11 @@ Actual launchd/systemd install/start is explicit:
 ```
 
 Default acceptance uses deterministic fake execution and may return `ready_with_skips` when live Codex, live Claude, ChatGPT product UI, WSL, or installed-service smokes were intentionally not run.
+
+## Release Artifact Check
+
+```bash
+make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+```
+
+This creates real release archives under `dist/` plus a manifest and checksums. A repository source ZIP is not a release artifact. The default RC release requires Darwin arm64, Darwin amd64, and Linux amd64; if the Linux artifact cannot be built locally, use Docker support, build on Linux/WSL, or run `ALLOW_PARTIAL=1` and label the output partial.

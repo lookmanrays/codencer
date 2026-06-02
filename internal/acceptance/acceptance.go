@@ -12,9 +12,9 @@ import (
 	"agent-bridge/internal/buildinfo"
 	"agent-bridge/internal/live"
 	"agent-bridge/internal/local"
-	"agent-bridge/internal/localexec"
 	"agent-bridge/internal/project"
 	"agent-bridge/internal/readiness"
+	"agent-bridge/internal/release"
 	"agent-bridge/internal/security"
 	"agent-bridge/internal/setup"
 	"agent-bridge/internal/supervisor"
@@ -127,15 +127,19 @@ func LocalProduction(ctx context.Context, opts Options) (Report, error) {
 	}
 	watchdog, err := supervisor.WatchdogOnce(ctx, supervisor.Options{RepoRoot: repo, BinDir: opts.BinDir, Manager: supervisor.ManagerManual})
 	if err != nil {
-		report.add(gate("watchdog_once", live.StatusFailed, true, false, err.Error(), nil))
+		report.add(gate("watchdog_command_runs", live.StatusFailed, true, false, err.Error(), nil))
+		report.add(gate("watchdog_health_ok", live.StatusSkipped, true, false, "watchdog command did not complete", nil))
 	} else {
-		report.add(gate("watchdog_once", live.StatusPassed, true, false, fmt.Sprintf("ok=%t blockers=%d", watchdog.OK, len(watchdog.Blockers)), nil))
+		report.add(gate("watchdog_command_runs", live.StatusPassed, true, false, fmt.Sprintf("checks=%d blockers=%d", len(watchdog.Checks), len(watchdog.Blockers)), nil))
+		report.add(gate("watchdog_health_ok", watchdogHealthStatus(watchdog), true, false, fmt.Sprintf("ok=%t blockers=%d", watchdog.OK, len(watchdog.Blockers)), nil))
 	}
 	recovery, err := supervisor.Recover(ctx, supervisor.RecoveryOptions{Options: supervisor.Options{RepoRoot: repo, BinDir: opts.BinDir, DryRun: true, Manager: supervisor.ManagerManual}, Mode: "all"})
 	if err != nil {
-		report.add(gate("recover_dry_run", live.StatusFailed, true, false, err.Error(), nil))
+		report.add(gate("recover_dry_run_command_runs", live.StatusFailed, true, false, err.Error(), nil))
+		report.add(gate("recover_dry_run_safe", live.StatusSkipped, true, false, "recover dry-run did not complete", nil))
 	} else {
-		report.add(gate("recover_dry_run", live.StatusPassed, true, false, fmt.Sprintf("ok=%t actions=%d blockers=%d", recovery.OK, len(recovery.Actions), len(recovery.Blockers)), nil))
+		report.add(gate("recover_dry_run_command_runs", live.StatusPassed, true, false, fmt.Sprintf("actions=%d blockers=%d", len(recovery.Actions), len(recovery.Blockers)), nil))
+		report.add(gate("recover_dry_run_safe", recoverySafetyStatus(recovery), true, false, fmt.Sprintf("ok=%t actions=%d blockers=%d", recovery.OK, len(recovery.Actions), len(recovery.Blockers)), nil))
 	}
 	ready, err := readiness.Build(ctx, readiness.Options{Local: true, Relay: profile == "relay", RepoRoot: repo, CodencerHome: opts.CodencerHome})
 	if err != nil {
@@ -174,6 +178,7 @@ func LocalProduction(ctx context.Context, opts Options) (Report, error) {
 	}
 	report.add(gate("docs_release_docs_present", docsStatus(repo), true, false, "", nil))
 	report.add(gate("release_manifest_available", releaseManifestStatus(repo), false, false, "dist/manifest.json is optional until release-snapshot is run", nil))
+	report.add(gate("release_artifacts_present", releaseArtifactsStatus(repo), true, false, "built manifest artifacts must exist and match checksums", nil))
 
 	report.CompletedAt = time.Now().UTC()
 	report.computeVerdict()
@@ -313,6 +318,36 @@ func releaseManifestStatus(repo string) string {
 	return live.StatusPassed
 }
 
+func releaseArtifactsStatus(repo string) string {
+	if _, err := os.Stat(filepath.Join(repo, "dist", "manifest.json")); err != nil {
+		return live.StatusSkipped
+	}
+	if err := release.ValidateDist(filepath.Join(repo, "dist")); err != nil {
+		return live.StatusFailed
+	}
+	return live.StatusPassed
+}
+
+func watchdogHealthStatus(report supervisor.WatchdogReport) string {
+	if report.OK {
+		return live.StatusPassed
+	}
+	if len(report.Blockers) > 0 {
+		return live.StatusBlocked
+	}
+	return live.StatusFailed
+}
+
+func recoverySafetyStatus(report supervisor.RecoveryReport) string {
+	if report.OK {
+		return live.StatusPassed
+	}
+	if len(report.Blockers) > 0 {
+		return live.StatusBlocked
+	}
+	return live.StatusFailed
+}
+
 func matrixProfile(profile string) string {
 	switch profile {
 	case "relay":
@@ -362,5 +397,3 @@ func overwrite(path string, report Report) error {
 	data = append(data, '\n')
 	return os.WriteFile(path, data, 0600)
 }
-
-var _ = localexec.ExitSuccess

@@ -308,7 +308,8 @@ Live Codex or Claude authentication is not required in Sprint 1. If live proof i
 - `codencer proof bundle --json` collects report references without secrets or full logs.
 - `make verify-local-prod` passes.
 - `make verify-release` passes.
-- `make release-snapshot VERSION=v0.3.0-local-prod-rc.1` writes release artifacts, checksums, and an honest manifest.
+- `make release-snapshot VERSION=v0.3.0-local-prod-rc.1` writes real release archives, checksums, and an honest manifest for required Darwin arm64, Darwin amd64, and Linux amd64 targets.
+- `release_artifacts_present` passes when every manifest artifact with `status:"built"` exists on disk and matches `dist/checksums.txt`; a source ZIP is not a release artifact.
 - `make verify-local-execution` passes.
 - `make verify-local-relay-mcp` passes.
 - `make verify-runtime-recovery` passes.
@@ -334,6 +335,8 @@ Acceptance and proof commands are the machine-readable release evidence path:
 ```
 
 `ready_with_skips` is acceptable when required deterministic gates pass and optional live gates were intentionally skipped. Live Codex, live Claude, WSL, installed service, and ChatGPT product UI gates stay pending/skipped until actually exercised.
+
+Release snapshots are full only when all required targets build. If Docker or a Linux host is unavailable for the Linux amd64 artifact, `ALLOW_PARTIAL=1` must be explicit and the output must be labeled partial. Windows-native daemon production is not claimed; Windows operators use WSL2/Linux.
 
 ## Remaining Work
 
