@@ -1,12 +1,15 @@
-# Codencer Cloud
+# Codencer Cloud Control-Plane Notes
 
-Codencer Cloud is the beta-track self-host cloud control plane for tenant-scoped provider integrations and tenant-scoped Codencer runtime control. It does not execute coding work, but it can now own the cloud-facing registry for claimed Codencer connectors and shared instances when started with an internal relay bridge.
+> [!WARNING]
+> This document describes existing experimental/self-hostable cloud-control-plane code. It is not the current open-source release path and it is not hosted Codencer Gateway/Cloud availability. For current OSS remote operation, use [Self-Host Relay Quickstart](quickstart-self-host-relay.md) and [MCP Gateway Model](architecture/mcp-gateway-model.md).
+
+Codencer Cloud control-plane code is an experimental self-hostable control plane for tenant-scoped provider integrations and tenant-scoped Codencer runtime control. It does not execute coding work, and it is separate from the v0.3 OSS self-host Relay path.
 
 Use this page for the cloud scope and route contract.
 
 - Use [CLOUD_SELF_HOST.md](CLOUD_SELF_HOST.md) for bootstrap, Docker baseline, and smoke order.
 - Use [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) for per-provider install/test depth and limitations.
-- Use [mcp/integrations.md](mcp/integrations.md) for the cloud-vs-relay planner/client chooser.
+- Use [mcp/integrations.md](mcp/integrations.md) for the current OSS Relay planner/client path.
 
 ## What It Does
 
@@ -143,7 +146,7 @@ Boundary rule:
 
 Both surfaces ultimately route through the same local runtime bridge doctrine, but only the cloud surface is tenant-scoped.
 
-For the frozen planner/client compatibility matrix, generic HTTP/MCP examples, and cloud-vs-relay packaging boundary, see [mcp/integrations.md](mcp/integrations.md) and [mcp/cloud_tools.md](mcp/cloud_tools.md).
+For the current OSS Relay planner/client path, see [mcp/integrations.md](mcp/integrations.md). For this experimental cloud-control-plane MCP surface, see [mcp/cloud_tools.md](mcp/cloud_tools.md).
 
 ## Command Surface
 
@@ -176,7 +179,7 @@ The runtime CLI covers cloud-scoped claim/list/get flows for claimed runtime con
 - Cloud runtime control requires `codencer-cloudd` to be started with `relay_config_path` or `--relay-config`.
 - Cloud runtime connector ownership is explicit. A relay connector must still be claimed into org/workspace/project scope before the cloud API or cloud MCP can use it.
 - Connector enrollment-token issuance remains relay-config backed in this pass. Cloud hosts connector ingress in composed mode, but it does not yet add a cloud-native enrollment-token lifecycle.
-- Jira is polling-first in the current beta track.
+- Jira is polling-first in the current experimental provider path.
 - Jira webhook ingest remains deferred and routed Jira webhook calls now return `501 webhook_deferred` instead of ingesting payloads.
 - `codencer-cloudworkerd` is the place where Jira polling runs.
 - `cloud_smoke.sh` now exercises the binary-native bootstrap, status, list, create, get, enable, disable, webhook ingest, events, and audit flows.

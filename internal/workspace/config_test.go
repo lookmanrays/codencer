@@ -8,7 +8,7 @@ import (
 
 func TestLoadWorkspaceConfig_Native(t *testing.T) {
 	root := t.TempDir()
-	
+
 	// Native config
 	nativePath := filepath.Join(root, ".codencer")
 	if err := os.Mkdir(nativePath, 0755); err != nil {
@@ -37,7 +37,7 @@ func TestLoadWorkspaceConfig_Native(t *testing.T) {
 
 func TestLoadWorkspaceConfig_SpecGrove(t *testing.T) {
 	root := t.TempDir()
-	
+
 	// grove.yaml
 	content := `
 workspace:
@@ -71,7 +71,7 @@ workspace:
 
 func TestLoadWorkspaceConfig_LegacyGroverc(t *testing.T) {
 	root := t.TempDir()
-	
+
 	// .groverc.json (Legacy)
 	content := `{"symlink": ["node_modules"], "afterCreate": "npm install"}`
 	if err := os.WriteFile(filepath.Join(root, ".groverc.json"), []byte(content), 0644); err != nil {
@@ -96,7 +96,7 @@ func TestLoadWorkspaceConfig_LegacyGroverc(t *testing.T) {
 
 func TestLoadWorkspaceConfig_PrecedenceChain(t *testing.T) {
 	root := t.TempDir()
-	
+
 	// Native (Wins on copy)
 	nativePath := filepath.Join(root, ".codencer")
 	_ = os.Mkdir(nativePath, 0755)

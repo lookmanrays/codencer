@@ -1,12 +1,12 @@
 package workspace
 
 import (
+	"agent-bridge/internal/domain"
 	"encoding/json"
+	"gopkg.in/yaml.v3"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"agent-bridge/internal/domain"
-	"gopkg.in/yaml.v3"
 )
 
 // LoadWorkspaceConfig probes the repository for provisioning configuration.
@@ -16,7 +16,7 @@ import (
 // 3. .groverc.json (Legacy-Grove)
 func LoadWorkspaceConfig(repoRoot string) (*domain.ProvisioningSpec, error) {
 	spec := &domain.ProvisioningSpec{}
-	
+
 	// 1. Native .codencer/workspace.json
 	nativePath := filepath.Join(repoRoot, ".codencer", "workspace.json")
 	if data, err := os.ReadFile(nativePath); err == nil {
@@ -32,25 +32,31 @@ func LoadWorkspaceConfig(repoRoot string) (*domain.ProvisioningSpec, error) {
 
 	// 2. Spec-Grove (grove.yaml)
 	if groveData, err := os.ReadFile(filepath.Join(repoRoot, "grove.yaml")); err == nil {
-			var grove struct {
-				Workspace struct {
-					Setup struct {
-						Copy     []string `yaml:"copy"`
-						Symlinks []string `yaml:"symlinks"`
-					} `yaml:"setup"`
-					Hooks struct {
-						PostCreate string `yaml:"post_create"`
-					} `yaml:"hooks"`
-				} `yaml:"workspace"`
+		var grove struct {
+			Workspace struct {
+				Setup struct {
+					Copy     []string `yaml:"copy"`
+					Symlinks []string `yaml:"symlinks"`
+				} `yaml:"setup"`
+				Hooks struct {
+					PostCreate string `yaml:"post_create"`
+				} `yaml:"hooks"`
+			} `yaml:"workspace"`
+		}
+		if err := yaml.Unmarshal(groveData, &grove); err != nil {
+			slog.Warn("Failed to parse grove.yaml", "error", err)
+		} else {
+			// Fallback merge
+			if len(spec.Copy) == 0 {
+				spec.Copy = grove.Workspace.Setup.Copy
 			}
-			if err := yaml.Unmarshal(groveData, &grove); err != nil {
-				slog.Warn("Failed to parse grove.yaml", "error", err)
-			} else {
-				// Fallback merge
-				if len(spec.Copy) == 0 { spec.Copy = grove.Workspace.Setup.Copy }
-				if len(spec.Symlinks) == 0 { spec.Symlinks = grove.Workspace.Setup.Symlinks }
-				if spec.Hooks.PostCreate == "" { spec.Hooks.PostCreate = grove.Workspace.Hooks.PostCreate }
+			if len(spec.Symlinks) == 0 {
+				spec.Symlinks = grove.Workspace.Setup.Symlinks
 			}
+			if spec.Hooks.PostCreate == "" {
+				spec.Hooks.PostCreate = grove.Workspace.Hooks.PostCreate
+			}
+		}
 	}
 
 	// 3. Legacy-Grove (.groverc.json - reference repo style)
@@ -63,8 +69,12 @@ func LoadWorkspaceConfig(repoRoot string) (*domain.ProvisioningSpec, error) {
 			slog.Warn("Failed to parse .groverc.json", "error", err)
 		} else {
 			// Fallback merge
-			if len(spec.Symlinks) == 0 { spec.Symlinks = legacy.Symlink }
-			if spec.Hooks.PostCreate == "" { spec.Hooks.PostCreate = legacy.AfterCreate }
+			if len(spec.Symlinks) == 0 {
+				spec.Symlinks = legacy.Symlink
+			}
+			if spec.Hooks.PostCreate == "" {
+				spec.Hooks.PostCreate = legacy.AfterCreate
+			}
 		}
 	}
 
@@ -72,6 +82,6 @@ func LoadWorkspaceConfig(repoRoot string) (*domain.ProvisioningSpec, error) {
 	if len(spec.Copy) == 0 && len(spec.Symlinks) == 0 && spec.Hooks.PostCreate == "" {
 		return nil, nil
 	}
-	
+
 	return spec, nil
 }

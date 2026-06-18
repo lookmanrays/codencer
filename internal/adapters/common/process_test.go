@@ -12,7 +12,7 @@ import (
 func TestInvokeLocal_BinaryNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	attempt := &domain.Attempt{ID: "test-id", Adapter: "test-adapter"}
-	
+
 	opts := ExecutionOptions{
 		AdapterName:  "test-adapter",
 		BinaryName:   "nonexistent-binary-xyz",
@@ -34,7 +34,7 @@ func TestInvokeLocal_Simulation(t *testing.T) {
 	tmpDir := t.TempDir()
 	artifactRoot := filepath.Join(tmpDir, "artifacts")
 	attempt := &domain.Attempt{ID: "test-sim-id", Adapter: "test-adapter-sim"}
-	
+
 	os.Setenv("TEST-ADAPTER-SIM_SIMULATION_MODE", "1")
 	defer os.Unsetenv("TEST-ADAPTER-SIM_SIMULATION_MODE")
 
@@ -60,7 +60,7 @@ func TestCollectAndNormalize(t *testing.T) {
 	tmpDir := t.TempDir()
 	artifactRoot := filepath.Join(tmpDir, "artifacts")
 	os.MkdirAll(artifactRoot, 0755)
-	
+
 	// Create dummy result
 	resultData := `{"state": "completed", "summary": "done"}`
 	os.WriteFile(filepath.Join(artifactRoot, "result.json"), []byte(resultData), 0644)

@@ -9,7 +9,7 @@ Use this pattern when ChatGPT, Claude, or another product-facing remote MCP clie
 ```text
 ChatGPT / Claude / API MCP client
   -> public HTTPS OAuth-aware front door
-  -> Codencer relay /mcp or cloud /api/cloud/v1/mcp
+  -> Codencer self-host Relay /mcp
   -> connector
   -> local daemon
   -> local Codex
@@ -27,7 +27,7 @@ The front door is responsible for:
 Codencer is responsible for:
 
 - verifying the forwarded bearer token
-- enforcing relay/cloud scopes
+- enforcing Relay scopes
 - routing to shared/claimed instances
 - executing submitted TaskSpec steps
 - returning structured evidence
@@ -54,7 +54,7 @@ Relay example:
 }
 ```
 
-Cloud example:
+Experimental cloud-control-plane example:
 
 ```json
 {
@@ -80,7 +80,7 @@ The front door should expose these public URLs:
 
 - Relay MCP: `https://relay.example.com/mcp`
 - Relay metadata: `https://relay.example.com/.well-known/oauth-protected-resource/mcp`
-- Cloud MCP: `https://cloud.example.com/api/cloud/v1/mcp`
+- Cloud-control-plane MCP: `https://cloud.example.com/api/cloud/v1/mcp`
 - Cloud metadata: `https://cloud.example.com/.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 
 On successful OAuth validation, forward to Codencer with:

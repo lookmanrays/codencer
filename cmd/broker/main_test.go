@@ -29,7 +29,7 @@ func TestBindingRegistry(t *testing.T) {
 	// 2. Set Bindings for separate repos
 	instA := Instance{PID: 111, HTTPSPort: 8081, CSRFToken: "tokenA"}
 	instB := Instance{PID: 222, HTTPSPort: 8082, CSRFToken: "tokenB"}
-	
+
 	registry.Set(repoA, instA)
 	registry.Set(repoB, instB)
 

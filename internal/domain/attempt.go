@@ -16,4 +16,3 @@ type Attempt struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
-

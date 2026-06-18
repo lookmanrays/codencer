@@ -248,9 +248,13 @@ func logger(next http.HandlerFunc) http.HandlerFunc {
 
 func main() {
 	host := os.Getenv("BROKER_HOST")
-	if host == "" { host = DefaultHost }
+	if host == "" {
+		host = DefaultHost
+	}
 	port := os.Getenv("BROKER_PORT")
-	if port == "" { port = DefaultPort }
+	if port == "" {
+		port = DefaultPort
+	}
 
 	client := NewProxyClient()
 	discovery := NewDiscovery(client)
@@ -268,7 +272,10 @@ func main() {
 	// Binding API
 	http.HandleFunc("/instances", logger(func(w http.ResponseWriter, r *http.Request) {
 		instances, err := discovery.GetInstances(r.Context())
-		if err != nil { http.Error(w, err.Error(), 500); return }
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 		json.NewEncoder(w).Encode(instances)
 	}))
 
@@ -276,27 +283,48 @@ func main() {
 		repoRoot := r.URL.Query().Get("repo_root")
 		switch r.Method {
 		case "GET":
-			if repoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+			if repoRoot == "" {
+				http.Error(w, "repo_root is required", 400)
+				return
+			}
 			inst := registry.Get(repoRoot)
-			if inst == nil { json.NewEncoder(w).Encode(map[string]string{"status": "unbound"}); return }
+			if inst == nil {
+				json.NewEncoder(w).Encode(map[string]string{"status": "unbound"})
+				return
+			}
 			json.NewEncoder(w).Encode(inst)
 		case "POST":
 			var b struct {
 				PID      int    `json:"pid"`
 				RepoRoot string `json:"repo_root"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&b); err != nil { http.Error(w, "invalid JSON", 400); return }
-			if b.RepoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+			if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+				http.Error(w, "invalid JSON", 400)
+				return
+			}
+			if b.RepoRoot == "" {
+				http.Error(w, "repo_root is required", 400)
+				return
+			}
 			instances, _ := discovery.GetInstances(r.Context())
 			var chosen *Instance
 			for _, inst := range instances {
-				if inst.PID == b.PID { chosen = &inst; break }
+				if inst.PID == b.PID {
+					chosen = &inst
+					break
+				}
 			}
-			if chosen == nil { http.Error(w, "instance not found", 404); return }
+			if chosen == nil {
+				http.Error(w, "instance not found", 404)
+				return
+			}
 			registry.Set(b.RepoRoot, *chosen)
 			json.NewEncoder(w).Encode(chosen)
 		case "DELETE":
-			if repoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+			if repoRoot == "" {
+				http.Error(w, "repo_root is required", 400)
+				return
+			}
 			registry.Clear(repoRoot)
 			w.WriteHeader(204)
 		default:
@@ -306,17 +334,29 @@ func main() {
 
 	// Task API (Experimental Phase 4)
 	http.HandleFunc("/tasks", logger(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" { http.Error(w, "method not allowed", 405); return }
+		if r.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
 		var b struct {
 			Prompt        string `json:"prompt"`
 			RepoRoot      string `json:"repo_root"`
 			WorkspaceRoot string `json:"workspace_root"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&b); err != nil { http.Error(w, "invalid JSON", 400); return }
-		if b.RepoRoot == "" { http.Error(w, "repo_root is required", 400); return }
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			http.Error(w, "invalid JSON", 400)
+			return
+		}
+		if b.RepoRoot == "" {
+			http.Error(w, "repo_root is required", 400)
+			return
+		}
 
 		inst := registry.Get(b.RepoRoot)
-		if inst == nil { http.Error(w, "no instance bound for this repo", 400); return }
+		if inst == nil {
+			http.Error(w, "no instance bound for this repo", 400)
+			return
+		}
 
 		runWorkspace := b.WorkspaceRoot
 		if runWorkspace == "" {
@@ -327,13 +367,15 @@ func main() {
 		}
 
 		req := map[string]any{
-			"userPrompt": b.Prompt,
+			"userPrompt":                 b.Prompt,
 			"workspaceFolderAbsoluteUri": runWorkspace,
-			"metadata": map[string]any{"fileAccessGranted": true},
-			"cascadeConfig": map[string]any{"plannerConfig": map[string]any{"plannerTypeConfig": map[string]any{"planning": map[string]any{}}}},
+			"metadata":                   map[string]any{"fileAccessGranted": true},
+			"cascadeConfig":              map[string]any{"plannerConfig": map[string]any{"plannerTypeConfig": map[string]any{"planning": map[string]any{}}}},
 		}
 
-		var resp struct{ CascadeId string `json:"cascadeId"` }
+		var resp struct {
+			CascadeId string `json:"cascadeId"`
+		}
 		if err := client.Call(r.Context(), inst, "StartCascade", req, &resp); err != nil {
 			http.Error(w, fmt.Sprintf("execution start failed: %v", err), 500)
 			return
@@ -353,24 +395,36 @@ func main() {
 
 	http.HandleFunc("/tasks/", logger(func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.Path, "/")
-		if len(parts) < 3 { http.Error(w, "invalid task ID", 400); return }
+		if len(parts) < 3 {
+			http.Error(w, "invalid task ID", 400)
+			return
+		}
 		taskID := parts[2]
 		task := tasks.Get(taskID)
-		if task == nil { http.Error(w, "task not found", 404); return }
+		if task == nil {
+			http.Error(w, "task not found", 404)
+			return
+		}
 
 		// Poll logic
-		var poll struct{ Status string `json:"status"` }
+		var poll struct {
+			Status string `json:"status"`
+		}
 		err := client.Call(r.Context(), &task.Instance, "GetCascadeTrajectory", map[string]any{"cascadeId": task.CascadeID}, &poll)
-		
+
 		if err != nil {
 			task.State = "error"
 			task.Summary = fmt.Sprintf("Transport/Poll failure: %v", err)
 		} else {
 			switch poll.Status {
-			case "COMPLETED": task.State = "completed"
-			case "FAILED":    task.State = "failed"
-			case "ABORTED":   task.State = "cancelled"
-			default:           task.State = "running"
+			case "COMPLETED":
+				task.State = "completed"
+			case "FAILED":
+				task.State = "failed"
+			case "ABORTED":
+				task.State = "cancelled"
+			default:
+				task.State = "running"
 			}
 		}
 

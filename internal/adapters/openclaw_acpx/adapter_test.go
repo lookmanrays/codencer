@@ -35,7 +35,7 @@ func TestAdapter_Lifecycle(t *testing.T) {
 	a := NewAdapter()
 	step := &domain.Step{ID: "step-1", Goal: "Test lifecycle"}
 	attempt := &domain.Attempt{ID: "att-1", Adapter: a.Name()}
-	
+
 	tmpDir, err := os.MkdirTemp("", "openclaw-lifecycle-*")
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestAdapter_Lifecycle(t *testing.T) {
 func TestAdapter_NormalizeResult(t *testing.T) {
 	a := NewAdapter()
 	attemptID := "att-normalize"
-	
+
 	tmpDir, err := os.MkdirTemp("", "openclaw-normalize-*")
 	if err != nil {
 		t.Fatal(err)

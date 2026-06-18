@@ -24,7 +24,7 @@ type InstanceProvider interface {
 type Adapter struct {
 	client           *Client
 	instanceProvider InstanceProvider
-	
+
 	// activeCascades maps attemptID -> cascadeID
 	activeCascades map[string]string
 	// instanceCache maps attemptID -> AGInstance (pinned for the attempt)
@@ -59,7 +59,7 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 	}
 
 	req := &StartCascadeRequest{
-		UserPrompt:                 step.Goal,
+		UserPrompt: step.Goal,
 		WorkspaceFolderAbsoluteUri: func() string {
 			if inst.WorkspaceRoot != "" {
 				return inst.WorkspaceRoot

@@ -3,7 +3,7 @@
 > **INTERNAL DEVELOPER DOCUMENT**: This file is for project maintainers and contains technical debt audits, task backlogs, and roadmap tracking.
 > For the official **User Guide**, please refer to the [README.md](../../README.md).
 >
-> **Historical status note**: This backlog is legacy context. It is not the current release contract. Use the frozen `BETA_*` docs in this directory for current beta truth.
+> **Historical status note**: This backlog is legacy context. It is not the current release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
 
 ## Priority 1 — Refactor and strengthen orchestration runtime [COMPLETE]
 - [x] Extract orchestration workflow out of monolithic `DispatchStep()`.

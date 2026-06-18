@@ -1,5 +1,8 @@
 # Codencer Cloud Connector Matrix
 
+> [!WARNING]
+> This is an experimental cloud-control-plane/provider matrix. It is not the current v0.3 OSS self-host Relay path and does not claim hosted Codencer Gateway/Cloud availability.
+
 This document freezes the current provider connector contract to repo-tested truth.
 
 Status labels in the matrix below mean:

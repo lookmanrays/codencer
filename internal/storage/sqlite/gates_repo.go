@@ -50,7 +50,7 @@ func (r *GatesRepo) Resolve(ctx context.Context, id string, state domain.GateSta
 func (r *GatesRepo) Get(ctx context.Context, id string) (*domain.Gate, error) {
 	q := `SELECT id, run_id, step_id, description, state, created_at, resolved_at FROM gates WHERE id = ?`
 	row := r.db.QueryRowContext(ctx, q, id)
-	
+
 	var gate domain.Gate
 	var s string // Changed from 'status' to 's'
 	err := row.Scan(&gate.ID, &gate.RunID, &gate.StepID, &gate.Description, &s, &gate.CreatedAt, &gate.ResolvedAt)

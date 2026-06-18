@@ -70,7 +70,7 @@ func TestAdapters_SimulationConformance(t *testing.T) {
 				}
 			}
 
-Collection:
+		Collection:
 			// Ensure artifacts are emitted to the correct bound
 			artifacts, err := a.CollectArtifacts(ctx, attempt.ID, artifactRoot)
 			if err != nil {

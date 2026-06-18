@@ -1,3 +1,7 @@
+# Legacy v0.2 Beta Document
+
+This document describes the older v0.2 beta track. For current v0.3 local/self-host RC guidance, use [README](../../../README.md), [Local Quickstart](../../quickstart-local.md), and [Self-Host Relay Quickstart](../../quickstart-self-host-relay.md).
+
 # Codencer v0.2.0-beta Release Notes
 
 Use [BETA_TESTING.md](BETA_TESTING.md) for the frozen beta tracks and [mcp/integrations.md](mcp/integrations.md) for the planner/client contract.

@@ -1,3 +1,7 @@
+# Legacy v0.2 Beta Document
+
+This document describes the older v0.2 beta track. For current v0.3 local/self-host RC guidance, use [README](../../../README.md), [Local Quickstart](../../quickstart-local.md), and [Self-Host Relay Quickstart](../../quickstart-self-host-relay.md).
+
 # Environmental Reference & Setup
 
 This guide is the setup hub for the Codencer beta tracks. Use it for prerequisites, a platform chooser, the native Linux inline path, and links back to the frozen beta-track docs.

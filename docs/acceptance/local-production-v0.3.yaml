@@ -125,6 +125,83 @@ profiles:
         commands:
           - test -f docs/architecture/mcp-gateway-model.md
         notes: Documents one MCP toolset, one connector, self-host Relay, future Gateway/Cloud mode, and no separate ChatGPT/Claude/Codex agents.
+      - id: readme_current_version
+        status: sprint_7_3_implemented
+        commands:
+          - rg "v0.3.0-local-prod-rc.1" README.md
+        notes: README is the primary OSS entry point and presents the current local/self-host RC as release truth.
+      - id: license_apache_2_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f LICENSE
+          - rg "Apache License" LICENSE
+        notes: Codencer Core is licensed under Apache-2.0.
+      - id: notice_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f NOTICE
+        notes: NOTICE includes owner/contributor copyright, prior-version note, and trademark/service identity boundary.
+      - id: trademark_policy_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f TRADEMARKS.md
+        notes: Trademark policy separates Apache-2.0 software rights from Codencer marks, logos, domains, official service identities, Gateway/Cloud, and hosted services.
+      - id: contributing_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f CONTRIBUTING.md
+          - rg "Go 1.25" CONTRIBUTING.md
+          - rg "Apache-2.0" CONTRIBUTING.md
+        notes: CONTRIBUTING uses current toolchain and contribution licensing guidance without requiring a CLA.
+      - id: docs_map_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/README.md
+        notes: Docs index points external users to current local, self-host Relay, MCP, activation, project config, troubleshooting, and acceptance docs.
+      - id: project_config_doc_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/project-config.md
+          - rg "project.json" docs/project-config.md
+        notes: Project config doc covers committed repo config, no-secret policy, local machine identity, and machine-aware routing.
+      - id: self_host_activation_docs_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/quickstart-self-host-relay.md
+          - test -f docs/activation-vps-relay.md
+          - test -f docs/activation-local-connector.md
+        notes: Self-host docs keep Relay/connector as the OSS remote path and do not claim hosted Gateway/Cloud.
+      - id: mcp_client_docs_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/mcp/chatgpt-app-setup.md
+          - test -f docs/mcp/codex-mcp-live.md
+          - test -f docs/mcp/claude-code-mcp-live.md
+          - test -f docs/mcp/relay_tools.md
+        notes: MCP client docs distinguish setup/preflight artifacts from live product proof.
+      - id: legacy_docs_archived_or_bannered
+        status: sprint_7_3_implemented
+        commands:
+          - test -d docs/archive/v0.2-beta
+          - rg "Legacy v0.2 Beta Document" docs/archive/v0.2-beta
+        notes: Public v0.2 beta/setup docs are archived; internal historical docs carry legacy warnings.
+      - id: no_stale_primary_v0_2_claims
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/README.md
+        notes: Primary current docs present v0.3 local/self-host RC; v0.2 references are limited to archived or historical contexts.
+      - id: no_mit_primary_claims
+        status: sprint_7_3_implemented
+        commands:
+          - test -f LICENSE
+          - test -f NOTICE
+        notes: Primary license docs use Apache-2.0; prior MIT references are historical only.
+      - id: live_claims_not_faked
+        status: sprint_7_3_implemented
+        commands:
+          - test -f README.md
+          - test -f docs/live-execution-matrix.md
+        notes: Live ChatGPT/Codex/Claude product proof remains pending unless actual product evidence is saved.
       - id: relay_oauth_dev_endpoints
         status: sprint_7_implemented
         commands:

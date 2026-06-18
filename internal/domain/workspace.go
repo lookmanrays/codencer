@@ -5,10 +5,10 @@ package domain
 type ProvisioningSpec struct {
 	// Copy paths from base repo to attempt worktree (e.g. .env)
 	Copy []string `json:"copy"`
-	
+
 	// Symlink paths from base repo to attempt worktree (e.g. node_modules)
 	Symlinks []string `json:"symlinks"`
-	
+
 	// ProvisioningHooks defines shell commands to run during setup
 	Hooks ProvisioningHooks `json:"hooks"`
 }

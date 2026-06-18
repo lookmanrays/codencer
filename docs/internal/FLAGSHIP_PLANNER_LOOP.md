@@ -1,5 +1,8 @@
 # Flagship Planner Loop Contract
 
+> [!WARNING]
+> Historical flagship-loop contract. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [MCP Integrations](../mcp/integrations.md), and [MCP Gateway Model](../architecture/mcp-gateway-model.md) for current guidance.
+
 Status: post-beta implementation contract
 
 Last audited: 2026-04-28

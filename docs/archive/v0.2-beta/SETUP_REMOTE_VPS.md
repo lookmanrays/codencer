@@ -1,3 +1,7 @@
+# Legacy v0.2 Beta Document
+
+This document describes the older v0.2 beta track. For current v0.3 local/self-host RC guidance, use [README](../../../README.md), [Local Quickstart](../../quickstart-local.md), and [Self-Host Relay Quickstart](../../quickstart-self-host-relay.md).
+
 # Remote VPS Setup
 
 This page replaces the Wave 1 placeholder with the practical `v0.2.0-beta` Remote VPS dev-server walkthrough.

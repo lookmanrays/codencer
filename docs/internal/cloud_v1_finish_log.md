@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **HISTORICAL FINISH LOG**: This log records an earlier cloud hardening pass and is not the current release contract.
-> Use the frozen `BETA_*` docs in this directory for current beta truth and remaining work.
+> Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
 
 Last updated: 2026-04-15
 

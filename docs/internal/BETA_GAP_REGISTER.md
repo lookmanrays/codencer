@@ -1,5 +1,8 @@
 # Beta Gap Register
 
+> [!WARNING]
+> Historical v0.2 beta record. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
+
 Severity scale:
 
 - `critical`: direct security/scope blocker

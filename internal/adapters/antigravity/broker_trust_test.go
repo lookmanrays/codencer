@@ -46,7 +46,7 @@ func TestBrokerAdapter_Trust_FailureMapping(t *testing.T) {
 			if spec.State != tt.expectedState {
 				t.Errorf("Expected state %s, got %s", tt.expectedState, spec.State)
 			}
-			
+
 			if spec.Artifacts["broker_task_id"] != "task-1" {
 				t.Errorf("Expected broker_task_id task-1, got %s", spec.Artifacts["broker_task_id"])
 			}

@@ -1,18 +1,18 @@
 package workspace
 
 import (
+	"agent-bridge/internal/domain"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"agent-bridge/internal/domain"
 )
 
 func TestProvisioner_Copy(t *testing.T) {
 	base := t.TempDir()
 	work := t.TempDir()
-	
+
 	// Setup source
 	envContent := "API_KEY=123"
 	if err := os.WriteFile(filepath.Join(base, ".env"), []byte(envContent), 0644); err != nil {
@@ -45,7 +45,7 @@ func TestProvisioner_Copy(t *testing.T) {
 func TestProvisioner_Symlink(t *testing.T) {
 	base := t.TempDir()
 	work := t.TempDir()
-	
+
 	// Setup source dir
 	nodeDir := filepath.Join(base, "node_modules")
 	if err := os.Mkdir(nodeDir, 0755); err != nil {
@@ -82,9 +82,9 @@ func TestProvisioner_Symlink(t *testing.T) {
 func TestProvisioner_PathTraversal(t *testing.T) {
 	base := t.TempDir()
 	work := t.TempDir()
-	
+
 	p := NewLocalProvisioner()
-	
+
 	// Test parent traversal
 	spec := &domain.ProvisioningSpec{
 		Copy: []string{"../outside.txt"},
@@ -114,7 +114,7 @@ func TestProvisioner_Isolation(t *testing.T) {
 	base := t.TempDir()
 	work1 := t.TempDir()
 	work2 := t.TempDir()
-	
+
 	// Setup source
 	if err := os.WriteFile(filepath.Join(base, "shared.txt"), []byte("base"), 0644); err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestProvisioner_Isolation(t *testing.T) {
 func TestProvisioner_Hooks(t *testing.T) {
 	base := t.TempDir()
 	work := t.TempDir()
-	
+
 	p := NewLocalProvisioner()
 	spec := &domain.ProvisioningSpec{
 		Hooks: domain.ProvisioningHooks{
@@ -184,7 +184,7 @@ func TestProvisioner_Hooks(t *testing.T) {
 func TestProvisioner_Telemetry(t *testing.T) {
 	base := t.TempDir()
 	work := t.TempDir()
-	
+
 	// Setup sources
 	os.WriteFile(filepath.Join(base, ".env"), []byte("ok"), 0644)
 	os.Mkdir(filepath.Join(base, "node_modules"), 0755)

@@ -78,7 +78,7 @@ func TestE2EFlow(t *testing.T) {
 	defer os.Unsetenv("CODEX_SIMULATION_MODE")
 	os.Setenv("FORCE_GATE_FOR_TESTING", "1")
 	defer os.Unsetenv("FORCE_GATE_FOR_TESTING")
-	
+
 	step := &domain.Step{
 		ID:      "step-1",
 		PhaseID: "phase-01-" + runId,

@@ -38,7 +38,7 @@ func NewClient() *Client {
 // Call executes a Connect RPC method on the specified instance.
 func (c *Client) Call(ctx context.Context, inst *domain.AGInstance, method string, req interface{}, resp interface{}) error {
 	url := fmt.Sprintf("https://127.0.0.1:%d/%s/%s", inst.HTTPSPort, servicePrefix, method)
-	
+
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("Antigravity RPC: failed to marshal request: %w", err)

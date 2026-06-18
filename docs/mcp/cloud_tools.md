@@ -1,5 +1,8 @@
 # Cloud MCP Tools
 
+> [!WARNING]
+> This page documents existing experimental cloud-control-plane MCP behavior. It is not the current v0.3 OSS self-host Relay path and does not claim hosted Codencer Gateway/Cloud availability. For current open-source remote MCP, use [Relay MCP Tools](relay_tools.md).
+
 Codencer exposes a tenant-scoped remote MCP surface from the cloud control plane in composed runtime mode.
 
 This page is about cloud tenancy mode.

@@ -4,9 +4,9 @@ Codencer exposes the remote MCP surface from the relay, not from the local daemo
 
 This page is about direct relay mode.
 
-If you are operating through Codencer Cloud tenancy and composed runtime mode, use `/api/cloud/v1/mcp` instead and treat [Cloud MCP Tools](cloud_tools.md) as the source of truth for that boundary.
+For the current OSS path, planners and clients use the self-host Relay MCP endpoint at `/mcp`. Experimental cloud-control-plane MCP behavior is documented separately in [Cloud MCP Tools](cloud_tools.md) and is not the hosted Codencer Gateway/Cloud service.
 
-For the frozen planner/client compatibility matrix, generic client examples, and client-specific packaging notes, see [Planner / Client Integration Notes](integrations.md).
+For the current planner/client matrix and client-specific packaging notes, see [MCP Integrations](integrations.md).
 
 ## Endpoint
 

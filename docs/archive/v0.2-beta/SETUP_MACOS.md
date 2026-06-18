@@ -1,3 +1,7 @@
+# Legacy v0.2 Beta Document
+
+This document describes the older v0.2 beta track. For current v0.3 local/self-host RC guidance, use [README](../../../README.md), [Local Quickstart](../../quickstart-local.md), and [Self-Host Relay Quickstart](../../quickstart-self-host-relay.md).
+
 # macOS Setup
 
 This page is the macOS zero-to-smoke walkthrough for the `v0.2.0-beta` local and self-host relay paths. Keep claims narrow: the canonical repo-wide beta contract still lives in [BETA_TESTING.md](BETA_TESTING.md), and the planner/client contract still lives in [mcp/integrations.md](mcp/integrations.md).

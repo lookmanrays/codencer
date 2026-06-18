@@ -193,6 +193,10 @@ verify-project-config: build-codencer
 	CODENCER_HOME="$$home" ./bin/codencer project list --json >/dev/null; \
 	CODENCER_HOME="$$home" ./bin/codencer project status test-project --json >/dev/null
 
+.PHONY: verify-docs-links
+verify-docs-links:
+	@python3 scripts/check_docs_links.py
+
 verify-local-prod: build-codencer
 	@echo "==> Checking local production formatting..."
 	@fmt=$$(gofmt -l internal/project internal/local cmd/codencer); \

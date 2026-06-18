@@ -28,7 +28,7 @@ Always verify the daemon's identity to ensure you are targeting the correct repo
 **Expected JSON Response:**
 ```json
 {
-  "version": "v0.2.0-beta",
+  "version": "v0.3.0-local-prod-rc.1",
   "repo_root": "/home/user/my-project",
   "execution_mode": "REAL",
   "port": 8085
@@ -146,7 +146,7 @@ Follow this sequence for every tactical mission:
 
 1.  **Use ID Namespacing**: Use clear `RunID` prefixes (e.g., `feature-fix-auth`) to group related steps.
 2.  **Narrow Scopes**: Avoid "Fix everything" prompts. Break work into small, verifiable goals.
-3.  **Mandatory Validations**: Always include at least one `--validation` command (e.g., `make test` or `go build`) to ensure the agent didn't break the build.
+3.  **Mandatory Validations**: Always include at least one validation command appropriate for the change, such as `go test ./...`, `make verify-local-prod`, or a focused package test, so the agent does not claim success without evidence.
 4.  **Audit the Diff**: Use `./bin/orchestratorctl step artifacts <UUID>` to verify the exact changes before finalizing.
 
 ---

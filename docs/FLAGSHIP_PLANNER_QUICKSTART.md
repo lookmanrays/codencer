@@ -5,7 +5,7 @@ Use this when you want an external planner, such as a ChatGPT-style or Claude-st
 The flagship loop is:
 
 ```text
-external planner -> relay/cloud MCP -> connector -> local daemon -> local codex -> result/evidence -> planner decides next task
+external planner -> self-host Relay MCP -> connector -> local daemon -> local codex -> result/evidence -> planner decides next task
 ```
 
 ## Fast Repo Proof
@@ -150,9 +150,7 @@ Best current operator lanes:
 - Claude Code remote HTTP MCP configuration using an `Authorization` header
 - Anthropic Messages API MCP connector using `mcp-client-2025-11-20`, `mcp_servers`, and `mcp_toolset`
 - relay example: [docs/mcp/examples/claude-code-relay.mcp.json](mcp/examples/claude-code-relay.mcp.json)
-- cloud example: [docs/mcp/examples/claude-code-cloud.mcp.json](mcp/examples/claude-code-cloud.mcp.json)
 - API relay example: [docs/mcp/examples/anthropic-messages-relay.mcp.json](mcp/examples/anthropic-messages-relay.mcp.json)
-- API cloud example: [docs/mcp/examples/anthropic-messages-cloud.mcp.json](mcp/examples/anthropic-messages-cloud.mcp.json)
 
 Claude Code setup:
 
@@ -163,7 +161,7 @@ claude mcp add --transport http --header "Authorization: Bearer <planner-token>"
 
 For Claude Desktop or `claude.ai` remote custom connectors, keep the existing auth caveat: Codencer's private planner auth is bearer-token based, while Anthropic's remote connector UI may require OAuth-oriented setup. Use the OAuth front-door pattern for that product setup.
 
-For Claude Desktop, `claude.ai`, or Anthropic Messages API remote MCP connector setup, use the public relay/cloud MCP URL. Bearer-token mode is proven for direct clients and Claude Code-style configs; OAuth protected-resource metadata is implemented for product-facing flows that expect OAuth bearer auth, but an OAuth issuer/front door remains operator-owned.
+For Claude Desktop, `claude.ai`, or Anthropic Messages API remote MCP connector setup, use the public self-host Relay MCP URL. Bearer-token mode is proven for direct clients and Claude Code-style configs; OAuth protected-resource metadata is implemented for product-facing flows that expect OAuth bearer auth, but an OAuth issuer/front door remains operator-owned.
 
 Status: materially stronger than compatibility-only for Claude Code remote HTTP MCP operator use, Anthropic Messages API packaging, and Codencer-side OAuth-capable MCP discovery; Claude Desktop/`claude.ai` product UI setup remains compatibility-only until exercised in that product.
 

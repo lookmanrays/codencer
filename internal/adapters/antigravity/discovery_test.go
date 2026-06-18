@@ -101,14 +101,14 @@ func TestDiscovery_Override(t *testing.T) {
 	// We also need to Mock WSL detection or just test getDaemonDirs
 	// Since getDaemonDirs checks /proc/sys/kernel/osrelease, we can't easily mock it without filesystem changes.
 	// However, we can test that IF it reaches the block, it uses the env.
-	
+
 	d := NewDiscovery()
 	dirs, err := d.getDaemonDirs()
 	if err != nil {
 		t.Fatalf("getDaemonDirs failed: %v", err)
 	}
 
-	// In a non-WSL environment (like CI), the overide might not be added 
+	// In a non-WSL environment (like CI), the overide might not be added
 	// because getDaemonDirs only checks the env if it detects Microsoft/WSL.
 	// We'll trust the logic for now or skip the check if not in WSL.
 	found := false
@@ -118,7 +118,7 @@ func TestDiscovery_Override(t *testing.T) {
 			break
 		}
 	}
-	
+
 	// If we are in WSL, it MUST be found.
 	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
 		if strings.Contains(strings.ToLower(string(content)), "microsoft") {

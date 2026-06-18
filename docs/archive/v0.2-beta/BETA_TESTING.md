@@ -1,3 +1,7 @@
+# Legacy v0.2 Beta Document
+
+This document describes the older v0.2 beta track. For current v0.3 local/self-host RC guidance, use [README](../../../README.md), [Local Quickstart](../../quickstart-local.md), and [Self-Host Relay Quickstart](../../quickstart-self-host-relay.md).
+
 # Public Beta Test Tracks
 
 Codencer is `v0.2.0-beta` overall. This guide freezes the **externally testable** public beta tracks and their exact proof boundaries.

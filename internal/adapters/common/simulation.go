@@ -23,7 +23,7 @@ func IsSimulationEnabled(adapterName string) bool {
 // and does not execute any real agent logic.
 func RunSimulation(ctx context.Context, step *domain.Step, attempt *domain.Attempt, attemptArtifactRoot, workspaceRoot string) error {
 	slog.Info("Simulation Mode: Executing stub for attempt", "attemptID", attempt.ID)
-	
+
 	stdoutPath := filepath.Join(attemptArtifactRoot, "stdout.log")
 	resultPath := filepath.Join(attemptArtifactRoot, "result.json")
 

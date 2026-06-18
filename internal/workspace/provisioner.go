@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"agent-bridge/internal/domain"
 	"context"
 	"fmt"
 	"io"
@@ -10,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"agent-bridge/internal/domain"
 )
 
 // Provisioner handles preparing the attempt worktree.
@@ -48,7 +48,7 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 
 		src := filepath.Join(baseRepo, relPath)
 		dst := filepath.Join(workspaceRoot, relPath)
-		
+
 		res.Log = append(res.Log, fmt.Sprintf("[COPY] %s", relPath))
 		res.EnvironmentFiles = append(res.EnvironmentFiles, relPath)
 		if err := p.copyFile(src, dst); err != nil {
@@ -64,7 +64,7 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 
 		src := filepath.Join(baseRepo, relPath)
 		dst := filepath.Join(workspaceRoot, relPath)
-		
+
 		res.Log = append(res.Log, fmt.Sprintf("[SYMLINK] %s", relPath))
 		res.Symlinks = append(res.Symlinks, relPath)
 		// Remove existing to allow idempotency/retries in the same folder if needed
@@ -79,15 +79,15 @@ func (p *LocalProvisioner) Provision(ctx context.Context, spec *domain.Provision
 		res.PostCreateHook = spec.Hooks.PostCreate
 		res.Log = append(res.Log, fmt.Sprintf("[HOOK] %s", spec.Hooks.PostCreate))
 		slog.Info("Provision: executing PostCreate hook", "hook", spec.Hooks.PostCreate)
-		
+
 		cmd := exec.CommandContext(ctx, "sh", "-c", spec.Hooks.PostCreate)
 		cmd.Dir = workspaceRoot
-		
+
 		output, err := cmd.CombinedOutput()
 		if len(output) > 0 {
 			res.Log = append(res.Log, string(output))
 		}
-		
+
 		if err != nil {
 			res.HookStatus = "failed"
 			return p.fail(res, start, "Post-create hook failed", err)

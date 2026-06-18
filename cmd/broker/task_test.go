@@ -8,10 +8,10 @@ import (
 func TestTaskRegistry_AddGet(t *testing.T) {
 	registry := NewTaskRegistry()
 	task := &Task{ID: "test-task", CascadeID: "cas-1", State: "running", CreatedAt: time.Now()}
-	
+
 	registry.Add(task)
 	got := registry.Get("test-task")
-	
+
 	if got == nil || got.ID != "test-task" {
 		t.Errorf("Expected task test-task, got %v", got)
 	}
@@ -23,7 +23,7 @@ func TestTaskHandler_IdentitySeparation(t *testing.T) {
 	registry := NewBindingRegistry()
 	repoRoot := "/home/user/stable-repo"
 	worktreePath := "/tmp/worktree-att-1"
-	
+
 	inst := Instance{
 		PID:           123,
 		WorkspaceRoot: repoRoot, // Default root discovered at bind-time
@@ -62,42 +62,42 @@ func TestTaskHandler_IdentitySeparation(t *testing.T) {
 	// 3. Verify LS Request formation
 	// In main.go, this 'runWorkspace' is passed as 'workspaceFolderAbsoluteUri' to the LS.
 	lsReq := map[string]any{
-		"userPrompt": payload.Prompt,
+		"userPrompt":                 payload.Prompt,
 		"workspaceFolderAbsoluteUri": runWorkspace,
 	}
-	
+
 	if lsReq["workspaceFolderAbsoluteUri"] != worktreePath {
 		t.Errorf("LS request used wrong workspace URI: %v", lsReq["workspaceFolderAbsoluteUri"])
 	}
 }
 
 func TestTaskHandler_WorkspaceRootPrecedence(t *testing.T) {
-registry := NewBindingRegistry()
-repoRoot := "/home/user/project"
-instanceDefault := "/home/user/project"
-attemptWorktree := "/tmp/codencer-worktree-run-001"
+	registry := NewBindingRegistry()
+	repoRoot := "/home/user/project"
+	instanceDefault := "/home/user/project"
+	attemptWorktree := "/tmp/codencer-worktree-run-001"
 
-inst := Instance{
-          999,
-instanceDefault,
-}
-registry.Set(repoRoot, inst)
+	inst := Instance{
+		PID:           999,
+		WorkspaceRoot: instanceDefault,
+	}
+	registry.Set(repoRoot, inst)
 
-// Case A: Provided WorkspaceRoot overrides instance default
-runWorkspaceA := attemptWorktree
-if runWorkspaceA == "" {
-WorkspaceA = inst.WorkspaceRoot
-}
-if runWorkspaceA != attemptWorktree {
-provided worktree %s to take precedence, but got %s", attemptWorktree, runWorkspaceA)
-}
+	// Case A: Provided WorkspaceRoot overrides instance default.
+	runWorkspaceA := attemptWorktree
+	if runWorkspaceA == "" {
+		runWorkspaceA = inst.WorkspaceRoot
+	}
+	if runWorkspaceA != attemptWorktree {
+		t.Errorf("expected provided worktree %s to take precedence, but got %s", attemptWorktree, runWorkspaceA)
+	}
 
-// Case B: Empty WorkspaceRoot falls back to instance default
-runWorkspaceB := ""
-if runWorkspaceB == "" {
-WorkspaceB = inst.WorkspaceRoot
-}
-if runWorkspaceB != instanceDefault {
-fallback to instance default %s, but got %s", instanceDefault, runWorkspaceB)
-}
+	// Case B: Empty WorkspaceRoot falls back to instance default.
+	runWorkspaceB := ""
+	if runWorkspaceB == "" {
+		runWorkspaceB = inst.WorkspaceRoot
+	}
+	if runWorkspaceB != instanceDefault {
+		t.Errorf("expected fallback to instance default %s, but got %s", instanceDefault, runWorkspaceB)
+	}
 }

@@ -319,7 +319,7 @@ Live Codex or Claude authentication is not required in Sprint 1. If live proof i
 - macOS: supported local development target; Sprint 4 includes LaunchAgent renderer/manager.
 - Linux: supported local development target; Sprint 4 includes systemd user renderer/manager.
 - WSL2: supported target for Windows-side planner workflows that keep repos, worktrees, daemon state, connector state, and artifacts inside WSL/Linux. If systemd user services are unavailable, Codencer reports an explicit manual fallback.
-- Windows native: not the primary production daemon path for this sprint.
+- Windows-native daemon binaries are not claimed for this release candidate; use WSL2/Linux for Windows-side workflows.
 
 ## Acceptance Checklist
 

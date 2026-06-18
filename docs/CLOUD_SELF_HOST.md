@@ -1,4 +1,7 @@
-# Codencer Self-Host Cloud Control Plane Guide
+# Codencer Cloud Control Plane Guide
+
+> [!WARNING]
+> This document covers existing experimental cloud-control-plane code. It is not the current open-source release path and it is not hosted Codencer Gateway/Cloud availability. For current OSS remote operation, use [Self-Host Relay Quickstart](quickstart-self-host-relay.md).
 
 This guide covers the practical self-host bootstrap path for Codencer Cloud.
 
@@ -7,7 +10,7 @@ Use this page when cloud tenancy is the public control plane.
 - Use [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) when you want the raw relay/runtime self-host path instead of cloud tenancy.
 - Use [CLOUD.md](CLOUD.md) for the cloud route/scope reference.
 - Use [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) for per-provider install/test depth and limitations.
-- Use [mcp/integrations.md](mcp/integrations.md) for the planner/client compatibility matrix.
+- Use [mcp/integrations.md](mcp/integrations.md) for the current OSS Relay planner/client path.
 
 ## Recommended Topology
 
@@ -226,7 +229,7 @@ Cloud-scoped MCP is also available in composed mode:
 
 Use relay `/mcp` only when you are operating the self-host relay directly without cloud tenancy.
 
-For the frozen planner/client compatibility matrix, generic client examples, and cloud-vs-relay boundary, see [mcp/integrations.md](mcp/integrations.md) and [mcp/cloud_tools.md](mcp/cloud_tools.md).
+For the current OSS Relay planner/client path, see [mcp/integrations.md](mcp/integrations.md). For this experimental cloud-control-plane MCP surface, see [mcp/cloud_tools.md](mcp/cloud_tools.md).
 
 ## Operator Commands
 
@@ -356,7 +359,7 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml r
 
 ## Worker
 
-`codencer-cloudworkerd` is the background worker for connector maintenance. In the current beta track:
+`codencer-cloudworkerd` is the background worker for connector maintenance. In the current experimental provider path:
 
 - GitHub, GitLab, Linear, and Slack remain webhook-first
 - Jira is polling-first

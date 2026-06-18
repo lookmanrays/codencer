@@ -1,6 +1,6 @@
 # Codencer Snippet Library
 
-This document provides specialized configuration and command snippets for advanced Codencer usage. For the primary "Day 0" flow, see the **[Operator Runbook](OPERATOR_RUNBOOK.md)**.
+This document provides specialized and legacy configuration snippets for advanced Codencer usage. For the current v0.3 local/self-host RC flow, start with [Local Quickstart](quickstart-local.md), [Self-Host Relay Quickstart](quickstart-self-host-relay.md), and [MCP Integrations](mcp/integrations.md).
 
 ---
 
@@ -60,7 +60,7 @@ Targeting a specific adapter for a task saved in a markdown file.
   --title "Auth Refactor" \
   --adapter codex \
   --timeout 300 \
-  --validation "make test-auth" \
+  --validation "go test ./internal/service" \
   --acceptance "Login still works" \
   --wait --json
 ```

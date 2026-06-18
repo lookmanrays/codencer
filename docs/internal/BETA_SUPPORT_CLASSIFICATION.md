@@ -1,5 +1,8 @@
 # Beta Support Classification
 
+> [!WARNING]
+> Historical v0.2 beta classification. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
+
 This matrix separates current repo truth from the frozen beta contract.
 
 This is a final audited classification snapshot after Phase 7 beta confirmation. The beta contract labels below are frozen release truth, not forward-looking intent.

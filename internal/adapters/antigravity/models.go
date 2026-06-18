@@ -4,10 +4,10 @@ const servicePrefix = "exa.language_server_pb.LanguageServerService"
 
 // StartCascadeRequest defines the payload for creating a new task execution.
 type StartCascadeRequest struct {
-	UserPrompt                 string         `json:"userPrompt"`
-	WorkspaceFolderAbsoluteUri string         `json:"workspaceFolderAbsoluteUri,omitempty"`
+	UserPrompt                 string          `json:"userPrompt"`
+	WorkspaceFolderAbsoluteUri string          `json:"workspaceFolderAbsoluteUri,omitempty"`
 	Metadata                   CascadeMetadata `json:"metadata"`
-	CascadeConfig              CascadeConfig  `json:"cascadeConfig,omitempty"`
+	CascadeConfig              CascadeConfig   `json:"cascadeConfig,omitempty"`
 }
 
 type CascadeMetadata struct {
@@ -24,7 +24,7 @@ type PlannerConfig struct {
 }
 
 type PlannerTypeConfig struct {
-	Planning      interface{} `json:"planning,omitempty"`
+	Planning       interface{} `json:"planning,omitempty"`
 	Conversational interface{} `json:"conversational,omitempty"`
 }
 

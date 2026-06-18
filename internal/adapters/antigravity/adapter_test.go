@@ -29,7 +29,7 @@ func TestAdapter_Start(t *testing.T) {
 			var req StartCascadeRequest
 			json.NewDecoder(r.Body).Decode(&req)
 			capturedURI = req.WorkspaceFolderAbsoluteUri
-			
+
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(StartCascadeResponse{CascadeId: "test-cascade"})
 			return
