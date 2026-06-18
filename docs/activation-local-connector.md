@@ -24,7 +24,7 @@ Start the local daemon by your existing operator flow or the Sprint 4 supervisor
   --json
 ```
 
-Sharing is explicit. The user-level registry keeps full local paths; relay planner payloads expose safe labels and hashes.
+Sharing is explicit. The user-level registry keeps full local paths and local machine metadata; relay planner payloads expose safe labels/hashes and `locations[]` with `machine_id`, `host_label`, connector/instance ids, and status. If the same `project_id` is online from multiple machines, planners must select `machine_id` or `host_label`; the relay returns `ambiguous_project_location` instead of choosing randomly.
 
 ## Enroll Connector
 

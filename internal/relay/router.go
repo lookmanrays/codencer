@@ -29,17 +29,40 @@ type plannerInstance struct {
 }
 
 type plannerProject struct {
-	ProjectID      string          `json:"project_id"`
-	ConnectorID    string          `json:"connector_id"`
-	InstanceID     string          `json:"instance_id"`
-	RepoLabel      string          `json:"repo_label,omitempty"`
-	RepoRootHash   string          `json:"repo_root_hash,omitempty"`
-	DefaultAdapter string          `json:"default_adapter,omitempty"`
-	AdapterProfile string          `json:"adapter_profile,omitempty"`
-	Online         bool            `json:"online"`
-	Status         string          `json:"status"`
-	LastSeenAt     time.Time       `json:"last_seen_at"`
-	Project        json.RawMessage `json:"project,omitempty"`
+	ProjectID      string            `json:"project_id"`
+	Name           string            `json:"name,omitempty"`
+	ConnectorID    string            `json:"connector_id,omitempty"`
+	InstanceID     string            `json:"instance_id,omitempty"`
+	MachineID      string            `json:"machine_id,omitempty"`
+	HostLabel      string            `json:"host_label,omitempty"`
+	Hostname       string            `json:"hostname,omitempty"`
+	RepoLabel      string            `json:"repo_label,omitempty"`
+	RepoRootHash   string            `json:"repo_root_hash,omitempty"`
+	DefaultAdapter string            `json:"default_adapter,omitempty"`
+	AdapterProfile string            `json:"adapter_profile,omitempty"`
+	Online         bool              `json:"online"`
+	Status         string            `json:"status"`
+	LastSeenAt     time.Time         `json:"last_seen_at"`
+	Locations      []projectLocation `json:"locations,omitempty"`
+	Project        json.RawMessage   `json:"project,omitempty"`
+}
+
+type projectLocation struct {
+	MachineID    string    `json:"machine_id,omitempty"`
+	HostLabel    string    `json:"host_label,omitempty"`
+	Hostname     string    `json:"hostname,omitempty"`
+	ConnectorID  string    `json:"connector_id,omitempty"`
+	InstanceID   string    `json:"instance_id,omitempty"`
+	RepoLabel    string    `json:"repo_label,omitempty"`
+	RepoRootHash string    `json:"repo_root_hash,omitempty"`
+	Online       bool      `json:"online"`
+	Status       string    `json:"status"`
+	LastSeenAt   time.Time `json:"last_seen_at"`
+}
+
+type projectSelector struct {
+	MachineID string
+	HostLabel string
 }
 
 type relayStatusResponse struct {
@@ -111,7 +134,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	principal := plannerFromContext(r.Context())
-	response := make([]plannerProject, 0, len(records))
+	projects := make([]plannerProject, 0, len(records))
 	for _, record := range records {
 		if !projectAllowed(principal, "projects:read", record) {
 			continue
@@ -121,9 +144,9 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusInternalServerError, "relay_internal_error", err.Error())
 			return
 		}
-		response = append(response, payload)
+		projects = append(projects, payload)
 	}
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, http.StatusOK, groupProjectPayloads(projects))
 }
 
 func (s *Server) handleProjectScoped(w http.ResponseWriter, r *http.Request) {
@@ -135,12 +158,26 @@ func (s *Server) handleProjectScoped(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := parts[0]
 	principal := plannerFromContext(r.Context())
-	record, apiErr := s.resolveProjectRecord(r.Context(), principal, projectID, scopeForProjectRoute(parts, r.Method))
-	if apiErr != nil {
-		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
-		return
-	}
 
+	switch {
+	case len(parts) == 1 && r.Method == http.MethodGet:
+		payload, apiErr := s.projectPayloadByID(r.Context(), principal, projectID)
+		if apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+	default:
+		record, apiErr := s.resolveProjectRecord(r.Context(), principal, projectID, scopeForProjectRoute(parts, r.Method), projectSelectorFromRequest(r))
+		if apiErr != nil {
+			writeAPIErrorWithAPIError(w, apiErr)
+			return
+		}
+		s.handleResolvedProjectScoped(w, r, parts, projectID, record)
+	}
+}
+
+func (s *Server) handleResolvedProjectScoped(w http.ResponseWriter, r *http.Request, parts []string, projectID string, record *ProjectRecord) {
 	switch {
 	case len(parts) == 1 && r.Method == http.MethodGet:
 		payload, err := s.projectPayload(r.Context(), record)
@@ -993,48 +1030,237 @@ func (s *Server) projectPayload(ctx context.Context, record *ProjectRecord) (pla
 		return plannerProject{}, err
 	}
 	repoLabel, repoHash := security.SafePathLabel(record.RepoRoot)
+	statusLabel := projectAvailabilityStatus(status)
+	location := projectLocation{
+		MachineID:    record.MachineID,
+		HostLabel:    record.HostLabel,
+		Hostname:     record.Hostname,
+		ConnectorID:  record.ConnectorID,
+		InstanceID:   record.InstanceID,
+		RepoLabel:    repoLabel,
+		RepoRootHash: repoHash,
+		Online:       status.Online,
+		Status:       statusLabel,
+		LastSeenAt:   record.LastSeenAt,
+	}
 	return plannerProject{
 		ProjectID:      record.ProjectID,
+		Name:           projectNameFromJSON(record.ProjectJSON),
 		ConnectorID:    record.ConnectorID,
 		InstanceID:     record.InstanceID,
+		MachineID:      record.MachineID,
+		HostLabel:      record.HostLabel,
+		Hostname:       record.Hostname,
 		RepoLabel:      repoLabel,
 		RepoRootHash:   repoHash,
 		DefaultAdapter: record.DefaultAdapter,
 		AdapterProfile: record.AdapterProfile,
 		Online:         status.Online,
-		Status:         status.Status,
+		Status:         statusLabel,
 		LastSeenAt:     record.LastSeenAt,
+		Locations:      []projectLocation{location},
 		Project:        json.RawMessage(security.SanitizeRemoteJSON([]byte(record.ProjectJSON))),
 	}, nil
 }
 
-func (s *Server) resolveProjectRecord(ctx context.Context, principal *plannerPrincipal, projectID, scope string) (*ProjectRecord, *apiError) {
+func (s *Server) projectPayloadByID(ctx context.Context, principal *plannerPrincipal, projectID string) (plannerProject, *apiError) {
+	records, err := s.store.ListProjectsByID(ctx, projectID)
+	if err != nil {
+		return plannerProject{}, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+	}
+	projects := make([]plannerProject, 0, len(records))
+	for _, record := range records {
+		if !projectAllowed(principal, "projects:read", record) {
+			continue
+		}
+		payload, err := s.projectPayload(ctx, &record)
+		if err != nil {
+			return plannerProject{}, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+		}
+		projects = append(projects, payload)
+	}
+	grouped := groupProjectPayloads(projects)
+	if len(grouped) == 0 {
+		if len(records) == 0 {
+			return plannerProject{}, &apiError{Status: http.StatusNotFound, Code: "project_not_found", Message: "project not found"}
+		}
+		return plannerProject{}, &apiError{Status: http.StatusForbidden, Code: "project_denied", Message: "planner token is not authorized for this project"}
+	}
+	return grouped[0], nil
+}
+
+func (s *Server) resolveProjectRecord(ctx context.Context, principal *plannerPrincipal, projectID, scope string, selector projectSelector) (*ProjectRecord, *apiError) {
 	records, err := s.store.ListProjectsByID(ctx, projectID)
 	if err != nil {
 		return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
 	}
-	candidates := make([]ProjectRecord, 0, len(records))
+	authorized := make([]ProjectRecord, 0, len(records))
 	for _, record := range records {
 		if projectAllowed(principal, scope, record) {
-			candidates = append(candidates, record)
+			authorized = append(authorized, record)
 		}
 	}
-	switch len(candidates) {
-	case 0:
+	if len(authorized) == 0 {
 		if len(records) == 0 {
 			return nil, &apiError{Status: http.StatusNotFound, Code: "project_not_found", Message: "project not found"}
 		}
 		return nil, &apiError{Status: http.StatusForbidden, Code: "project_denied", Message: "planner token is not authorized for this project"}
-	case 1:
-		return &candidates[0], nil
-	default:
-		connectors := make([]string, 0, len(candidates))
-		for _, candidate := range candidates {
-			connectors = append(connectors, candidate.ConnectorID)
-		}
-		sort.Strings(connectors)
-		return nil, &apiError{Status: http.StatusConflict, Code: "project_ambiguous", Message: fmt.Sprintf("project %s is shared by multiple connectors: %s", projectID, strings.Join(connectors, ", "))}
 	}
+	selected := filterProjectSelector(authorized, selector)
+	if len(selected) == 0 {
+		return nil, &apiError{Status: http.StatusNotFound, Code: "project_location_not_found", Message: "project location not found"}
+	}
+	online := make([]ProjectRecord, 0, len(selected))
+	for _, candidate := range selected {
+		status, err := s.projectStatus(ctx, &candidate)
+		if err != nil {
+			return nil, &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: err.Error()}
+		}
+		if status.Online {
+			online = append(online, candidate)
+		}
+	}
+	switch len(online) {
+	case 0:
+		return nil, &apiError{Status: http.StatusServiceUnavailable, Code: "connector_offline", Message: "no matching online project location is available"}
+	case 1:
+		return &online[0], nil
+	default:
+		return nil, ambiguousProjectLocationError(projectID, online)
+	}
+}
+
+func filterProjectSelector(records []ProjectRecord, selector projectSelector) []ProjectRecord {
+	if strings.TrimSpace(selector.MachineID) == "" && strings.TrimSpace(selector.HostLabel) == "" {
+		return records
+	}
+	out := make([]ProjectRecord, 0, len(records))
+	machineID := strings.TrimSpace(selector.MachineID)
+	hostLabel := strings.ToLower(strings.TrimSpace(selector.HostLabel))
+	for _, record := range records {
+		if machineID != "" && record.MachineID != machineID {
+			continue
+		}
+		if hostLabel != "" && strings.ToLower(record.HostLabel) != hostLabel {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out
+}
+
+func ambiguousProjectLocationError(projectID string, records []ProjectRecord) *apiError {
+	labels := make([]string, 0, len(records))
+	for _, record := range records {
+		labels = append(labels, projectLocationLabel(record))
+	}
+	sort.Strings(labels)
+	fact := fmt.Sprintf("project_id %s is available on %s", projectID, strings.Join(labels, " and "))
+	blocker := map[string]any{
+		"type":                      "ambiguous_project_location",
+		"planner_decision_required": true,
+		"observed_facts":            []string{fact},
+	}
+	return &apiError{
+		Status:  http.StatusConflict,
+		Code:    "ambiguous_project_location",
+		Message: fact,
+		Blocker: blocker,
+	}
+}
+
+func projectLocationLabel(record ProjectRecord) string {
+	if strings.TrimSpace(record.HostLabel) != "" {
+		return strings.TrimSpace(record.HostLabel)
+	}
+	if strings.TrimSpace(record.MachineID) != "" {
+		return strings.TrimSpace(record.MachineID)
+	}
+	if strings.TrimSpace(record.ConnectorID) != "" {
+		return strings.TrimSpace(record.ConnectorID)
+	}
+	return strings.TrimSpace(record.InstanceID)
+}
+
+func projectSelectorFromRequest(r *http.Request) projectSelector {
+	if r == nil {
+		return projectSelector{}
+	}
+	return projectSelector{
+		MachineID: strings.TrimSpace(r.URL.Query().Get("machine_id")),
+		HostLabel: strings.TrimSpace(r.URL.Query().Get("host_label")),
+	}
+}
+
+func groupProjectPayloads(projects []plannerProject) []plannerProject {
+	byID := map[string]*plannerProject{}
+	order := make([]string, 0, len(projects))
+	for _, project := range projects {
+		current := byID[project.ProjectID]
+		if current == nil {
+			copyProject := project
+			copyProject.Locations = append([]projectLocation(nil), project.Locations...)
+			byID[project.ProjectID] = &copyProject
+			order = append(order, project.ProjectID)
+			continue
+		}
+		current.Locations = append(current.Locations, project.Locations...)
+		if current.Name == "" {
+			current.Name = project.Name
+		}
+		if current.DefaultAdapter == "" {
+			current.DefaultAdapter = project.DefaultAdapter
+		}
+		if current.AdapterProfile == "" {
+			current.AdapterProfile = project.AdapterProfile
+		}
+		if len(current.Project) == 0 || string(current.Project) == "null" {
+			current.Project = project.Project
+		}
+		if project.Online {
+			current.Online = true
+			current.Status = "available"
+		}
+		if project.LastSeenAt.After(current.LastSeenAt) {
+			current.LastSeenAt = project.LastSeenAt
+		}
+	}
+	sort.Strings(order)
+	out := make([]plannerProject, 0, len(order))
+	for _, id := range order {
+		project := *byID[id]
+		sort.Slice(project.Locations, func(i, j int) bool {
+			left := project.Locations[i].HostLabel + project.Locations[i].MachineID + project.Locations[i].ConnectorID
+			right := project.Locations[j].HostLabel + project.Locations[j].MachineID + project.Locations[j].ConnectorID
+			return left < right
+		})
+		if !project.Online && project.Status == "" {
+			project.Status = "offline"
+		}
+		out = append(out, project)
+	}
+	return out
+}
+
+func projectAvailabilityStatus(status InstanceStatus) string {
+	if status.Online {
+		return "available"
+	}
+	if status.Status == "" {
+		return "offline"
+	}
+	return status.Status
+}
+
+func projectNameFromJSON(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	var payload struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal([]byte(raw), &payload)
+	return strings.TrimSpace(payload.Name)
 }
 
 func scopeForProjectRoute(parts []string, method string) string {

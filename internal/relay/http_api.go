@@ -7,19 +7,24 @@ import (
 )
 
 type apiError struct {
-	Status  int    `json:"-"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Status  int            `json:"-"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Blocker map[string]any `json:"blocker,omitempty"`
 }
 
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {
+	writeAPIErrorWithAPIError(w, &apiError{Status: status, Code: code, Message: message})
+}
+
+func writeAPIErrorWithAPIError(w http.ResponseWriter, err *apiError) {
+	if err == nil {
+		err = &apiError{Status: http.StatusInternalServerError, Code: "relay_internal_error", Message: "unknown relay error"}
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	w.WriteHeader(err.Status)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": apiError{
-			Code:    code,
-			Message: message,
-		},
+		"error": err,
 	})
 }
 

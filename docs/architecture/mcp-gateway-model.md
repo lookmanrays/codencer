@@ -18,7 +18,9 @@ flowchart LR
   Daemon --> Repo
 ```
 
-The connector advertises only projects that are explicitly shared from the local registry. Relay stores sanitized project advertisements and routes tool calls back to the connector. Execution remains daemon-first and local.
+The connector advertises only projects that are explicitly shared from the local registry. Advertisements include machine/location metadata (`machine_id`, `host_label`, hostname, connector/instance ids, status). Relay stores sanitized project advertisements and routes tool calls back to the selected connector. Execution remains daemon-first and local.
+
+If the same `project_id` is available from multiple online machines, Relay/MCP requires an explicit `machine_id` or `host_label` selector. Without one it returns structured blocker `ambiguous_project_location`; it does not randomly select a connector. Project listings expose `locations[]` with safe labels/hashes instead of absolute repo paths.
 
 ## Toolset
 

@@ -23,6 +23,17 @@ To register the current checkout as a project:
 
 This creates or verifies `$CODENCER_HOME`, config, registry, logs, runtime, tokens, and artifacts. It does not install services or call live Codex/Claude unless explicit flags are used.
 
+For direct project config flow:
+
+```bash
+./bin/codencer project scan --repo . --json
+./bin/codencer project init --repo . --id codencer --name "Codencer" --json
+./bin/codencer project adopt --repo . --json
+./bin/codencer machine show --json
+```
+
+`project init` creates only `repo/.codencer/project.json` by default. Machine identity and absolute repo paths remain local in `$CODENCER_HOME`. See [Project Config](project-config.md).
+
 ## Deterministic Demo
 
 ```bash

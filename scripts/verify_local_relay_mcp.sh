@@ -184,6 +184,39 @@ for _ in $(seq 1 150); do
   sleep 0.1
 done
 grep -q '"project_id":"codencer"\|"project_id": "codencer"' "$projects_json" || { cat "$projects_json" >&2; exit 1; }
+grep -q '"locations"' "$projects_json" || { cat "$projects_json" >&2; exit 1; }
+if grep -q "$repo" "$projects_json"; then
+  echo "relay project listing leaked absolute repo path" >&2
+  cat "$projects_json" >&2
+  exit 1
+fi
+
+machine_id="$(python3 - "$projects_json" <<'PY'
+import json, sys
+projects=json.load(open(sys.argv[1]))
+print(projects[0]["locations"][0]["machine_id"])
+PY
+)"
+host_label="$(python3 - "$projects_json" <<'PY'
+import json, sys
+projects=json.load(open(sys.argv[1]))
+print(projects[0]["locations"][0]["host_label"])
+PY
+)"
+test -n "$machine_id"
+test -n "$host_label"
+
+curl -fsS \
+  -H "Authorization: Bearer $planner_token" \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"relay machine selector fake success","profile":"fake-success","wait":true}' \
+  "$relay_url/api/v2/projects/codencer/submit?machine_id=$machine_id" > "$TMPDIR_ROOT/submit-machine.json"
+grep -q '"ok":true\|"ok": true' "$TMPDIR_ROOT/submit-machine.json" || { cat "$TMPDIR_ROOT/submit-machine.json" >&2; exit 1; }
+
+curl -fsS \
+  -H "Authorization: Bearer $planner_token" \
+  "$relay_url/api/v2/projects/codencer/runs?host_label=$host_label" > "$TMPDIR_ROOT/runs-host-label.json"
+grep -q '"project_id":"codencer"\|"project_id": "codencer"\|\[\]' "$TMPDIR_ROOT/runs-host-label.json" || { cat "$TMPDIR_ROOT/runs-host-label.json" >&2; exit 1; }
 
 curl -fsS \
   -H "Authorization: Bearer $planner_token" \
@@ -255,6 +288,12 @@ curl -fsS \
   -d '{"jsonrpc":"2.0","id":1,"name":"codencer.list_projects","arguments":{}}' \
   "$relay_url/mcp/call" > "$TMPDIR_ROOT/mcp-list-projects.json"
 grep -q '"codencer"' "$TMPDIR_ROOT/mcp-list-projects.json" || { cat "$TMPDIR_ROOT/mcp-list-projects.json" >&2; exit 1; }
+grep -q '"locations"' "$TMPDIR_ROOT/mcp-list-projects.json" || { cat "$TMPDIR_ROOT/mcp-list-projects.json" >&2; exit 1; }
+if grep -q "$repo" "$TMPDIR_ROOT/mcp-list-projects.json"; then
+  echo "MCP list_projects leaked absolute repo path" >&2
+  cat "$TMPDIR_ROOT/mcp-list-projects.json" >&2
+  exit 1
+fi
 
 kill "$CONNECTOR_PID" 2>/dev/null || true
 wait "$CONNECTOR_PID" 2>/dev/null || true

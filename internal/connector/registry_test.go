@@ -109,6 +109,16 @@ func TestRegistry_AdvertisementsIncludeSharedProjects(t *testing.T) {
 	if len(set.Projects) != 1 || set.ProjectIDs[0] != "codencer" || set.Projects[0].InstanceID != "inst-1" {
 		t.Fatalf("expected shared project advertisement, got %+v", set)
 	}
+	if set.Projects[0].MachineID == "" || set.Projects[0].HostLabel == "" || set.Projects[0].Status != "available" {
+		t.Fatalf("expected machine metadata in project advertisement, got %+v", set.Projects[0])
+	}
+	loaded, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Projects[0].MachineID == "" || loaded.Projects[0].HostLabel == "" {
+		t.Fatalf("expected local registry to be backfilled with machine metadata, got %+v", loaded.Projects[0])
+	}
 }
 
 func TestRegistry_SkipsRelayInstanceMismatchWithWarning(t *testing.T) {

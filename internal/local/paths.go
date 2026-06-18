@@ -13,12 +13,14 @@ const (
 	defaultDaemonURL = "http://127.0.0.1:8085"
 	configFileName   = "config.json"
 	projectsFileName = "projects.json"
+	machineFileName  = "machine.json"
 	repoStateDirName = ".codencer"
 )
 
 type Paths struct {
 	Home           string `json:"home"`
 	ProjectsFile   string `json:"projects_file"`
+	MachineFile    string `json:"machine_file"`
 	ConfigFile     string `json:"config_file"`
 	LogsDir        string `json:"logs_dir"`
 	RuntimeDir     string `json:"runtime_dir"`
@@ -55,6 +57,7 @@ func ResolvePathsForHome(repoOverride, configOverride, homeOverride string) (Pat
 	paths := Paths{
 		Home:         home,
 		ProjectsFile: filepath.Join(home, projectsFileName),
+		MachineFile:  filepath.Join(home, machineFileName),
 		ConfigFile:   configFile,
 		LogsDir:      filepath.Join(home, "logs"),
 		RuntimeDir:   filepath.Join(home, "runtime"),

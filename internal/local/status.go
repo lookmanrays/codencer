@@ -44,6 +44,7 @@ type StatusReport struct {
 	Relay             RuntimeStatus    `json:"relay"`
 	Executors         []ExecutorStatus `json:"executors"`
 	Environment       Environment      `json:"environment"`
+	Machine           *MachineIdentity `json:"machine,omitempty"`
 	Warnings          []string         `json:"warnings,omitempty"`
 }
 
@@ -69,6 +70,13 @@ func BuildStatusReport(opts StatusOptions) StatusReport {
 			executorStatus(probe, "codex", "CODEX_BINARY", "codex"),
 			executorStatus(probe, "claude", "CLAUDE_BINARY", "claude"),
 		},
+	}
+	if opts.Paths.MachineFile != "" {
+		if machine, _, err := EnsureMachine(opts.Paths.MachineFile, time.Now().UTC()); err == nil {
+			report.Machine = &machine
+		} else {
+			report.Warnings = append(report.Warnings, "machine identity unavailable: "+err.Error())
+		}
 	}
 
 	registry, err := project.LoadRegistry(opts.Paths.ProjectsFile)

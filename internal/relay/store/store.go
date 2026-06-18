@@ -31,6 +31,9 @@ type ProjectRecord struct {
 	ProjectID      string    `json:"project_id"`
 	ConnectorID    string    `json:"connector_id"`
 	InstanceID     string    `json:"instance_id"`
+	MachineID      string    `json:"machine_id,omitempty"`
+	HostLabel      string    `json:"host_label,omitempty"`
+	Hostname       string    `json:"hostname,omitempty"`
 	RepoRoot       string    `json:"repo_root"`
 	DefaultAdapter string    `json:"default_adapter,omitempty"`
 	AdapterProfile string    `json:"adapter_profile,omitempty"`
@@ -148,6 +151,9 @@ CREATE TABLE IF NOT EXISTS projects (
   connector_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
   instance_id TEXT NOT NULL,
+  machine_id TEXT,
+  host_label TEXT,
+  hostname TEXT,
   repo_root TEXT NOT NULL,
   default_adapter TEXT,
   adapter_profile TEXT,
@@ -193,6 +199,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
 		"ALTER TABLE projects ADD COLUMN default_adapter TEXT",
 		"ALTER TABLE projects ADD COLUMN adapter_profile TEXT",
 		"ALTER TABLE projects ADD COLUMN project_json TEXT",
+		"ALTER TABLE projects ADD COLUMN machine_id TEXT",
+		"ALTER TABLE projects ADD COLUMN host_label TEXT",
+		"ALTER TABLE projects ADD COLUMN hostname TEXT",
 		"ALTER TABLE audit_events ADD COLUMN actor_type TEXT",
 		"ALTER TABLE audit_events ADD COLUMN actor_id TEXT",
 		"ALTER TABLE audit_events ADD COLUMN method TEXT",
@@ -623,16 +632,19 @@ func (s *Store) ReplaceConnectorProjects(ctx context.Context, connectorID string
 		}
 		record.ConnectorID = connectorID
 		if _, execErr := tx.ExecContext(ctx, `
-			INSERT INTO projects (connector_id, project_id, instance_id, repo_root, default_adapter, adapter_profile, project_json, last_seen_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO projects (connector_id, project_id, instance_id, machine_id, host_label, hostname, repo_root, default_adapter, adapter_profile, project_json, last_seen_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(connector_id, project_id) DO UPDATE SET
 				instance_id = excluded.instance_id,
+				machine_id = excluded.machine_id,
+				host_label = excluded.host_label,
+				hostname = excluded.hostname,
 				repo_root = excluded.repo_root,
 				default_adapter = excluded.default_adapter,
 				adapter_profile = excluded.adapter_profile,
 				project_json = excluded.project_json,
 				last_seen_at = excluded.last_seen_at
-		`, record.ConnectorID, record.ProjectID, record.InstanceID, record.RepoRoot, record.DefaultAdapter, record.AdapterProfile, record.ProjectJSON, record.LastSeenAt.UTC()); execErr != nil {
+		`, record.ConnectorID, record.ProjectID, record.InstanceID, record.MachineID, record.HostLabel, record.Hostname, record.RepoRoot, record.DefaultAdapter, record.AdapterProfile, record.ProjectJSON, record.LastSeenAt.UTC()); execErr != nil {
 			err = execErr
 			return nil, err
 		}
@@ -680,7 +692,7 @@ func (s *Store) ReplaceConnectorProjects(ctx context.Context, connectorID string
 
 func (s *Store) ListProjects(ctx context.Context) ([]ProjectRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT connector_id, project_id, instance_id, repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
+		SELECT connector_id, project_id, instance_id, COALESCE(machine_id, ''), COALESCE(host_label, ''), COALESCE(hostname, ''), repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
 		FROM projects
 		ORDER BY project_id, connector_id
 	`)
@@ -691,7 +703,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]ProjectRecord, error) {
 	var records []ProjectRecord
 	for rows.Next() {
 		var record ProjectRecord
-		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
+		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.MachineID, &record.HostLabel, &record.Hostname, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
 			return nil, err
 		}
 		records = append(records, record)
@@ -701,7 +713,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]ProjectRecord, error) {
 
 func (s *Store) ListProjectsByConnector(ctx context.Context, connectorID string) ([]ProjectRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT connector_id, project_id, instance_id, repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
+		SELECT connector_id, project_id, instance_id, COALESCE(machine_id, ''), COALESCE(host_label, ''), COALESCE(hostname, ''), repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
 		FROM projects
 		WHERE connector_id = ?
 		ORDER BY project_id
@@ -713,7 +725,7 @@ func (s *Store) ListProjectsByConnector(ctx context.Context, connectorID string)
 	var records []ProjectRecord
 	for rows.Next() {
 		var record ProjectRecord
-		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
+		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.MachineID, &record.HostLabel, &record.Hostname, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
 			return nil, err
 		}
 		records = append(records, record)
@@ -723,7 +735,7 @@ func (s *Store) ListProjectsByConnector(ctx context.Context, connectorID string)
 
 func (s *Store) ListProjectsByID(ctx context.Context, projectID string) ([]ProjectRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT connector_id, project_id, instance_id, repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
+		SELECT connector_id, project_id, instance_id, COALESCE(machine_id, ''), COALESCE(host_label, ''), COALESCE(hostname, ''), repo_root, COALESCE(default_adapter, ''), COALESCE(adapter_profile, ''), COALESCE(project_json, ''), last_seen_at
 		FROM projects
 		WHERE project_id = ?
 		ORDER BY connector_id
@@ -735,7 +747,7 @@ func (s *Store) ListProjectsByID(ctx context.Context, projectID string) ([]Proje
 	var records []ProjectRecord
 	for rows.Next() {
 		var record ProjectRecord
-		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
+		if err := rows.Scan(&record.ConnectorID, &record.ProjectID, &record.InstanceID, &record.MachineID, &record.HostLabel, &record.Hostname, &record.RepoRoot, &record.DefaultAdapter, &record.AdapterProfile, &record.ProjectJSON, &record.LastSeenAt); err != nil {
 			return nil, err
 		}
 		records = append(records, record)

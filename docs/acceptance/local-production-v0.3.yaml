@@ -28,6 +28,15 @@ profiles:
           - ./bin/codencer project init --id codencer --repo . --adapter codex --profile codex-workspace --json
           - ./bin/codencer project list --json
           - ./bin/codencer project get codencer --json
+      - id: project_local_config_and_machine_routing
+        status: sprint_7_2_implemented
+        commands:
+          - make verify-project-config
+          - ./bin/codencer project scan --repo . --json
+          - ./bin/codencer project adopt --repo . --json
+          - ./bin/codencer machine show --json
+          - ./bin/codencer machine set-label macbook --json
+        notes: project init creates only repo/.codencer/project.json by default; machine identity and absolute paths stay in CODENCER_HOME. Relay/MCP project tools expose locations and return ambiguous_project_location when multiple online machines share a project_id without a selector.
       - id: local_cli_manifest_execution
         status: implemented
         commands:
@@ -213,6 +222,7 @@ verification:
   non_live_release_candidate:
     - go test ./...
     - make build-codencer
+    - make verify-project-config
     - make verify-local-execution
     - make verify-local-relay-mcp
     - make verify-runtime-recovery

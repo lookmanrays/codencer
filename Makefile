@@ -149,6 +149,50 @@ doctor-toolchain: build-codencer
 	@echo "==> Verifying local production toolchain using codencer..."
 	@./bin/codencer doctor toolchain --json
 
+verify-project-config: build-codencer
+	@echo "==> Checking project config formatting..."
+	@fmt=$$(gofmt -l internal/projectconfig internal/project internal/local cmd/codencer); \
+	if [ -n "$$fmt" ]; then \
+		echo "$$fmt"; \
+		echo "ERROR: gofmt required for project config files."; \
+		exit 1; \
+	fi
+	@echo "==> Running project config unit tests..."
+	@go test ./internal/projectconfig ./internal/project ./internal/local ./cmd/codencer
+	@echo "==> Running project config CLI smoke..."
+	@tmpdir=$$(mktemp -d "$${TMPDIR:-/tmp}/codencer-project-config.XXXXXX"); \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	home="$$tmpdir/home"; \
+	repo="$$tmpdir/repo"; \
+	scanrepo="$$tmpdir/scanrepo"; \
+	missingrepo="$$tmpdir/missingrepo"; \
+	mkdir -p "$$repo" "$$scanrepo" "$$missingrepo"; \
+	git -C "$$repo" init -q; \
+	git -C "$$missingrepo" init -q; \
+	printf 'module example.test/scan\n' > "$$scanrepo/go.mod"; \
+	before_scan=$$(find "$$scanrepo" -type f -print | sort); \
+	CODENCER_HOME="$$home" ./bin/codencer init --json >/dev/null; \
+	CODENCER_HOME="$$home" ./bin/codencer machine show --json >/dev/null; \
+	CODENCER_HOME="$$home" ./bin/codencer machine set-label macbook-test --json >/dev/null; \
+	CODENCER_HOME="$$home" ./bin/codencer project scan --repo "$$scanrepo" --json >/dev/null; \
+	after_scan=$$(find "$$scanrepo" -type f -print | sort); \
+	test "$$before_scan" = "$$after_scan"; \
+	CODENCER_HOME="$$home" ./bin/codencer project init --repo "$$repo" --id test-project --name "Test Project" --json >/dev/null; \
+	test -f "$$repo/.codencer/project.json"; \
+	footprint=$$(find "$$repo/.codencer" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' '); \
+	test "$$footprint" = "1"; \
+	before_project=$$(cat "$$repo/.codencer/project.json"); \
+	CODENCER_HOME="$$home" ./bin/codencer project init --repo "$$repo" --json >/dev/null; \
+	after_project=$$(cat "$$repo/.codencer/project.json"); \
+	test "$$before_project" = "$$after_project"; \
+	CODENCER_HOME="$$home" ./bin/codencer project adopt --repo "$$repo" --json >/dev/null; \
+	if CODENCER_HOME="$$home" ./bin/codencer project adopt --repo "$$missingrepo" --json >/dev/null 2>&1; then \
+		echo "ERROR: project adopt unexpectedly succeeded without .codencer/project.json"; \
+		exit 1; \
+	fi; \
+	CODENCER_HOME="$$home" ./bin/codencer project list --json >/dev/null; \
+	CODENCER_HOME="$$home" ./bin/codencer project status test-project --json >/dev/null
+
 verify-local-prod: build-codencer
 	@echo "==> Checking local production formatting..."
 	@fmt=$$(gofmt -l internal/project internal/local cmd/codencer); \
@@ -170,6 +214,7 @@ verify-local-prod: build-codencer
 	CODENCER_HOME="$$tmpdir" ./bin/codencer project list --json >/dev/null; \
 	CODENCER_HOME="$$tmpdir" ./bin/codencer project status codencer --json >/dev/null
 	@$(MAKE) verify-local-execution
+	@$(MAKE) verify-project-config
 	@$(MAKE) verify-local-relay-mcp
 	@$(MAKE) verify-runtime-recovery
 	@$(MAKE) verify-live-matrix

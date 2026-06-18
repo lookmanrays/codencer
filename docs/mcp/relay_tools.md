@@ -72,6 +72,8 @@ Compatibility instance tools:
 
 - Project-aware tools are preferred for remote planners.
 - Project tools require projects shared from the user-level registry with `shared_to_relay:true`.
+- `codencer.list_projects` returns projects with `locations[]`; each location includes `machine_id`, `host_label`, connector/instance ids, status, and safe repo labels/hashes. Absolute local paths are not exposed.
+- Project execution tools accept optional `machine_id` or `host_label`. If exactly one online location exists, no selector is required. If multiple online locations exist for the same `project_id`, the tool returns structured blocker `ambiguous_project_location` with `planner_decision_required:true`.
 - Planner tokens can restrict project tools with `project_ids`, `instance_ids`, and scopes such as `projects:read`, `runs:write`, `steps:write`, `reports:read`, and `artifacts:read`.
 - Project task and manifest tools call the same Sprint 2 local execution contract as `codencer submit` and `codencer run-plan`.
 - Project blockers are returned as structured report data with `exit_code`; they are not converted into transport errors.

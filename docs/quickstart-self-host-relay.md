@@ -36,11 +36,11 @@ Generated OAuth client/operator secrets are stored only under `$CODENCER_HOME/to
 ## Share A Project
 
 ```bash
-./bin/codencer setup local --project-id codencer --repo . --adapter codex --profile codex-workspace --json
+./bin/codencer project init --repo . --id codencer --name "Codencer" --json
 ./bin/codencer project share codencer --json
 ```
 
-Remote project descriptors use safe labels/hashes instead of absolute local paths. The local registry keeps full paths for local execution.
+Remote project descriptors include `locations[]` with `machine_id`, `host_label`, connector/instance ids, status, and safe labels/hashes instead of absolute local paths. The local registry keeps full paths for local execution. If more than one online machine advertises the same `project_id`, MCP execution must pass `machine_id` or `host_label`; otherwise the relay returns `ambiguous_project_location`.
 
 ## Enroll Local Connector
 

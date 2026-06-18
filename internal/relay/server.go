@@ -267,6 +267,7 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 	}
 	s.hub.Touch(session)
 	now := time.Now().UTC()
+	connectorRecord, _ := s.store.GetConnector(ctx, session.connectorID)
 	records := make([]InstanceRecord, 0, len(advertise.Instances))
 	projectRecords := make([]ProjectRecord, 0, len(advertise.Projects))
 	next := make(map[string]struct{})
@@ -293,9 +294,13 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 	for _, advertised := range advertise.Projects {
 		var project struct {
 			ID             string `json:"id"`
+			Name           string `json:"name"`
 			RepoRoot       string `json:"repo_root"`
 			DefaultAdapter string `json:"default_adapter"`
 			AdapterProfile string `json:"adapter_profile"`
+			MachineID      string `json:"machine_id"`
+			HostLabel      string `json:"host_label"`
+			Hostname       string `json:"hostname"`
 		}
 		if err := json.Unmarshal(advertised.Project, &project); err != nil {
 			return err
@@ -310,10 +315,19 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 		if advertised.InstanceID == "" {
 			return fmt.Errorf("advertised project %s is missing instance_id", projectID)
 		}
+		machineID := firstNonEmpty(advertised.MachineID, project.MachineID, session.machineID)
+		hostLabel := firstNonEmpty(advertised.HostLabel, project.HostLabel)
+		if hostLabel == "" && connectorRecord != nil {
+			hostLabel = connectorRecord.Label
+		}
+		hostname := firstNonEmpty(advertised.Hostname, project.Hostname)
 		projectRecords = append(projectRecords, ProjectRecord{
 			ProjectID:      projectID,
 			ConnectorID:    session.connectorID,
 			InstanceID:     advertised.InstanceID,
+			MachineID:      machineID,
+			HostLabel:      hostLabel,
+			Hostname:       hostname,
 			RepoRoot:       project.RepoRoot,
 			DefaultAdapter: project.DefaultAdapter,
 			AdapterProfile: project.AdapterProfile,

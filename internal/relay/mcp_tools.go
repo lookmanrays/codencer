@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -428,10 +429,10 @@ func addProjectMCPTools(server *mcpServer, tools map[string]mcpTool) {
 		Name:        "codencer.get_project_blocker",
 		Description: "Get the top-level blocker from a persisted project execution report.",
 		Scope:       "reports:read",
-		InputSchema: objectSchema([]string{"project_id", "run_id"}, map[string]any{
+		InputSchema: withProjectSelectorSchema(objectSchema([]string{"project_id", "run_id"}, map[string]any{
 			"project_id": stringSchema("Shared project identifier."),
 			"run_id":     stringSchema("Run identifier."),
-		}),
+		})),
 		Annotations: readOnlyAnnotations(),
 		Invoke: func(ctx context.Context, principal *plannerPrincipal, args map[string]any) (mcpToolResult, *apiError) {
 			projectID, apiErr := requiredString(args, "project_id")
@@ -442,7 +443,8 @@ func addProjectMCPTools(server *mcpServer, tools map[string]mcpTool) {
 			if apiErr != nil {
 				return mcpToolResult{}, apiErr
 			}
-			_, _, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, fmt.Sprintf("/api/v2/projects/%s/reports/run-plans/%s", projectID, runID), nil)
+			path := appendProjectSelector(fmt.Sprintf("/api/v2/projects/%s/reports/run-plans/%s", projectID, runID), args)
+			_, _, body, err := server.callPlannerRoute(ctx, principal, http.MethodGet, path, nil)
 			if err != nil {
 				return mcpToolResult{}, err
 			}
@@ -507,6 +509,7 @@ func projectSubmitTool(server *mcpServer, name string, wait bool) mcpTool {
 }
 
 func projectRouteTool(server *mcpServer, name, description, scope string, schema map[string]any, route func(projectID string, args map[string]any) (string, []byte, *apiError)) mcpTool {
+	schema = withProjectSelectorSchema(schema)
 	return mcpTool{
 		Name:        name,
 		Description: description,
@@ -521,6 +524,7 @@ func projectRouteTool(server *mcpServer, name, description, scope string, schema
 			if apiErr != nil {
 				return mcpToolResult{}, apiErr
 			}
+			path = appendProjectSelector(path, args)
 			method := http.MethodGet
 			if body != nil {
 				method = http.MethodPost
@@ -600,6 +604,38 @@ func objectSchema(required []string, properties map[string]any) map[string]any {
 		"required":   required,
 		"properties": properties,
 	}
+}
+
+func withProjectSelectorSchema(schema map[string]any) map[string]any {
+	if schema == nil {
+		schema = objectSchema(nil, nil)
+	}
+	properties, _ := schema["properties"].(map[string]any)
+	if properties == nil {
+		properties = map[string]any{}
+		schema["properties"] = properties
+	}
+	properties["machine_id"] = stringSchema("Optional machine_id selector for a shared project location.")
+	properties["host_label"] = stringSchema("Optional host_label selector for a shared project location.")
+	return schema
+}
+
+func appendProjectSelector(path string, args map[string]any) string {
+	values := url.Values{}
+	if machineID, _ := args["machine_id"].(string); strings.TrimSpace(machineID) != "" {
+		values.Set("machine_id", strings.TrimSpace(machineID))
+	}
+	if hostLabel, _ := args["host_label"].(string); strings.TrimSpace(hostLabel) != "" {
+		values.Set("host_label", strings.TrimSpace(hostLabel))
+	}
+	if len(values) == 0 {
+		return path
+	}
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	return path + separator + values.Encode()
 }
 
 func stringSchema(description string) map[string]any {

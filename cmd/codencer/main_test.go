@@ -574,10 +574,151 @@ func TestProjectInitNonGitWarningAndMissingProjectJSONError(t *testing.T) {
 	}
 }
 
+func TestProjectConfigInitAdoptScanAndMachineJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+	repo := makeTestRepo(t)
+
+	stdout, stderr, err := runCLI("init", "--json")
+	if err != nil {
+		t.Fatalf("init failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if _, err := os.Stat(filepath.Join(home, "machine.json")); err != nil {
+		t.Fatalf("machine.json missing: %v", err)
+	}
+
+	stdout, stderr, err = runCLI("project", "init", "--id", "codencer", "--name", "Codencer", "--repo", repo, "--json")
+	if err != nil {
+		t.Fatalf("project init failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	projectConfigPath := filepath.Join(repo, ".codencer", "project.json")
+	before, err := os.ReadFile(projectConfigPath)
+	if err != nil {
+		t.Fatalf("project config missing: %v", err)
+	}
+	if got := listRelativeFiles(t, filepath.Join(repo, ".codencer")); strings.Join(got, ",") != "project.json" {
+		t.Fatalf("project init created unexpected .codencer footprint: %v", got)
+	}
+	var initPayload map[string]any
+	decodeJSON(t, stdout, &initPayload)
+	if initPayload["project_config_action"] != "created" {
+		t.Fatalf("expected created project config action, got %s", stdout)
+	}
+	projectPayload := initPayload["project"].(map[string]any)
+	if projectPayload["machine_id"] == "" || projectPayload["project_config_path"] != projectConfigPath {
+		t.Fatalf("project registry missing machine/config path fields: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("project", "init", "--repo", repo, "--json")
+	if err != nil {
+		t.Fatalf("project init adopt existing failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	after, err := os.ReadFile(projectConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("project init overwrote existing project config\nbefore=%s\nafter=%s", before, after)
+	}
+	if !strings.Contains(stdout, `"project_config_action": "adopted"`) {
+		t.Fatalf("expected adopted action, got %s", stdout)
+	}
+
+	missingRepo := makeTestRepo(t)
+	stdout, _, err = runCLI("project", "adopt", "--repo", missingRepo, "--json")
+	if err == nil || !strings.Contains(stdout, ".codencer/project.json is required") {
+		t.Fatalf("expected adopt missing config error, got err=%v stdout=%s", err, stdout)
+	}
+
+	scanRepo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(scanRepo, "go.mod"), []byte("module example.test/scan\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	beforeScan := listRelativeFiles(t, scanRepo)
+	stdout, stderr, err = runCLI("project", "scan", "--repo", scanRepo, "--json")
+	if err != nil {
+		t.Fatalf("project scan failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	afterScan := listRelativeFiles(t, scanRepo)
+	if strings.Join(beforeScan, ",") != strings.Join(afterScan, ",") {
+		t.Fatalf("project scan wrote files: before=%v after=%v", beforeScan, afterScan)
+	}
+	if _, err := os.Stat(filepath.Join(scanRepo, ".codencer")); !os.IsNotExist(err) {
+		t.Fatalf("project scan should not create .codencer, stat err=%v", err)
+	}
+
+	stdout, stderr, err = runCLI("machine", "set-label", "MacBook Test", "--json")
+	if err != nil {
+		t.Fatalf("machine set-label failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"host_label": "macbook-test"`) {
+		t.Fatalf("host label override missing: %s", stdout)
+	}
+}
+
+func TestProjectListBackfillsOldRegistryMachineMetadata(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+	repo := makeTestRepo(t)
+	if _, _, err := runCLI("init", "--json"); err != nil {
+		t.Fatal(err)
+	}
+	if stdout, stderr, err := runCLI("project", "init", "--id", "codencer", "--repo", repo, "--json"); err != nil {
+		t.Fatalf("project init failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	registryPath := filepath.Join(home, "projects.json")
+	raw, err := os.ReadFile(registryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var registry map[string]any
+	decodeJSON(t, string(raw), &registry)
+	projects := registry["projects"].([]any)
+	project := projects[0].(map[string]any)
+	delete(project, "machine_id")
+	delete(project, "host_label")
+	delete(project, "hostname")
+	rewritten, _ := json.MarshalIndent(registry, "", "  ")
+	if err := os.WriteFile(registryPath, append(rewritten, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCLI("project", "list", "--json")
+	if err != nil {
+		t.Fatalf("project list failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"machine_id": "mach_`) || !strings.Contains(stdout, `"host_label":`) {
+		t.Fatalf("expected project list to backfill machine metadata, got %s", stdout)
+	}
+}
+
 func runCLI(args ...string) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 	err := run(args, &stdout, &stderr)
 	return stdout.String(), stderr.String(), err
+}
+
+func listRelativeFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 func makeTestRepo(t *testing.T) string {

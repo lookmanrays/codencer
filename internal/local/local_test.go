@@ -50,10 +50,10 @@ func TestEnsureHomeCreatesConfigRegistryAndDirs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure home: %v", err)
 	}
-	if !result.ConfigCreated || !result.RegistryCreated {
+	if !result.ConfigCreated || !result.RegistryCreated || !result.MachineCreated {
 		t.Fatalf("expected config and registry creation, got %+v", result)
 	}
-	for _, path := range []string{paths.Home, paths.LogsDir, paths.RuntimeDir, paths.TokensDir, paths.ArtifactsDir, paths.ConfigFile, paths.ProjectsFile} {
+	for _, path := range []string{paths.Home, paths.LogsDir, paths.RuntimeDir, paths.TokensDir, paths.ArtifactsDir, paths.ConfigFile, paths.ProjectsFile, paths.MachineFile} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected %s to exist: %v", path, err)
 		}
@@ -63,8 +63,37 @@ func TestEnsureHomeCreatesConfigRegistryAndDirs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure home second pass: %v", err)
 	}
-	if result.ConfigCreated || result.RegistryCreated {
+	if result.ConfigCreated || result.RegistryCreated || result.MachineCreated {
 		t.Fatalf("second pass should be idempotent, got %+v", result)
+	}
+}
+
+func TestMachineIdentityIsStableAndHostLabelEditable(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "codencer-home")
+	paths, err := ResolvePathsForHome("", "", home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, created, err := EnsureMachine(paths.MachineFile, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created || first.MachineID == "" || first.HostLabel == "" {
+		t.Fatalf("unexpected first machine identity: created=%t machine=%+v", created, first)
+	}
+	second, created, err := EnsureMachine(paths.MachineFile, time.Date(2026, 6, 1, 13, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || second.MachineID != first.MachineID {
+		t.Fatalf("machine id should be stable: first=%+v second=%+v created=%t", first, second, created)
+	}
+	updated, err := SetMachineHostLabel(paths.MachineFile, "MacBook Test", time.Date(2026, 6, 1, 14, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.MachineID != first.MachineID || updated.HostLabel != "macbook-test" {
+		t.Fatalf("unexpected host label update: %+v", updated)
 	}
 }
 

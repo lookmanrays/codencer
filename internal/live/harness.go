@@ -74,6 +74,7 @@ func (h *workspaceHarness) Cleanup() {
 }
 
 func (h *workspaceHarness) registerProject(id, adapter, profile, daemonURL string, share bool) error {
+	machine, _, _ := local.EnsureMachine(h.Paths.MachineFile, time.Now().UTC())
 	next, _, err := project.NewProject(project.ProjectOptions{
 		ID:             id,
 		Name:           id,
@@ -82,6 +83,9 @@ func (h *workspaceHarness) registerProject(id, adapter, profile, daemonURL strin
 		AdapterProfile: profile,
 		DaemonURL:      daemonURL,
 		SharedToRelay:  share,
+		MachineID:      machine.MachineID,
+		HostLabel:      machine.HostLabel,
+		Hostname:       machine.Hostname,
 	})
 	if err != nil {
 		return err

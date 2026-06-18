@@ -54,9 +54,14 @@ type InstanceAdvertisement struct {
 }
 
 type ProjectAdvertisement struct {
-	ProjectID  string          `json:"project_id"`
-	InstanceID string          `json:"instance_id"`
-	Project    json.RawMessage `json:"project"`
+	ProjectID   string          `json:"project_id"`
+	ProjectName string          `json:"project_name,omitempty"`
+	InstanceID  string          `json:"instance_id"`
+	MachineID   string          `json:"machine_id,omitempty"`
+	HostLabel   string          `json:"host_label,omitempty"`
+	Hostname    string          `json:"hostname,omitempty"`
+	Status      string          `json:"status,omitempty"`
+	Project     json.RawMessage `json:"project"`
 }
 
 type AdvertiseMessage struct {

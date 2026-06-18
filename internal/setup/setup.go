@@ -137,12 +137,16 @@ func Local(ctx context.Context, opts LocalOptions) (Report, error) {
 		adapter := firstNonEmpty(opts.Adapter, "codex")
 		profile := firstNonEmpty(opts.AdapterProfile, defaultProfile(adapter))
 		cfg, _ := local.LoadConfig(paths.ConfigFile)
+		machine, _, _ := local.EnsureMachine(paths.MachineFile, started)
 		next, warnings, err := project.NewProject(project.ProjectOptions{
 			ID:             opts.ProjectID,
 			RepoRoot:       repo,
 			DefaultAdapter: adapter,
 			AdapterProfile: profile,
 			DaemonURL:      cfg.DefaultDaemonURL,
+			MachineID:      machine.MachineID,
+			HostLabel:      machine.HostLabel,
+			Hostname:       machine.Hostname,
 		})
 		if err != nil {
 			report.add("project_register", "failed", err.Error())
@@ -450,7 +454,8 @@ func DemoLocal(ctx context.Context, opts DemoOptions) (Report, error) {
 	}
 	defer daemon.Process.Kill()
 	report.add("daemon", "passed", daemonURL)
-	next, _, err := project.NewProject(project.ProjectOptions{ID: "demo", RepoRoot: repo, DefaultAdapter: "fake", AdapterProfile: "fake-success", DaemonURL: daemonURL})
+	machine, _, _ := local.EnsureMachine(paths.MachineFile, started)
+	next, _, err := project.NewProject(project.ProjectOptions{ID: "demo", RepoRoot: repo, DefaultAdapter: "fake", AdapterProfile: "fake-success", DaemonURL: daemonURL, MachineID: machine.MachineID, HostLabel: machine.HostLabel, Hostname: machine.Hostname})
 	if err != nil {
 		return Report{}, err
 	}

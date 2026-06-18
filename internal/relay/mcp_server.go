@@ -343,7 +343,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 		s.writeRPC(w, mcpResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
-			Result:  errorToolResult(err.Code, err.Message),
+			Result:  apiErrorToolResult(err),
 		}, session, protocolVersion)
 		return
 	}
@@ -353,7 +353,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 		s.writeRPC(w, mcpResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
-			Result:  errorToolResult(apiErr.Code, apiErr.Message),
+			Result:  apiErrorToolResult(apiErr),
 		}, session, protocolVersion)
 		return
 	}
@@ -562,18 +562,37 @@ func (s *mcpServer) writeRPC(w http.ResponseWriter, response mcpResponse, sessio
 }
 
 func errorToolResult(code, message string) mcpToolResult {
+	return apiErrorToolResult(&apiError{Code: code, Message: message})
+}
+
+func apiErrorToolResult(err *apiError) mcpToolResult {
+	if err == nil {
+		err = &apiError{Code: "relay_internal_error", Message: "unknown relay error"}
+	}
+	structured := any(map[string]any{
+		"error": map[string]any{
+			"code":    err.Code,
+			"message": err.Message,
+		},
+	})
+	if len(err.Blocker) > 0 {
+		blocker := map[string]any{}
+		for key, value := range err.Blocker {
+			blocker[key] = value
+		}
+		blocker["error"] = map[string]any{
+			"code":    err.Code,
+			"message": err.Message,
+		}
+		structured = blocker
+	}
 	return mcpToolResult{
 		IsError: true,
 		Content: []map[string]string{{
 			"type": "text",
-			"text": message,
+			"text": err.Message,
 		}},
-		StructuredContent: map[string]any{
-			"error": map[string]any{
-				"code":    code,
-				"message": message,
-			},
-		},
+		StructuredContent: structured,
 	}
 }
 
@@ -640,12 +659,13 @@ func clonePlannerPrincipal(principal *plannerPrincipal) *plannerPrincipal {
 func decodeAPIError(status int, body []byte) *apiError {
 	var payload struct {
 		Error struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
+			Code    string         `json:"code"`
+			Message string         `json:"message"`
+			Blocker map[string]any `json:"blocker"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil && payload.Error.Code != "" {
-		return &apiError{Status: status, Code: payload.Error.Code, Message: payload.Error.Message}
+		return &apiError{Status: status, Code: payload.Error.Code, Message: payload.Error.Message, Blocker: payload.Error.Blocker}
 	}
 	return &apiError{Status: status, Code: "upstream_error", Message: strings.TrimSpace(string(body))}
 }

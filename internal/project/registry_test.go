@@ -139,6 +139,33 @@ func TestProjectRelaySharingTogglesPersistedFields(t *testing.T) {
 	}
 }
 
+func TestBackfillMachineMetadataUpdatesOldRegistryEntries(t *testing.T) {
+	tempDir := t.TempDir()
+	repo := makeRepo(t, tempDir, "repo", true)
+	registry := EmptyRegistry()
+	p, _, err := NewProject(ProjectOptions{ID: "codencer", RepoRoot: repo, DefaultAdapter: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpsertProject(registry, p, false, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if registry.Projects[0].MachineID != "" {
+		t.Fatalf("test setup expected old registry shape, got %+v", registry.Projects[0])
+	}
+	changed := BackfillMachineMetadata(registry, "mach_test", "macbook", "host.local", time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	if !changed {
+		t.Fatal("expected backfill to report a change")
+	}
+	got := registry.Projects[0]
+	if got.MachineID != "mach_test" || got.HostLabel != "macbook" || got.Hostname != "host.local" {
+		t.Fatalf("machine metadata not backfilled: %+v", got)
+	}
+	if BackfillMachineMetadata(registry, "mach_other", "other", "other.local", time.Now().UTC()) {
+		t.Fatal("second backfill should preserve existing metadata and report no change")
+	}
+}
+
 func TestProjectIDValidation(t *testing.T) {
 	valid := []string{"a", "codencer", "repo-1", "repo_1", "repo.1"}
 	for _, id := range valid {

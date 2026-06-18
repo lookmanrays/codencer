@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/local"
@@ -104,6 +105,16 @@ func (r *Registry) SharedProjects(ctx context.Context) ([]SharedProject, []strin
 	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
 	if err != nil {
 		return nil, []string{err.Error()}, nil
+	}
+	machine, _, machineErr := local.EnsureMachine(paths.MachineFile, time.Now().UTC())
+	if machineErr == nil {
+		if projectpkg.BackfillMachineMetadata(registry, machine.MachineID, machine.HostLabel, machine.Hostname, time.Now().UTC()) {
+			if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
+				return nil, []string{err.Error()}, nil
+			}
+		}
+	} else {
+		return nil, []string{machineErr.Error()}, nil
 	}
 
 	out := make([]SharedProject, 0, len(registry.Projects))
@@ -207,9 +218,14 @@ func (r *Registry) Advertisements(ctx context.Context) (AdvertisementSet, error)
 			return AdvertisementSet{}, err
 		}
 		projectAds = append(projectAds, relayproto.ProjectAdvertisement{
-			ProjectID:  shared.Project.ID,
-			InstanceID: shared.Info.ID,
-			Project:    payload,
+			ProjectID:   shared.Project.ID,
+			ProjectName: shared.Project.Name,
+			InstanceID:  shared.Info.ID,
+			MachineID:   shared.Project.MachineID,
+			HostLabel:   shared.Project.HostLabel,
+			Hostname:    shared.Project.Hostname,
+			Status:      "available",
+			Project:     payload,
 		})
 		projectIDs = append(projectIDs, shared.Project.ID)
 	}

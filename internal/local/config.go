@@ -31,10 +31,12 @@ type RuntimeConfig struct {
 }
 
 type InitResult struct {
-	Paths           Paths    `json:"paths"`
-	ConfigCreated   bool     `json:"config_created"`
-	RegistryCreated bool     `json:"registry_created"`
-	DirsCreated     []string `json:"dirs_created"`
+	Paths           Paths            `json:"paths"`
+	ConfigCreated   bool             `json:"config_created"`
+	RegistryCreated bool             `json:"registry_created"`
+	MachineCreated  bool             `json:"machine_created"`
+	Machine         *MachineIdentity `json:"machine,omitempty"`
+	DirsCreated     []string         `json:"dirs_created"`
 }
 
 func DefaultConfig(now time.Time) Config {
@@ -149,6 +151,13 @@ func EnsureHome(paths Paths, now time.Time) (InitResult, error) {
 		}
 		result.RegistryCreated = true
 	}
+
+	machine, created, err := EnsureMachine(paths.MachineFile, now)
+	if err != nil {
+		return result, fmt.Errorf("ensure machine identity: %w", err)
+	}
+	result.MachineCreated = created
+	result.Machine = &machine
 
 	return result, nil
 }

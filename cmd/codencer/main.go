@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"agent-bridge/internal/local"
 	"agent-bridge/internal/localexec"
 	projectpkg "agent-bridge/internal/project"
+	"agent-bridge/internal/projectconfig"
 	"agent-bridge/internal/proof"
 	"agent-bridge/internal/readiness"
 	setuppkg "agent-bridge/internal/setup"
@@ -75,6 +77,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runStatus(args[1:], stdout)
 	case "project":
 		return runProject(args[1:], stdout)
+	case "machine":
+		return runMachine(args[1:], stdout)
 	case "connector":
 		return runConnector(args[1:], stdout)
 	case "run":
@@ -156,6 +160,7 @@ func runInit(args []string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "Codencer home: %s\n", result.Paths.Home)
 	fmt.Fprintf(stdout, "Config:        %s\n", result.Paths.ConfigFile)
 	fmt.Fprintf(stdout, "Projects:      %s\n", result.Paths.ProjectsFile)
+	fmt.Fprintf(stdout, "Machine:       %s\n", result.Paths.MachineFile)
 	if result.ConfigCreated || result.RegistryCreated {
 		fmt.Fprintln(stdout, "Initialized local production files.")
 	} else {
@@ -238,6 +243,9 @@ func runDoctor(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if _, _, err := loadRegistryWithMachine(paths, time.Now().UTC()); err != nil {
+		return err
+	}
 	cfg, err := local.LoadConfig(paths.ConfigFile)
 	if err != nil {
 		return err
@@ -304,11 +312,15 @@ func runStatus(args []string, stdout io.Writer) error {
 
 func runProject(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer project <init|list|get|use|status|share|unshare|remove>")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer project <init|adopt|scan|list|get|use|status|share|unshare|remove>")
 	}
 	switch args[0] {
 	case "init":
 		return runProjectInit(args[1:], stdout)
+	case "adopt":
+		return runProjectAdopt(args[1:], stdout)
+	case "scan":
+		return runProjectScan(args[1:], stdout)
 	case "list":
 		return runProjectList(args[1:], stdout)
 	case "get":
@@ -325,6 +337,66 @@ func runProject(args []string, stdout io.Writer) error {
 		return runProjectRemove(args[1:], stdout)
 	default:
 		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown project command %q", args[0]))
+	}
+}
+
+func runMachine(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer machine <show|set-label> [--json]")
+	}
+	switch args[0] {
+	case "show":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "machine show does not accept positional arguments")
+		}
+		paths, err := local.ResolvePaths("", parsed.value("config"))
+		if err != nil {
+			return err
+		}
+		if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+			return err
+		}
+		machine, _, err := local.EnsureMachine(paths.MachineFile, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{"machine": machine, "machine_path": paths.MachineFile}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		printMachine(stdout, machine, paths.MachineFile)
+		return nil
+	case "set-label":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer machine set-label <label> [--json]")
+		}
+		paths, err := local.ResolvePaths("", parsed.value("config"))
+		if err != nil {
+			return err
+		}
+		if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+			return err
+		}
+		machine, err := local.SetMachineHostLabel(paths.MachineFile, parsed.positionals[0], time.Now().UTC())
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		payload := map[string]any{"machine": machine, "machine_path": paths.MachineFile}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		printMachine(stdout, machine, paths.MachineFile)
+		return nil
+	default:
+		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown machine command %q", args[0]))
 	}
 }
 
@@ -420,67 +492,346 @@ func runConnector(args []string, stdout io.Writer) error {
 }
 
 func runProjectInit(args []string, stdout io.Writer) error {
-	parsed, err := parseArgs(args, []string{"json", "force", "share-to-relay"}, []string{"id", "repo", "adapter", "name", "adapter-profile", "profile", "daemon-url", "relay-instance-id", "config"})
+	parsed, err := parseArgs(args, []string{"json", "force", "share-to-relay", "scan", "update-project-config"}, []string{"id", "repo", "adapter", "name", "adapter-profile", "profile", "daemon-url", "relay-instance-id", "config"})
 	if err != nil {
 		return err
 	}
 	if len(parsed.positionals) != 0 {
 		return usageError(parsed.bool("json"), stdout, "project init does not accept positional arguments")
 	}
-	paths, err := local.ResolvePaths("", parsed.value("config"))
-	if err != nil {
-		return err
-	}
-	cfg, err := local.LoadConfig(paths.ConfigFile)
-	if err != nil {
-		return err
-	}
-	daemonURL := parsed.value("daemon-url")
-	if daemonURL == "" {
-		daemonURL = cfg.DefaultDaemonURL
-	}
-	adapterProfile, err := adapterProfileAlias(parsed.value("adapter-profile"), parsed.value("profile"))
+	report, err := initOrAdoptProject(projectInitOptions{
+		Repo:                parsed.value("repo"),
+		ID:                  parsed.value("id"),
+		Name:                parsed.value("name"),
+		Adapter:             parsed.value("adapter"),
+		AdapterProfile:      parsed.value("adapter-profile"),
+		Profile:             parsed.value("profile"),
+		DaemonURL:           parsed.value("daemon-url"),
+		RelayInstanceID:     parsed.value("relay-instance-id"),
+		ConfigPath:          parsed.value("config"),
+		ShareToRelay:        parsed.bool("share-to-relay"),
+		Scan:                parsed.bool("scan"),
+		UpdateProjectConfig: parsed.bool("update-project-config") || parsed.bool("force"),
+		RequireExisting:     false,
+		Action:              "project_init",
+	}, time.Now().UTC())
 	if err != nil {
 		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
 	}
-	next, warnings, err := projectpkg.NewProject(projectpkg.ProjectOptions{
-		ID:              parsed.value("id"),
-		Name:            parsed.value("name"),
-		RepoRoot:        parsed.value("repo"),
-		DefaultAdapter:  parsed.value("adapter"),
-		AdapterProfile:  adapterProfile,
-		DaemonURL:       daemonURL,
+	if parsed.bool("json") {
+		return writeJSON(stdout, report)
+	}
+	for _, message := range report.Messages {
+		fmt.Fprintln(stdout, message)
+	}
+	return nil
+}
+
+func runProjectAdopt(args []string, stdout io.Writer) error {
+	parsed, err := parseArgs(args, []string{"json"}, []string{"repo", "daemon-url", "relay-instance-id", "config"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "project adopt does not accept positional arguments")
+	}
+	report, err := initOrAdoptProject(projectInitOptions{
+		Repo:            parsed.value("repo"),
+		DaemonURL:       parsed.value("daemon-url"),
 		RelayInstanceID: parsed.value("relay-instance-id"),
-		SharedToRelay:   parsed.bool("share-to-relay"),
-	})
+		ConfigPath:      parsed.value("config"),
+		RequireExisting: true,
+		Action:          "project_adopt",
+	}, time.Now().UTC())
 	if err != nil {
 		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	}
+	if parsed.bool("json") {
+		return writeJSON(stdout, report)
+	}
+	for _, message := range report.Messages {
+		fmt.Fprintln(stdout, message)
+	}
+	return nil
+}
+
+func runProjectScan(args []string, stdout io.Writer) error {
+	parsed, err := parseArgs(args, []string{"json"}, []string{"repo"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "project scan does not accept positional arguments")
+	}
+	repoRoot, err := repoRootForCommand(parsed.value("repo"))
+	if err != nil {
+		return err
+	}
+	proposal, err := projectconfig.Scan(repoRoot)
+	if err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	}
+	if parsed.bool("json") {
+		return writeJSON(stdout, map[string]any{"proposal": proposal, "read_only": true})
+	}
+	fmt.Fprintf(stdout, "Suggested project id: %s\n", proposal.SuggestedProjectID)
+	fmt.Fprintf(stdout, "Detected files: %s\n", strings.Join(proposal.DetectedFiles, ", "))
+	return nil
+}
+
+type projectInitOptions struct {
+	Repo                string
+	ID                  string
+	Name                string
+	Adapter             string
+	AdapterProfile      string
+	Profile             string
+	DaemonURL           string
+	RelayInstanceID     string
+	ConfigPath          string
+	ShareToRelay        bool
+	Scan                bool
+	UpdateProjectConfig bool
+	RequireExisting     bool
+	Action              string
+}
+
+type projectInitReport struct {
+	OK                  bool                        `json:"ok"`
+	Action              string                      `json:"action"`
+	Project             projectpkg.Project          `json:"project"`
+	Machine             local.MachineIdentity       `json:"machine"`
+	ProjectConfig       projectconfig.Config        `json:"project_config"`
+	ProjectConfigPath   string                      `json:"project_config_path"`
+	ProjectConfigAction string                      `json:"project_config_action"`
+	RegistryPath        string                      `json:"registry_path"`
+	CurrentProjectID    string                      `json:"current_project_id,omitempty"`
+	Warnings            []string                    `json:"warnings,omitempty"`
+	Messages            []string                    `json:"messages"`
+	ScanProposal        *projectconfig.ScanProposal `json:"scan_proposal,omitempty"`
+}
+
+func initOrAdoptProject(opts projectInitOptions, now time.Time) (projectInitReport, error) {
+	repoRoot, err := repoRootForCommand(opts.Repo)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	absRepo, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return projectInitReport{}, fmt.Errorf("resolve repo path: %w", err)
+	}
+	absRepo = filepath.Clean(absRepo)
+	paths, err := local.ResolvePaths("", opts.ConfigPath)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	if _, err := local.EnsureHome(paths, now); err != nil {
+		return projectInitReport{}, err
+	}
+	localCfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	machine, _, err := local.EnsureMachine(paths.MachineFile, now)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	configPath := projectconfig.Path(absRepo)
+	configExists := projectconfig.Exists(absRepo)
+	messages := []string{}
+	var proposal *projectconfig.ScanProposal
+	if opts.Scan {
+		scanned, err := projectconfig.Scan(absRepo)
+		if err != nil {
+			return projectInitReport{}, err
+		}
+		proposal = &scanned
+	}
+
+	var projectConfig projectconfig.Config
+	configAction := "adopted"
+	warnings := []string{}
+	if configExists {
+		loaded, loadWarnings, err := projectconfig.Load(absRepo)
+		if err != nil {
+			return projectInitReport{}, err
+		}
+		projectConfig = loaded
+		warnings = append(warnings, loadWarnings...)
+		messages = append(messages, "Found .codencer/project.json", "Validated project config")
+		if opts.UpdateProjectConfig {
+			projectConfig = applyProjectConfigOverrides(projectConfig, opts, proposal, absRepo)
+			if err := projectconfig.Save(absRepo, projectConfig); err != nil {
+				return projectInitReport{}, err
+			}
+			configAction = "updated"
+			messages = append(messages, "Updated .codencer/project.json")
+		}
+	} else {
+		if opts.RequireExisting {
+			return projectInitReport{}, fmt.Errorf(".codencer/project.json is required; run codencer project init first")
+		}
+		projectConfig = newProjectConfigForInit(opts, proposal, absRepo)
+		if strings.TrimSpace(projectConfig.Project.ID) == "" {
+			return projectInitReport{}, fmt.Errorf("project id is required and could not be inferred")
+		}
+		if err := projectconfig.Save(absRepo, projectConfig); err != nil {
+			return projectInitReport{}, err
+		}
+		configAction = "created"
+		messages = append(messages, "Created .codencer/project.json")
+	}
+
+	registryProject, projectWarnings, err := projectFromConfig(absRepo, configPath, projectConfig, opts, localCfg, machine)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	warnings = append(warnings, projectWarnings...)
+	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	if existing, err := projectpkg.GetProject(registry, registryProject.ID); err == nil {
+		if !opts.ShareToRelay {
+			registryProject.SharedToRelay = existing.SharedToRelay
+		}
+		if strings.TrimSpace(opts.RelayInstanceID) == "" {
+			registryProject.RelayInstanceID = existing.RelayInstanceID
+		}
+		if strings.TrimSpace(opts.DaemonURL) == "" && existing.DaemonURL != "" {
+			registryProject.DaemonURL = existing.DaemonURL
+		}
+	}
+	saved, err := projectpkg.UpsertProject(registry, registryProject, true, now)
+	if err != nil {
+		return projectInitReport{}, err
+	}
+	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
+		return projectInitReport{}, err
+	}
+	messages = append(messages, "Updated local registry")
+	return projectInitReport{
+		OK:                  true,
+		Action:              opts.Action,
+		Project:             saved,
+		Machine:             machine,
+		ProjectConfig:       projectConfig,
+		ProjectConfigPath:   configPath,
+		ProjectConfigAction: configAction,
+		RegistryPath:        paths.ProjectsFile,
+		CurrentProjectID:    registry.CurrentProjectID,
+		Warnings:            warnings,
+		Messages:            messages,
+		ScanProposal:        proposal,
+	}, nil
+}
+
+func newProjectConfigForInit(opts projectInitOptions, proposal *projectconfig.ScanProposal, repoRoot string) projectconfig.Config {
+	id := strings.TrimSpace(opts.ID)
+	if id == "" && proposal != nil {
+		id = proposal.SuggestedProjectID
+	}
+	if id == "" {
+		id = projectconfig.InferID(repoRoot)
+	}
+	name := strings.TrimSpace(opts.Name)
+	if name == "" && proposal != nil {
+		name = proposal.SuggestedProjectName
+	}
+	adapter := strings.TrimSpace(opts.Adapter)
+	profile, _ := adapterProfileAlias(opts.AdapterProfile, opts.Profile)
+	forbidden := projectconfig.DefaultForbiddenPaths()
+	if proposal != nil && len(proposal.SuggestedForbiddenPaths) > 0 {
+		forbidden = proposal.SuggestedForbiddenPaths
+	}
+	return projectconfig.Default(projectconfig.DefaultOptions{
+		ProjectID:      id,
+		ProjectName:    name,
+		DefaultAdapter: adapter,
+		DefaultProfile: profile,
+		ForbiddenPaths: forbidden,
+	})
+}
+
+func applyProjectConfigOverrides(cfg projectconfig.Config, opts projectInitOptions, proposal *projectconfig.ScanProposal, repoRoot string) projectconfig.Config {
+	if strings.TrimSpace(opts.ID) != "" {
+		cfg.Project.ID = strings.TrimSpace(opts.ID)
+	}
+	if strings.TrimSpace(opts.Name) != "" {
+		cfg.Project.Name = strings.TrimSpace(opts.Name)
+	}
+	if strings.TrimSpace(opts.Adapter) != "" {
+		cfg.Execution.DefaultAdapter = strings.TrimSpace(opts.Adapter)
+	}
+	if profile, err := adapterProfileAlias(opts.AdapterProfile, opts.Profile); err == nil && strings.TrimSpace(profile) != "" {
+		cfg.Execution.DefaultProfile = profile
+	}
+	if opts.Scan && proposal != nil && len(proposal.SuggestedForbiddenPaths) > 0 {
+		cfg.Workspace.ForbiddenPaths = proposal.SuggestedForbiddenPaths
+	}
+	if strings.TrimSpace(cfg.Project.ID) == "" {
+		cfg.Project.ID = projectconfig.InferID(repoRoot)
+	}
+	return cfg
+}
+
+func projectFromConfig(repoRoot, configPath string, cfg projectconfig.Config, opts projectInitOptions, localCfg local.Config, machine local.MachineIdentity) (projectpkg.Project, []string, error) {
+	if strings.TrimSpace(opts.ID) != "" && !opts.UpdateProjectConfig && strings.TrimSpace(opts.ID) != cfg.Project.ID {
+		return projectpkg.Project{}, nil, fmt.Errorf("--id %q does not match existing project config id %q; use --update-project-config to change it", opts.ID, cfg.Project.ID)
+	}
+	adapter := firstNonEmpty(opts.Adapter, cfg.Execution.DefaultAdapter)
+	profile, err := adapterProfileAlias(opts.AdapterProfile, opts.Profile)
+	if err != nil {
+		return projectpkg.Project{}, nil, err
+	}
+	profile = firstNonEmpty(profile, cfg.Execution.DefaultProfile)
+	daemonURL := firstNonEmpty(opts.DaemonURL, localCfg.DefaultDaemonURL)
+	name := firstNonEmpty(opts.Name, cfg.Project.Name)
+	return projectpkg.NewProject(projectpkg.ProjectOptions{
+		ID:                 cfg.Project.ID,
+		Name:               name,
+		RepoRoot:           repoRoot,
+		DefaultAdapter:     adapter,
+		AdapterProfile:     profile,
+		DaemonURL:          daemonURL,
+		RelayInstanceID:    opts.RelayInstanceID,
+		SharedToRelay:      opts.ShareToRelay,
+		MachineID:          machine.MachineID,
+		HostLabel:          machine.HostLabel,
+		Hostname:           machine.Hostname,
+		ProjectConfigPath:  configPath,
+		AllowedPaths:       []string{cfg.Workspace.Root},
+		ForbiddenPaths:     cfg.Workspace.ForbiddenPaths,
+		DefaultValidations: projectValidationCommands(cfg.Validations),
+	})
+}
+
+func projectValidationCommands(validations []projectconfig.ValidationCommand) []projectpkg.ValidationCommand {
+	out := make([]projectpkg.ValidationCommand, 0, len(validations))
+	for _, validation := range validations {
+		out = append(out, projectpkg.ValidationCommand{Name: validation.Name, Command: validation.Command})
+	}
+	return out
+}
+
+func loadRegistryWithMachine(paths local.Paths, now time.Time) (*projectpkg.Registry, local.MachineIdentity, error) {
+	if _, err := local.EnsureHome(paths, now); err != nil {
+		return nil, local.MachineIdentity{}, err
+	}
+	machine, _, err := local.EnsureMachine(paths.MachineFile, now)
+	if err != nil {
+		return nil, local.MachineIdentity{}, err
 	}
 	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
 	if err != nil {
-		return err
+		return nil, local.MachineIdentity{}, err
 	}
-	saved, err := projectpkg.UpsertProject(registry, next, parsed.bool("force"), time.Now().UTC())
-	if err != nil {
-		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	if projectpkg.BackfillMachineMetadata(registry, machine.MachineID, machine.HostLabel, machine.Hostname, now) {
+		if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
+			return nil, local.MachineIdentity{}, err
+		}
 	}
-	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
-		return err
-	}
-	payload := map[string]any{
-		"project":            saved,
-		"warnings":           warnings,
-		"registry_path":      paths.ProjectsFile,
-		"current_project_id": registry.CurrentProjectID,
-	}
-	if parsed.bool("json") {
-		return writeJSON(stdout, payload)
-	}
-	fmt.Fprintf(stdout, "Registered project %s at %s\n", saved.ID, saved.RepoRoot)
-	for _, warning := range warnings {
-		fmt.Fprintf(stdout, "warning: %s\n", warning)
-	}
-	return nil
+	return registry, machine, nil
 }
 
 func runProjectList(args []string, stdout io.Writer) error {
@@ -495,7 +846,7 @@ func runProjectList(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	registry, machine, err := loadRegistryWithMachine(paths, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -503,6 +854,7 @@ func runProjectList(args []string, stdout io.Writer) error {
 		"current_project_id": registry.CurrentProjectID,
 		"projects":           projectpkg.ListProjects(registry),
 		"registry_path":      paths.ProjectsFile,
+		"machine":            machine,
 	}
 	if parsed.bool("json") {
 		return writeJSON(stdout, payload)
@@ -533,7 +885,7 @@ func runProjectGet(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	registry, machine, err := loadRegistryWithMachine(paths, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -542,7 +894,7 @@ func runProjectGet(args []string, stdout io.Writer) error {
 		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
 	}
 	if parsed.bool("json") {
-		return writeJSON(stdout, p)
+		return writeJSON(stdout, map[string]any{"project": p, "machine": machine})
 	}
 	printProject(stdout, p)
 	return nil
@@ -560,7 +912,7 @@ func runProjectUse(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	registry, machine, err := loadRegistryWithMachine(paths, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -571,7 +923,7 @@ func runProjectUse(args []string, stdout io.Writer) error {
 	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
 		return err
 	}
-	payload := map[string]any{"current_project_id": p.ID, "project": p}
+	payload := map[string]any{"current_project_id": p.ID, "project": p, "machine": machine}
 	if parsed.bool("json") {
 		return writeJSON(stdout, payload)
 	}
@@ -634,7 +986,7 @@ func runProjectShare(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	registry, machine, err := loadRegistryWithMachine(paths, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -645,7 +997,13 @@ func runProjectShare(args []string, stdout io.Writer) error {
 	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
 		return err
 	}
-	payload := map[string]any{"project": project, "shared_to_relay": project.SharedToRelay}
+	payload := map[string]any{
+		"project":         project,
+		"project_id":      project.ID,
+		"shared_to_relay": project.SharedToRelay,
+		"machine_id":      machine.MachineID,
+		"host_label":      machine.HostLabel,
+	}
 	if parsed.bool("json") {
 		return writeJSON(stdout, payload)
 	}
@@ -665,7 +1023,7 @@ func runProjectUnshare(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	registry, machine, err := loadRegistryWithMachine(paths, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -676,7 +1034,7 @@ func runProjectUnshare(args []string, stdout io.Writer) error {
 	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
 		return err
 	}
-	payload := map[string]any{"project": project, "shared_to_relay": project.SharedToRelay}
+	payload := map[string]any{"project": project, "shared_to_relay": project.SharedToRelay, "machine": machine}
 	if parsed.bool("json") {
 		return writeJSON(stdout, payload)
 	}
@@ -696,7 +1054,7 @@ func runProjectRemove(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	registry, err := projectpkg.LoadRegistry(paths.ProjectsFile)
+	registry, _, err := loadRegistryWithMachine(paths, time.Now().UTC())
 	if err != nil {
 		return err
 	}
@@ -1538,12 +1896,13 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|connector|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|machine|connector|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func printPaths(w io.Writer, paths local.Paths) {
 	fmt.Fprintf(w, "home:           %s\n", paths.Home)
 	fmt.Fprintf(w, "projects_file:  %s\n", paths.ProjectsFile)
+	fmt.Fprintf(w, "machine_file:   %s\n", paths.MachineFile)
 	fmt.Fprintf(w, "config_file:    %s\n", paths.ConfigFile)
 	fmt.Fprintf(w, "logs_dir:       %s\n", paths.LogsDir)
 	fmt.Fprintf(w, "runtime_dir:    %s\n", paths.RuntimeDir)
@@ -1567,6 +1926,21 @@ func printProject(w io.Writer, p projectpkg.Project) {
 	if p.RelayInstanceID != "" {
 		fmt.Fprintf(w, "relay_instance:  %s\n", p.RelayInstanceID)
 	}
+	if p.MachineID != "" {
+		fmt.Fprintf(w, "machine_id:      %s\n", p.MachineID)
+	}
+	if p.HostLabel != "" {
+		fmt.Fprintf(w, "host_label:      %s\n", p.HostLabel)
+	}
+}
+
+func printMachine(w io.Writer, machine local.MachineIdentity, path string) {
+	fmt.Fprintf(w, "machine_id: %s\n", machine.MachineID)
+	fmt.Fprintf(w, "host_label: %s\n", machine.HostLabel)
+	fmt.Fprintf(w, "hostname:   %s\n", machine.Hostname)
+	fmt.Fprintf(w, "os:         %s\n", machine.OS)
+	fmt.Fprintf(w, "arch:       %s\n", machine.Arch)
+	fmt.Fprintf(w, "path:       %s\n", path)
 }
 
 func printConnectorEnrollReport(w io.Writer, report *connectorops.EnrollReport) {
@@ -1611,6 +1985,9 @@ func printStatus(w io.Writer, report local.StatusReport) {
 	if report.Project != nil {
 		fmt.Fprintf(w, "project:       %s (%s)\n", report.Project.ID, report.Project.RepoRoot)
 		fmt.Fprintf(w, "adapter:       %s/%s\n", report.Project.DefaultAdapter, report.Project.AdapterProfile)
+	}
+	if report.Machine != nil {
+		fmt.Fprintf(w, "machine:       %s host_label=%s hostname=%s\n", report.Machine.MachineID, report.Machine.HostLabel, report.Machine.Hostname)
 	}
 	fmt.Fprintf(w, "daemon:        %s %s\n", report.Daemon.Status, report.Daemon.Detail)
 	fmt.Fprintf(w, "relay:         %s %s\n", report.Relay.Status, report.Relay.Detail)

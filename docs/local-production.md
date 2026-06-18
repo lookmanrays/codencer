@@ -106,6 +106,7 @@ This creates:
 ```text
 $CODENCER_HOME/
   projects.json
+  machine.json
   config.json
   logs/
   runtime/
@@ -113,13 +114,17 @@ $CODENCER_HOME/
   artifacts/
 ```
 
-`tokens/` is created with restricted permissions. The project registry and local config do not store secrets.
+`tokens/` is created with restricted permissions. The project registry and local config do not store secrets. `machine.json` stores local-only machine identity (`machine_id`, `hostname`, editable `host_label`, OS, arch).
 
 ## Register A Project
 
 ```bash
 ./bin/codencer project init --id codencer --repo . --adapter codex
 ./bin/codencer project init --id fake --repo . --adapter fake --profile fake-success
+./bin/codencer project adopt --repo . --json
+./bin/codencer project scan --repo . --json
+./bin/codencer machine show --json
+./bin/codencer machine set-label macbook --json
 ./bin/codencer project share codencer --daemon-url http://127.0.0.1:8085
 ./bin/codencer project unshare codencer
 ./bin/codencer project list --json
@@ -128,7 +133,9 @@ $CODENCER_HOME/
 ./bin/codencer project status codencer --json
 ```
 
-Project ids are stable lowercase ids matching `[a-z0-9][a-z0-9._-]{0,62}`. Repo roots are stored as absolute paths. A non-git directory is accepted with a warning so operators can register workspaces before Git metadata exists.
+`project init` creates `repo/.codencer/project.json` when missing and adopts an existing file without overwriting it unless `--update-project-config` or `--force` is explicit. Default repo footprint is only `.codencer/project.json`; machine-specific state remains in `$CODENCER_HOME`. See [Project Config](project-config.md).
+
+Project ids are stable lowercase ids matching `[a-z0-9][a-z0-9._-]{0,62}`. Repo roots are stored as absolute paths only in the local registry. A non-git directory is accepted with a warning so operators can register workspaces before Git metadata exists.
 
 Project resolution order is:
 
@@ -269,7 +276,9 @@ Self-host Relay exposes:
 - MCP endpoint: `POST|GET|DELETE /mcp`, with `/mcp/call` as a compatibility POST alias.
 - OAuth protected-resource metadata: `GET /.well-known/oauth-protected-resource/mcp`.
 
-Project MCP tools return `structuredContent` plus JSON text content. Planner blockers remain data, not transport failures. Existing instance-centric `codencer.*` MCP tools remain available for compatibility, but project tools are the preferred remote planner surface.
+Project MCP tools return `structuredContent` plus JSON text content. Project listings include `locations[]` with `machine_id`, `host_label`, connector/instance ids, status, and safe repo labels/hashes. Absolute local repo paths are not exposed. Project execution accepts optional `machine_id` or `host_label`; if multiple online machines advertise the same `project_id` and no selector is provided, the relay returns `ambiguous_project_location` instead of choosing randomly.
+
+Planner blockers remain data, not transport failures. Existing instance-centric `codencer.*` MCP tools remain available for compatibility, but project tools are the preferred remote planner surface.
 
 Example remote task submission:
 

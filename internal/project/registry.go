@@ -35,6 +35,10 @@ type Project struct {
 	DaemonURL          string              `json:"daemon_url"`
 	RelayInstanceID    string              `json:"relay_instance_id"`
 	SharedToRelay      bool                `json:"shared_to_relay"`
+	MachineID          string              `json:"machine_id,omitempty"`
+	HostLabel          string              `json:"host_label,omitempty"`
+	Hostname           string              `json:"hostname,omitempty"`
+	ProjectConfigPath  string              `json:"project_config_path,omitempty"`
 	AllowedPaths       []string            `json:"allowed_paths"`
 	ForbiddenPaths     []string            `json:"forbidden_paths"`
 	DefaultValidations []ValidationCommand `json:"default_validations"`
@@ -57,6 +61,10 @@ type ProjectOptions struct {
 	DaemonURL          string
 	RelayInstanceID    string
 	SharedToRelay      bool
+	MachineID          string
+	HostLabel          string
+	Hostname           string
+	ProjectConfigPath  string
 	AllowedPaths       []string
 	ForbiddenPaths     []string
 	DefaultValidations []ValidationCommand
@@ -154,7 +162,7 @@ func NewProject(opts ProjectOptions) (Project, []string, error) {
 	}
 	forbiddenPaths := cleanList(opts.ForbiddenPaths)
 	if len(forbiddenPaths) == 0 {
-		forbiddenPaths = []string{".env", ".codencer/secrets"}
+		forbiddenPaths = []string{".env", ".env.*", ".git", "node_modules", "dist", "build"}
 	}
 
 	defaultValidations := append([]ValidationCommand{}, opts.DefaultValidations...)
@@ -168,6 +176,10 @@ func NewProject(opts ProjectOptions) (Project, []string, error) {
 		DaemonURL:          strings.TrimSpace(opts.DaemonURL),
 		RelayInstanceID:    strings.TrimSpace(opts.RelayInstanceID),
 		SharedToRelay:      opts.SharedToRelay,
+		MachineID:          strings.TrimSpace(opts.MachineID),
+		HostLabel:          strings.TrimSpace(opts.HostLabel),
+		Hostname:           strings.TrimSpace(opts.Hostname),
+		ProjectConfigPath:  strings.TrimSpace(opts.ProjectConfigPath),
 		AllowedPaths:       allowedPaths,
 		ForbiddenPaths:     forbiddenPaths,
 		DefaultValidations: defaultValidations,
@@ -278,6 +290,39 @@ func UseProject(registry *Registry, id string) (Project, error) {
 	}
 	registry.CurrentProjectID = project.ID
 	return project, nil
+}
+
+func BackfillMachineMetadata(registry *Registry, machineID, hostLabel, hostname string, now time.Time) bool {
+	if registry == nil {
+		return false
+	}
+	changed := false
+	machineID = strings.TrimSpace(machineID)
+	hostLabel = strings.TrimSpace(hostLabel)
+	hostname = strings.TrimSpace(hostname)
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	for i := range registry.Projects {
+		projectChanged := false
+		if registry.Projects[i].MachineID == "" && machineID != "" {
+			registry.Projects[i].MachineID = machineID
+			projectChanged = true
+		}
+		if registry.Projects[i].HostLabel == "" && hostLabel != "" {
+			registry.Projects[i].HostLabel = hostLabel
+			projectChanged = true
+		}
+		if registry.Projects[i].Hostname == "" && hostname != "" {
+			registry.Projects[i].Hostname = hostname
+			projectChanged = true
+		}
+		if projectChanged {
+			registry.Projects[i].UpdatedAt = now
+			changed = true
+		}
+	}
+	return changed
 }
 
 func ShareProject(registry *Registry, id, relayInstanceID, daemonURL string, now time.Time) (Project, error) {
