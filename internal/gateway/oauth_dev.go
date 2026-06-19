@@ -16,11 +16,13 @@ import (
 )
 
 type oauthDevService struct {
-	cfg    OAuthDevConfig
-	now    func() time.Time
-	mu     sync.Mutex
-	codes  map[string]oauthAuthCode
-	tokens map[string]oauthAccessToken
+	cfg                OAuthDevConfig
+	defaultUserID      string
+	defaultWorkspaceID string
+	now                func() time.Time
+	mu                 sync.Mutex
+	codes              map[string]oauthAuthCode
+	tokens             map[string]oauthAccessToken
 }
 
 type oauthAuthCode struct {
@@ -34,11 +36,13 @@ type oauthAuthCode struct {
 }
 
 type oauthAccessToken struct {
-	Name      string
-	TokenHash string
-	Scopes    []string
-	Resource  string
-	ExpiresAt time.Time
+	Name        string
+	TokenHash   string
+	UserID      string
+	WorkspaceID string
+	Scopes      []string
+	Resource    string
+	ExpiresAt   time.Time
 }
 
 func newOAuthDevService(cfg *Config) *oauthDevService {
@@ -265,11 +269,13 @@ func (o *oauthDevService) ExchangeCode(values url.Values, authorizationHeader, b
 	}
 	expiresIn := o.cfg.TokenTTLSeconds
 	tokenRecord := oauthAccessToken{
-		Name:      "gateway-oauth-dev",
-		TokenHash: tokenHash(accessToken),
-		Scopes:    strings.Fields(authCode.Scope),
-		Resource:  authCode.Resource,
-		ExpiresAt: now.Add(time.Duration(expiresIn) * time.Second),
+		Name:        "gateway-oauth-dev",
+		TokenHash:   tokenHash(accessToken),
+		UserID:      o.defaultUserID,
+		WorkspaceID: o.defaultWorkspaceID,
+		Scopes:      strings.Fields(authCode.Scope),
+		Resource:    authCode.Resource,
+		ExpiresAt:   now.Add(time.Duration(expiresIn) * time.Second),
 	}
 	o.tokens[tokenRecord.TokenHash] = tokenRecord
 	return map[string]any{
@@ -298,7 +304,7 @@ func (o *oauthDevService) Authenticate(token string) (*authPrincipal, *apiError)
 		delete(o.tokens, hash)
 		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "OAuth access token is expired"}
 	}
-	return &authPrincipal{Name: record.Name, TokenHash: record.TokenHash, Scopes: append([]string(nil), record.Scopes...)}, nil
+	return &authPrincipal{Name: record.Name, TokenHash: record.TokenHash, UserID: record.UserID, WorkspaceID: record.WorkspaceID, Scopes: append([]string(nil), record.Scopes...)}, nil
 }
 
 func (o *oauthDevService) issuer(baseURL string) string {

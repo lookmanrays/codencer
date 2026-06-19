@@ -52,13 +52,18 @@ type relayProjectMatch struct {
 func buildTools(server *Server) map[string]Tool {
 	return map[string]Tool{
 		"codencer.list_relays": {
-			Name:        "codencer.list_relays",
-			Description: "List Gateway relay profiles available to the official Codencer connector.",
-			InputSchema: objectSchema(nil, nil),
-			ReadOnly:    true,
-			Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
-				relays := make([]map[string]any, 0, len(server.cfg.RelayProfiles))
-				for _, profile := range server.cfg.RelayProfiles {
+			Name:           "codencer.list_relays",
+			Description:    "List Gateway relay profiles available to the official Codencer connector.",
+			InputSchema:    objectSchema(nil, nil),
+			ReadOnly:       true,
+			RequiredScopes: []string{"projects:read"},
+			Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
+				profiles, apiErr := server.relayProfiles(ctx, principal)
+				if apiErr != nil {
+					return ToolResult{}, apiErr
+				}
+				relays := make([]map[string]any, 0, len(profiles))
+				for _, profile := range profiles {
 					payload := relayStatusMap(profile)
 					payload["status"] = server.relayAvailability(ctx, profile)
 					relays = append(relays, payload)
@@ -67,12 +72,13 @@ func buildTools(server *Server) map[string]Tool {
 			},
 		},
 		"codencer.get_relay": {
-			Name:        "codencer.get_relay",
-			Description: "Get one Gateway relay profile without exposing backend bearer tokens.",
-			InputSchema: objectSchema([]string{"relay_profile_id"}, map[string]any{"relay_profile_id": stringSchema("Gateway relay profile id.")}),
-			ReadOnly:    true,
-			Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
-				profile, apiErr := server.profileByID(requiredStringValue(args, "relay_profile_id"))
+			Name:           "codencer.get_relay",
+			Description:    "Get one Gateway relay profile without exposing backend bearer tokens.",
+			InputSchema:    objectSchema([]string{"relay_profile_id"}, map[string]any{"relay_profile_id": stringSchema("Gateway relay profile id.")}),
+			ReadOnly:       true,
+			RequiredScopes: []string{"projects:read"},
+			Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
+				profile, apiErr := server.profileByID(ctx, principal, requiredStringValue(args, "relay_profile_id"))
 				if apiErr != nil {
 					return ToolResult{}, apiErr
 				}
@@ -82,26 +88,28 @@ func buildTools(server *Server) map[string]Tool {
 			},
 		},
 		"codencer.list_projects": {
-			Name:        "codencer.list_projects",
-			Description: "Aggregate shared Codencer projects across enabled backend Relays.",
-			InputSchema: objectSchema(nil, nil),
-			ReadOnly:    true,
-			Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
-				projects, relayErrors := server.aggregateProjects(ctx)
+			Name:           "codencer.list_projects",
+			Description:    "Aggregate shared Codencer projects across enabled backend Relays.",
+			InputSchema:    objectSchema(nil, nil),
+			ReadOnly:       true,
+			RequiredScopes: []string{"projects:read"},
+			Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
+				projects, relayErrors := server.aggregateProjects(ctx, principal)
 				return successToolResult("Listed projects through Codencer Gateway.", map[string]any{"projects": projects, "relay_errors": relayErrors}), nil
 			},
 		},
 		"codencer.get_project": {
-			Name:        "codencer.get_project",
-			Description: "Get a shared project through the Gateway, selecting a relay profile when needed.",
-			InputSchema: withSelectorSchema(objectSchema([]string{"project_id"}, map[string]any{"project_id": stringSchema("Project id.")})),
-			ReadOnly:    true,
-			Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
+			Name:           "codencer.get_project",
+			Description:    "Get a shared project through the Gateway, selecting a relay profile when needed.",
+			InputSchema:    withSelectorSchema(objectSchema([]string{"project_id"}, map[string]any{"project_id": stringSchema("Project id.")})),
+			ReadOnly:       true,
+			RequiredScopes: []string{"projects:read"},
+			Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
 				projectID, apiErr := requiredString(args, "project_id")
 				if apiErr != nil {
 					return ToolResult{}, apiErr
 				}
-				match, apiErr := server.resolveProject(ctx, projectID, args, false)
+				match, apiErr := server.resolveProject(ctx, principal, projectID, args, false)
 				if apiErr != nil {
 					return ToolResult{}, apiErr
 				}
@@ -109,16 +117,17 @@ func buildTools(server *Server) map[string]Tool {
 			},
 		},
 		"codencer.list_project_locations": {
-			Name:        "codencer.list_project_locations",
-			Description: "List safe machine/location metadata for a project across Gateway relay profiles.",
-			InputSchema: withSelectorSchema(objectSchema([]string{"project_id"}, map[string]any{"project_id": stringSchema("Project id.")})),
-			ReadOnly:    true,
-			Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
+			Name:           "codencer.list_project_locations",
+			Description:    "List safe machine/location metadata for a project across Gateway relay profiles.",
+			InputSchema:    withSelectorSchema(objectSchema([]string{"project_id"}, map[string]any{"project_id": stringSchema("Project id.")})),
+			ReadOnly:       true,
+			RequiredScopes: []string{"projects:read"},
+			Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
 				projectID, apiErr := requiredString(args, "project_id")
 				if apiErr != nil {
 					return ToolResult{}, apiErr
 				}
-				locations, relayErrors := server.projectLocations(ctx, projectID, args)
+				locations, relayErrors := server.projectLocations(ctx, principal, projectID, args)
 				return successToolResult("Listed project locations.", map[string]any{"project_id": projectID, "locations": locations, "relay_errors": relayErrors}), nil
 			},
 		},
@@ -166,8 +175,9 @@ func buildTools(server *Server) map[string]Tool {
 				"project_id": stringSchema("Project id."),
 				"run_id":     stringSchema("Run id."),
 			})),
-			ReadOnly: true,
-			Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
+			ReadOnly:       true,
+			RequiredScopes: []string{"reports:read", "runs:read"},
+			Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
 				projectID, apiErr := requiredString(args, "project_id")
 				if apiErr != nil {
 					return ToolResult{}, apiErr
@@ -176,7 +186,7 @@ func buildTools(server *Server) map[string]Tool {
 				if apiErr != nil {
 					return ToolResult{}, apiErr
 				}
-				match, apiErr := server.resolveProject(ctx, projectID, args, false)
+				match, apiErr := server.resolveProject(ctx, principal, projectID, args, false)
 				if apiErr != nil {
 					return ToolResult{}, apiErr
 				}
@@ -221,16 +231,17 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 		properties["timeout_seconds"] = intSchema("Timeout in seconds.")
 	}
 	return Tool{
-		Name:        name,
-		Description: description,
-		InputSchema: withSelectorSchema(objectSchema(required, properties)),
-		ReadOnly:    name == "codencer.get_run_report",
-		Invoke: func(ctx context.Context, args map[string]any) (ToolResult, *apiError) {
+		Name:           name,
+		Description:    description,
+		InputSchema:    withSelectorSchema(objectSchema(required, properties)),
+		ReadOnly:       name == "codencer.get_run_report",
+		RequiredScopes: forwardToolScopes(name),
+		Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
 			projectID, apiErr := requiredString(args, "project_id")
 			if apiErr != nil {
 				return ToolResult{}, apiErr
 			}
-			match, apiErr := s.resolveProject(ctx, projectID, args, true)
+			match, apiErr := s.resolveProject(ctx, principal, projectID, args, true)
 			if apiErr != nil {
 				return ToolResult{}, apiErr
 			}
@@ -273,11 +284,31 @@ func (s *Server) relayAvailability(ctx context.Context, profile RelayProfile) st
 	return "available"
 }
 
-func (s *Server) aggregateProjects(ctx context.Context) ([]aggregatedProject, []map[string]any) {
+func (s *Server) relayProfiles(ctx context.Context, principal *authPrincipal) ([]RelayProfile, *apiError) {
+	if s.store != nil && principal != nil && principal.WorkspaceID != "" {
+		records, err := s.store.ListRelayProfiles(ctx, principal.WorkspaceID)
+		if err != nil {
+			return nil, &apiError{Status: http.StatusInternalServerError, Code: "gateway_store_error", Message: err.Error()}
+		}
+		profiles := make([]RelayProfile, 0, len(records))
+		for _, record := range records {
+			profiles = append(profiles, record.ToRelayProfile())
+		}
+		return profiles, nil
+	}
+	return append([]RelayProfile(nil), s.cfg.RelayProfiles...), nil
+}
+
+func (s *Server) aggregateProjects(ctx context.Context, principal *authPrincipal) ([]aggregatedProject, []map[string]any) {
 	byID := map[string]*aggregatedProject{}
 	order := []string{}
 	relayErrors := []map[string]any{}
-	for _, profile := range s.cfg.RelayProfiles {
+	profiles, apiErr := s.relayProfiles(ctx, principal)
+	if apiErr != nil {
+		relayErrors = append(relayErrors, map[string]any{"code": apiErr.Code, "message": apiErr.Message})
+		return nil, relayErrors
+	}
+	for _, profile := range profiles {
 		if !profile.Enabled {
 			continue
 		}
@@ -337,9 +368,9 @@ func (s *Server) fetchRelayProject(ctx context.Context, profile RelayProfile, pr
 	return project, nil
 }
 
-func (s *Server) resolveProject(ctx context.Context, projectID string, args map[string]any, requireLocationDisambiguation bool) (relayProjectMatch, *apiError) {
+func (s *Server) resolveProject(ctx context.Context, principal *authPrincipal, projectID string, args map[string]any, requireLocationDisambiguation bool) (relayProjectMatch, *apiError) {
 	if relayProfileID, _ := args["relay_profile_id"].(string); strings.TrimSpace(relayProfileID) != "" {
-		profile, apiErr := s.profileByID(relayProfileID)
+		profile, apiErr := s.profileByID(ctx, principal, relayProfileID)
 		if apiErr != nil {
 			return relayProjectMatch{}, apiErr
 		}
@@ -356,7 +387,11 @@ func (s *Server) resolveProject(ctx context.Context, projectID string, args map[
 	}
 	matches := []relayProjectMatch{}
 	relayErrors := []map[string]any{}
-	for _, profile := range s.cfg.RelayProfiles {
+	profiles, apiErr := s.relayProfiles(ctx, principal)
+	if apiErr != nil {
+		return relayProjectMatch{}, apiErr
+	}
+	for _, profile := range profiles {
 		if !profile.Enabled {
 			continue
 		}
@@ -389,12 +424,16 @@ func (s *Server) resolveProject(ctx context.Context, projectID string, args map[
 	}
 }
 
-func (s *Server) projectLocations(ctx context.Context, projectID string, args map[string]any) ([]map[string]any, []map[string]any) {
+func (s *Server) projectLocations(ctx context.Context, principal *authPrincipal, projectID string, args map[string]any) ([]map[string]any, []map[string]any) {
 	locations := []map[string]any{}
 	relayErrors := []map[string]any{}
-	profiles := s.cfg.RelayProfiles
+	profiles, apiErr := s.relayProfiles(ctx, principal)
+	if apiErr != nil {
+		relayErrors = append(relayErrors, map[string]any{"code": apiErr.Code, "message": apiErr.Message})
+		return locations, relayErrors
+	}
 	if relayProfileID, _ := args["relay_profile_id"].(string); strings.TrimSpace(relayProfileID) != "" {
-		if profile, apiErr := s.profileByID(relayProfileID); apiErr == nil {
+		if profile, apiErr := s.profileByID(ctx, principal, relayProfileID); apiErr == nil {
 			profiles = []RelayProfile{profile}
 		} else {
 			relayErrors = append(relayErrors, map[string]any{"relay_profile_id": relayProfileID, "code": apiErr.Code, "message": apiErr.Message})
@@ -431,9 +470,13 @@ func (s *Server) projectLocations(ctx context.Context, projectID string, args ma
 	return locations, relayErrors
 }
 
-func (s *Server) profileByID(id string) (RelayProfile, *apiError) {
+func (s *Server) profileByID(ctx context.Context, principal *authPrincipal, id string) (RelayProfile, *apiError) {
 	id = strings.TrimSpace(id)
-	for _, profile := range s.cfg.RelayProfiles {
+	profiles, apiErr := s.relayProfiles(ctx, principal)
+	if apiErr != nil {
+		return RelayProfile{}, apiErr
+	}
+	for _, profile := range profiles {
 		if profile.ID == id {
 			if !profile.Enabled {
 				return RelayProfile{}, &apiError{Status: http.StatusServiceUnavailable, Code: "relay_profile_disabled", Message: "relay profile is disabled"}
@@ -530,11 +573,21 @@ func gatewayProjectPayload(profile RelayProfile, project relayProject) map[strin
 func relayStatusMap(profile RelayProfile) map[string]any {
 	status := RelayStatus(profile)
 	return map[string]any{
-		"id":        status.ID,
-		"name":      status.Name,
-		"url":       status.URL,
-		"token_env": status.TokenEnv,
-		"enabled":   status.Enabled,
+		"id":               status.ID,
+		"relay_profile_id": status.ID,
+		"name":             status.Name,
+		"url":              status.URL,
+		"enabled":          status.Enabled,
+		"token_configured": profile.TokenEnv != "" || profile.TokenFile != "",
+	}
+}
+
+func forwardToolScopes(name string) []string {
+	switch name {
+	case "codencer.get_run_report":
+		return []string{"reports:read", "runs:read"}
+	default:
+		return []string{"projects:read", "projects:write", "runs:write"}
 	}
 }
 

@@ -15,6 +15,8 @@ const (
 	ConfigVersion       = 1
 	DefaultListenAddr   = "127.0.0.1:19090"
 	DefaultGatewayToken = "CODENCER_GATEWAY_MCP_TOKEN"
+	DefaultRelayURL     = "https://relay.codencer.dev"
+	DefaultRelayToken   = "CODENCER_DEFAULT_RELAY_TOKEN"
 )
 
 type Config struct {
@@ -22,9 +24,21 @@ type Config struct {
 	PublicBaseURL string         `json:"public_base_url"`
 	MCPURL        string         `json:"mcp_url"`
 	ListenAddr    string         `json:"listen_addr"`
+	Store         StoreConfig    `json:"store,omitempty"`
+	DefaultRelay  DefaultRelay   `json:"default_relay,omitempty"`
 	Auth          AuthConfig     `json:"auth"`
 	OAuthDev      OAuthDevConfig `json:"oauth_dev,omitempty"`
 	RelayProfiles []RelayProfile `json:"relay_profiles,omitempty"`
+}
+
+type StoreConfig struct {
+	Path string `json:"path,omitempty"`
+}
+
+type DefaultRelay struct {
+	URL       string `json:"url,omitempty"`
+	TokenEnv  string `json:"token_env,omitempty"`
+	TokenFile string `json:"token_file,omitempty"`
 }
 
 type AuthConfig struct {
@@ -67,6 +81,10 @@ func DefaultConfig() *Config {
 		PublicBaseURL: "https://mcp.codencer.dev",
 		MCPURL:        "https://mcp.codencer.dev/mcp",
 		ListenAddr:    DefaultListenAddr,
+		DefaultRelay: DefaultRelay{
+			URL:      DefaultRelayURL,
+			TokenEnv: DefaultRelayToken,
+		},
 		Auth: AuthConfig{
 			Mode:     "bearer-dev",
 			TokenEnv: DefaultGatewayToken,
@@ -122,6 +140,10 @@ func (c *Config) Validate() error {
 	c.PublicBaseURL = strings.TrimRight(strings.TrimSpace(c.PublicBaseURL), "/")
 	c.MCPURL = strings.TrimRight(strings.TrimSpace(c.MCPURL), "/")
 	c.ListenAddr = strings.TrimSpace(c.ListenAddr)
+	c.Store.Path = strings.TrimSpace(c.Store.Path)
+	c.DefaultRelay.URL = strings.TrimRight(strings.TrimSpace(firstNonEmpty(c.DefaultRelay.URL, DefaultRelayURL)), "/")
+	c.DefaultRelay.TokenEnv = strings.TrimSpace(firstNonEmpty(c.DefaultRelay.TokenEnv, DefaultRelayToken))
+	c.DefaultRelay.TokenFile = strings.TrimSpace(c.DefaultRelay.TokenFile)
 	if c.PublicBaseURL == "" {
 		return fmt.Errorf("gateway public_base_url is required")
 	}
@@ -141,6 +163,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := validatePublicURL("mcp_url", c.MCPURL); err != nil {
+		return err
+	}
+	if err := validatePublicURL("default_relay.url", c.DefaultRelay.URL); err != nil {
 		return err
 	}
 	if c.Auth.Mode == "" {
@@ -229,6 +254,7 @@ func RedactedConfig(cfg *Config) *Config {
 	clone := *cfg
 	clone.RelayProfiles = make([]RelayProfile, len(cfg.RelayProfiles))
 	copy(clone.RelayProfiles, cfg.RelayProfiles)
+	clone.DefaultRelay.TokenFile = redactPathToken(clone.DefaultRelay.TokenFile)
 	clone.Auth.TokenFile = redactPathToken(clone.Auth.TokenFile)
 	clone.OAuthDev.ClientSecretHash = redactedNonEmpty(clone.OAuthDev.ClientSecretHash)
 	clone.OAuthDev.OperatorCodeHash = redactedNonEmpty(clone.OAuthDev.OperatorCodeHash)

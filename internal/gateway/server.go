@@ -35,6 +35,7 @@ var supportedProtocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26
 
 type Server struct {
 	cfg      *Config
+	store    *Store
 	client   *http.Client
 	tools    map[string]Tool
 	oauth    *oauthDevService
@@ -44,11 +45,12 @@ type Server struct {
 }
 
 type Tool struct {
-	Name        string
-	Description string
-	InputSchema map[string]any
-	ReadOnly    bool
-	Invoke      func(ctx context.Context, args map[string]any) (ToolResult, *apiError)
+	Name           string
+	Description    string
+	InputSchema    map[string]any
+	ReadOnly       bool
+	RequiredScopes []string
+	Invoke         func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError)
 }
 
 type ToolResult struct {
@@ -97,9 +99,11 @@ type mcpRPCError struct {
 }
 
 type authPrincipal struct {
-	Name      string
-	TokenHash string
-	Scopes    []string
+	Name        string
+	TokenHash   string
+	UserID      string
+	WorkspaceID string
+	Scopes      []string
 }
 
 type ServerOptions struct {
@@ -117,12 +121,27 @@ func NewServer(cfg *Config, opts ServerOptions) (*Server, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
+	var store *Store
+	if strings.TrimSpace(cfg.Store.Path) != "" {
+		opened, err := OpenStore(cfg.Store.Path)
+		if err != nil {
+			return nil, err
+		}
+		store = opened
+	}
 	server := &Server{
 		cfg:      cfg,
+		store:    store,
 		client:   client,
 		oauth:    newOAuthDevService(cfg),
 		sessions: make(map[string]*session),
 		started:  time.Now().UTC(),
+	}
+	if server.oauth != nil && server.store != nil {
+		if account, err := server.store.EnsureUserWorkspace(context.Background(), "oauth-dev@codencer.local", "OAuth Dev User", cfg.DefaultRelay); err == nil {
+			server.oauth.defaultUserID = account.User.ID
+			server.oauth.defaultWorkspaceID = account.Workspace.ID
+		}
 	}
 	server.tools = buildTools(server)
 	return server, nil
@@ -153,6 +172,16 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/gateway/v1/status", s.handleStatus)
+	mux.HandleFunc("/api/gateway/v1/device/authorize", s.handleDeviceAuthorize)
+	mux.HandleFunc("/api/gateway/v1/device/approve", s.handleDeviceApprove)
+	mux.HandleFunc("/api/gateway/v1/device/token", s.handleDeviceToken)
+	mux.HandleFunc("/api/gateway/v1/whoami", s.handleWhoami)
+	mux.HandleFunc("/api/gateway/v1/logout", s.handleLogout)
+	mux.HandleFunc("/api/gateway/v1/relays", s.handleRelays)
+	mux.HandleFunc("/api/gateway/v1/relays/", s.handleRelayByID)
+	mux.HandleFunc("/api/gateway/v1/connectors/login", s.handleConnectorLogin)
+	mux.HandleFunc("/api/gateway/v1/connectors/complete", s.handleConnectorComplete)
+	mux.HandleFunc("/device", s.handleDevicePage)
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", s.handleProtectedResource)
 	mux.HandleFunc("/.well-known/oauth-authorization-server", s.handleOAuthAuthorizationServer)
 	mux.HandleFunc("/.well-known/openid-configuration", s.handleOpenIDConfiguration)
@@ -329,7 +358,7 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request, sess *ses
 		}
 		s.writeRPC(w, mcpResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{"tools": s.listTools()}}, sess, protocolVersion)
 	case "tools/call":
-		s.handleToolCall(w, r, req, sess)
+		s.handleToolCall(w, r, req, sess, principal)
 	default:
 		protocolVersion, apiErr := s.resolveProtocolVersion(r, sess)
 		if apiErr != nil {
@@ -355,7 +384,7 @@ func (s *Server) handleInitialize(w http.ResponseWriter, r *http.Request, req mc
 	}}, sess, protocolVersion)
 }
 
-func (s *Server) handleToolCall(w http.ResponseWriter, r *http.Request, req mcpRequest, sess *session) {
+func (s *Server) handleToolCall(w http.ResponseWriter, r *http.Request, req mcpRequest, sess *session, principal *authPrincipal) {
 	protocolVersion, apiErr := s.resolveProtocolVersion(r, sess)
 	if apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
@@ -374,10 +403,14 @@ func (s *Server) handleToolCall(w http.ResponseWriter, r *http.Request, req mcpR
 		s.writeRPC(w, mcpResponse{JSONRPC: "2.0", ID: req.ID, Result: apiErrorToolResult(&apiError{Status: http.StatusNotFound, Code: "tool_not_found", Message: "unknown tool: " + params.Name})}, sess, protocolVersion)
 		return
 	}
+	if !principalAllows(principal, tool.RequiredScopes) {
+		s.writeRPC(w, mcpResponse{JSONRPC: "2.0", ID: req.ID, Result: apiErrorToolResult(&apiError{Status: http.StatusForbidden, Code: "insufficient_scope", Message: "Gateway token is missing required scope"})}, sess, protocolVersion)
+		return
+	}
 	if params.Arguments == nil {
 		params.Arguments = map[string]any{}
 	}
-	result, apiErr := tool.Invoke(r.Context(), params.Arguments)
+	result, apiErr := tool.Invoke(r.Context(), principal, params.Arguments)
 	if apiErr != nil {
 		s.writeRPC(w, mcpResponse{JSONRPC: "2.0", ID: req.ID, Result: apiErrorToolResult(apiErr)}, sess, protocolVersion)
 		return
@@ -412,6 +445,17 @@ func (s *Server) authenticate(r *http.Request) (*authPrincipal, *apiError) {
 	if token == "" {
 		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "gateway bearer token required"}
 	}
+	if s.store != nil {
+		if record, err := s.store.LookupAccessToken(r.Context(), token); err == nil {
+			return &authPrincipal{
+				Name:        "gateway-token",
+				TokenHash:   record.TokenHash,
+				UserID:      record.UserID,
+				WorkspaceID: record.WorkspaceID,
+				Scopes:      append([]string(nil), record.Scopes...),
+			}, nil
+		}
+	}
 	expected, err := s.cfg.Auth.Token()
 	if err == nil && expected != "" && token == expected {
 		return &authPrincipal{Name: "gateway-bearer-dev", TokenHash: tokenHash(token), Scopes: []string{"*"}}, nil
@@ -422,6 +466,28 @@ func (s *Server) authenticate(r *http.Request) (*authPrincipal, *apiError) {
 		}
 	}
 	return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "gateway authorization failed"}
+}
+
+func principalAllows(principal *authPrincipal, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+	if principal == nil {
+		return false
+	}
+	have := map[string]struct{}{}
+	for _, scope := range principal.Scopes {
+		if scope == "*" {
+			return true
+		}
+		have[scope] = struct{}{}
+	}
+	for _, want := range required {
+		if _, ok := have[want]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) addAuthChallenge(w http.ResponseWriter, r *http.Request, scope string) {
@@ -685,6 +751,12 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(sanitizeAny(payload))
+}
+
+func writePrivateJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func bearerToken(header string) string {
