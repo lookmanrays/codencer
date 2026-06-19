@@ -17,6 +17,7 @@ import (
 	"agent-bridge/internal/app"
 	"agent-bridge/internal/buildinfo"
 	"agent-bridge/internal/connectorops"
+	gatewaypkg "agent-bridge/internal/gateway"
 	"agent-bridge/internal/live"
 	"agent-bridge/internal/local"
 	"agent-bridge/internal/localexec"
@@ -81,6 +82,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runMachine(args[1:], stdout)
 	case "connector":
 		return runConnector(args[1:], stdout)
+	case "gateway":
+		return runGateway(args[1:], stdout)
 	case "run":
 		return runRun(args[1:], stdout)
 	case "submit":
@@ -218,6 +221,9 @@ func runConfig(args []string, stdout io.Writer) error {
 	}
 	if cfg.ConnectorConfigPath != "" {
 		fmt.Fprintf(stdout, "Connector config:   %s\n", cfg.ConnectorConfigPath)
+	}
+	if cfg.GatewayConfigPath != "" {
+		fmt.Fprintf(stdout, "Gateway config:     %s\n", cfg.GatewayConfigPath)
 	}
 	return nil
 }
@@ -489,6 +495,226 @@ func runConnector(args []string, stdout io.Writer) error {
 	default:
 		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown connector command %q", args[0]))
 	}
+}
+
+func runGateway(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer gateway <relay|status|config> [flags]")
+	}
+	switch args[0] {
+	case "relay":
+		return runGatewayRelay(args[1:], stdout)
+	case "status":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "gateway status does not accept positional arguments")
+		}
+		path, cfg, err := loadGatewayConfig(parsed.value("config"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		payload := map[string]any{
+			"ok":                  true,
+			"config_file":         path,
+			"mcp_url":             cfg.MCPURL,
+			"public_base_url":     cfg.PublicBaseURL,
+			"listen_addr":         cfg.ListenAddr,
+			"auth_mode":           cfg.Auth.Mode,
+			"oauth_dev_enabled":   cfg.OAuthDev.Enabled,
+			"relay_profile_count": len(cfg.RelayProfiles),
+			"relay_profiles":      gatewayRelayStatuses(cfg),
+		}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		fmt.Fprintf(stdout, "Gateway config: %s\n", path)
+		fmt.Fprintf(stdout, "MCP URL:        %s\n", cfg.MCPURL)
+		fmt.Fprintf(stdout, "Relay profiles: %d\n", len(cfg.RelayProfiles))
+		return nil
+	case "config":
+		if len(args) < 2 || args[1] != "show" {
+			return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer gateway config show [--config <path>] [--json]")
+		}
+		parsed, err := parseArgs(args[2:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "gateway config show does not accept positional arguments")
+		}
+		path, cfg, err := loadGatewayConfig(parsed.value("config"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		payload := map[string]any{"config_file": path, "config": gatewaypkg.RedactedConfig(cfg)}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		fmt.Fprintf(stdout, "Gateway config: %s\n", path)
+		fmt.Fprintf(stdout, "Public URL:     %s\n", cfg.PublicBaseURL)
+		fmt.Fprintf(stdout, "MCP URL:        %s\n", cfg.MCPURL)
+		fmt.Fprintf(stdout, "Relay profiles: %d\n", len(cfg.RelayProfiles))
+		return nil
+	default:
+		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown gateway command %q", args[0]))
+	}
+}
+
+func runGatewayRelay(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer gateway relay <add|list|status> [flags]")
+	}
+	switch args[0] {
+	case "add":
+		parsed, err := parseArgs(args[1:], []string{"json", "disabled"}, []string{"config", "id", "name", "url", "token-env", "token-file"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "gateway relay add does not accept positional arguments")
+		}
+		id := strings.TrimSpace(parsed.value("id"))
+		if id == "" {
+			return usageError(parsed.bool("json"), stdout, "gateway relay add requires --id")
+		}
+		relayURL := strings.TrimSpace(parsed.value("url"))
+		if relayURL == "" {
+			return usageError(parsed.bool("json"), stdout, "gateway relay add requires --url")
+		}
+		if parsed.value("token-env") == "" && parsed.value("token-file") == "" {
+			return usageError(parsed.bool("json"), stdout, "gateway relay add requires --token-env or --token-file")
+		}
+		path, cfg, err := loadOrDefaultGatewayConfig(parsed.value("config"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		cfg, err = gatewaypkg.UpsertRelayProfile(cfg, gatewaypkg.RelayProfile{
+			ID:        id,
+			Name:      parsed.value("name"),
+			URL:       relayURL,
+			TokenEnv:  parsed.value("token-env"),
+			TokenFile: parsed.value("token-file"),
+			Enabled:   !parsed.bool("disabled"),
+		})
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if err := gatewaypkg.SaveConfig(path, cfg); err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+		payload := map[string]any{"ok": true, "config_file": path, "relay": gatewaypkg.RelayStatus(mustGatewayProfile(cfg, id))}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		fmt.Fprintf(stdout, "Gateway relay profile %q saved in %s\n", id, path)
+		return nil
+	case "list", "status":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "gateway relay "+args[0]+" does not accept positional arguments")
+		}
+		path, cfg, err := loadGatewayConfig(parsed.value("config"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		payload := map[string]any{"config_file": path, "relays": gatewayRelayStatuses(cfg)}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		for _, profile := range cfg.RelayProfiles {
+			fmt.Fprintf(stdout, "%s\t%s\tenabled=%t\ttoken_env=%s\n", profile.ID, profile.URL, profile.Enabled, profile.TokenEnv)
+		}
+		return nil
+	default:
+		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown gateway relay command %q", args[0]))
+	}
+}
+
+func gatewayConfigPath(flagValue string) (string, error) {
+	if strings.TrimSpace(flagValue) != "" {
+		return filepath.Abs(flagValue)
+	}
+	paths, err := local.ResolvePaths("", "")
+	if err != nil {
+		return "", err
+	}
+	cfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(cfg.GatewayConfigPath) != "" {
+		return cfg.GatewayConfigPath, nil
+	}
+	return filepath.Join(paths.RuntimeDir, "gateway", "config.json"), nil
+}
+
+func loadGatewayConfig(flagValue string) (string, *gatewaypkg.Config, error) {
+	path, err := gatewayConfigPath(flagValue)
+	if err != nil {
+		return "", nil, err
+	}
+	cfg, err := gatewaypkg.LoadConfig(path)
+	if err != nil {
+		return "", nil, err
+	}
+	return path, cfg, nil
+}
+
+func loadOrDefaultGatewayConfig(flagValue string) (string, *gatewaypkg.Config, error) {
+	path, err := gatewayConfigPath(flagValue)
+	if err != nil {
+		return "", nil, err
+	}
+	cfg, err := gatewaypkg.LoadConfig(path)
+	if err == nil {
+		return path, cfg, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", nil, err
+	}
+	paths, pathErr := local.ResolvePaths("", "")
+	if pathErr != nil {
+		return "", nil, pathErr
+	}
+	if _, ensureErr := local.EnsureHome(paths, time.Now().UTC()); ensureErr != nil {
+		return "", nil, ensureErr
+	}
+	localCfg, loadErr := local.LoadConfig(paths.ConfigFile)
+	if loadErr != nil {
+		return "", nil, loadErr
+	}
+	localCfg.GatewayConfigPath = path
+	localCfg.UpdatedAt = time.Now().UTC()
+	if saveErr := local.SaveConfig(paths.ConfigFile, localCfg); saveErr != nil {
+		return "", nil, saveErr
+	}
+	return path, gatewaypkg.DefaultConfig(), nil
+}
+
+func gatewayRelayStatuses(cfg *gatewaypkg.Config) []gatewaypkg.RelayProfileStatus {
+	if cfg == nil {
+		return nil
+	}
+	out := make([]gatewaypkg.RelayProfileStatus, 0, len(cfg.RelayProfiles))
+	for _, profile := range cfg.RelayProfiles {
+		out = append(out, gatewaypkg.RelayStatus(profile))
+	}
+	return out
+}
+
+func mustGatewayProfile(cfg *gatewaypkg.Config, id string) gatewaypkg.RelayProfile {
+	for _, profile := range cfg.RelayProfiles {
+		if profile.ID == id {
+			return profile
+		}
+	}
+	return gatewaypkg.RelayProfile{ID: id}
 }
 
 func runProjectInit(args []string, stdout io.Writer) error {
@@ -1589,7 +1815,7 @@ func runReadiness(args []string, stdout io.Writer) error {
 
 func runSetup(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer setup <local|relay|mcp> [flags]")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer setup <local|relay|gateway|mcp> [flags]")
 	}
 	switch args[0] {
 	case "local":
@@ -1645,6 +1871,33 @@ func runSetup(args []string, stdout io.Writer) error {
 			Strict:                       parsed.bool("strict"),
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
+	case "gateway":
+		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "setup gateway does not accept positional arguments")
+		}
+		report, err := setuppkg.Gateway(contextBackground(), setuppkg.GatewayOptions{
+			BaseURL:           parsed.value("base-url"),
+			MCPURL:            parsed.value("mcp-url"),
+			ListenAddr:        parsed.value("listen"),
+			GatewayConfigPath: parsed.value("gateway-config"),
+			AuthMode:          parsed.value("auth"),
+			TokenEnv:          parsed.value("token-env"),
+			TokenFile:         parsed.value("token-file"),
+			EnableOAuthDev:    parsed.bool("enable-oauth-dev"),
+			OAuthIssuer:       parsed.value("oauth-issuer"),
+			OAuthClientID:     parsed.value("oauth-client-id"),
+			OAuthClientSecret: parsed.value("oauth-client-secret"),
+			InstallServices:   parsed.bool("install-services"),
+			StartServices:     parsed.bool("start-services"),
+			Manager:           parsed.value("manager"),
+			BinDir:            parsed.value("bin-dir"),
+			Strict:            parsed.bool("strict"),
+		})
+		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
 		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"client", "relay", "endpoint", "token-env", "token", "name"})
 		if err != nil {
@@ -1669,9 +1922,9 @@ func runSetup(args []string, stdout io.Writer) error {
 
 func runActivation(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer activation <check|package|chatgpt|codex|claude-code> [--json]")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer activation <check|package|gateway|chatgpt|codex|claude-code> [--json]")
 	}
-	parsed, err := parseArgs(args[1:], []string{"json", "run-fake-manifest", "check-oauth", "check-chatgpt-readiness"}, []string{"relay", "mcp-url", "token-env", "token", "project", "auth"})
+	parsed, err := parseArgs(args[1:], []string{"json", "run-fake-manifest", "check-oauth", "check-chatgpt-readiness"}, []string{"gateway", "relay", "mcp-url", "token-env", "token", "project", "auth"})
 	if err != nil {
 		return err
 	}
@@ -1679,6 +1932,7 @@ func runActivation(args []string, stdout io.Writer) error {
 		return usageError(parsed.bool("json"), stdout, "activation command does not accept positional arguments")
 	}
 	opts := activation.Options{
+		Gateway:               parsed.value("gateway"),
 		Relay:                 parsed.value("relay"),
 		MCPURL:                parsed.value("mcp-url"),
 		TokenEnv:              parsed.value("token-env"),
@@ -1695,6 +1949,8 @@ func runActivation(args []string, stdout io.Writer) error {
 		report, err = activation.CheckActivation(contextBackground(), opts)
 	case "package":
 		report, err = activation.Package(contextBackground(), opts)
+	case "gateway":
+		report, err = activation.Gateway(contextBackground(), opts)
 	case "chatgpt":
 		report, err = activation.ChatGPT(opts)
 		if err != nil {
@@ -1896,7 +2152,7 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|machine|connector|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func printPaths(w io.Writer, paths local.Paths) {

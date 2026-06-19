@@ -56,6 +56,56 @@ func TestPackageGenerationRedactsTokensAndWritesExpectedFiles(t *testing.T) {
 	}
 }
 
+func TestGatewayPackagePointsClientsAtGatewayURL(t *testing.T) {
+	home := t.TempDir()
+	report, err := Gateway(context.Background(), Options{
+		Gateway:      "https://mcp.codencer.dev",
+		Relay:        "https://relay.example.com",
+		Token:        "literal-gateway-token",
+		TokenEnv:     "CODENCER_GATEWAY_MCP_TOKEN",
+		ProjectID:    "codencer",
+		CodencerHome: home,
+		Now:          fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("gateway package: %v", err)
+	}
+	if !report.OK || report.PackagePath == "" {
+		t.Fatalf("expected gateway package success, got %+v", report)
+	}
+	expected := []string{"activation-package.json", "README.md", "gateway-curl-smoke.sh", "codex-config.toml", "claude-code-command.sh", "chatgpt-app-setup.md", "relay-profile-setup.sh"}
+	for _, name := range expected {
+		data, err := os.ReadFile(filepath.Join(report.PackagePath, name))
+		if err != nil {
+			t.Fatalf("%s missing: %v", name, err)
+		}
+		text := string(data)
+		if strings.Contains(text, "literal-gateway-token") {
+			t.Fatalf("%s leaked literal token: %s", name, data)
+		}
+		if (name == "codex-config.toml" || name == "claude-code-command.sh" || name == "chatgpt-app-setup.md" || name == "gateway-curl-smoke.sh") && !strings.Contains(text, "https://mcp.codencer.dev/mcp") {
+			t.Fatalf("%s does not point at Gateway MCP URL:\n%s", name, data)
+		}
+		if (name == "codex-config.toml" || name == "claude-code-command.sh" || name == "chatgpt-app-setup.md") && strings.Contains(text, "https://relay.example.com/mcp") {
+			t.Fatalf("%s points client at direct Relay MCP:\n%s", name, data)
+		}
+	}
+	readme, _ := os.ReadFile(filepath.Join(report.PackagePath, "README.md"))
+	if !strings.Contains(string(readme), "AI client -> Codencer Gateway -> selected Relay") {
+		t.Fatalf("gateway README missing official routing path:\n%s", readme)
+	}
+	relaySetup, _ := os.ReadFile(filepath.Join(report.PackagePath, "relay-profile-setup.sh"))
+	for _, want := range []string{"codencer setup gateway", "codencer gateway relay add", "https://relay.example.com"} {
+		if !strings.Contains(string(relaySetup), want) {
+			t.Fatalf("relay profile setup missing %q:\n%s", want, relaySetup)
+		}
+	}
+	chatgpt, _ := os.ReadFile(filepath.Join(report.PackagePath, "chatgpt-app-setup.md"))
+	if !strings.Contains(string(chatgpt), filepath.Join(home, "tokens", "gateway-oauth-client-secret")) {
+		t.Fatalf("Gateway ChatGPT setup should reference gateway OAuth secret files:\n%s", chatgpt)
+	}
+}
+
 func TestClientOutputsContainExpectedActivationGuidance(t *testing.T) {
 	for _, tc := range []struct {
 		name string

@@ -1,23 +1,23 @@
 # ChatGPT Custom MCP Integration Notes
 
 ChatGPT product proof is manual and workspace-gated. This repository can prepare
-the self-host Relay, OAuth dev metadata, activation package, tool list, and test
-prompts, but it must not claim ChatGPT product UI proof until an operator
-actually exercises ChatGPT and saves evidence.
+Gateway OAuth dev metadata, activation packages, tool lists, and test prompts,
+but it must not claim ChatGPT product UI proof until an operator actually
+exercises ChatGPT and saves evidence.
 
 Use this page with:
 
 - [ChatGPT custom MCP app setup](../chatgpt-app-setup.md)
 - [ChatGPT OAuth dev mode](../chatgpt-oauth-dev.md)
-- [Relay MCP tools](../relay_tools.md)
+- [Official Gateway activation](../../activation-official-gateway.md)
 - [MCP integrations](../integrations.md)
 
 ## Current Supported Surface
 
-ChatGPT must target the self-host Relay MCP endpoint:
+ChatGPT must target the official Gateway MCP endpoint:
 
 ```text
-https://<relay-host>/mcp
+https://mcp.codencer.dev/mcp
 ```
 
 Do not point ChatGPT at:
@@ -26,13 +26,14 @@ Do not point ChatGPT at:
 - `http://127.0.0.1`;
 - WSL-only loopback URLs;
 - old cloud-control-plane MCP examples;
-- any hosted Codencer Gateway/Cloud URL unless an official managed service
-  exists and is explicitly documented.
+- a self-host Relay `/mcp` endpoint unless you are deliberately running
+  advanced/direct/debug mode.
 
 ## Prerequisites
 
-- A public HTTPS self-host Relay.
-- A valid planner token, or Relay OAuth dev mode for single-user testing.
+- A public HTTPS Gateway endpoint.
+- Gateway bearer-dev auth or Gateway OAuth dev mode for single-user testing.
+- A backend self-host Relay profile configured in Gateway.
 - A local connector enrolled with the Relay.
 - At least one explicitly shared project.
 - An eligible ChatGPT workspace with custom MCP/developer mode access.
@@ -40,10 +41,9 @@ Do not point ChatGPT at:
 Generate setup materials:
 
 ```bash
-codencer setup relay --base-url https://relay.example.com --generate-planner-token --enable-chatgpt-oauth-dev --json
-codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
-codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
-codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
+codencer setup gateway --base-url https://mcp.codencer.dev --mcp-url https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json
+codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 ## Narrow Product Smoke
@@ -51,20 +51,20 @@ codencer activation chatgpt --relay https://relay.example.com --project codencer
 Only mark ChatGPT proof passed when all of this evidence exists:
 
 1. The ChatGPT workspace has custom MCP/developer mode enabled.
-2. The Codencer MCP app/connector is configured against the public Relay URL.
+2. The Codencer MCP app/connector is configured against the public Gateway URL.
 3. ChatGPT initializes the MCP session successfully.
 4. ChatGPT calls `codencer.list_projects`.
 5. If execution proof is claimed, ChatGPT calls an execution tool against a
    shared fake/local project and Codencer returns a structured result or blocker.
-6. Evidence is saved with timestamps and the exact Relay endpoint used.
+6. Evidence is saved with timestamps and the exact Gateway endpoint used.
 
 Until then, ChatGPT proof is pending/manual, not passed.
 
 ## Expected Tools
 
-The Relay exposes project-aware `codencer.*` tools. See
-[Relay MCP tools](../relay_tools.md) for the exact tool list and selector
-behavior.
+Gateway exposes project-aware `codencer.*` tools. See
+[Official Gateway activation](../../activation-official-gateway.md) for the
+exact Gateway tool list and selector behavior.
 
 Project listings include `locations[]`. If more than one online machine
 advertises the same `project_id`, ChatGPT must provide `machine_id` or
@@ -73,9 +73,9 @@ advertises the same `project_id`, ChatGPT must provide `machine_id` or
 
 ## Troubleshooting
 
-- If ChatGPT cannot reach the MCP server, confirm the Relay URL is public HTTPS.
-- If auth fails, confirm OAuth dev metadata or the operator-owned auth front
-  door forwards a bearer token Codencer accepts.
+- If ChatGPT cannot reach the MCP server, confirm the Gateway URL is public
+  HTTPS.
+- If auth fails, confirm Gateway OAuth dev metadata or bearer-dev token setup.
 - If no projects appear, confirm connector enrollment and `codencer project
-  share`.
+  share`, then confirm the Gateway relay profile points to the backend Relay.
 - If execution is ambiguous, pass `machine_id` or `host_label`.

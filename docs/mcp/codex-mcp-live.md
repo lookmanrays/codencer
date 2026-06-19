@@ -5,6 +5,20 @@ Codex MCP activation generates configuration artifacts only. It does not write u
 ## Generate
 
 ```bash
+./bin/codencer activation gateway \
+  --gateway https://mcp.codencer.dev \
+  --relay https://relay.example.com \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --project codencer \
+  --json
+```
+
+The generated package includes a Codex config pointing to
+`https://mcp.codencer.dev/mcp`.
+
+Direct Relay debug setup remains available:
+
+```bash
 ./bin/codencer activation codex \
   --relay https://relay.example.com \
   --token-env CODENCER_MCP_TOKEN \
@@ -12,7 +26,7 @@ Codex MCP activation generates configuration artifacts only. It does not write u
   --json
 ```
 
-The output includes:
+Codex setup output includes:
 
 - `codex mcp add ... --bearer-token-env-var CODENCER_MCP_TOKEN`
 - project/user TOML snippets

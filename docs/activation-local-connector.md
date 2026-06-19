@@ -1,6 +1,13 @@
 # Local Connector Activation
 
-The connector advertises explicitly shared local projects to a self-host relay. It does not expose arbitrary filesystem access or a raw shell.
+The connector advertises explicitly shared local projects to a self-host Relay.
+It does not expose arbitrary filesystem access or a raw shell. In the official
+connector path, AI clients talk to Gateway, Gateway selects a Relay, and the
+Relay routes to this connector:
+
+```text
+AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
+```
 
 ## Prepare Local Project
 
@@ -86,6 +93,17 @@ export CODENCER_MCP_TOKEN=<planner-token>
 ```
 
 The check verifies protected-resource metadata, unauthenticated MCP challenge behavior, MCP initialize/tools list, project visibility, and path redaction. Add `--run-fake-manifest` only when the fake project/profile is intentionally registered for server preflight.
+
+For official client activation, generate the Gateway package instead:
+
+```bash
+./bin/codencer activation gateway \
+  --gateway https://mcp.codencer.dev \
+  --relay https://relay.example.com \
+  --project codencer \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --json
+```
 
 ## Planner Protocol
 

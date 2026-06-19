@@ -13,8 +13,8 @@ the implementation brief.
 - The "What exists today" section does not reflect the v0.3 local/self-host RC.
 - Old beta-track language makes cloud/control-plane surfaces sound like the
   current open-source path.
-- Any hosted launch date wording should be replaced with future
-  Codencer Gateway/Cloud positioning.
+- Any hosted launch date wording should be replaced with current Gateway MVP
+  plus future Codencer Cloud positioning.
 - The site must not claim live ChatGPT, Codex, or Claude product proof unless
   actual evidence exists.
 
@@ -26,13 +26,15 @@ Position Codencer as:
 - an open-source local/self-host bridge between AI planners and coding
   executors;
 - local-first by default;
-- self-host Relay plus MCP for remote planner/client access;
+- one official Codencer connector at `https://mcp.codencer.dev/mcp`;
+- Codencer Gateway routing to self-host Relay or future managed Relays;
+- self-host Relay as backend transport and advanced/direct/debug MCP mode;
 - local connector for explicit project sharing;
 - project-local `.codencer/project.json`;
 - machine-aware routing by `machine_id` or `host_label`;
 - activation support for ChatGPT custom MCP app setup, Claude Code MCP setup,
   and Codex MCP setup;
-- future Codencer Gateway/Cloud as a separate planned managed layer.
+- future Codencer Cloud as a separate planned managed layer.
 
 ## Suggested Homepage Sections
 
@@ -40,11 +42,11 @@ Position Codencer as:
 2. What Codencer is
 3. How it works
 4. Local-first flow
-5. Self-host Relay + MCP flow
+5. Gateway + self-host Relay flow
 6. Project config + machine routing
 7. MCP clients
 8. Status matrix
-9. OSS now / Gateway later
+9. One connector now / Cloud later
 10. Quickstart
 11. Docs links
 12. License and trademark note
@@ -61,10 +63,13 @@ Open-source local/self-host bridge between AI planners and coding executors.
 
 ### Status Line
 
-v0.3.0-local-prod-rc.1: local-first daemon, self-host Relay, project-aware MCP,
-activation packages, and release snapshot packaging.
+v0.3.0-local-prod-rc.1: local-first daemon, official Gateway MCP,
+self-host Relay backend, project-aware MCP tools, activation packages, and
+release snapshot packaging.
 
 ### What Codencer Is
+
+One official Codencer connector.
 
 Codencer is a bridge, not a planner. The planner decides what should happen.
 The executor performs approved work. Codencer records runs, steps, attempts,
@@ -76,25 +81,33 @@ next decision from structured evidence.
 Codencer Core includes local CLI and daemon execution, project registry,
 project-local `.codencer/project.json`, machine identity and host labels,
 manifest execution, structured blockers, self-host Relay, local connector,
-Relay-hosted MCP tools, MCP setup snippets for Codex and Claude Code, ChatGPT
-custom MCP app setup guidance with OAuth dev mode, activation package
-generation, readiness/acceptance/proof bundles, and release snapshots for
-darwin and linux/amd64.
+official Gateway MCP, Relay profiles, MCP setup snippets for Codex and Claude
+Code, ChatGPT custom MCP app setup guidance with OAuth dev mode, activation
+package generation, readiness/acceptance/proof bundles, and release snapshots
+for darwin and linux/amd64.
 
 ### What Is Not Claimed Yet
 
 Live ChatGPT product UI proof, live Codex client proof, and live Claude Code
 client proof remain pending unless those products are actually connected and
 evidence is saved. Codencer does not currently claim signed/notarized binaries,
-Windows-native daemon binaries, hosted Gateway/Cloud availability, commercial
-billing, or hosted UI from this repository.
+Windows-native daemon binaries, hosted Codencer Cloud availability, commercial
+billing, hosted UI, or production multi-user Gateway auth from this repository.
 
-### Self-Host Now, Gateway Later
+### One Official Connector
 
-The open-source path today is self-host Relay plus local connector. Future
-Codencer Gateway/Cloud is a separate managed layer with official service
-identity. The same local connector and project-aware MCP toolset conceptually
-carry forward, but the hosted service is not shipped by this repository.
+Connect ChatGPT, Claude Code, and Codex to `https://mcp.codencer.dev/mcp`.
+Codencer Gateway authenticates the AI client, lists projects across Relay
+profiles, routes to your self-host Relay or future Codencer-managed Relay, and
+returns structured result/blocker/evidence. Direct self-host Relay MCP remains
+available for advanced/debug mode.
+
+### Self-Host Now, Cloud Later
+
+The open-source path includes Gateway plus self-host Relay and local connector.
+Future Codencer Cloud is a separate managed layer with official service
+identity. The same local connector and project-aware MCP toolset carry forward,
+but hosted Cloud services are not shipped by this repository.
 
 ### Try It Locally
 
@@ -115,12 +128,21 @@ codencer connector enroll --relay-url https://relay.example.com --daemon-url htt
 codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
 ```
 
+### Connect Through Gateway
+
+```bash
+codencer setup gateway --base-url https://mcp.codencer.dev --mcp-url https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json
+codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+```
+
 ## Navigation Updates
 
 Recommended navigation:
 
 - Docs
 - Quickstart
+- Official Gateway
 - Self-host Relay
 - MCP clients
 - Architecture
@@ -131,6 +153,7 @@ Recommended repository doc targets:
 
 - Quickstart: `docs/quickstart-local.md`
 - Self-host Relay: `docs/quickstart-self-host-relay.md`
+- Official Gateway: `docs/activation-official-gateway.md`
 - VPS Relay activation: `docs/activation-vps-relay.md`
 - Local connector activation: `docs/activation-local-connector.md`
 - MCP clients: `docs/mcp/integrations.md`
@@ -146,7 +169,8 @@ Recommended repository doc targets:
 | Local CLI/daemon | RC, deterministic proof available |
 | Project config | RC, committed `.codencer/project.json` |
 | Machine identity/routing | RC, selector support by `machine_id` or `host_label` |
-| Self-host Relay | RC, deterministic relay/MCP smoke available |
+| Codencer Gateway | MVP, deterministic `make verify-gateway` smoke available |
+| Self-host Relay | RC backend/direct-debug MCP, deterministic relay/MCP smoke available |
 | Local connector | RC, explicit project sharing |
 | Relay MCP tools | RC, project-aware tools |
 | Codex MCP setup | Setup artifacts generated; live client proof pending unless run |
@@ -154,7 +178,7 @@ Recommended repository doc targets:
 | ChatGPT custom MCP app setup | Setup sheet/OAuth dev support; product UI proof pending unless run |
 | Release snapshots | darwin and linux/amd64 packaging; not signed/notarized |
 | Windows path | WSL2/Linux; Windows-native daemon not claimed |
-| Hosted Gateway/Cloud | Future managed layer; not shipped in this repo |
+| Hosted Codencer Cloud | Future managed layer; not shipped in this repo |
 
 ## License And Trademark Note
 
@@ -169,8 +193,9 @@ Codencer service.
 
 - Replace old beta/version copy with `v0.3.0-local-prod-rc.1`.
 - Remove or demote old beta-track language from primary homepage sections.
-- Keep self-host Relay as the current OSS remote path.
-- Present Gateway/Cloud only as a future managed layer.
+- Present one official Codencer connector using Gateway.
+- Keep self-host Relay as backend transport and advanced/direct/debug mode.
+- Present Codencer Cloud as a future managed layer.
 - Add project config and machine-aware routing sections.
 - Add MCP client setup section for ChatGPT, Claude Code, and Codex.
 - Link to current docs from the repository.

@@ -19,6 +19,7 @@ import (
 
 	"agent-bridge/internal/connector"
 	"agent-bridge/internal/domain"
+	"agent-bridge/internal/gateway"
 	"agent-bridge/internal/local"
 	"agent-bridge/internal/localexec"
 	manifestpkg "agent-bridge/internal/manifest"
@@ -84,6 +85,26 @@ type RelayOptions struct {
 	BinDir                       string
 	Strict                       bool
 	Now                          func() time.Time
+}
+
+type GatewayOptions struct {
+	BaseURL           string
+	MCPURL            string
+	ListenAddr        string
+	GatewayConfigPath string
+	AuthMode          string
+	TokenEnv          string
+	TokenFile         string
+	EnableOAuthDev    bool
+	OAuthIssuer       string
+	OAuthClientID     string
+	OAuthClientSecret string
+	InstallServices   bool
+	StartServices     bool
+	Manager           string
+	BinDir            string
+	Strict            bool
+	Now               func() time.Time
 }
 
 type MCPOptions struct {
@@ -392,6 +413,118 @@ func Relay(ctx context.Context, opts RelayOptions) (Report, error) {
 			"allow_real_projects": opts.AllowRealProjectsInDevNoAuth,
 		},
 	}
+	return report.finish(exitForSteps(report.Steps, opts.Strict)), nil
+}
+
+func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
+	started := now(opts.Now)
+	paths, err := local.ResolvePaths("", "")
+	if err != nil {
+		return Report{}, err
+	}
+	report := baseReport("gateway", started, &paths)
+	if _, err := local.EnsureHome(paths, started); err != nil {
+		report.add("init_home", "failed", err.Error())
+		return report.finish(localexec.ExitInternal), nil
+	}
+	report.add("init_home", "passed", paths.Home)
+
+	gatewayConfigPath := firstNonEmpty(opts.GatewayConfigPath, filepath.Join(paths.RuntimeDir, "gateway", "config.json"))
+	baseURL := strings.TrimRight(firstNonEmpty(opts.BaseURL, "https://mcp.codencer.dev"), "/")
+	mcpURL := strings.TrimRight(firstNonEmpty(opts.MCPURL, baseURL+"/mcp"), "/")
+	if !strings.HasSuffix(mcpURL, "/mcp") {
+		mcpURL += "/mcp"
+	}
+	cfg := gateway.DefaultConfig()
+	cfg.PublicBaseURL = baseURL
+	cfg.MCPURL = mcpURL
+	cfg.ListenAddr = firstNonEmpty(opts.ListenAddr, gateway.DefaultListenAddr)
+	cfg.Auth.Mode = firstNonEmpty(opts.AuthMode, "bearer-dev")
+	cfg.Auth.TokenEnv = firstNonEmpty(opts.TokenEnv, gateway.DefaultGatewayToken)
+	cfg.Auth.TokenFile = strings.TrimSpace(opts.TokenFile)
+	cfg.OAuthDev.Enabled = opts.EnableOAuthDev
+	cfg.OAuthDev.Issuer = strings.TrimRight(firstNonEmpty(opts.OAuthIssuer, baseURL), "/")
+	cfg.OAuthDev.ClientID = firstNonEmpty(opts.OAuthClientID, "codencer-chatgpt-dev")
+
+	oauthOutput := map[string]any{"enabled": opts.EnableOAuthDev}
+	if opts.EnableOAuthDev {
+		clientSecret := strings.TrimSpace(opts.OAuthClientSecret)
+		if clientSecret == "" {
+			clientSecret, err = randomToken()
+			if err != nil {
+				return Report{}, err
+			}
+			clientSecretPath := filepath.Join(paths.TokensDir, "gateway-oauth-client-secret")
+			if err := os.WriteFile(clientSecretPath, []byte(clientSecret+"\n"), 0600); err != nil {
+				return Report{}, err
+			}
+			report.add("gateway_oauth_client_secret_generated", "passed", clientSecretPath)
+			oauthOutput["client_secret_file"] = clientSecretPath
+		} else {
+			report.add("gateway_oauth_client_secret_supplied", "passed", "literal client secret accepted and redacted from output")
+		}
+		operatorCode, err := randomToken()
+		if err != nil {
+			return Report{}, err
+		}
+		operatorCodePath := filepath.Join(paths.TokensDir, "gateway-oauth-operator-code")
+		if err := os.WriteFile(operatorCodePath, []byte(operatorCode+"\n"), 0600); err != nil {
+			return Report{}, err
+		}
+		report.add("gateway_oauth_operator_code_generated", "passed", operatorCodePath)
+		cfg.OAuthDev.ClientSecretHash = sha256Hex(clientSecret)
+		cfg.OAuthDev.OperatorCodeHash = sha256Hex(operatorCode)
+		cfg.OAuthDev.TokenTTLSeconds = 3600
+		cfg.OAuthDev.AuthorizationCodeTTL = 300
+		oauthOutput["issuer"] = cfg.OAuthDev.Issuer
+		oauthOutput["client_id"] = cfg.OAuthDev.ClientID
+		oauthOutput["operator_code_file"] = operatorCodePath
+	}
+
+	if err := gateway.SaveConfig(gatewayConfigPath, cfg); err != nil {
+		report.add("gateway_config", "failed", err.Error())
+		return report.finish(localexec.ExitInvalidInput), nil
+	}
+	report.add("gateway_config", "passed", gatewayConfigPath)
+
+	localCfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return Report{}, err
+	}
+	localCfg.GatewayConfigPath = gatewayConfigPath
+	localCfg.UpdatedAt = started
+	if err := local.SaveConfig(paths.ConfigFile, localCfg); err != nil {
+		return Report{}, err
+	}
+	report.add("local_config_updated", "passed", paths.ConfigFile)
+
+	if opts.InstallServices {
+		report.add("gateway_service_install", "skipped", "codencer-gatewayd service install is not wired yet; run codencer-gatewayd serve under your supervisor")
+	} else {
+		report.add("gateway_service_install", "skipped", "pass --install-services after service templates include codencer-gatewayd")
+	}
+	if opts.StartServices {
+		report.add("gateway_service_start", "skipped", "start codencer-gatewayd serve --config "+gatewayConfigPath)
+	} else {
+		report.add("gateway_service_start", "skipped", "pass --start-services after service templates include codencer-gatewayd")
+	}
+	report.Configured = true
+	report.NextCommands = []string{
+		"export " + cfg.Auth.TokenEnv + "=<gateway-client-token>",
+		"codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json",
+		"codencer-gatewayd serve --config " + gatewayConfigPath,
+		"codencer activation gateway --gateway " + baseURL + " --relay https://relay.example.com --project codencer --token-env " + cfg.Auth.TokenEnv + " --json",
+	}
+	report.Output = map[string]any{
+		"base_url":       baseURL,
+		"mcp_url":        mcpURL,
+		"listen_addr":    cfg.ListenAddr,
+		"auth_mode":      cfg.Auth.Mode,
+		"token_env":      cfg.Auth.TokenEnv,
+		"gateway_config": gatewayConfigPath,
+		"oauth_dev":      oauthOutput,
+	}
+	_ = ctx
 	return report.finish(exitForSteps(report.Steps, opts.Strict)), nil
 }
 

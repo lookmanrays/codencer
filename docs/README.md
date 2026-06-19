@@ -5,6 +5,7 @@ Start here for the current open-source local/self-host RC:
 - [Local quickstart](quickstart-local.md)
 - [Local production guide](local-production.md)
 - [Self-host Relay quickstart](quickstart-self-host-relay.md)
+- [Official Gateway activation](activation-official-gateway.md)
 - [Project config](project-config.md)
 - [VPS Relay activation](activation-vps-relay.md)
 - [Local connector activation](activation-local-connector.md)
@@ -15,6 +16,7 @@ Start here for the current open-source local/self-host RC:
 ## MCP Clients
 
 - [MCP integrations](mcp/integrations.md)
+- [Official Gateway activation](activation-official-gateway.md)
 - [Relay MCP tools](mcp/relay_tools.md)
 - [MCP Gateway model](architecture/mcp-gateway-model.md)
 - [Codex MCP activation](mcp/codex-mcp-live.md)

@@ -1,10 +1,15 @@
 # Relay MCP Tools
 
-Codencer exposes the remote MCP surface from the relay, not from the local daemon.
+Codencer exposes a direct MCP surface from the Relay for advanced/direct/debug
+mode. Official client setup should use Codencer Gateway instead:
+
+```text
+AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
+```
 
 This page is about direct relay mode.
 
-For the current OSS path, planners and clients use the self-host Relay MCP endpoint at `/mcp`. Experimental cloud-control-plane MCP behavior is documented separately in [Cloud MCP Tools](cloud_tools.md) and is not the hosted Codencer Gateway/Cloud service.
+For official Gateway setup, see [Official Gateway activation](../activation-official-gateway.md) and [MCP Gateway model](../architecture/mcp-gateway-model.md). Experimental cloud-control-plane MCP behavior is documented separately in [Cloud MCP Tools](cloud_tools.md) and is not the hosted Codencer Gateway/Cloud service.
 
 For the current planner/client matrix and client-specific packaging notes, see [MCP Integrations](integrations.md).
 
@@ -108,7 +113,7 @@ Compatibility instance tools:
 
 ## Client Snippets
 
-Generate current client setup snippets:
+Generate direct Relay debug snippets:
 
 ```bash
 ./bin/codencer-relayd mcp-config --client codex --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN

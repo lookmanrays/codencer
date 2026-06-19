@@ -77,11 +77,12 @@ profiles:
         commands:
           - ./bin/codencer proof bundle --json
       - id: setup_mcp_snippets
-        status: sprint_6_implemented
+        status: sprint_8_gateway_updated
         commands:
-          - ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
-          - ./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
-          - ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+          - ./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+        notes: Direct Relay MCP snippets remain available only for advanced/direct/debug mode.
       - id: activation_package_and_preflight
         status: sprint_7_implemented
         commands:
@@ -104,12 +105,12 @@ profiles:
         status: sprint_7_1_implemented
         commands:
           - go test ./internal/mcpconfig ./internal/activation ./cmd/codencer
-        notes: Canonical order is claude mcp add --transport http --header "Authorization: Bearer $CODENCER_MCP_TOKEN" codencer https://relay.example.com/mcp.
+        notes: Gateway canonical order is claude mcp add --transport http --header "Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN" codencer https://mcp.codencer.dev/mcp. Direct Relay remains advanced/debug only.
       - id: chatgpt_setup_sheet_complete
-        status: sprint_7_1_implemented
+        status: sprint_8_gateway_updated
         commands:
-          - ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
-        notes: JSON setup sheet includes endpoint, auth mode, client id, local token file paths, OAuth endpoints/metadata, scopes, expected tools, UI steps, test prompts, and evidence checklist.
+          - ./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --auth oauth --json
+        notes: JSON setup sheet includes Gateway endpoint, auth mode, client id, local token file paths, OAuth endpoints/metadata, scopes, expected tools, UI steps, test prompts, relay profile guidance, and evidence checklist.
       - id: curl_smoke_real_mcp_flow
         status: sprint_7_1_implemented
         commands:
@@ -124,7 +125,75 @@ profiles:
         status: sprint_7_1_implemented
         commands:
           - test -f docs/architecture/mcp-gateway-model.md
-        notes: Documents one MCP toolset, one connector, self-host Relay, future Gateway/Cloud mode, and no separate ChatGPT/Claude/Codex agents.
+        notes: Documents the official Gateway MCP surface, Relay profiles, direct Relay debug mode, routing selectors, and no separate ChatGPT/Claude/Codex agents.
+      - id: official_gateway_binary_present
+        status: sprint_8_implemented
+        commands:
+          - make build-gateway
+          - test -x bin/codencer-gatewayd
+        notes: `codencer-gatewayd` is a release/build artifact for the official Gateway MCP endpoint.
+      - id: gateway_config_valid
+        status: sprint_8_implemented
+        commands:
+          - go test ./internal/gateway ./internal/setup ./cmd/codencer
+        notes: Gateway config validates URLs, bearer-dev auth, OAuth dev metadata, Relay profiles, token env/file references, and redacted output.
+      - id: gateway_mcp_initialize
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Deterministic verifier initializes Gateway `/mcp` with isolated temp services and random free ports.
+      - id: gateway_list_relays
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Gateway lists relay profiles without exposing backend Relay tokens.
+      - id: gateway_list_projects
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Gateway aggregates projects across relay profiles and verifies no obvious absolute local path or token leakage.
+      - id: gateway_forward_manifest
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Gateway forwards fake manifest execution through selected Relay/machine and retrieves the run report.
+      - id: gateway_ambiguous_relay_blocker
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Multiple matching Relay profiles without `relay_profile_id` return `ambiguous_relay_profile`.
+      - id: gateway_ambiguous_location_blocker
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Multiple online project locations in a selected Relay without `machine_id` or `host_label` return `ambiguous_project_location`.
+      - id: gateway_relay_unavailable_blocker
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Backend Relay outage returns structured blocker `relay_unavailable`.
+      - id: gateway_auth_metadata
+        status: sprint_8_implemented
+        commands:
+          - go test ./internal/gateway
+          - make verify-gateway
+        notes: Gateway exposes protected-resource metadata and OAuth dev authorization-server metadata for product-facing MCP setup.
+      - id: gateway_activation_package
+        status: sprint_8_implemented
+        commands:
+          - go test ./internal/activation ./cmd/codencer
+          - ./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+        notes: Activation package contains Gateway curl smoke, Codex config, Claude Code command, ChatGPT setup, relay profile setup instructions, and evidence checklist.
+      - id: official_connector_docs_use_gateway_url
+        status: sprint_8_implemented
+        commands:
+          - rg "https://mcp.codencer.dev/mcp" README.md docs
+        notes: Primary client docs use Gateway as the official connector URL.
+      - id: self_host_direct_marked_advanced
+        status: sprint_8_implemented
+        commands:
+          - rg "advanced/direct/debug" README.md docs
+        notes: Direct self-host Relay `/mcp` remains supported but is documented as advanced/direct/debug mode.
       - id: readme_current_version
         status: sprint_7_3_implemented
         commands:
@@ -170,7 +239,7 @@ profiles:
           - test -f docs/quickstart-self-host-relay.md
           - test -f docs/activation-vps-relay.md
           - test -f docs/activation-local-connector.md
-        notes: Self-host docs keep Relay/connector as the OSS remote path and do not claim hosted Gateway/Cloud.
+        notes: Self-host docs keep Relay/connector as backend and direct-debug paths while official client activation uses Gateway.
       - id: mcp_client_docs_current
         status: sprint_7_3_implemented
         commands:

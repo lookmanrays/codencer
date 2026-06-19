@@ -8,8 +8,10 @@ Use this for the local/self-host production release-candidate path. It is intent
 gofmt -w <touched-go-files>
 go test ./...
 make build-codencer
+make build-gateway
 make verify-local-execution
 make verify-local-relay-mcp
+make verify-gateway
 make verify-runtime-recovery
 make verify-live-matrix
 make acceptance-local-production
@@ -24,6 +26,8 @@ make release-snapshot VERSION=v0.3.0-local-prod-rc.1
 ```
 
 The snapshot writes real `dist/codencer_*.tar.gz` archives, `dist/manifest.json`, and `dist/checksums.txt`. A GitHub source ZIP is not a release artifact.
+Release archives include `codencer-gatewayd` alongside `codencer`,
+`orchestratord`, `codencer-relayd`, and `codencer-connectord`.
 
 Default required RC targets are:
 

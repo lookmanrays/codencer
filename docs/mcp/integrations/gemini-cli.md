@@ -1,8 +1,10 @@
 # Gemini CLI MCP Integration Notes
 
-Gemini CLI integration remains expected/operator-packaged. Codencer proves the
-self-host Relay MCP surface directly, but this repository does not claim Gemini
-CLI product proof unless an operator runs Gemini CLI and saves evidence.
+Gemini CLI integration remains expected/operator-packaged. The official
+Codencer connector path is Gateway-first for ChatGPT, Claude Code, and Codex;
+direct self-host Relay MCP remains available for advanced/direct/debug clients.
+This repository does not claim Gemini CLI product proof unless an operator runs
+Gemini CLI and saves evidence.
 
 Use this page with:
 
@@ -12,21 +14,22 @@ Use this page with:
 
 ## Current Surface
 
-Use the self-host Relay MCP endpoint:
+For an official-style remote MCP setup, use the Gateway MCP endpoint:
 
 ```text
-https://<relay-host>/mcp
+https://mcp.codencer.dev/mcp
 ```
 
-Do not point Gemini CLI at the local daemon or a loopback URL unless you are
-running a private local experiment and labeling the result accordingly.
+Direct `https://<relay-host>/mcp` is an advanced/direct/debug path. Do not point
+Gemini CLI at the local daemon or a loopback URL unless you are running a
+private local experiment and labeling the result accordingly.
 
 ## Operator Setup Shape
 
 Configure Gemini CLI with:
 
-- HTTP MCP server URL: `https://<relay-host>/mcp`
-- Authorization header: `Bearer <planner-token>`
+- HTTP MCP server URL: `https://mcp.codencer.dev/mcp`
+- Authorization header: `Bearer <gateway-token>`
 - Server name: `codencer`
 
 Then ask Gemini CLI to make a non-destructive first call:

@@ -91,6 +91,7 @@ var releaseBinaries = []binarySpec{
 	{name: "codencer", pkg: "./cmd/codencer"},
 	{name: "orchestratord", pkg: "./cmd/orchestratord"},
 	{name: "codencer-relayd", pkg: "./cmd/codencer-relayd"},
+	{name: "codencer-gatewayd", pkg: "./cmd/codencer-gatewayd"},
 	{name: "codencer-connectord", pkg: "./cmd/codencer-connectord"},
 }
 
@@ -377,7 +378,12 @@ func writeBundleFiles(repo, stage string) error {
 	if err := os.MkdirAll(stage, 0755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(stage, "QUICKSTART.txt"), []byte("Codencer local production release snapshot\n\nRun ./scripts/install.sh --bin-dir ./bin --dry-run first, then codencer setup local --json.\n"), 0644); err != nil {
+	quickstart := "Codencer local production release snapshot\n\n" +
+		"Run ./scripts/install.sh --bin-dir ./bin --dry-run first.\n\n" +
+		"Local setup: codencer setup local --json\n" +
+		"Gateway setup: codencer setup gateway --base-url https://mcp.codencer.dev --mcp-url https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json\n" +
+		"Gateway activation: codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json\n"
+	if err := os.WriteFile(filepath.Join(stage, "QUICKSTART.txt"), []byte(quickstart), 0644); err != nil {
 		return err
 	}
 	for _, rel := range []string{"README.md", "LICENSE"} {

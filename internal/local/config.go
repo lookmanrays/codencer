@@ -17,6 +17,7 @@ type Config struct {
 	DefaultDaemonURL    string            `json:"default_daemon_url"`
 	RelayConfigPath     string            `json:"relay_config_path,omitempty"`
 	ConnectorConfigPath string            `json:"connector_config_path,omitempty"`
+	GatewayConfigPath   string            `json:"gateway_config_path,omitempty"`
 	Runtime             RuntimeConfig     `json:"runtime,omitempty"`
 	BinaryPaths         map[string]string `json:"binary_paths,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`

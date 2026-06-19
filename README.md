@@ -4,7 +4,7 @@ Open-source local/self-host bridge between AI planners and coding executors.
 
 Status: `v0.3.0-local-prod-rc.1`
 License: Apache-2.0
-Primary path: local-first daemon, self-host Relay, project-aware MCP
+Primary path: local-first daemon, official Gateway MCP, self-host Relay backend
 
 Codencer is a bridge, not a planner. The planner decides. The executor works.
 Codencer accepts approved tasks or manifests, routes them to the right local
@@ -24,7 +24,8 @@ Codencer is a stateful execution bridge for coding-agent work:
 
 ```text
 Planner / MCP client
-  -> Codencer Relay or local CLI
+  -> Codencer Gateway or local CLI
+  -> selected self-host Relay
   -> local connector / daemon
   -> local adapter / executor
   -> structured result, evidence, blocker, or validation state
@@ -46,8 +47,11 @@ The v0.3 local/self-host RC includes:
 - manifest runner and deterministic fake profiles;
 - structured blockers and validation results;
 - self-host Relay;
+- official Gateway daemon (`codencer-gatewayd`);
+- Gateway relay profiles for routing to one or more backend Relays;
 - local connector with explicit project sharing;
 - Relay-hosted MCP server and project-aware `codencer.*` MCP tools;
+- Gateway-hosted official MCP server and project-aware `codencer.*` MCP tools;
 - project locations with machine-aware routing by `machine_id` or `host_label`;
 - Codex MCP setup snippets;
 - Claude Code MCP setup snippets;
@@ -69,12 +73,13 @@ This repository does not claim:
   calls a tool;
 - signed or notarized binaries;
 - Windows-native daemon binaries or production daemon support;
-- hosted Codencer Gateway, hosted Codencer Cloud, commercial billing, or hosted
-  UI availability from this repository.
+- hosted Codencer Cloud, commercial billing, or hosted UI availability from
+  this repository;
+- production multi-user Gateway auth beyond bearer-dev and OAuth dev metadata.
 
-Self-host Relay is the open-source remote path today. Future Codencer
-Gateway/Cloud is a separate managed/commercial layer and is not the same thing
-as the OSS self-host Relay.
+`codencer-gatewayd` is the open-source MVP for the official connector surface.
+The hosted Codencer Gateway/Cloud service is a future managed/commercial layer
+and is not the same thing as the OSS self-host Relay.
 
 ## Quickstart: Local
 
@@ -188,16 +193,61 @@ from multiple online machines, execution must pass `machine_id` or `host_label`.
 Without a selector, Relay/MCP returns `ambiguous_project_location` instead of
 choosing randomly.
 
-## MCP Clients
+## Quickstart: Gateway
 
-Codencer exposes one project-aware MCP toolset through the self-host Relay.
-Client setup commands generate snippets and instructions; they do not write
-user-level client config files.
+Official ChatGPT, Claude Code, and Codex connector setup should point at the
+Gateway MCP URL, for example `https://mcp.codencer.dev/mcp`. A self-host Relay
+remains the backend target that Gateway routes to.
 
 ```bash
-./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
-./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
-./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+make build-gateway
+
+codencer setup gateway \
+  --base-url https://mcp.codencer.dev \
+  --mcp-url https://mcp.codencer.dev/mcp \
+  --listen 127.0.0.1:19090 \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --enable-oauth-dev \
+  --json
+
+codencer gateway relay add \
+  --id personal \
+  --name "Personal self-host Relay" \
+  --url https://relay.example.com \
+  --token-env CODENCER_RELAY_PERSONAL_TOKEN \
+  --json
+
+codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
+```
+
+Generate Gateway-first activation artifacts:
+
+```bash
+codencer activation gateway \
+  --gateway https://mcp.codencer.dev \
+  --relay https://relay.example.com \
+  --project codencer \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --json
+```
+
+Gateway tools aggregate projects across relay profiles and forward execution to
+the selected Relay. If multiple relay profiles expose the same project and no
+`relay_profile_id` is selected, Gateway returns `ambiguous_relay_profile`. If
+the selected Relay has multiple online machine locations and no `machine_id` or
+`host_label` is selected, Gateway returns `ambiguous_project_location`. Gateway
+does not expose backend Relay tokens or absolute local paths.
+
+## MCP Clients
+
+Codencer exposes one official project-aware MCP toolset through Gateway. Client
+setup commands generate snippets and instructions; they do not write user-level
+client config files.
+
+```bash
+./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --json
+./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --json
+./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
 ```
 
 See:
@@ -205,6 +255,7 @@ See:
 - [Codex MCP activation](docs/mcp/codex-mcp-live.md)
 - [Claude Code MCP activation](docs/mcp/claude-code-mcp-live.md)
 - [ChatGPT custom MCP app setup](docs/mcp/chatgpt-app-setup.md)
+- [Official Gateway activation](docs/activation-official-gateway.md)
 - [Relay MCP tools](docs/mcp/relay_tools.md)
 - [MCP Gateway model](docs/architecture/mcp-gateway-model.md)
 
@@ -233,16 +284,25 @@ Local-only state lives under `$CODENCER_HOME`, including:
 
 See [Project Config](docs/project-config.md).
 
-## Self-Host Now, Gateway Later
+## Gateway And Self-Host Relay
 
-Today’s open-source remote path is self-host Relay plus local connector. That is
-the OSS path for remote planners and MCP clients.
+The official connector path is Gateway-first:
 
-Future Codencer Gateway/Cloud is planned as a separate managed/commercial layer
-with official service identity. It must not be confused with the open-source
-self-host Relay in this repository. Forks and hosted services can use the OSS
-core under Apache-2.0, but they must use their own name and must not imply they
-are the official Codencer service.
+```text
+AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
+```
+
+Direct self-host Relay MCP remains supported for advanced, direct, and debug
+testing:
+
+```text
+AI client -> user Relay /mcp
+```
+
+The future hosted Codencer Gateway/Cloud layer will grow from this Gateway
+service identity. Forks and hosted services can use the OSS core under
+Apache-2.0, but they must use their own name and must not imply they are the
+official Codencer service.
 
 ## Docs Map
 
@@ -250,6 +310,7 @@ are the official Codencer service.
 - [Local quickstart](docs/quickstart-local.md)
 - [Local production guide](docs/local-production.md)
 - [Self-host Relay quickstart](docs/quickstart-self-host-relay.md)
+- [Official Gateway activation](docs/activation-official-gateway.md)
 - [VPS Relay activation](docs/activation-vps-relay.md)
 - [Local connector activation](docs/activation-local-connector.md)
 - [Project config](docs/project-config.md)
@@ -281,6 +342,7 @@ make build-codencer
 make verify-project-config
 make verify-local-execution
 make verify-local-relay-mcp
+make verify-gateway
 make verify-runtime-recovery
 make verify-live-matrix
 make acceptance-local-production

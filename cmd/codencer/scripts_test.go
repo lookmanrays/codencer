@@ -24,7 +24,7 @@ func TestInstallAndUpgradeScriptsReportMissingBinaries(t *testing.T) {
 			t.Fatalf("%s should report ok=false partial=true: %+v", script, payload)
 		}
 		missing, _ := payload["missing_binaries"].([]any)
-		if len(missing) != 4 {
+		if len(missing) != 5 {
 			t.Fatalf("%s expected all binaries missing, got %+v", script, payload["missing_binaries"])
 		}
 	}
@@ -33,7 +33,7 @@ func TestInstallAndUpgradeScriptsReportMissingBinaries(t *testing.T) {
 func TestInstallAndUpgradeScriptsPassWithRequiredBinaries(t *testing.T) {
 	repo := filepath.Join("..", "..")
 	binDir := t.TempDir()
-	for _, name := range []string{"codencer", "orchestratord", "codencer-relayd", "codencer-connectord"} {
+	for _, name := range []string{"codencer", "orchestratord", "codencer-relayd", "codencer-gatewayd", "codencer-connectord"} {
 		if err := os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
 			t.Fatal(err)
 		}

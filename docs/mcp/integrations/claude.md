@@ -1,21 +1,21 @@
 # Claude Code MCP Integration Notes
 
 Claude Code MCP setup is configuration/preflight proof until Claude Code
-actually connects to the self-host Relay, calls a tool, and evidence is saved.
-Do not mark live Claude Code proof passed from repository-only tests.
+actually connects to the official Codencer Gateway, calls a tool, and evidence
+is saved. Do not mark live Claude Code proof passed from repository-only tests.
 
 Use this page with:
 
 - [Claude Code MCP activation](../claude-code-mcp-live.md)
-- [Relay MCP tools](../relay_tools.md)
+- [Official Gateway activation](../../activation-official-gateway.md)
 - [MCP integrations](../integrations.md)
 
 ## Current Supported Surface
 
-Claude Code should target the self-host Relay MCP endpoint:
+Claude Code should target the official Gateway MCP endpoint:
 
 ```text
-https://<relay-host>/mcp
+https://mcp.codencer.dev/mcp
 ```
 
 Do not point Claude Code at:
@@ -24,14 +24,14 @@ Do not point Claude Code at:
 - `http://127.0.0.1` unless running a purely local private experiment;
 - WSL-only loopback URLs for remote product flows;
 - old cloud-control-plane MCP examples;
-- hosted Codencer Gateway/Cloud endpoints unless an official managed service is
-  explicitly documented.
+- a self-host Relay `/mcp` endpoint unless you are deliberately running
+  advanced/direct/debug mode.
 
 ## Generate Setup
 
 ```bash
-codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --json
-codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 Canonical command shape:
@@ -39,16 +39,19 @@ Canonical command shape:
 ```bash
 claude mcp add \
   --transport http \
-  --header "Authorization: Bearer $CODENCER_MCP_TOKEN" \
+  --header "Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN" \
   codencer \
-  https://relay.example.com/mcp
+  https://mcp.codencer.dev/mcp
 ```
+
+Direct self-host Relay snippets remain available for advanced/direct/debug
+testing, but they are not the official connector path.
 
 ## Narrow Product Smoke
 
 Only mark Claude Code proof passed when all of this evidence exists:
 
-1. Claude Code is configured with the Relay MCP endpoint.
+1. Claude Code is configured with the Gateway MCP endpoint.
 2. Claude Code connects successfully.
 3. Claude Code calls `codencer.list_projects`.
 4. If execution proof is claimed, Claude Code calls an execution tool against a
@@ -60,7 +63,8 @@ Until then, Claude Code proof is pending/manual, not passed.
 ## Notes
 
 Claude Code as an MCP client is separate from the local `claude` executor
-adapter. The MCP client talks to Relay. The executor adapter, when configured,
+adapter. The MCP client talks to Gateway; Gateway routes to the selected Relay,
+then to the local connector and daemon. The executor adapter, when configured,
 runs locally through the daemon.
 
 Project listings include `locations[]`. If multiple online machines advertise

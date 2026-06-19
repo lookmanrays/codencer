@@ -34,7 +34,18 @@ Only `shared_to_relay:true` projects are advertised. The connector skips unreach
 
 ## MCP Auth Fails
 
-Relay MCP requires bearer auth, Sprint 7 OAuth dev mode, or an OAuth front door that forwards a token Codencer accepts. Generate current snippets without writing client config:
+Official MCP clients should authenticate to Codencer Gateway. Gateway supports
+bearer-dev auth and OAuth dev mode for pre-prod product setup:
+
+```bash
+./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+```
+
+Direct Relay MCP auth is still available for advanced/direct/debug mode. It
+requires bearer auth, Relay OAuth dev mode, or an OAuth front door that forwards
+a token Codencer accepts:
 
 ```bash
 ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --json
@@ -42,7 +53,10 @@ Relay MCP requires bearer auth, Sprint 7 OAuth dev mode, or an OAuth front door 
 ./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
 ```
 
-ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and an eligible workspace. For self-host testing, generate the server-side activation artifacts with `codencer activation chatgpt --relay https://relay.example.com --auth oauth --json`. Keep product proof pending until the actual product flow is exercised.
+ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and
+an eligible workspace. For Gateway-first testing, generate the server-side
+activation artifacts with `codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --auth oauth --json`.
+Keep product proof pending until the actual product flow is exercised.
 
 ## Connector Enrollment Fails
 

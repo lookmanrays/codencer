@@ -29,6 +29,7 @@ const (
 )
 
 type Options struct {
+	Gateway               string
 	Relay                 string
 	MCPURL                string
 	TokenEnv              string
@@ -64,6 +65,7 @@ type Report struct {
 	StartedAt   time.Time         `json:"started_at"`
 	CompletedAt time.Time         `json:"completed_at"`
 	Relay       string            `json:"relay,omitempty"`
+	Gateway     string            `json:"gateway,omitempty"`
 	MCPURL      string            `json:"mcp_url,omitempty"`
 	ProjectID   string            `json:"project_id,omitempty"`
 	AuthMode    string            `json:"auth_mode,omitempty"`
@@ -80,6 +82,7 @@ type packageArtifact struct {
 	OK        bool      `json:"ok"`
 	CreatedAt time.Time `json:"created_at"`
 	Relay     string    `json:"relay,omitempty"`
+	Gateway   string    `json:"gateway,omitempty"`
 	MCPURL    string    `json:"mcp_url,omitempty"`
 	ProjectID string    `json:"project_id,omitempty"`
 	AuthMode  string    `json:"auth_mode,omitempty"`
@@ -247,6 +250,96 @@ func Package(ctx context.Context, opts Options) (Report, error) {
 		"relay":        relayURL,
 		"mcp_url":      mcpURL,
 		"auth_mode":    authMode(opts),
+	})
+	_ = ctx
+	return finish(report, opts), nil
+}
+
+func Gateway(ctx context.Context, opts Options) (Report, error) {
+	if strings.TrimSpace(opts.TokenEnv) == "" && strings.TrimSpace(opts.Token) == "" {
+		opts.TokenEnv = "CODENCER_GATEWAY_MCP_TOKEN"
+	}
+	report := baseReport("gateway", opts)
+	paths, err := local.ResolvePathsForHome("", "", opts.CodencerHome)
+	if err != nil {
+		return Report{}, err
+	}
+	if _, err := local.EnsureHome(paths, now(opts)); err != nil {
+		report.add("codencer_home", StatusFailed, err.Error())
+		return finish(report, opts), nil
+	}
+	gatewayURL, relayURL, mcpURL, err := normalizeGatewayRelayAndMCP(opts)
+	if err != nil {
+		report.add("gateway_url", StatusFailed, err.Error())
+		return finish(report, opts), nil
+	}
+	report.Gateway = gatewayURL
+	report.Relay = relayURL
+	report.MCPURL = mcpURL
+	report.ProjectID = strings.TrimSpace(opts.ProjectID)
+	report.AuthMode = firstNonEmpty(opts.AuthMode, "bearer-dev")
+	root := filepath.Join(paths.ArtifactsDir, "activation", "gateway-"+timestamp(now(opts)))
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return Report{}, err
+	}
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"README.md", gatewayReadmeContent(opts, gatewayURL, relayURL, mcpURL)},
+		{"gateway-curl-smoke.sh", gatewayCurlSmokeContent(opts, gatewayURL, mcpURL)},
+		{"codex-config.toml", codexConfigContent(opts, mcpURL)},
+		{"claude-code-command.sh", claudeCommandContent(opts, mcpURL)},
+		{"chatgpt-app-setup.md", chatGPTContent(opts, gatewayURL, mcpURL)},
+		{"relay-profile-setup.sh", gatewayRelayProfileContent(opts, gatewayURL, relayURL)},
+	}
+	written := make([]string, 0, len(files)+1)
+	for _, file := range files {
+		perm := os.FileMode(0600)
+		if strings.HasSuffix(file.name, ".sh") {
+			perm = 0700
+		}
+		if err := os.WriteFile(filepath.Join(root, file.name), []byte(file.content), perm); err != nil {
+			report.add("gateway_package_write_"+file.name, StatusFailed, err.Error())
+			return finish(report, opts), nil
+		}
+		written = append(written, file.name)
+	}
+	manifestFiles := append(append([]string(nil), written...), "activation-package.json")
+	artifact := packageArtifact{
+		OK:        true,
+		CreatedAt: now(opts),
+		Gateway:   gatewayURL,
+		Relay:     relayURL,
+		MCPURL:    mcpURL,
+		ProjectID: strings.TrimSpace(opts.ProjectID),
+		AuthMode:  report.AuthMode,
+		Files:     manifestFiles,
+		States: []string{
+			"gateway_ready",
+			"relay_profile_configured",
+			"client_config_generated",
+			"client_connected",
+			"client_used_tool",
+			"full_e2e_execution",
+		},
+	}
+	data, _ := json.MarshalIndent(security.RedactJSON(artifact), "", "  ")
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(root, "activation-package.json"), data, 0600); err != nil {
+		report.add("gateway_package_write_activation_package", StatusFailed, err.Error())
+		return finish(report, opts), nil
+	}
+	written = manifestFiles
+	report.add("gateway_activation_package", StatusPassed, "Gateway activation package generated", written...)
+	report.PackagePath = root
+	report.Output = security.RedactJSON(map[string]any{
+		"package_path": root,
+		"files":        written,
+		"gateway":      gatewayURL,
+		"relay":        relayURL,
+		"mcp_url":      mcpURL,
+		"auth_mode":    report.AuthMode,
 	})
 	_ = ctx
 	return finish(report, opts), nil
@@ -556,6 +649,31 @@ func normalizeRelayAndMCP(opts Options) (string, string, error) {
 	return relayURL, mcpURL, nil
 }
 
+func normalizeGatewayRelayAndMCP(opts Options) (string, string, string, error) {
+	gatewayURL := strings.TrimRight(strings.TrimSpace(opts.Gateway), "/")
+	relayURL := strings.TrimRight(strings.TrimSpace(opts.Relay), "/")
+	mcpURL := strings.TrimRight(strings.TrimSpace(opts.MCPURL), "/")
+	if gatewayURL == "" {
+		gatewayURL = "https://mcp.codencer.dev"
+	}
+	if mcpURL == "" {
+		mcpURL = gatewayURL + "/mcp"
+	}
+	if !strings.HasSuffix(mcpURL, "/mcp") {
+		mcpURL += "/mcp"
+	}
+	if relayURL == "" {
+		relayURL = "https://relay.example.com"
+	}
+	for flag, value := range map[string]string{"--gateway": gatewayURL, "--relay": relayURL, "--mcp-url": mcpURL} {
+		parsed, err := url.Parse(value)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return "", "", "", fmt.Errorf("%s must be an absolute URL", flag)
+		}
+	}
+	return gatewayURL, relayURL, mcpURL, nil
+}
+
 func baseReport(mode string, opts Options) Report {
 	started := now(opts)
 	_, mcpURL, _ := normalizeRelayAndMCP(opts)
@@ -563,6 +681,7 @@ func baseReport(mode string, opts Options) Report {
 		OK:          true,
 		Mode:        mode,
 		StartedAt:   started,
+		Gateway:     strings.TrimRight(strings.TrimSpace(opts.Gateway), "/"),
 		Relay:       strings.TrimRight(strings.TrimSpace(opts.Relay), "/"),
 		MCPURL:      mcpURL,
 		ProjectID:   strings.TrimSpace(opts.ProjectID),

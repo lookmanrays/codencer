@@ -1,57 +1,124 @@
 # MCP Gateway Model
 
-Codencer exposes one project-aware MCP toolset through the self-host Relay. The public planner surface is the relay `/mcp` endpoint, not the local daemon and not separate ChatGPT, Claude, or Codex agents.
+Codencer exposes one official project-aware MCP surface through Codencer
+Gateway. The official connector endpoint is:
+
+```text
+https://mcp.codencer.dev/mcp
+```
+
+Self-host Relay `/mcp` remains supported for advanced/direct/debug mode, but it
+is not the primary official ChatGPT, Claude Code, or Codex connector endpoint.
 
 ## Model
 
 ```mermaid
 flowchart LR
-  Planner["Planner client\nChatGPT / Codex / Claude Code / curl"]
-  Relay["Self-host Relay\ntransport, auth, audit"]
-  Connector["One local connector\nproject advertisements"]
+  Client["AI client\nChatGPT / Claude Code / Codex"]
+  Gateway["Codencer Gateway\n/mcp, auth, relay profiles"]
+  Relay["Selected Relay\nself-host or managed"]
+  Connector["Local connector\nproject advertisements"]
   Daemon["Local daemon\nruns, steps, evidence"]
   Repo["Local project workspace"]
 
-  Planner -->|MCP tools| Relay
+  Client -->|official MCP tools| Gateway
+  Gateway -->|Relay profile + selectors| Relay
   Relay -->|authorized route| Connector
-  Connector -->|Sprint 2 localexec HTTP contract| Daemon
+  Connector -->|local execution contract| Daemon
   Daemon --> Repo
 ```
 
-The connector advertises only projects that are explicitly shared from the local registry. Advertisements include machine/location metadata (`machine_id`, `host_label`, hostname, connector/instance ids, status). Relay stores sanitized project advertisements and routes tool calls back to the selected connector. Execution remains daemon-first and local.
+Direct Relay MCP is still available:
 
-If the same `project_id` is available from multiple online machines, Relay/MCP requires an explicit `machine_id` or `host_label` selector. Without one it returns structured blocker `ambiguous_project_location`; it does not randomly select a connector. Project listings expose `locations[]` with safe labels/hashes instead of absolute repo paths.
+```text
+AI client -> user Relay /mcp
+```
 
-## Toolset
+Use it for direct self-host debugging, not as the official connector story.
 
-All planner clients use the same `codencer.*` MCP tools:
+## Gateway Responsibilities
 
+Gateway:
+
+- authenticates AI clients with bearer-dev auth for Codex/Claude Code pre-prod;
+- exposes OAuth dev and protected-resource metadata for ChatGPT Developer Mode;
+- loads Relay profiles from `$CODENCER_HOME/runtime/gateway/config.json`;
+- aggregates projects across enabled Relay profiles;
+- forwards approved project task/manifest calls to the selected Relay;
+- normalizes Codencer results, blockers, and evidence;
+- never returns backend Relay tokens to AI clients;
+- sanitizes backend Relay responses so absolute local paths are not exposed.
+
+Relay profiles contain:
+
+- `id`
+- `url`
+- `token_env` or a token file reference
+- `enabled`
+
+Literal Relay tokens should not be stored in Gateway config by default.
+
+## Official Toolset
+
+Gateway exposes:
+
+- `codencer.list_relays`
+- `codencer.get_relay`
 - `codencer.list_projects`
 - `codencer.get_project`
+- `codencer.list_project_locations`
 - `codencer.submit_project_task_and_wait`
 - `codencer.run_project_manifest`
-- `codencer.get_execution_report`
 - `codencer.get_run_report`
-- `codencer.get_project_blocker`
 - `codencer.get_blocker`
 
-There is no ChatGPT-specific agent, Claude-specific agent, or Codex-specific planner inside Codencer. Client setup artifacts only teach those products how to reach the relay MCP endpoint.
+The toolset is planner-neutral. There is no ChatGPT-specific agent,
+Claude-specific agent, or Codex-specific planner inside Codencer.
 
-## Relay Profiles
+## Routing Rules
 
-Relay profiles describe deployment posture, not different products:
+Execution tools accept:
 
-- `local`: local daemon and local `codencer` CLI only.
-- `self-host-relay`: operator-owned relay plus local connector.
-- `oauth-dev`: self-host relay with the single-user OAuth dev issuer for ChatGPT testing.
-- `future-gateway`: a managed/gateway posture that could proxy auth and routing while preserving the same project tool contract.
+- `relay_profile_id`
+- `machine_id`
+- `host_label`
 
-The useful analogy is Tailscale/Headscale: a private network endpoint can be self-hosted by the operator now, while a future hosted gateway could improve distribution and policy. That future boundary is transport/auth/ops monetization, not managed coding-agent execution or planner decision making.
+Routing is deterministic:
+
+1. If `relay_profile_id` is provided, Gateway uses that Relay profile.
+2. If no `relay_profile_id` is provided and only one enabled Relay profile has
+   the project, Gateway uses it.
+3. If multiple Relay profiles match and no selector is provided, Gateway returns
+   blocker `ambiguous_relay_profile`.
+4. If the selected Relay has multiple online project locations and no
+   `machine_id` or `host_label` is provided, Gateway returns blocker
+   `ambiguous_project_location`.
+5. If a backend Relay is down, Gateway returns blocker `relay_unavailable`.
+6. Gateway never chooses randomly.
+
+Backend Relay blockers are forwarded in normalized Codencer blocker shape.
 
 ## Safety Boundaries
 
-- Project sharing is explicit; the connector does not expose arbitrary filesystem access.
-- Relay is transport, auth, routing, and audit.
+- Project sharing is explicit; the connector does not expose arbitrary
+  filesystem access.
+- Gateway owns official connector auth and Relay-profile routing.
+- Relay remains transport, audit, and connector routing for its backend.
 - The local daemon owns orchestration state and evidence.
 - Codencer surfaces state and blockers; the planner decides.
-- ChatGPT/Codex/Claude live product proof remains pending until those products actually connect and call tools with saved evidence.
+- ChatGPT/Codex/Claude live product proof remains pending until those products
+  actually connect to Gateway and call tools with saved evidence.
+
+## Verification
+
+Use:
+
+```bash
+make verify-gateway
+```
+
+The verifier starts isolated temp daemon, Relay, connector instances, and
+Gateway on random free ports. It checks MCP initialize, tools/list,
+`codencer.list_relays`, `codencer.list_projects`, fake manifest execution,
+run report retrieval, ambiguity blockers, relay-down blocker, and no obvious
+absolute path or token leakage.

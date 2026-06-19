@@ -84,6 +84,52 @@ func TestRelayOAuthDevSetupWritesHashesAndRedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestGatewaySetupWritesConfigHashesAndRedactsSecrets(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+	report, err := Gateway(nilContext(), GatewayOptions{
+		BaseURL:           "http://127.0.0.1:19090",
+		MCPURL:            "http://127.0.0.1:19090/mcp",
+		ListenAddr:        "127.0.0.1:19090",
+		TokenEnv:          "CODENCER_GATEWAY_MCP_TOKEN",
+		EnableOAuthDev:    true,
+		OAuthClientSecret: "literal-gateway-client-secret",
+	})
+	if err != nil {
+		t.Fatalf("gateway setup: %v", err)
+	}
+	if !report.OK || !report.Configured {
+		t.Fatalf("expected configured gateway, got %+v", report)
+	}
+	encoded := mustJSON(t, report)
+	if strings.Contains(encoded, "literal-gateway-client-secret") {
+		t.Fatalf("gateway report leaked client secret: %s", encoded)
+	}
+	cfgPath := filepath.Join(home, "runtime", "gateway", "config.json")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("gateway config missing: %v", err)
+	}
+	if strings.Contains(string(data), "literal-gateway-client-secret") || strings.Contains(string(data), "operator-code") {
+		t.Fatalf("gateway config leaked secret material: %s", data)
+	}
+	for _, want := range []string{`"client_secret_hash"`, `"operator_code_hash"`, `"token_env": "CODENCER_GATEWAY_MCP_TOKEN"`} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("gateway config missing %q: %s", want, data)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "tokens", "gateway-oauth-operator-code")); err != nil {
+		t.Fatalf("gateway operator code file missing: %v", err)
+	}
+	localConfig, err := os.ReadFile(filepath.Join(home, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(localConfig), `"gateway_config_path"`) {
+		t.Fatalf("local config did not record gateway config path: %s", localConfig)
+	}
+}
+
 func TestRelayDevNoAuthDefaultsToFakeReadOnlyProjects(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CODENCER_HOME", home)

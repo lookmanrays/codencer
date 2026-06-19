@@ -1,6 +1,18 @@
 # Self-Host Relay/MCP Quickstart
 
-Self-host Relay is the remote planner transport. Execution remains local and daemon-first. Projects are exposed only after explicit `project share`; the relay is not a raw shell or arbitrary filesystem browser.
+Self-host Relay is the backend remote transport for Gateway and the advanced
+direct MCP path. Execution remains local and daemon-first. Projects are exposed
+only after explicit `project share`; the relay is not a raw shell or arbitrary
+filesystem browser.
+
+Official client setup should use:
+
+```text
+AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
+```
+
+Direct `https://relay.example.com/mcp` remains supported for
+advanced/direct/debug testing.
 
 ## Build
 
@@ -69,6 +81,16 @@ Use `codencer-connectord enroll` and `codencer-connectord run` only as low-level
 
 ## MCP Client Snippets
 
+Official client snippets should point to Gateway:
+
+```bash
+./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+```
+
+Direct Relay snippets are available for advanced/debug mode:
+
 ```bash
 ./bin/codencer setup mcp --client codex --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN --json
 ./bin/codencer setup mcp --client claude-code --endpoint https://relay.example.com/mcp --token-env CODENCER_PLANNER_TOKEN --json
@@ -80,6 +102,7 @@ These commands generate snippets only. They do not write user-level Codex, Claud
 Activation artifacts:
 
 ```bash
+./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
 ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
 ./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json

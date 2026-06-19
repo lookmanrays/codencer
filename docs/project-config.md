@@ -8,6 +8,10 @@ repo/.codencer/project.json
 
 By default, `codencer project init` creates only this file under repo `.codencer/`. It does not create policy files, manifests, prompts, schemas, logs, runtime state, artifacts, proof bundles, connector identity, daemon URLs, relay URLs, tokens, private keys, enrollment material, machine IDs, or absolute local paths in the repository.
 
+Gateway config and Relay profiles are local runtime state under
+`$CODENCER_HOME/runtime/gateway/config.json`; they are never written into
+`repo/.codencer/project.json`.
+
 ## Schema
 
 Minimum shape:
@@ -41,6 +45,7 @@ Machine-local state stays in `$CODENCER_HOME`:
 
 - `$CODENCER_HOME/machine.json`: stable local `machine_id`, detected `hostname`, editable `host_label`, OS, arch, timestamps.
 - `$CODENCER_HOME/projects.json`: local registry with absolute `repo_root`, daemon URL, sharing state, relay instance mapping, machine metadata, and project config path.
+- `$CODENCER_HOME/runtime/gateway/config.json`: local Gateway config with Relay profile URLs and token env/file references.
 
 Use:
 
@@ -91,7 +96,9 @@ Connectors advertise shared projects with location metadata:
 - `instance_id`
 - `status`
 
-Relay/MCP project listing returns projects with `locations[]`. Locations include machine and connector identifiers plus safe repo labels/hashes, never absolute repo paths.
+Gateway and Relay/MCP project listings return projects with `locations[]`.
+Locations include machine and connector identifiers plus safe repo labels/hashes,
+never absolute repo paths.
 
 Project execution tools accept optional selectors:
 
@@ -113,3 +120,7 @@ Resolution order:
 4. Multiple online locations without a selector return `ambiguous_project_location` with `planner_decision_required: true`.
 
 Codencer never randomly chooses among multiple machines for the same `project_id`.
+
+Gateway adds one more selector layer: if multiple Relay profiles expose the same
+`project_id`, execution must pass `relay_profile_id` or Gateway returns
+`ambiguous_relay_profile`.

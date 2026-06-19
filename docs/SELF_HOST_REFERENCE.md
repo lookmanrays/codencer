@@ -414,7 +414,27 @@ This is recommended operator topology, not an automated smoke proof. See [WSL / 
 - Self-host mode is implemented in this repo and uses your own relay config, sqlite state, and tokens.
 - A future default or managed relay can speak the same connector session model, but self-host does not depend on that future service.
 
-## Sprint 7 Setup And Activation Short Path
+## Sprint 8 Gateway Short Path
+
+Official client setup is Gateway-first. A self-host Relay is still the backend
+transport, but ChatGPT, Claude Code, and Codex should point at Gateway:
+
+```bash
+make build
+./bin/codencer setup gateway \
+  --base-url https://mcp.codencer.dev \
+  --mcp-url https://mcp.codencer.dev/mcp \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --enable-oauth-dev \
+  --json
+./bin/codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+```
+
+## Sprint 7 Direct Relay Short Path
+
+The direct Relay path below is retained for advanced/direct/debug mode and
+historical self-host testing. It is not the official connector path.
 
 ```bash
 make build

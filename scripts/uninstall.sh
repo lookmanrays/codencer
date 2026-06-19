@@ -46,7 +46,7 @@ if [ "$UNINSTALL_SERVICES" = "1" ]; then
     CODENCER_HOME="$CODENCER_HOME_VALUE" "$CODENCER_BIN" service uninstall --all --json >/dev/null || true
   fi
 fi
-for bin in codencer orchestratord codencer-relayd codencer-connectord agent-broker; do
+for bin in codencer orchestratord codencer-relayd codencer-gatewayd codencer-connectord agent-broker; do
   path="$INSTALL_DIR/$bin"
   ACTIONS+=("remove:$path")
   if [ "$DRY_RUN" != "1" ]; then

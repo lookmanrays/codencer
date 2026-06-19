@@ -186,6 +186,8 @@ func chatGPTContent(opts Options, relayURL, mcpURL string) string {
 		"- MCP endpoint: " + mcpURL,
 		"- Auth mode: " + stringValue(payload["auth_mode"]),
 		"- Client id: " + stringValue(payload["client_id"]),
+		"- Client secret file: " + stringValue(payload["client_secret_file"]),
+		"- Operator code file: " + stringValue(payload["operator_code_file"]),
 		"- OAuth metadata: " + stringValue(payload["authorization_server_metadata"]),
 		"- OpenID configuration: " + stringValue(payload["openid_configuration"]),
 		"- Protected resource metadata: " + stringValue(payload["protected_resource_metadata"]),
@@ -216,8 +218,39 @@ func chatGPTPayload(opts Options, relayURL, mcpURL string) map[string]any {
 	clientSecretFile := ""
 	operatorCodeFile := ""
 	if paths.TokensDir != "" {
-		clientSecretFile = paths.TokensDir + "/chatgpt-oauth-client-secret"
-		operatorCodeFile = paths.TokensDir + "/chatgpt-oauth-operator-code"
+		prefix := "chatgpt-oauth"
+		if strings.TrimSpace(opts.Gateway) != "" {
+			prefix = "gateway-oauth"
+		}
+		clientSecretFile = paths.TokensDir + "/" + prefix + "-client-secret"
+		operatorCodeFile = paths.TokensDir + "/" + prefix + "-operator-code"
+	}
+	expectedTools := []string{
+		"codencer.list_projects",
+		"codencer.get_project",
+		"codencer.start_project_run",
+		"codencer.list_project_runs",
+		"codencer.get_project_run",
+		"codencer.submit_project_task",
+		"codencer.submit_project_task_and_wait",
+		"codencer.run_project_manifest",
+		"codencer.get_execution_report",
+		"codencer.get_run_report",
+		"codencer.get_project_blocker",
+		"codencer.get_blocker",
+	}
+	if strings.TrimSpace(opts.Gateway) != "" {
+		expectedTools = []string{
+			"codencer.list_relays",
+			"codencer.get_relay",
+			"codencer.list_projects",
+			"codencer.get_project",
+			"codencer.list_project_locations",
+			"codencer.submit_project_task_and_wait",
+			"codencer.run_project_manifest",
+			"codencer.get_run_report",
+			"codencer.get_blocker",
+		}
 	}
 	return map[string]any{
 		"mcp_endpoint":                  mcpURL,
@@ -239,20 +272,7 @@ func chatGPTPayload(opts Options, relayURL, mcpURL string) map[string]any {
 			"artifacts:read",
 			"reports:read",
 		},
-		"expected_tools": []string{
-			"codencer.list_projects",
-			"codencer.get_project",
-			"codencer.start_project_run",
-			"codencer.list_project_runs",
-			"codencer.get_project_run",
-			"codencer.submit_project_task",
-			"codencer.submit_project_task_and_wait",
-			"codencer.run_project_manifest",
-			"codencer.get_execution_report",
-			"codencer.get_run_report",
-			"codencer.get_project_blocker",
-			"codencer.get_blocker",
-		},
+		"expected_tools": expectedTools,
 		"chatgpt_ui_steps": []string{
 			"Open ChatGPT workspace settings and confirm Developer Mode/custom MCP app access is available.",
 			"Create a draft custom MCP app named Codencer pointing to the MCP endpoint.",
@@ -325,6 +345,134 @@ func clientPayload(clientName string, opts Options, payload map[string]any) map[
 		out["mcp_json"] = payload["mcp_json"]
 	}
 	return security.RedactJSON(out).(map[string]any)
+}
+
+func gatewayReadmeContent(opts Options, gatewayURL, relayURL, mcpURL string) string {
+	return strings.TrimSpace(fmt.Sprintf(`# Codencer Gateway Activation Package
+
+Codencer is a bridge, not a planner. This package connects approved planner clients to the official Codencer Gateway MCP endpoint.
+
+Official Gateway endpoint: %s
+Official MCP endpoint: %s
+Backend Relay profile target: %s
+Project: %s
+
+Recommended path:
+
+AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project.
+
+The self-host Relay /mcp endpoint remains available for advanced/direct/debug testing, but official ChatGPT, Claude Code, and Codex connector setup should point to the Gateway MCP URL above.
+
+Proof states are separate:
+
+- gateway_ready: Gateway health, protected-resource metadata, MCP initialize, and tools/list answer checks.
+- relay_profile_configured: Gateway has an enabled relay profile pointing at the backend Relay.
+- client_config_generated: a client setup artifact was generated.
+- client_connected: the real client connected to the Gateway MCP endpoint.
+- client_used_tool: the real client listed or called a Codencer Gateway tool.
+- full_e2e_execution: a real end-to-end task or manifest ran and produced evidence.
+
+Recommended preflight:
+
+1. Run ./relay-profile-setup.sh or equivalent codencer gateway relay add.
+2. Run ./gateway-curl-smoke.sh with your Gateway bearer token env set.
+3. Confirm codencer.list_relays and codencer.list_projects work through Gateway.
+4. Use relay_profile_id, machine_id, or host_label when Gateway returns an ambiguity blocker.
+5. Stop and return blocker details when planner_decision_required is true.
+
+Fake manifest preflights prove server routing only. They are not live Codex, Claude, or ChatGPT product proof.
+`, gatewayURL, mcpURL, relayURL, firstNonEmpty(opts.ProjectID, "<project-id>"))) + "\n"
+}
+
+func gatewayCurlSmokeContent(opts Options, gatewayURL, mcpURL string) string {
+	env := firstNonEmpty(opts.TokenEnv, "CODENCER_GATEWAY_MCP_TOKEN")
+	project := firstNonEmpty(opts.ProjectID, "codencer")
+	return strings.TrimSpace(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN="${%s:?set %s to a Gateway bearer or OAuth access token}"
+GATEWAY_URL=%q
+MCP_URL=%q
+PROJECT_ID=%q
+PROTOCOL_VERSION="2025-11-25"
+SESSION_ID=""
+
+tmp_headers="$(mktemp)"
+tmp_body="$(mktemp)"
+trap 'rm -f "${tmp_headers}" "${tmp_body}"' EXIT
+
+print_json() {
+  if command -v jq >/dev/null 2>&1; then
+    jq .
+  else
+    cat
+  fi
+}
+
+mcp_post() {
+  local payload="$1"
+  local session_args=()
+  if [ -n "${SESSION_ID}" ]; then
+    session_args=(-H "MCP-Session-Id: ${SESSION_ID}")
+  fi
+  curl -fsS \
+    -D "${tmp_headers}" \
+    -o "${tmp_body}" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Accept: application/json, text/event-stream" \
+    -H "Content-Type: application/json" \
+    -H "MCP-Protocol-Version: ${PROTOCOL_VERSION}" \
+    "${session_args[@]}" \
+    --data "${payload}" \
+    "${MCP_URL}"
+  local returned_session
+  returned_session="$(awk -F': ' 'tolower($1)=="mcp-session-id" {gsub("\r","",$2); print $2}' "${tmp_headers}" | tail -n 1)"
+  if [ -n "${returned_session}" ]; then
+    SESSION_ID="${returned_session}"
+  fi
+  cat "${tmp_body}" | print_json
+}
+
+curl -fsS -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/json" "${GATEWAY_URL}/api/gateway/v1/status" | print_json
+curl -fsS -H "Accept: application/json" "${GATEWAY_URL}/.well-known/oauth-protected-resource/mcp" | print_json
+
+mcp_post '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"codencer-gateway-activation-smoke","version":"v0"}}}'
+mcp_post '{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}'
+mcp_post '{"jsonrpc":"2.0","id":"list-relays","method":"tools/call","params":{"name":"codencer.list_relays","arguments":{}}}'
+mcp_post '{"jsonrpc":"2.0","id":"list-projects","method":"tools/call","params":{"name":"codencer.list_projects","arguments":{}}}'
+
+if [ "${RUN_FAKE_MANIFEST:-0}" = "1" ]; then
+  mcp_post "$(cat <<JSON
+{"jsonrpc":"2.0","id":"fake-manifest","method":"tools/call","params":{"name":"codencer.run_project_manifest","arguments":{"project_id":"${PROJECT_ID}","manifest":{"version":"v0.3","kind":"codencer.run_plan","metadata":{"name":"gateway-activation-fake-success"},"project":{"id":"${PROJECT_ID}"},"execution":{"adapter":"fake-success","profile":"fake-success"},"policy":{"stop_on_blocker":true,"stop_on_failure":true},"tasks":[{"id":"fake-success","title":"Gateway activation fake success","goal":"Return fake-success evidence through Gateway."}]}}}}
+JSON
+)"
+fi
+`, env, env, gatewayURL, mcpURL, project)) + "\n"
+}
+
+func gatewayRelayProfileContent(opts Options, gatewayURL, relayURL string) string {
+	env := firstNonEmpty(opts.TokenEnv, "CODENCER_GATEWAY_MCP_TOKEN")
+	return strings.TrimSpace(fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+
+GATEWAY_URL=%q
+RELAY_URL=%q
+RELAY_PROFILE_ID="${RELAY_PROFILE_ID:-personal}"
+RELAY_PROFILE_NAME="${RELAY_PROFILE_NAME:-Personal self-host Relay}"
+RELAY_TOKEN_ENV="${RELAY_TOKEN_ENV:-CODENCER_RELAY_PERSONAL_TOKEN}"
+GATEWAY_TOKEN_ENV=%q
+
+# This configures Gateway's backend Relay profile. It does not put backend Relay tokens in client configs.
+codencer setup gateway --base-url "${GATEWAY_URL}" --mcp-url "${GATEWAY_URL}/mcp" --token-env "${GATEWAY_TOKEN_ENV}" --enable-oauth-dev --json
+codencer gateway relay add \
+  --id "${RELAY_PROFILE_ID}" \
+  --name "${RELAY_PROFILE_NAME}" \
+  --url "${RELAY_URL}" \
+  --token-env "${RELAY_TOKEN_ENV}" \
+  --json
+
+codencer gateway relay list --json
+`, gatewayURL, relayURL, env)) + "\n"
 }
 
 func stringValue(value any) string {

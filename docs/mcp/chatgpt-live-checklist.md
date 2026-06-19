@@ -4,10 +4,13 @@ ChatGPT product proof is manual until an operator actually exercises the product
 
 ## Prerequisites
 
-- Public HTTPS self-host Relay endpoint.
-- OAuth/front-door mode when required by the ChatGPT workspace.
+- Public HTTPS Gateway endpoint, normally `https://mcp.codencer.dev/mcp`.
+- Gateway OAuth dev mode or equivalent OAuth/front-door mode when required by
+  the ChatGPT workspace.
 - Eligible ChatGPT workspace with developer mode/custom MCP access.
-- Scoped planner token or OAuth token exchange with `projects:read`, `runs:*`, `steps:*`, `artifacts:*`, and `reports:read`.
+- Scoped Gateway bearer token or OAuth token exchange with `projects:read`,
+  `runs:*`, `steps:*`, `artifacts:*`, and `reports:read`.
+- Backend Relay profile configured in Gateway.
 - A project shared with `codencer project share`.
 - Connector online.
 - Local daemon online.
@@ -30,16 +33,20 @@ ChatGPT product proof is manual until an operator actually exercises the product
 - Run report JSON.
 - Timestamp.
 - Codencer version/build.
-- Relay endpoint used.
+- Gateway endpoint used and selected backend Relay profile.
 
 ## Acceptance Status
 
 Keep ChatGPT product proof marked pending until real evidence is attached.
 
-Sprint 6 setup generates values for the product flow without claiming a pass:
+Gateway activation generates values for the product flow without claiming a
+pass:
 
 ```bash
-./bin/codencer setup mcp --client chatgpt --endpoint https://relay.example.com/mcp --json
+./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
-The command is configuration proof only. A passed ChatGPT gate requires an actual eligible workspace, public HTTPS, OAuth dev mode or an operator-owned OAuth front door, saved connector configuration, a real tool call, and saved result evidence.
+The command is configuration proof only. A passed ChatGPT gate requires an
+actual eligible workspace, public HTTPS, Gateway OAuth dev mode or an
+operator-owned OAuth front door, saved connector configuration, a real tool
+call, and saved result evidence.

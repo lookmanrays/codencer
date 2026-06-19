@@ -22,11 +22,17 @@ build: build-codencer
 	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-connectord ./cmd/codencer-connectord
 	@echo "==> Building codencer-relayd..."
 	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-relayd ./cmd/codencer-relayd
+	@$(MAKE) build-gateway
 
 build-codencer:
 	@mkdir -p bin
 	@echo "==> Building codencer..."
 	@go build -ldflags "$(LDFLAGS)" -o bin/codencer ./cmd/codencer
+
+build-gateway:
+	@mkdir -p bin
+	@echo "==> Building codencer-gatewayd..."
+	@go build -ldflags "$(LDFLAGS)" -o bin/codencer-gatewayd ./cmd/codencer-gatewayd
 
 build-orchestratord:
 	@mkdir -p bin
@@ -220,6 +226,7 @@ verify-local-prod: build-codencer
 	@$(MAKE) verify-local-execution
 	@$(MAKE) verify-project-config
 	@$(MAKE) verify-local-relay-mcp
+	@$(MAKE) verify-gateway
 	@$(MAKE) verify-runtime-recovery
 	@$(MAKE) verify-live-matrix
 	@$(MAKE) activation-preflight
@@ -250,6 +257,19 @@ verify-local-relay-mcp: build build-mcp-sdk-smoke
 	@go test ./internal/project ./internal/connector ./internal/relay ./cmd/codencer ./cmd/codencer-connectord ./cmd/codencer-relayd
 	@echo "==> Running local relay/MCP smoke..."
 	@./scripts/verify_local_relay_mcp.sh
+
+verify-gateway: build build-gateway
+	@echo "==> Checking Gateway formatting..."
+	@fmt=$$(gofmt -l internal/gateway cmd/codencer-gatewayd internal/setup internal/activation cmd/codencer); \
+	if [ -n "$$fmt" ]; then \
+		echo "$$fmt"; \
+		echo "ERROR: gofmt required for Gateway files."; \
+		exit 1; \
+	fi
+	@echo "==> Running Gateway unit tests..."
+	@go test ./internal/gateway ./internal/setup ./internal/activation ./cmd/codencer ./cmd/codencer-gatewayd
+	@echo "==> Running Gateway E2E smoke..."
+	@./scripts/verify_gateway.sh
 
 verify-runtime-recovery: build
 	@echo "==> Checking runtime supervisor formatting..."
@@ -353,7 +373,7 @@ release-snapshot:
 
 verify-release:
 	@echo "==> Checking Sprint 6 formatting..."
-	@fmt=$$(gofmt -l internal/buildinfo internal/security internal/setup internal/acceptance internal/proof internal/release cmd/codencer internal/relay/router.go internal/relay/mcp_server.go internal/relay/mcp_server_test.go); \
+	@fmt=$$(gofmt -l internal/buildinfo internal/security internal/setup internal/acceptance internal/proof internal/release internal/gateway cmd/codencer cmd/codencer-gatewayd internal/relay/router.go internal/relay/mcp_server.go internal/relay/mcp_server_test.go); \
 	if [ -n "$$fmt" ]; then \
 		echo "$$fmt"; \
 		echo "ERROR: gofmt required for release hardening files."; \
@@ -376,6 +396,7 @@ verify-release:
 	@$(MAKE) release-snapshot VERSION=v0.3.0-local-prod-verify
 	@$(MAKE) verify-local-execution
 	@$(MAKE) verify-local-relay-mcp
+	@$(MAKE) verify-gateway
 	@$(MAKE) verify-runtime-recovery
 	@$(MAKE) verify-live-matrix
 	@$(MAKE) activation-preflight

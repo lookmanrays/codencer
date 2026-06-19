@@ -4,6 +4,15 @@ This guide is for a self-host operator running `codencer-relayd` on a VPS and co
 
 Codencer is a bridge, not a planner. Relay is transport, auth, routing, and audit. Execution remains daemon-first on the local machine that owns the project.
 
+Official ChatGPT, Claude Code, and Codex connector setup should point to
+Codencer Gateway, not directly to this Relay:
+
+```text
+AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
+```
+
+This Relay `/mcp` endpoint remains available for advanced/direct/debug mode.
+
 ## Build Or Install
 
 Use the `linux/amd64` release artifact on Linux/WSL2, or build from source on the VPS:
@@ -92,7 +101,18 @@ Fallback remains available through `codencer-connectord enroll` and `codencer-co
 
 ## Activation Package
 
-Generate operator artifacts:
+Generate official Gateway-first operator artifacts:
+
+```bash
+./bin/codencer activation gateway \
+  --gateway https://mcp.codencer.dev \
+  --relay https://relay.example.com \
+  --project codencer \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --json
+```
+
+Direct Relay artifacts are still available for advanced/debug mode:
 
 ```bash
 ./bin/codencer activation package \

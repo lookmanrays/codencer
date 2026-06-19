@@ -416,6 +416,38 @@ func TestSetupAcceptProofCommandsJSON(t *testing.T) {
 		t.Fatalf("setup relay OAuth output wrong: %s", stdout)
 	}
 
+	stdout, stderr, err = runCLI("setup", "gateway", "--base-url", "http://127.0.0.1:19090", "--mcp-url", "http://127.0.0.1:19090/mcp", "--listen", "127.0.0.1:19090", "--token-env", "CODENCER_GATEWAY_MCP_TOKEN", "--enable-oauth-dev", "--oauth-client-secret", "gateway-client-secret", "--json")
+	if err != nil {
+		t.Fatalf("setup gateway failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"mode": "gateway"`) || !strings.Contains(stdout, `"gateway_config"`) || strings.Contains(stdout, "gateway-client-secret") {
+		t.Fatalf("setup gateway output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("gateway", "relay", "add", "--id", "personal", "--url", "https://relay.example.com", "--token-env", "CODENCER_RELAY_PERSONAL_TOKEN", "--json")
+	if err != nil {
+		t.Fatalf("gateway relay add failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"id": "personal"`) || strings.Contains(stdout, "relay-secret") {
+		t.Fatalf("gateway relay add output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("gateway", "relay", "list", "--json")
+	if err != nil {
+		t.Fatalf("gateway relay list failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"token_env": "CODENCER_RELAY_PERSONAL_TOKEN"`) {
+		t.Fatalf("gateway relay list output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("activation", "gateway", "--gateway", "https://mcp.codencer.dev", "--relay", "https://relay.example.com", "--project", "codencer", "--token", "literal-gateway-token", "--json")
+	if err != nil {
+		t.Fatalf("activation gateway failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"mode": "gateway"`) || !strings.Contains(stdout, `"mcp_url": "https://mcp.codencer.dev/mcp"`) || strings.Contains(stdout, "literal-gateway-token") {
+		t.Fatalf("activation gateway output wrong: %s", stdout)
+	}
+
 	stdout, stderr, err = runCLI("activation", "package", "--relay", "https://relay.example.com", "--project", "codencer", "--token", "literal-token", "--json")
 	if err != nil {
 		t.Fatalf("activation package failed: %v stderr=%s stdout=%s", err, stderr, stdout)

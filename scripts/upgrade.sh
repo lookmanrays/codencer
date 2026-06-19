@@ -7,7 +7,7 @@ ALLOW_MISSING=0
 BIN_DIR="bin"
 INSTALL_DIR="${CODENCER_INSTALL_DIR:-$HOME/.local/bin}"
 CODENCER_HOME_VALUE="${CODENCER_HOME:-$HOME/.codencer}"
-BINS=(codencer orchestratord codencer-relayd codencer-connectord)
+BINS=(codencer orchestratord codencer-relayd codencer-gatewayd codencer-connectord)
 
 json_string() {
   local value="$1"
