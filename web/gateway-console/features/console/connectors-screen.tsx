@@ -22,7 +22,7 @@ export function ConnectorsScreen() {
         emptyTitle="No connectors"
       >
         {(snapshot) => (
-          <div className="grid gap-lg">
+          <div className="grid min-w-0 max-w-full gap-lg">
             <MachineConnectorTable
               connectors={snapshot.connectors}
               machines={snapshot.machines}

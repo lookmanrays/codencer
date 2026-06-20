@@ -22,7 +22,7 @@ export function ProjectsScreen() {
         emptyTitle="No projects"
       >
         {(snapshot) => (
-          <div className="grid gap-lg">
+          <div className="grid min-w-0 max-w-full gap-lg">
             <Alert title="Routing rule" tone="warning">
               When the same project is available from multiple Relay profiles or
               machines, execution requires <code>relay_profile_id</code>,{" "}

@@ -27,14 +27,14 @@ export function DashboardScreen() {
     >
       <ConsoleData>
         {(snapshot) => (
-          <div className="grid gap-lg">
+          <div className="grid min-w-0 max-w-full gap-lg">
             {isMockMode() ? <MockModeNotice /> : null}
-            <div className="grid gap-md lg:grid-cols-3">
+            <div className="grid min-w-0 gap-md lg:grid-cols-3">
               <OfficialGatewayNotice />
               <SelfHostModeNotice />
               <McpEndpointCard endpoint={snapshot.mcpEndpoint} />
             </div>
-            <div className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid min-w-0 gap-md md:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 description="Enabled Gateway backend profiles."
                 icon={Cable}
@@ -64,7 +64,7 @@ export function DashboardScreen() {
                 }
               />
             </div>
-            <div className="grid gap-lg xl:grid-cols-[1fr_1.2fr]">
+            <div className="grid min-w-0 gap-lg xl:grid-cols-[1fr_1.2fr]">
               <WorkspaceSummaryCard snapshot={snapshot} />
               <Card>
                 <CardHeader>

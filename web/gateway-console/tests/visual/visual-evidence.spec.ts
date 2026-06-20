@@ -7,11 +7,20 @@ type ViewportName = "desktop" | "mobile";
 
 type ScreenshotRecord = {
   file: string;
+  height?: number;
   label: string;
   route: string;
   theme: ThemeName;
   viewport: ViewportName;
+  width?: number;
   kind: "route" | "interaction";
+};
+
+type MobileOverflowCheck = {
+  bodyWidth: number;
+  documentWidth: number;
+  innerWidth: number;
+  label: string;
 };
 
 const routes = [
@@ -35,6 +44,7 @@ const viewports: Record<ViewportName, { width: number; height: number }> = {
 const themes: ThemeName[] = ["light", "dark"];
 const records: ScreenshotRecord[] = [];
 const securityFindings: string[] = [];
+const mobileOverflowChecks: MobileOverflowCheck[] = [];
 
 const repoRoot = path.resolve(process.cwd(), "../..");
 const runId = process.env.GATEWAY_CONSOLE_SCREENSHOT_RUN ?? timestamp();
@@ -68,6 +78,7 @@ test("captures Gateway Console visual evidence", async ({ page }) => {
   }
 
   await captureInteractions(page);
+  assertGeneratedMobileScreenshotWidths();
   writeReports();
 
   expect(securityFindings, securityFindings.join("\n")).toEqual([]);
@@ -238,9 +249,119 @@ async function setTheme(page: Page, theme: ThemeName) {
 }
 
 async function capture(page: Page, record: ScreenshotRecord) {
+  if (record.viewport === "mobile") {
+    await assertNoMobileOverflow(page, record.label);
+  }
+
   const target = path.join(runDir, record.file);
   await page.screenshot({ path: target, fullPage: record.kind === "route" });
-  records.push(record);
+  const dimensions = readPngDimensions(target);
+  const captured = { ...record, ...dimensions };
+  records.push(captured);
+
+  if (record.viewport === "mobile") {
+    expect(
+      dimensions.width,
+      `${record.file} must be exactly ${viewports.mobile.width}px wide`,
+    ).toBe(viewports.mobile.width);
+  }
+}
+
+async function assertNoMobileOverflow(page: Page, label: string) {
+  const result = await page.evaluate(() => {
+    const innerWidth = window.innerWidth;
+    const offenders = Array.from(document.body.querySelectorAll("*"))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const className =
+          typeof element.className === "string"
+            ? element.className
+            : String(element.className);
+        return {
+          className,
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          tag: element.tagName.toLowerCase(),
+          text: (element.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 100),
+          width: Math.round(rect.width),
+        };
+      })
+      .filter(
+        (item) =>
+          item.width > innerWidth + 1 ||
+          item.right > innerWidth + 1 ||
+          item.left < -1,
+      )
+      .slice(0, 20);
+
+    return {
+      bodyWidth: document.body.scrollWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      innerWidth,
+      offenders,
+    };
+  });
+
+  mobileOverflowChecks.push({
+    bodyWidth: result.bodyWidth,
+    documentWidth: result.documentWidth,
+    innerWidth: result.innerWidth,
+    label,
+  });
+
+  const diagnostic = JSON.stringify({ label, ...result }, null, 2);
+  expect(result.documentWidth, diagnostic).toBeLessThanOrEqual(
+    result.innerWidth + 1,
+  );
+  expect(result.bodyWidth, diagnostic).toBeLessThanOrEqual(
+    result.innerWidth + 1,
+  );
+}
+
+function assertGeneratedMobileScreenshotWidths() {
+  const expectedWidth = viewports.mobile.width;
+  const recordFailures = records
+    .filter((record) => record.viewport === "mobile")
+    .filter((record) => record.width !== expectedWidth)
+    .map(
+      (record) =>
+        `${record.file}: expected ${expectedWidth}px, got ${record.width}px`,
+    );
+  const diskFailures = fs
+    .readdirSync(runDir)
+    .filter((file) => file.endsWith(".png") && file.includes("__mobile__"))
+    .map((file) => {
+      const dimensions = readPngDimensions(path.join(runDir, file));
+      return { ...dimensions, file };
+    })
+    .filter((entry) => entry.width !== expectedWidth)
+    .map(
+      (entry) =>
+        `${entry.file}: expected ${expectedWidth}px, got ${entry.width}px`,
+    );
+
+  expect(
+    [...recordFailures, ...diskFailures],
+    "all mobile screenshots must be exactly 390px wide",
+  ).toEqual([]);
+}
+
+function readPngDimensions(filePath: string) {
+  const header = fs.readFileSync(filePath).subarray(0, 24);
+  const pngSignature = "89504e470d0a1a0a";
+  if (
+    header.length < 24 ||
+    header.subarray(0, 8).toString("hex") !== pngSignature
+  ) {
+    throw new Error(`${filePath} is not a valid PNG file`);
+  }
+  return {
+    height: header.readUInt32BE(20),
+    width: header.readUInt32BE(16),
+  };
 }
 
 async function assertSafeHTML(page: Page, label: string) {
@@ -277,6 +398,9 @@ function writeReports() {
     route: records.filter((record) => record.kind === "route"),
     interaction: records.filter((record) => record.kind === "interaction"),
   };
+  const mobileRecords = records.filter(
+    (record) => record.viewport === "mobile",
+  );
   fs.writeFileSync(
     path.join(runDir, "index.md"),
     [
@@ -304,6 +428,19 @@ function writeReports() {
           `| ${record.label} | \`${record.route}\` | ${record.viewport} | ${record.theme} | [${record.file}](./${record.file}) |`,
       ),
       "",
+      "## Mobile Layout Checks",
+      "",
+      "Horizontal overflow assertions passed for every captured mobile route and mobile interaction state. Mobile PNG widths were read from the generated files and must be exactly 390px.",
+      "",
+      "| Capture | Viewport width | Document width | Body width | PNG width | PNG height |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
+      ...mobileRecords.map((record) => {
+        const check = mobileOverflowChecks.find(
+          (item) => item.label === record.label,
+        );
+        return `| ${record.file} | ${check?.innerWidth ?? ""} | ${check?.documentWidth ?? ""} | ${check?.bodyWidth ?? ""} | ${record.width ?? ""} | ${record.height ?? ""} |`;
+      }),
+      "",
       "## Security Scan",
       "",
       securityFindings.length === 0
@@ -321,6 +458,8 @@ function writeReports() {
       "## What Looks Good",
       "",
       "- Screenshot matrix completed for all required routes, themes, and viewports.",
+      "- Mobile horizontal overflow checks passed before screenshots were accepted.",
+      "- Every captured mobile PNG was verified at exactly 390px wide.",
       "- Interaction screenshots cover form validation, Radix open states, copy affordance, mobile navigation, and theme toggle states.",
       "- Generated screenshots are local review artifacts, not marketing screenshots.",
       "",

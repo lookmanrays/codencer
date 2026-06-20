@@ -226,6 +226,8 @@ verify-gateway-console:
 	@cd web/gateway-console && npm run build
 	@echo "==> Running Gateway Console browser smoke..."
 	@cd web/gateway-console && npm run test:e2e
+	@echo "==> Capturing Gateway Console visual evidence..."
+	@cd web/gateway-console && npm run visual:evidence
 
 verify-local-prod: build-codencer
 	@echo "==> Checking local production formatting..."

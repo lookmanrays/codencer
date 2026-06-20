@@ -13,14 +13,18 @@ export function ActivationCommandPanel({
     client: commands.filter((command) => command.target === "client"),
   };
   return (
-    <Tabs defaultValue="gateway">
+    <Tabs className="min-w-0 max-w-full" defaultValue="gateway">
       <TabsList>
         <TabsTrigger value="gateway">Gateway</TabsTrigger>
         <TabsTrigger value="local">Local</TabsTrigger>
         <TabsTrigger value="client">MCP clients</TabsTrigger>
       </TabsList>
       {Object.entries(groups).map(([key, values]) => (
-        <TabsContent className="grid gap-md" key={key} value={key}>
+        <TabsContent
+          className="grid min-w-0 max-w-full gap-md"
+          key={key}
+          value={key}
+        >
           {values.map((command) => (
             <CommandBlock
               command={command.command}

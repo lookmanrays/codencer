@@ -10,16 +10,19 @@ export type TimelineItem = {
 
 export function Timeline({ items }: { items: TimelineItem[] }) {
   return (
-    <ol className="m-0 grid list-none gap-md p-0">
+    <ol className="m-0 grid min-w-0 list-none gap-md p-0">
       {items.map((item) => (
-        <li className="grid grid-cols-[18px_1fr] gap-md" key={item.id}>
+        <li
+          className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)] gap-md"
+          key={item.id}
+        >
           <span
             aria-hidden="true"
             className="mt-[0.55rem] h-2 w-2 rounded-full bg-accent"
           />
-          <div className="border-b border-border pb-md">
-            <div className="flex flex-wrap items-start justify-between gap-sm">
-              <div>
+          <div className="min-w-0 border-b border-border pb-md">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-sm">
+              <div className="min-w-0">
                 <p className="m-0 font-semibold">{item.title}</p>
                 <p className="m-0 mt-xs text-body-sm text-ink-secondary">
                   {item.description}

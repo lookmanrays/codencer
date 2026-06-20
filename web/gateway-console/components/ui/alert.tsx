@@ -25,7 +25,7 @@ export function Alert({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-card)] border p-md",
+        "min-w-0 max-w-full rounded-[var(--radius-card)] border p-md",
         tones[tone],
         className,
       )}
@@ -43,7 +43,9 @@ export function Alert({
       >
         {title}
       </Badge>
-      <div className="mt-sm text-body-sm text-ink-secondary">{children}</div>
+      <div className="mt-sm min-w-0 break-words text-body-sm text-ink-secondary">
+        {children}
+      </div>
     </div>
   );
 }

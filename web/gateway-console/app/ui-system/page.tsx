@@ -108,10 +108,10 @@ export default function UISystemPage() {
       kicker="Design system"
       title="Codencer Gateway Console UI"
     >
-      <div className="grid gap-xl">
-        <section className="grid gap-md">
+      <div className="grid min-w-0 max-w-full gap-xl">
+        <section className="grid min-w-0 max-w-full gap-md">
           <h2 className="m-0 text-h2 font-bold">Tokens</h2>
-          <div className="grid gap-md sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid min-w-0 gap-md sm:grid-cols-2 lg:grid-cols-4">
             {colors.map((name) => (
               <Card key={name}>
                 <div
@@ -130,22 +130,26 @@ export default function UISystemPage() {
             <CardContent>
               {typeRows.map(([name, className, sample]) => (
                 <div
-                  className="grid grid-cols-[180px_1fr] items-baseline gap-md border-t border-border py-md first:border-t-0 max-md:grid-cols-1"
+                  className="grid min-w-0 grid-cols-[180px_minmax(0,1fr)] items-baseline gap-md border-t border-border py-md first:border-t-0 max-md:grid-cols-1"
                   key={name}
                 >
-                  <span className="font-mono text-mono text-ink-muted">
+                  <span className="min-w-0 break-words font-mono text-mono text-ink-muted">
                     --text-{name}
                   </span>
-                  <span className={`${className} leading-tight`}>{sample}</span>
+                  <span
+                    className={`${className} min-w-0 break-words leading-tight`}
+                  >
+                    {sample}
+                  </span>
                 </div>
               ))}
             </CardContent>
           </Card>
         </section>
 
-        <section className="grid gap-md">
+        <section className="grid min-w-0 max-w-full gap-md">
           <h2 className="m-0 text-h2 font-bold">Layout grids</h2>
-          <div className="grid gap-md md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid min-w-0 gap-md md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((item) => (
               <Card key={item}>
                 <CardContent>
@@ -161,7 +165,7 @@ export default function UISystemPage() {
           </div>
         </section>
 
-        <section className="grid gap-md">
+        <section className="grid min-w-0 max-w-full gap-md">
           <h2 className="m-0 text-h2 font-bold">Primitives</h2>
           <Card>
             <CardHeader>
@@ -182,7 +186,7 @@ export default function UISystemPage() {
             <CardHeader>
               <CardTitle>Forms</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-md md:grid-cols-2">
+            <CardContent className="grid min-w-0 gap-md md:grid-cols-2">
               <Field id="demo-input" label="Input">
                 <Input
                   id="demo-input"
@@ -203,12 +207,15 @@ export default function UISystemPage() {
                   </SelectContent>
                 </Select>
               </Field>
-              <div className="flex items-center gap-md">
+              <div className="flex min-w-0 flex-wrap items-center gap-md">
                 <Checkbox id="demo-checkbox" defaultChecked />
                 <label htmlFor="demo-checkbox">Explicit project sharing</label>
                 <Switch defaultChecked />
               </div>
-              <RadioGroup className="flex gap-md" defaultValue="gateway">
+              <RadioGroup
+                className="flex min-w-0 flex-wrap gap-md"
+                defaultValue="gateway"
+              >
                 <label className="flex items-center gap-sm">
                   <RadioGroupItem value="gateway" /> Gateway
                 </label>
@@ -282,7 +289,7 @@ export default function UISystemPage() {
               </Tooltip>
             </CardContent>
           </Card>
-          <Tabs defaultValue="one">
+          <Tabs className="min-w-0 max-w-full" defaultValue="one">
             <TabsList>
               <TabsTrigger value="one">Terminal</TabsTrigger>
               <TabsTrigger value="two">Progress</TabsTrigger>
@@ -296,9 +303,9 @@ export default function UISystemPage() {
           </Tabs>
         </section>
 
-        <section className="grid gap-md">
+        <section className="grid min-w-0 max-w-full gap-md">
           <h2 className="m-0 text-h2 font-bold">Console modules</h2>
-          <div className="grid gap-md lg:grid-cols-3">
+          <div className="grid min-w-0 gap-md lg:grid-cols-3">
             <MockModeNotice />
             <OfficialGatewayNotice />
             <SelfHostModeNotice />

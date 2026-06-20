@@ -7,9 +7,9 @@ export function McpEndpointCard({ endpoint }: { endpoint: string }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between gap-md">
-          <div>
-            <CardTitle className="flex items-center gap-sm">
+        <div className="flex min-w-0 items-start justify-between gap-md">
+          <div className="min-w-0">
+            <CardTitle className="flex min-w-0 items-center gap-sm">
               <Cable aria-hidden="true" className="h-5 w-5 text-accent" />
               MCP endpoint
             </CardTitle>

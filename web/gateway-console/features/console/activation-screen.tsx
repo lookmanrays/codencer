@@ -21,7 +21,7 @@ export function ActivationScreen() {
         emptyTitle="No activation commands"
       >
         {(snapshot) => (
-          <div className="grid gap-lg">
+          <div className="grid min-w-0 max-w-full gap-lg">
             <OfficialGatewayNotice />
             <ActivationCommandPanel commands={snapshot.activationCommands} />
           </div>

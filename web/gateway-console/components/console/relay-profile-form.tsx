@@ -31,7 +31,7 @@ export function RelayProfileForm() {
 
   return (
     <form
-      className="grid gap-md rounded-[var(--radius-card)] border border-border bg-paper-strong p-md"
+      className="grid min-w-0 max-w-full gap-md rounded-[var(--radius-card)] border border-border bg-paper-strong p-md"
       onSubmit={handleSubmit(() => undefined)}
     >
       <Field error={errors.name?.message} id="relay-name" label="Profile name">

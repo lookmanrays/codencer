@@ -20,11 +20,13 @@ export function Field({
   label,
 }: FieldProps) {
   return (
-    <div className={cn("flex flex-col gap-[6px]", className)}>
+    <div className={cn("flex min-w-0 flex-col gap-[6px]", className)}>
       <Label htmlFor={id}>{label}</Label>
       {children}
       {description && !error ? (
-        <p className="m-0 text-body-sm text-ink-secondary">{description}</p>
+        <p className="m-0 min-w-0 break-words text-body-sm text-ink-secondary">
+          {description}
+        </p>
       ) : null}
       {error ? <FormMessage id={`${id}-message`}>{error}</FormMessage> : null}
     </div>

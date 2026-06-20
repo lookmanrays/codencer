@@ -23,9 +23,9 @@ export function RelaysScreen() {
         emptyTitle="No Relay profiles"
       >
         {(snapshot) => (
-          <div className="grid gap-lg">
+          <div className="grid min-w-0 max-w-full gap-lg">
             <OfficialGatewayNotice />
-            <div className="grid gap-md lg:grid-cols-2">
+            <div className="grid min-w-0 gap-md lg:grid-cols-2">
               {snapshot.relays.map((relay) => (
                 <RelayProfileCard key={relay.id} relay={relay} />
               ))}

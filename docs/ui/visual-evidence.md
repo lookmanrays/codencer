@@ -17,6 +17,11 @@ server on `127.0.0.1:19575` and writes artifacts under:
 reports/gateway-console-screenshots/YYYY-MM-DD-HHMM/
 ```
 
+The run fails if any mobile capture has document or body horizontal overflow.
+It also reads the generated PNG headers and requires every mobile screenshot to
+be exactly `390px` wide. `make verify-gateway-console` runs this same evidence
+command so mobile overflow is part of the repository-level UI gate.
+
 ## Captured Matrix
 
 Every run captures full-page PNGs for:

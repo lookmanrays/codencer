@@ -20,8 +20,8 @@ export function StatCard({
   return (
     <Card className={cn("border-l-[3px] border-l-accent", className)}>
       <CardContent>
-        <div className="flex items-start justify-between gap-md">
-          <div>
+        <div className="flex min-w-0 items-start justify-between gap-md">
+          <div className="min-w-0">
             <p className="m-0 font-mono text-mono uppercase tracking-[0.12em] text-ink-muted">
               {label}
             </p>

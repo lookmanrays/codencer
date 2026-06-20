@@ -17,7 +17,7 @@ export function PageShell({
 }) {
   return (
     <main
-      className="mx-auto w-full max-w-[var(--container-max)] px-[var(--container-pad)] py-lg"
+      className="mx-auto min-w-0 w-full max-w-[var(--container-max)] px-[var(--container-pad)] py-lg"
       id="main-content"
     >
       <PageHeader

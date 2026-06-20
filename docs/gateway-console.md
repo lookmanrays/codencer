@@ -38,8 +38,9 @@ npm run visual:evidence
 The visual run writes local artifacts under
 `reports/gateway-console-screenshots/YYYY-MM-DD-HHMM/` with full-page route
 screenshots, interaction-state screenshots, `index.md`, and
-`visual-review.md`. Timestamped PNGs are ignored by default to avoid repository
-bloat. See [UI visual evidence](ui/visual-evidence.md).
+`visual-review.md`. It fails on mobile horizontal overflow and verifies mobile
+PNG widths at exactly `390px`. Timestamped PNGs are ignored by default to avoid
+repository bloat. See [UI visual evidence](ui/visual-evidence.md).
 
 The console is mock-backed by default unless
 `NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false` is configured. Live Gateway API

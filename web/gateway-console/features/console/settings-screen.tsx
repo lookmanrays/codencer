@@ -21,7 +21,7 @@ export function SettingsScreen() {
     >
       <ConsoleData>
         {(snapshot) => (
-          <div className="grid gap-lg">
+          <div className="grid min-w-0 max-w-full gap-lg">
             <Card>
               <CardHeader>
                 <CardTitle>Workspace</CardTitle>

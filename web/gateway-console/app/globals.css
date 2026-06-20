@@ -142,6 +142,11 @@ a {
   color: inherit;
 }
 
+:not(pre) > code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 button,
 input,
 textarea,

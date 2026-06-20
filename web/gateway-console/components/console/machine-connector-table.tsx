@@ -44,7 +44,7 @@ export function MachineConnectorTable({
     machine: machines.find((machine) => machine.id === connector.machineId),
   }));
   return (
-    <div className="grid gap-md">
+    <div className="grid min-w-0 max-w-full gap-md">
       <DataTable
         columns={columns}
         data={rows}

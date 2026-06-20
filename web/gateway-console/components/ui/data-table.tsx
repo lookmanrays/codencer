@@ -31,19 +31,19 @@ export function DataTable<TData>({
 
   return (
     <>
-      <div className="grid gap-sm md:hidden">
+      <div className="grid min-w-0 max-w-full gap-sm md:hidden">
         {table.getRowModel().rows.map((row) => (
           <article
-            className="rounded-[var(--radius-card)] border border-border bg-paper-strong p-md"
+            className="min-w-0 max-w-full rounded-[var(--radius-card)] border border-border bg-paper-strong p-md"
             key={row.id}
           >
-            <dl className="m-0 grid gap-sm">
+            <dl className="m-0 grid min-w-0 gap-sm">
               {row.getVisibleCells().map((cell) => (
                 <div
-                  className="grid gap-xs border-t border-border py-sm first:border-t-0 first:pt-0 last:pb-0"
+                  className="grid min-w-0 gap-xs border-t border-border py-sm first:border-t-0 first:pt-0 last:pb-0"
                   key={cell.id}
                 >
-                  <dt className="font-mono text-mono uppercase tracking-[0.12em] text-ink-muted">
+                  <dt className="min-w-0 break-words font-mono text-mono uppercase tracking-[0.12em] text-ink-muted">
                     {headerText(cell.column.columnDef.header, cell.column.id)}
                   </dt>
                   <dd className="m-0 min-w-0 break-words text-body-sm text-ink-primary">
@@ -55,7 +55,7 @@ export function DataTable<TData>({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto rounded-[var(--radius-card)] border border-border bg-paper-strong md:block">
+      <div className="hidden min-w-0 max-w-full overflow-x-auto rounded-[var(--radius-card)] border border-border bg-paper-strong md:block">
         <table className="w-full min-w-[760px] border-collapse text-left">
           <thead className="border-b border-border bg-paper-tinted">
             {table.getHeaderGroups().map((headerGroup) => (

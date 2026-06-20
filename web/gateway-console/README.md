@@ -53,5 +53,9 @@ Artifacts are written under:
 ../../reports/gateway-console-screenshots/YYYY-MM-DD-HHMM/
 ```
 
+The visual evidence run asserts that mobile document/body widths do not exceed
+the `390px` viewport and that generated mobile PNGs are exactly `390px` wide.
+`make verify-gateway-console` includes this visual gate.
+
 Timestamped PNG artifacts are ignored by default. Commit screenshot tooling and
 small curated evidence only when a review specifically needs it.

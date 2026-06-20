@@ -17,12 +17,12 @@ export function PageHeader({
   title,
 }: PageHeaderProps) {
   return (
-    <header className="mb-lg">
+    <header className="mb-lg min-w-0 max-w-full">
       {breadcrumbs ? <Breadcrumbs items={breadcrumbs} /> : null}
-      <div className="mt-md flex flex-wrap items-end justify-between gap-md">
-        <div className="max-w-[780px]">
+      <div className="mt-md flex min-w-0 flex-wrap items-end justify-between gap-md">
+        <div className="min-w-0 max-w-[780px]">
           <Kicker label={kicker} />
-          <h1 className="m-0 mt-md text-h1 font-bold leading-[1.1] tracking-[-0.01em]">
+          <h1 className="m-0 mt-md min-w-0 break-words text-h1 font-bold leading-[1.1] tracking-[-0.01em]">
             {title}
           </h1>
           <p className="mb-0 mt-md text-body-lg leading-[1.6] text-ink-secondary">
@@ -30,7 +30,7 @@ export function PageHeader({
           </p>
         </div>
         {actions ? (
-          <div className="flex flex-wrap gap-sm">{actions}</div>
+          <div className="flex min-w-0 flex-wrap gap-sm">{actions}</div>
         ) : null}
       </div>
     </header>

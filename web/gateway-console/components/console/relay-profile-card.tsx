@@ -26,8 +26,8 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between gap-md">
-          <div>
+        <div className="flex min-w-0 items-start justify-between gap-md">
+          <div className="min-w-0">
             <CardTitle>{relay.name}</CardTitle>
             <p className="m-0 mt-xs text-body-sm text-ink-secondary">
               {relay.type === "managed"
@@ -38,7 +38,7 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
           <RelayHealthBadge relay={relay} />
         </div>
       </CardHeader>
-      <CardContent className="grid gap-md">
+      <CardContent className="grid min-w-0 gap-md">
         <KeyValueList
           items={[
             { label: "ID", value: relay.id },
@@ -49,7 +49,7 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
         />
         <SecretField label="Token reference" value={relay.tokenRef} />
       </CardContent>
-      <CardFooter className="flex justify-end gap-sm">
+      <CardFooter className="flex min-w-0 flex-wrap justify-end gap-sm">
         <Button disabled={relay.type === "managed"} variant="quiet">
           Disable
         </Button>

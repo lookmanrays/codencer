@@ -22,8 +22,8 @@ export function Topbar({
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-paper/95 backdrop-blur">
-      <div className="flex min-h-[64px] items-center justify-between gap-md px-md">
-        <div className="flex min-w-0 items-center gap-sm">
+      <div className="flex min-h-[64px] min-w-0 items-center justify-between gap-sm px-sm sm:px-md">
+        <div className="flex min-w-0 flex-1 items-center gap-sm">
           <IconButton
             icon={Menu}
             label="Toggle sidebar"
@@ -36,10 +36,15 @@ export function Topbar({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-sm">
+        <div className="flex shrink-0 items-center gap-xs sm:gap-sm">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button data-testid="nav-menu" variant="quiet">
+              <Button
+                className="shrink-0"
+                data-testid="nav-menu"
+                size="sm"
+                variant="quiet"
+              >
                 Routes
               </Button>
             </DropdownMenuTrigger>
@@ -52,7 +57,7 @@ export function Topbar({
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
-          <Avatar>
+          <Avatar className="max-[430px]:hidden">
             <AvatarFallback>CO</AvatarFallback>
           </Avatar>
         </div>
