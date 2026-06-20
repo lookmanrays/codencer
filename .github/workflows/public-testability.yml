@@ -20,13 +20,26 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/gateway-console/package-lock.json
+
       - name: Install CGO build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential
 
-      - name: Build supported beta-track binaries
+      - name: Install Gateway Console browser
+        working-directory: web/gateway-console
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build supported public binaries
         run: make build-supported
 
       - name: Run supported public verification
-        run: ./scripts/verify_beta.sh
+        run: make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host

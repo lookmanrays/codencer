@@ -86,6 +86,10 @@ PRIMARY_STALE_RE = re.compile(
     r"|setup gateway",
     re.IGNORECASE,
 )
+ACTIVE_RELEASE_LABEL_RE = re.compile(
+    r"\b(beta|alpha|staging)\b|v0\.2|verify-beta|verify_beta|beta-track",
+    re.IGNORECASE,
+)
 SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)\b[A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|CLIENT_SECRET)[A-Z0-9_]*\s*[:=]\s*['\"]?([^'\"\s#]+)"
 )
@@ -227,9 +231,17 @@ def should_scan_primary_stale_reference(rel: str) -> bool:
         return False
     if rel in {"README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}:
         return True
+    if rel == "Makefile" or rel.startswith(".github/"):
+        return True
     if rel.startswith("docs/") or rel.startswith("web/gateway-console/"):
         return Path(rel).suffix in TEXT_SUFFIXES
     return False
+
+
+def should_scan_active_release_labels(rel: str) -> bool:
+    if rel == "scripts/check_public_boundary.py":
+        return False
+    return rel == "Makefile" or rel.startswith(".github/") or rel.startswith("scripts/")
 
 
 def endpoint_allowed(rel: str) -> bool:
@@ -281,6 +293,10 @@ def check_tracked_file(rel: str, failures: list[str]) -> None:
         for line_number, line in enumerate(text.splitlines(), start=1):
             if PRIMARY_STALE_RE.search(line):
                 fail(f"stale primary release reference in {rel}:{line_number}: {line.strip()}", failures)
+    elif should_scan_active_release_labels(rel):
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if ACTIVE_RELEASE_LABEL_RE.search(line):
+                fail(f"stale active release label in {rel}:{line_number}: {line.strip()}", failures)
 
 
 def scan_source_tree(failures: list[str]) -> None:

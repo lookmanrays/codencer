@@ -589,11 +589,11 @@ cloud-stack-smoke:
 	@echo "==> Running docker-compose cloud stack smoke test..."
 	@./deploy/cloud/smoke.sh
 
-verify-beta: build-supported
-	@./scripts/verify_beta.sh
+verify-supported-public: build-supported
+	@./scripts/verify_supported_public.sh
 
-verify-beta-docker: build-supported
-	@./scripts/verify_beta.sh --docker
+verify-supported-public-docker: build-supported
+	@./scripts/verify_supported_public.sh --docker
 
 validate: build
 	@echo "==> Running Codex validation scenario (Internal Version Bump)..."

@@ -175,12 +175,12 @@ if ! wait_http "$selfhost_relay_url/api/v2/status" -H "Authorization: Bearer $se
   exit 1
 fi
 
-CODENCER_HOME="$gateway_home" "$ROOT/bin/codencer" setup gateway \
-  --base-url "$gateway_url" \
+CODENCER_HOME="$gateway_home" "$ROOT/bin/codencer" setup self-host \
+  --gateway-url "$gateway_url" \
   --mcp-url "$gateway_url/mcp" \
+  --relay-url "$official_relay_url" \
   --listen "127.0.0.1:$gateway_port" \
   --store "$TMPDIR_ROOT/gateway.db" \
-  --default-relay-url "$official_relay_url" \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \

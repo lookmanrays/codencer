@@ -3,11 +3,21 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERIFY_DOCKER_STACK=0
-VERIFY_BETA_DAEMON_PORT="${VERIFY_BETA_DAEMON_PORT:-18085}"
-VERIFY_BETA_RELAY_PORT="${VERIFY_BETA_RELAY_PORT:-18090}"
-DAEMON_URL="http://127.0.0.1:${VERIFY_BETA_DAEMON_PORT}"
-RELAY_URL="http://127.0.0.1:${VERIFY_BETA_RELAY_PORT}"
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/codencer-verify-beta.XXXXXX")"
+free_port() {
+  python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+}
+
+VERIFY_PUBLIC_DAEMON_PORT="${VERIFY_PUBLIC_DAEMON_PORT:-$(free_port)}"
+VERIFY_PUBLIC_RELAY_PORT="${VERIFY_PUBLIC_RELAY_PORT:-$(free_port)}"
+DAEMON_URL="http://127.0.0.1:${VERIFY_PUBLIC_DAEMON_PORT}"
+RELAY_URL="http://127.0.0.1:${VERIFY_PUBLIC_RELAY_PORT}"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/codencer-verify-public.XXXXXX")"
 RELAY_CONFIG="$TMP_DIR/relay.json"
 PLANNER_TOKEN_JSON="$TMP_DIR/planner-token.json"
 RELAY_LOG="$TMP_DIR/relay.log"
@@ -51,7 +61,7 @@ print(value)
 PY
     return
   fi
-  echo "ERROR: verify_beta.sh requires jq or python3 for JSON parsing." >&2
+  echo "ERROR: verify_supported_public.sh requires jq or python3 for JSON parsing." >&2
   exit 1
 }
 
@@ -91,7 +101,7 @@ make smoke
 cat > "$RELAY_CONFIG" <<EOF
 {
   "host": "127.0.0.1",
-  "port": ${VERIFY_BETA_RELAY_PORT},
+  "port": ${VERIFY_PUBLIC_RELAY_PORT},
   "db_path": "${TMP_DIR}/relay.db",
   "planner_tokens": []
 }
@@ -101,7 +111,7 @@ echo "==> Creating temporary relay planner token config..."
 ./bin/codencer-relayd planner-token create \
   --config "$RELAY_CONFIG" \
   --write-config \
-  --name verify-beta \
+  --name verify-public \
   --scope '*' \
   --json > "$PLANNER_TOKEN_JSON"
 
@@ -113,7 +123,7 @@ if [[ -z "$PLANNER_TOKEN" ]]; then
 fi
 
 echo "==> Starting temporary simulation daemon on ${DAEMON_URL}..."
-nohup env ALL_ADAPTERS_SIMULATION_MODE=1 PORT="${VERIFY_BETA_DAEMON_PORT}" \
+nohup env ALL_ADAPTERS_SIMULATION_MODE=1 PORT="${VERIFY_PUBLIC_DAEMON_PORT}" \
   ./bin/orchestratord --repo-root "$ROOT_DIR" > "$DAEMON_LOG" 2>&1 &
 DAEMON_PID="$!"
 
@@ -124,7 +134,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 if ! curl -fsS "${DAEMON_URL}/api/v1/instance" >/dev/null 2>&1; then
-  echo "ERROR: verify-beta daemon failed to start on ${DAEMON_URL}" >&2
+  echo "ERROR: public verification daemon failed to start on ${DAEMON_URL}" >&2
   cat "$DAEMON_LOG" >&2 || true
   exit 1
 fi
@@ -140,7 +150,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 if ! ./bin/codencer-relayd status --config "$RELAY_CONFIG" --json >/dev/null 2>&1; then
-  echo "ERROR: verify-beta relay failed to start on ${RELAY_URL}" >&2
+  echo "ERROR: public verification relay failed to start on ${RELAY_URL}" >&2
   cat "$RELAY_LOG" >&2 || true
   exit 1
 fi
@@ -164,4 +174,4 @@ if [[ "$VERIFY_DOCKER_STACK" == "1" ]]; then
   make cloud-stack-smoke
 fi
 
-echo "==> Supported beta-track verification complete."
+echo "==> Supported public verification complete."
