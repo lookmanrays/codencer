@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-bridge/internal/defaults"
 	"agent-bridge/internal/local"
 	"agent-bridge/internal/localexec"
 	"agent-bridge/internal/mcpconfig"
@@ -630,7 +631,7 @@ func normalizeRelayAndMCP(opts Options) (string, string, error) {
 	relayURL := strings.TrimRight(strings.TrimSpace(opts.Relay), "/")
 	mcpURL := strings.TrimRight(strings.TrimSpace(opts.MCPURL), "/")
 	if relayURL == "" && mcpURL == "" {
-		relayURL = "https://relay.example.com"
+		relayURL = defaults.DefaultRelayURL()
 	}
 	if relayURL == "" && mcpURL != "" {
 		relayURL = strings.TrimSuffix(mcpURL, "/mcp")
@@ -657,7 +658,7 @@ func normalizeGatewayRelayAndMCP(opts Options) (string, string, string, error) {
 	relayURL := strings.TrimRight(strings.TrimSpace(opts.Relay), "/")
 	mcpURL := strings.TrimRight(strings.TrimSpace(opts.MCPURL), "/")
 	if gatewayURL == "" {
-		gatewayURL = "https://mcp.codencer.dev"
+		gatewayURL = defaults.DefaultGatewayBaseURL()
 	}
 	if mcpURL == "" {
 		mcpURL = gatewayURL + "/mcp"
@@ -666,7 +667,7 @@ func normalizeGatewayRelayAndMCP(opts Options) (string, string, string, error) {
 		mcpURL += "/mcp"
 	}
 	if relayURL == "" {
-		relayURL = "https://relay.example.com"
+		relayURL = defaults.DefaultRelayURL()
 	}
 	for flag, value := range map[string]string{"--gateway": gatewayURL, "--relay": relayURL, "--mcp-url": mcpURL} {
 		parsed, err := url.Parse(value)

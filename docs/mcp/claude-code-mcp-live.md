@@ -5,8 +5,8 @@ Claude Code MCP activation generates setup artifacts only. It does not write `.m
 ## Generate
 
 ```bash
-./bin/codencer activation official \
-  --gateway https://mcp.codencer.dev \
+./bin/codencer activation self-host \
+  --gateway http://127.0.0.1:19090 \
   --relay https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --project codencer \
@@ -14,7 +14,7 @@ Claude Code MCP activation generates setup artifacts only. It does not write `.m
 ```
 
 The generated package includes a Claude Code command pointing to
-`https://mcp.codencer.dev/mcp`.
+`http://127.0.0.1:19090/mcp` for local self-host proof.
 
 Direct Relay debug setup remains available:
 
@@ -27,7 +27,7 @@ Direct Relay debug setup remains available:
 ```
 
 The Gateway package's Claude Code setup output includes a command pointing to
-`https://mcp.codencer.dev/mcp`. Direct Relay debug setup output includes:
+`http://127.0.0.1:19090/mcp`. Direct Relay debug setup output includes:
 
 - `claude mcp add --transport http --header "Authorization: Bearer $CODENCER_MCP_TOKEN" codencer https://relay.example.com/mcp`
 - `.mcp.json` alternative
@@ -43,5 +43,6 @@ Ask Claude Code to:
 3. Run one approved fake-success or real operator-approved task.
 4. Stop and return blocker details when Codencer reports a planner decision is required.
 
-Live Claude Code proof remains pending until Claude Code actually connects to
-the Gateway MCP endpoint and calls a tool.
+Protocol proof is covered by `make verify-public-selfhost-release`. Live Claude
+Code product-client proof remains pending until Claude Code actually connects
+to the Gateway MCP endpoint and calls a tool.

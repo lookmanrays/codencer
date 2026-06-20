@@ -50,6 +50,66 @@ func TestVersionPathsAndDoctorJSON(t *testing.T) {
 	}
 }
 
+func TestConfigProfilesAndSelfHostDefaultsJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+
+	stdout, stderr, err := runCLI("init", "--json")
+	if err != nil {
+		t.Fatalf("init failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+
+	stdout, stderr, err = runCLI("config", "show", "--json")
+	if err != nil {
+		t.Fatalf("config show failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if strings.Contains(stdout, "mcp.codencer.dev") || !strings.Contains(stdout, `"gateway_url": "http://127.0.0.1:19090"`) || !strings.Contains(stdout, `"active_profile": "self-host"`) {
+		t.Fatalf("default config should be self-host/local, got %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("config", "profiles", "list", "--json")
+	if err != nil {
+		t.Fatalf("profiles list failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"active_profile": "self-host"`) || !strings.Contains(stdout, `"name": "self-host"`) {
+		t.Fatalf("profiles list missing self-host profile: %s", stdout)
+	}
+
+	t.Setenv("CODENCER_GATEWAY_URL", "http://127.0.0.1:19191")
+	stdout, stderr, err = runCLI("config", "show", "--json")
+	if err != nil {
+		t.Fatalf("config show with env failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"gateway_url": "http://127.0.0.1:19191"`) || !strings.Contains(stdout, `"source": "env:CODENCER_GATEWAY_URL"`) {
+		t.Fatalf("env override did not win: %s", stdout)
+	}
+	t.Setenv("CODENCER_GATEWAY_URL", "")
+
+	stdout, stderr, err = runCLI("config", "set", "gateway.url", "http://127.0.0.1:19091", "--json")
+	if err != nil {
+		t.Fatalf("config set failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"gateway_url": "http://127.0.0.1:19091"`) {
+		t.Fatalf("config set output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("config", "profiles", "use", "self-host", "--json")
+	if err != nil {
+		t.Fatalf("profiles use failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"active_profile": "self-host"`) {
+		t.Fatalf("profiles use output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("setup", "self-host", "--gateway-url", "http://127.0.0.1:19092", "--relay-url", "http://127.0.0.1:8092", "--listen", "127.0.0.1:19092", "--token-env", "CODENCER_GATEWAY_MCP_TOKEN", "--enable-oauth-dev", "--oauth-client-secret", "self-host-client-secret", "--json")
+	if err != nil {
+		t.Fatalf("setup self-host failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"mode": "self-host"`) || !strings.Contains(stdout, `"profile": "self-host"`) || strings.Contains(stdout, "self-host-client-secret") || strings.Contains(stdout, "mcp.codencer.dev") {
+		t.Fatalf("setup self-host output wrong: %s", stdout)
+	}
+}
+
 func TestExecutionCommandsJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

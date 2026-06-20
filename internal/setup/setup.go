@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"agent-bridge/internal/connector"
+	"agent-bridge/internal/defaults"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/gateway"
 	"agent-bridge/internal/local"
@@ -108,6 +109,23 @@ type GatewayOptions struct {
 	Manager               string
 	BinDir                string
 	Strict                bool
+	Now                   func() time.Time
+}
+
+type SelfHostOptions struct {
+	GatewayURL            string
+	MCPURL                string
+	RelayURL              string
+	ConsoleURL            string
+	ListenAddr            string
+	GatewayConfigPath     string
+	StorePath             string
+	TokenEnv              string
+	TokenFile             string
+	DefaultRelayTokenEnv  string
+	DefaultRelayTokenFile string
+	EnableOAuthDev        bool
+	OAuthClientSecret     string
 	Now                   func() time.Time
 }
 
@@ -435,7 +453,7 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 
 	gatewayConfigPath := firstNonEmpty(opts.GatewayConfigPath, filepath.Join(paths.RuntimeDir, "gateway", "config.json"))
 	storePath := firstNonEmpty(opts.StorePath, filepath.Join(paths.RuntimeDir, "gateway", "gateway.db"))
-	baseURL := strings.TrimRight(firstNonEmpty(opts.BaseURL, "https://mcp.codencer.dev"), "/")
+	baseURL := strings.TrimRight(firstNonEmpty(opts.BaseURL, defaults.DefaultGatewayBaseURL()), "/")
 	mcpURL := strings.TrimRight(firstNonEmpty(opts.MCPURL, baseURL+"/mcp"), "/")
 	if !strings.HasSuffix(mcpURL, "/mcp") {
 		mcpURL += "/mcp"
@@ -520,11 +538,11 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 	report.Configured = true
 	report.NextCommands = []string{
 		"export " + cfg.Auth.TokenEnv + "=<gateway-client-token>",
-		"export " + cfg.DefaultRelay.TokenEnv + "=<default-managed-relay-token>",
+		"export " + cfg.DefaultRelay.TokenEnv + "=<self-host-relay-planner-token>",
 		"codencer-gatewayd serve --config " + gatewayConfigPath,
 		"codencer login --gateway " + baseURL,
 		"codencer connector login --gateway " + baseURL + " --relay default --json",
-		"codencer activation official --gateway " + baseURL + " --project codencer --token-env " + cfg.Auth.TokenEnv + " --json",
+		"codencer activation self-host --gateway " + baseURL + " --project codencer --token-env " + cfg.Auth.TokenEnv + " --json",
 	}
 	report.Output = map[string]any{
 		"base_url":       baseURL,
@@ -545,10 +563,76 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 	return report.finish(exitForSteps(report.Steps, opts.Strict)), nil
 }
 
+func SelfHost(ctx context.Context, opts SelfHostOptions) (Report, error) {
+	gatewayURL := strings.TrimRight(firstNonEmpty(opts.GatewayURL, defaults.DefaultGatewayBaseURL()), "/")
+	mcpURL := strings.TrimRight(firstNonEmpty(opts.MCPURL, gatewayURL+"/mcp"), "/")
+	if !strings.HasSuffix(mcpURL, "/mcp") {
+		mcpURL += "/mcp"
+	}
+	relayURL := strings.TrimRight(firstNonEmpty(opts.RelayURL, defaults.DefaultRelayURL()), "/")
+	consoleURL := strings.TrimRight(firstNonEmpty(opts.ConsoleURL, defaults.DefaultConsoleURL()), "/")
+
+	report, err := Gateway(ctx, GatewayOptions{
+		BaseURL:               gatewayURL,
+		MCPURL:                mcpURL,
+		ListenAddr:            firstNonEmpty(opts.ListenAddr, gateway.DefaultListenAddr),
+		GatewayConfigPath:     opts.GatewayConfigPath,
+		StorePath:             opts.StorePath,
+		TokenEnv:              firstNonEmpty(opts.TokenEnv, gateway.DefaultGatewayToken),
+		TokenFile:             opts.TokenFile,
+		DefaultRelayURL:       relayURL,
+		DefaultRelayTokenEnv:  firstNonEmpty(opts.DefaultRelayTokenEnv, gateway.DefaultRelayToken),
+		DefaultRelayTokenFile: opts.DefaultRelayTokenFile,
+		EnableOAuthDev:        opts.EnableOAuthDev,
+		OAuthIssuer:           gatewayURL,
+		OAuthClientSecret:     opts.OAuthClientSecret,
+		Now:                   opts.Now,
+	})
+	if err != nil {
+		return report, err
+	}
+	report.Mode = "self-host"
+
+	paths, err := local.ResolvePaths("", "")
+	if err != nil {
+		return Report{}, err
+	}
+	cfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return Report{}, err
+	}
+	cfg.ActiveProfile = local.DefaultProfileName
+	if cfg.Profiles == nil {
+		cfg.Profiles = map[string]local.Profile{}
+	}
+	cfg.Profiles[local.DefaultProfileName] = local.Profile{
+		Name:       "Self-host local",
+		GatewayURL: gatewayURL,
+		MCPURL:     mcpURL,
+		RelayURL:   relayURL,
+		ConsoleURL: consoleURL,
+	}
+	cfg.UpdatedAt = now(opts.Now)
+	if err := local.SaveConfig(paths.ConfigFile, cfg); err != nil {
+		return Report{}, err
+	}
+	report.add("self_host_profile", "passed", paths.ConfigFile)
+	report.NextCommands = append([]string{
+		"codencer config profiles use self-host",
+		"codencer config show",
+	}, report.NextCommands...)
+	if output, ok := report.Output.(map[string]any); ok {
+		output["profile"] = local.DefaultProfileName
+		output["console_url"] = consoleURL
+		report.Output = output
+	}
+	return report, nil
+}
+
 func MCP(opts MCPOptions) (Report, error) {
 	started := now(opts.Now)
 	report := baseReport("mcp", started, nil)
-	endpoint := firstNonEmpty(opts.Endpoint, "https://relay.example.com/mcp")
+	endpoint := firstNonEmpty(opts.Endpoint, defaults.DefaultGatewayMCPURL())
 	payload, err := mcpconfig.Generate(mcpconfig.Options{
 		Client:   opts.Client,
 		Endpoint: endpoint,

@@ -34,7 +34,7 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
             <CardTitle>{relay.name}</CardTitle>
             <p className="m-0 mt-xs text-body-sm text-ink-secondary">
               {relay.type === "managed"
-                ? "Default managed Relay profile"
+                ? "Default Relay profile"
                 : "User-added backend Relay profile"}
             </p>
           </div>

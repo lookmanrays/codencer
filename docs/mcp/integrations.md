@@ -1,9 +1,9 @@
 # MCP Integrations
 
-Codencer exposes one official remote MCP surface:
+Codencer exposes one public self-host remote MCP surface:
 
 ```text
-Codencer Gateway: https://mcp.codencer.dev/mcp
+Codencer Gateway: http://127.0.0.1:19090/mcp
 ```
 
 Gateway routes to one or more backend Relays. The local daemon is not the public
@@ -12,13 +12,13 @@ advanced/direct/debug mode.
 
 ## Current Surface
 
-Use Gateway for official remote planners and MCP clients:
+Use Gateway for public self-host planners and MCP clients:
 
 - MCP endpoint at `/mcp`
 - OAuth protected-resource metadata at
   `/.well-known/oauth-protected-resource/mcp`
 - optional OAuth dev issuer for ChatGPT Developer Mode
-- Relay profiles that route to self-host or managed Relays
+- Relay profiles that route to self-host Relays
 
 Gateway forwards to self-host Relay:
 
@@ -31,13 +31,14 @@ Gateway forwards to self-host Relay:
 Remote clients must not target:
 
 - daemon-local URLs;
-- `http://127.0.0.1` or WSL-only loopback URLs for product-hosted clients;
+- `http://127.0.0.1` or WSL-only loopback URLs for product-hosted clients
+  running outside the same machine/network;
 - archived cloud-control-plane examples;
 - backend Relay `/mcp` unless they are intentionally using direct/debug mode.
 
 ## Auth Modes
 
-Gateway bearer-dev mode is the repo-proven official pre-prod auth mode:
+Gateway bearer-dev mode is the repo-proven self-host auth mode:
 
 ```text
 Authorization: Bearer <gateway-token>
@@ -53,7 +54,7 @@ translates to a bearer token Codencer accepts.
 
 | Client path | Status | Repo proof | Notes |
 | --- | --- | --- | --- |
-| Gateway MCP | proven | Gateway tests, `make verify-gateway`, and `make verify-official-connector` | Official connector endpoint and project-aware tools. |
+| Gateway MCP | proven | Gateway tests, `make verify-gateway`, and `make verify-public-selfhost-release` | Self-host Gateway endpoint and project-aware tools. |
 | Relay HTTP | proven | relay tests and smoke | Planner API under `/api/v2/...`. |
 | Relay MCP | proven direct/debug | relay MCP tests, SDK helper, `make verify-local-relay-mcp` | Advanced direct Relay endpoint. |
 | Generic HTTP/MCP callers | proven for protocol | curl/tests/SDK helper | Specific product UIs are not universally proven. |
@@ -89,8 +90,7 @@ exist for the same `project_id`, Codencer returns structured blocker
 
 ```bash
 make activation-preflight
-./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-./bin/codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer activation self-host --gateway http://127.0.0.1:19090 --relay http://127.0.0.1:8090 --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
 ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
 ./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json
@@ -113,7 +113,7 @@ Gateway, calls a tool, and evidence is saved.
 - [Claude Code MCP activation](claude-code-mcp-live.md)
 - [ChatGPT custom MCP app setup](chatgpt-app-setup.md)
 - [ChatGPT OAuth dev mode](chatgpt-oauth-dev.md)
-- [Official Gateway activation](../activation-official-gateway.md)
+- [Self-host MCP proof](self-host-mcp-proof.md)
 - [Relay MCP tools](relay_tools.md)
 - [ChatGPT integration notes](integrations/chatgpt.md)
 - [Claude Code integration notes](integrations/claude.md)

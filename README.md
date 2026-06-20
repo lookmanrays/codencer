@@ -4,12 +4,12 @@ Open-source local/self-host bridge between AI planners and coding executors.
 
 Status: `v0.3.0-local-prod-rc.1`
 License: Apache-2.0
-Primary path: local-first daemon, official Gateway MCP, self-host Relay backend
+Primary path: local-first daemon, self-host Gateway MCP, self-host Relay backend
 
 This repository contains open-source Codencer Core plus self-hostable Gateway,
-Relay, MCP, connector, and community cloud-control-plane components. The
-official managed Codencer Cloud service is operated separately and is not
-shipped by this repository.
+Relay, MCP, connector, Gateway Console, runbooks, and release tooling. A
+future official managed Codencer service is separate from this public self-host
+release and is not shipped by this repository.
 
 Codencer is a bridge, not a planner. The planner decides. The executor works.
 Codencer accepts approved tasks or manifests, routes them to the right local
@@ -55,12 +55,12 @@ The v0.3 local/self-host RC includes:
 - self-hostable Gateway daemon (`codencer-gatewayd`) implementing the official
   connector MCP surface;
 - persistent Gateway user/workspace store with device-code login;
-- default personal workspace and default managed Relay profile support;
+- default personal workspace and default self-host Relay profile support;
 - Gateway relay profiles for routing to the default Relay or user-added
   self-host Relays;
 - local connector with explicit project sharing;
 - Relay-hosted MCP server and project-aware `codencer.*` MCP tools;
-- Gateway-hosted official MCP server and project-aware `codencer.*` MCP tools;
+- Gateway-hosted MCP server and project-aware `codencer.*` MCP tools;
 - project locations with machine-aware routing by `machine_id` or `host_label`;
 - Codex MCP setup snippets;
 - Claude Code MCP setup snippets;
@@ -87,9 +87,10 @@ This repository does not claim:
 - production multi-user Gateway auth beyond bearer-dev and OAuth dev metadata.
 
 `codencer-gatewayd` is the open-source Gateway implementation used for
-self-host deployments and controlled pre-production connector verification. The
-hosted Codencer Gateway/Cloud service is a separate managed/commercial layer and
-is not the same thing as the OSS self-host Relay.
+self-host deployments. Future official hosted Gateway/Cloud builds may override
+build-time defaults to Codencer-operated domains, but public/self-built binaries
+default to self-host/local endpoints and must not silently call commercial
+services.
 
 ## Quickstart: Local
 
@@ -203,58 +204,75 @@ from multiple online machines, execution must pass `machine_id` or `host_label`.
 Without a selector, Relay/MCP returns `ambiguous_project_location` instead of
 choosing randomly.
 
-## Quickstart: Gateway
+## Quickstart: Self-Host Gateway
 
-Official ChatGPT, Claude Code, and Codex connector setup should point at the
-Gateway MCP URL, for example `https://mcp.codencer.dev/mcp`. Gateway routes to
-the default official managed Relay profile or to user-added self-host Relay
-profiles.
+Public/self-built Codencer defaults to self-host/local endpoints:
+
+```text
+Gateway: http://127.0.0.1:19090
+MCP:     http://127.0.0.1:19090/mcp
+Relay:   http://127.0.0.1:8090
+Console: http://127.0.0.1:3000
+```
+
+Endpoint precedence is:
+
+```text
+CLI flags > env vars > user config profile > build-time defaults > self-host defaults
+```
+
+Use `codencer config show`, `codencer config profiles list`,
+`codencer config profiles use self-host`, and
+`codencer config set gateway.url <url>` to inspect or change local profile
+state. Environment overrides are `CODENCER_GATEWAY_URL`, `CODENCER_MCP_URL`,
+`CODENCER_RELAY_URL`, and `CODENCER_CONSOLE_URL`.
 
 ```bash
+make build
 make build-gateway
 
-codencer setup gateway \
-  --base-url https://mcp.codencer.dev \
-  --mcp-url https://mcp.codencer.dev/mcp \
+codencer setup self-host \
+  --gateway-url http://127.0.0.1:19090 \
+  --relay-url http://127.0.0.1:8090 \
   --listen 127.0.0.1:19090 \
-  --default-relay-url https://relay.codencer.dev \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
 
-export CODENCER_DEFAULT_RELAY_TOKEN=<managed-relay-planner-token>
+export CODENCER_DEFAULT_RELAY_TOKEN=<self-host-relay-planner-token>
+export CODENCER_GATEWAY_MCP_TOKEN=<gateway-client-token>
 codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
 ```
 
-Self-service local connector setup:
+Local connector setup through self-host Gateway:
 
 ```bash
-codencer login --gateway https://mcp.codencer.dev
-codencer connector login --gateway https://mcp.codencer.dev --relay default --json
+codencer login --gateway http://127.0.0.1:19090
+codencer connector login --gateway http://127.0.0.1:19090 --relay default --json
 codencer project share codencer --json
 codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
 ```
 
-Optionally add a self-host Relay as a backend relay profile:
+Optionally add another self-host Relay as a backend relay profile:
 
 ```bash
 codencer gateway relay add \
-  --gateway https://mcp.codencer.dev \
+  --gateway http://127.0.0.1:19090 \
   --name "Personal self-host Relay" \
   --url https://relay.example.com \
   --token-env CODENCER_RELAY_PERSONAL_TOKEN \
   --json
 
-codencer connector login --gateway https://mcp.codencer.dev --relay personal --json
+codencer connector login --gateway http://127.0.0.1:19090 --relay personal --json
 ```
 
-Generate Gateway-first activation artifacts:
+Generate self-host Gateway activation artifacts:
 
 ```bash
-codencer activation official \
-  --gateway https://mcp.codencer.dev \
-  --relay https://relay.example.com \
+codencer activation self-host \
+  --gateway http://127.0.0.1:19090 \
+  --relay http://127.0.0.1:8090 \
   --project codencer \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --json
@@ -269,14 +287,15 @@ does not expose backend Relay tokens or absolute local paths.
 
 ## MCP Clients
 
-Codencer exposes one official project-aware MCP toolset through Gateway. Client
-setup commands generate snippets and instructions; they do not write user-level
-client config files.
+Codencer exposes one project-aware MCP toolset through Gateway. Public
+self-host users point Codex, Claude Code, ChatGPT custom MCP apps, or protocol
+smoke clients at the self-host Gateway MCP URL. Client setup commands generate
+snippets and instructions; they do not write user-level client config files.
 
 ```bash
-./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --json
-./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --json
-./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+./bin/codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --json
+./bin/codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --json
+./bin/codencer activation self-host --gateway http://127.0.0.1:19090 --relay http://127.0.0.1:8090 --project codencer --json
 ```
 
 See:
@@ -284,7 +303,8 @@ See:
 - [Codex MCP activation](docs/mcp/codex-mcp-live.md)
 - [Claude Code MCP activation](docs/mcp/claude-code-mcp-live.md)
 - [ChatGPT custom MCP app setup](docs/mcp/chatgpt-app-setup.md)
-- [Official Gateway activation](docs/activation-official-gateway.md)
+- [Self-host production deployment](docs/deployment/self-host-production.md)
+- [Self-host MCP proof](docs/mcp/self-host-mcp-proof.md)
 - [Relay MCP tools](docs/mcp/relay_tools.md)
 - [MCP Gateway model](docs/architecture/mcp-gateway-model.md)
 
@@ -315,7 +335,7 @@ See [Project Config](docs/project-config.md).
 
 ## Gateway And Self-Host Relay
 
-The official connector path is Gateway-first:
+The public self-host connector path is Gateway-first:
 
 ```text
 AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
@@ -328,8 +348,8 @@ testing:
 AI client -> user Relay /mcp
 ```
 
-The future hosted Codencer Gateway/Cloud layer will grow from this Gateway
-service identity. Forks and hosted services can use the OSS core under
+Future official hosted Gateway/Cloud builds may use Codencer-operated service
+identity and domains. Forks and hosted services can use the OSS core under
 Apache-2.0, but they must use their own name and must not imply they are the
 official Codencer service.
 
@@ -364,7 +384,7 @@ official Codencer service.
 - [Public repo release acceptance](docs/acceptance/public-repo-release.yaml)
 - [codencer.dev update pack](docs/site-update-codencer-dev.md)
 
-Legacy v0.2 beta documents are archived under `docs/archive/v0.2-beta/`.
+Legacy v0.2 documents are archived under `docs/archive/v0.2-beta/`.
 
 ## Development
 

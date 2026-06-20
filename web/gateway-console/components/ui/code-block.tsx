@@ -7,6 +7,7 @@ type CodeBlockProps = {
   language?: string;
   copyValue?: string;
   className?: string;
+  variant?: "code" | "terminal";
 };
 
 export function CodeBlock({
@@ -14,17 +15,30 @@ export function CodeBlock({
   code,
   copyValue,
   language = "text",
+  variant = "code",
 }: CodeBlockProps) {
   const safeCode = sanitizeForDisplay(code);
+  const terminal = variant === "terminal";
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full overflow-hidden rounded-[var(--radius-card)] border border-border bg-code-bg text-code-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+        "min-w-0 max-w-full overflow-hidden rounded-[var(--radius-card)] border border-border text-code-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+        terminal ? "bg-[#0f1419] text-[#e8e6e1]" : "bg-code-bg",
         className,
       )}
     >
-      <div className="flex min-w-0 items-center justify-between gap-sm border-b border-border-strong bg-paper/5 px-md py-sm">
-        <span className="min-w-0 truncate font-mono text-mono uppercase tracking-[0.12em] text-dark-muted">
+      <div
+        className={cn(
+          "flex min-w-0 items-center justify-between gap-sm border-b border-border-strong px-md py-sm",
+          terminal ? "bg-white/5" : "bg-paper-tinted/70",
+        )}
+      >
+        <span
+          className={cn(
+            "min-w-0 truncate font-mono text-mono uppercase tracking-[0.12em]",
+            terminal ? "text-[#c9c9ce]" : "text-ink-muted",
+          )}
+        >
           {language}
         </span>
         <CopyButton label="Copy code" value={copyValue ?? safeCode} />
@@ -39,9 +53,11 @@ export function CodeBlock({
 export function CommandBlock({
   command,
   title,
+  variant = "code",
 }: {
   command: string;
   title?: string;
+  variant?: "code" | "terminal";
 }) {
   return (
     <div className="min-w-0 max-w-full">
@@ -50,7 +66,12 @@ export function CommandBlock({
           {title}
         </p>
       ) : null}
-      <CodeBlock code={command} copyValue={command} language="shell" />
+      <CodeBlock
+        code={command}
+        copyValue={command}
+        language="shell"
+        variant={variant}
+      />
     </div>
   );
 }

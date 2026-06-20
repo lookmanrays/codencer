@@ -498,7 +498,7 @@ func (s *Server) handleActivationCommands(w http.ResponseWriter, r *http.Request
 		{"id": "project-share", "title": "Share project explicitly", "description": "Connector advertises this project to the selected Relay.", "target": "local", "command": "codencer project share <project-id> --json"},
 		{"id": "codex", "title": "Codex MCP setup", "description": "AI clients point to Gateway, not a user Relay.", "target": "client", "command": "codencer setup mcp --client codex --endpoint " + mcpURL + " --json"},
 		{"id": "claude", "title": "Claude Code MCP setup", "description": "Generates the Gateway MCP command for Claude Code.", "target": "client", "command": "codencer setup mcp --client claude-code --endpoint " + mcpURL + " --json"},
-		{"id": "chatgpt", "title": "ChatGPT custom MCP setup", "description": "Uses Gateway OAuth dev metadata for controlled testing.", "target": "client", "command": "codencer activation official --gateway " + gatewayURL + " --project <project-id> --token-env CODENCER_GATEWAY_MCP_TOKEN --json"},
+		{"id": "chatgpt", "title": "ChatGPT custom MCP setup", "description": "Uses Gateway OAuth dev metadata for controlled testing.", "target": "client", "command": "codencer activation self-host --gateway " + gatewayURL + " --project <project-id> --token-env CODENCER_GATEWAY_MCP_TOKEN --json"},
 		{"id": "curl", "title": "Gateway curl smoke", "description": "Runs MCP initialize/tools/list against Gateway.", "target": "gateway", "command": "curl -fsS " + mcpURL + " -H 'Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN'"},
 	}, "workspace_id": principal.WorkspaceID})
 }

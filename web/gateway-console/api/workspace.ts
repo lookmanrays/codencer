@@ -11,7 +11,7 @@ export async function getWorkspace() {
   if (isDemoMode()) {
     return {
       mcpEndpoint: demoSnapshot.mcpEndpoint,
-      publicBaseURL: "https://mcp.codencer.dev",
+      publicBaseURL: "http://127.0.0.1:19090",
       user: demoSnapshot.user,
       workspace: {
         ...demoSnapshot.workspace,

@@ -32,8 +32,8 @@ The public self-host remote bridge contains:
   local outbound connector, explicit project sharing, enrollment, and connector
   config.
 - `cmd/mcp-sdk-smoke`: deterministic MCP SDK proof helper.
-- `web/gateway-console`: public/self-host Gateway Console for self-host,
-  community, and controlled pre-production official connector operation.
+- `web/gateway-console`: public/self-host Gateway Console for self-host and
+  community operation.
 - Docs under `docs/mcp`, activation docs, Gateway/Relay quickstarts, and
   self-host references.
 
@@ -74,7 +74,8 @@ and must not be documented as hosted Codencer availability.
 
 These belong outside the public repository when they exist:
 
-- production `mcp.codencer.dev` and `relay.codencer.dev` deployment configs;
+- production `mcp.codencer.dev`, `relay.codencer.dev`, and `app.codencer.dev`
+  deployment configs;
 - production OAuth/passwordless login providers;
 - persistent production session infrastructure;
 - OAuth client management and redirect URI allowlists;
@@ -127,6 +128,7 @@ Run:
 
 ```bash
 make verify-public-release
+make verify-public-selfhost-release
 ```
 
 The verifier checks docs links, license/legal files, public/private boundary

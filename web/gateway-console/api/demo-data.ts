@@ -33,13 +33,13 @@ export const demoSnapshot: DemoSnapshot = {
     slug: "personal",
     mode: "demo",
   },
-  mcpEndpoint: "https://mcp.codencer.dev/mcp",
+  mcpEndpoint: "http://127.0.0.1:19090/mcp",
   relays: [
     {
       id: "default",
-      name: "Default managed Relay",
-      type: "managed",
-      url: "https://relay.codencer.dev",
+      name: "Default self-host Relay",
+      type: "self_host",
+      url: "http://127.0.0.1:8090",
       tokenRef: "CODENCER_DEFAULT_RELAY_TOKEN",
       tokenConfigured: true,
       enabled: true,
@@ -206,7 +206,7 @@ export const demoSnapshot: DemoSnapshot = {
       description:
         "Creates a workspace-bound Gateway session under CODENCER_HOME.",
       target: "gateway",
-      command: "codencer login --gateway https://mcp.codencer.dev",
+      command: "codencer login --gateway http://127.0.0.1:19090",
     },
     {
       id: "connector-login",
@@ -215,7 +215,7 @@ export const demoSnapshot: DemoSnapshot = {
         "Requests a short-lived Relay enrollment secret through Gateway; output is redacted.",
       target: "gateway",
       command:
-        "codencer connector login --gateway https://mcp.codencer.dev --relay default --json",
+        "codencer connector login --gateway http://127.0.0.1:19090 --relay default --json",
     },
     {
       id: "project-init",
@@ -239,7 +239,7 @@ export const demoSnapshot: DemoSnapshot = {
       description: "AI clients point to Gateway, not a user Relay.",
       target: "client",
       command:
-        "codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --json",
+        "codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --json",
     },
     {
       id: "claude",
@@ -247,7 +247,7 @@ export const demoSnapshot: DemoSnapshot = {
       description: "Generates the Gateway MCP command for Claude Code.",
       target: "client",
       command:
-        "codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --json",
+        "codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --json",
     },
     {
       id: "chatgpt",
@@ -255,7 +255,7 @@ export const demoSnapshot: DemoSnapshot = {
       description: "Uses Gateway OAuth dev metadata for controlled testing.",
       target: "client",
       command:
-        "codencer activation official --gateway https://mcp.codencer.dev --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json",
+        "codencer activation self-host --gateway http://127.0.0.1:19090 --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json",
     },
     {
       id: "curl",
@@ -263,7 +263,7 @@ export const demoSnapshot: DemoSnapshot = {
       description: "Runs MCP initialize/tools/list against Gateway.",
       target: "gateway",
       command:
-        "curl -fsS https://mcp.codencer.dev/mcp -H 'Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN'",
+        "curl -fsS http://127.0.0.1:19090/mcp -H 'Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN'",
     },
   ],
 };

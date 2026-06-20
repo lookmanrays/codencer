@@ -7,11 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"agent-bridge/internal/defaults"
 )
 
 const (
-	SessionVersion    = 1
-	DefaultGatewayURL = "https://mcp.codencer.dev"
+	SessionVersion = 1
+)
+
+var (
+	DefaultGatewayURL = defaults.DefaultGatewayBaseURL()
 )
 
 type Session struct {

@@ -2,10 +2,10 @@ import { Alert } from "@/components/ui/alert";
 
 export function OfficialGatewayNotice() {
   return (
-    <Alert title="Official connector path" tone="brand">
-      AI clients point to Gateway at <code>https://mcp.codencer.dev/mcp</code>.
-      Gateway routes to the default managed Relay or to user-added self-host
-      Relay profiles.
+    <Alert title="Gateway MCP path" tone="brand">
+      AI clients point to Gateway at <code>http://127.0.0.1:19090/mcp</code>.
+      Gateway routes to the default self-host Relay or to user-added Relay
+      profiles.
     </Alert>
   );
 }
@@ -14,7 +14,7 @@ export function SelfHostModeNotice() {
   return (
     <Alert title="Self-host boundary">
       Direct self-host Relay MCP remains available for personal, corporate, and
-      debug use. It is not the primary official connector endpoint.
+      debug use. Gateway MCP is the primary public self-host client endpoint.
     </Alert>
   );
 }

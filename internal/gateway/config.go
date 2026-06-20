@@ -9,15 +9,18 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"agent-bridge/internal/defaults"
 )
 
 const (
 	ConfigVersion       = 1
 	DefaultListenAddr   = "127.0.0.1:19090"
 	DefaultGatewayToken = "CODENCER_GATEWAY_MCP_TOKEN"
-	DefaultRelayURL     = "https://relay.codencer.dev"
 	DefaultRelayToken   = "CODENCER_DEFAULT_RELAY_TOKEN"
 )
+
+var DefaultRelayURL = defaults.DefaultRelayURL()
 
 type Config struct {
 	Version       int            `json:"version"`
@@ -78,8 +81,8 @@ type RelayProfileStatus struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Version:       ConfigVersion,
-		PublicBaseURL: "https://mcp.codencer.dev",
-		MCPURL:        "https://mcp.codencer.dev/mcp",
+		PublicBaseURL: defaults.DefaultGatewayBaseURL(),
+		MCPURL:        defaults.DefaultGatewayMCPURL(),
 		ListenAddr:    DefaultListenAddr,
 		DefaultRelay: DefaultRelay{
 			URL:      DefaultRelayURL,
@@ -91,7 +94,7 @@ func DefaultConfig() *Config {
 		},
 		OAuthDev: OAuthDevConfig{
 			Enabled:  true,
-			Issuer:   "https://mcp.codencer.dev",
+			Issuer:   defaults.DefaultGatewayBaseURL(),
 			ClientID: "codencer-chatgpt-dev",
 		},
 	}

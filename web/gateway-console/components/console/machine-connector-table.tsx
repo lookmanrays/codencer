@@ -53,7 +53,7 @@ export function MachineConnectorTable({
         emptyTitle="No connectors"
       />
       <CommandBlock
-        command="codencer connector login --gateway https://mcp.codencer.dev --relay default --json"
+        command="codencer connector login --gateway http://127.0.0.1:19090 --relay default --json"
         title="Connector login command"
       />
     </div>

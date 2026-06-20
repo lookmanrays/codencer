@@ -209,7 +209,7 @@ export default function UISystemPage() {
                 A live API operation failed or is unsafe.
               </Alert>
               <Alert title="Brand" tone="brand">
-                Primary Codencer path or official connector callout.
+                Primary Codencer path or Gateway MCP callout.
               </Alert>
             </CardContent>
           </Card>
@@ -326,7 +326,7 @@ export default function UISystemPage() {
               <TabsTrigger value="two">Progress</TabsTrigger>
             </TabsList>
             <TabsContent value="one">
-              <CommandBlock command="codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --json" />
+              <CommandBlock command="codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --json" />
             </TabsContent>
             <TabsContent value="two">
               <Progress value={66} />

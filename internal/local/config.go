@@ -5,23 +5,52 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"agent-bridge/internal/defaults"
 	"agent-bridge/internal/project"
 )
 
-const ConfigVersion = 1
+const (
+	ConfigVersion        = 1
+	DefaultProfileName   = "self-host"
+	GatewayURLEnvName    = defaults.GatewayURLEnv
+	GatewayMCPURLEnvName = defaults.MCPURLEnv
+	RelayURLEnvName      = defaults.RelayURLEnv
+	ConsoleURLEnvName    = defaults.ConsoleURLEnv
+)
 
 type Config struct {
-	Version             int               `json:"version"`
-	DefaultDaemonURL    string            `json:"default_daemon_url"`
-	RelayConfigPath     string            `json:"relay_config_path,omitempty"`
-	ConnectorConfigPath string            `json:"connector_config_path,omitempty"`
-	GatewayConfigPath   string            `json:"gateway_config_path,omitempty"`
-	Runtime             RuntimeConfig     `json:"runtime,omitempty"`
-	BinaryPaths         map[string]string `json:"binary_paths,omitempty"`
-	CreatedAt           time.Time         `json:"created_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
+	Version             int                `json:"version"`
+	DefaultDaemonURL    string             `json:"default_daemon_url"`
+	ActiveProfile       string             `json:"active_profile,omitempty"`
+	Profiles            map[string]Profile `json:"profiles,omitempty"`
+	RelayConfigPath     string             `json:"relay_config_path,omitempty"`
+	ConnectorConfigPath string             `json:"connector_config_path,omitempty"`
+	GatewayConfigPath   string             `json:"gateway_config_path,omitempty"`
+	Runtime             RuntimeConfig      `json:"runtime,omitempty"`
+	BinaryPaths         map[string]string  `json:"binary_paths,omitempty"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
+type Profile struct {
+	Name       string `json:"name,omitempty"`
+	GatewayURL string `json:"gateway_url,omitempty"`
+	MCPURL     string `json:"mcp_url,omitempty"`
+	RelayURL   string `json:"relay_url,omitempty"`
+	ConsoleURL string `json:"console_url,omitempty"`
+}
+
+type ResolvedConnection struct {
+	Profile     string `json:"profile,omitempty"`
+	GatewayURL  string `json:"gateway_url"`
+	MCPURL      string `json:"mcp_url"`
+	RelayURL    string `json:"relay_url"`
+	ConsoleURL  string `json:"console_url"`
+	Source      string `json:"source"`
+	EnvOverride bool   `json:"env_override"`
 }
 
 type RuntimeConfig struct {
@@ -47,6 +76,10 @@ func DefaultConfig(now time.Time) Config {
 	return Config{
 		Version:          ConfigVersion,
 		DefaultDaemonURL: defaultDaemonURL,
+		ActiveProfile:    DefaultProfileName,
+		Profiles: map[string]Profile{
+			DefaultProfileName: DefaultProfile(),
+		},
 		Runtime: RuntimeConfig{
 			StaleRunningAfter:    "30m",
 			StaleWaitAfter:       "30m",
@@ -76,6 +109,7 @@ func LoadConfig(path string) (Config, error) {
 		cfg.DefaultDaemonURL = defaultDaemonURL
 	}
 	cfg.Runtime = defaultRuntimeConfig(cfg.Runtime)
+	cfg = normalizeConfig(cfg)
 	return cfg, nil
 }
 
@@ -87,6 +121,7 @@ func SaveConfig(path string, cfg Config) error {
 		cfg.DefaultDaemonURL = defaultDaemonURL
 	}
 	cfg.Runtime = defaultRuntimeConfig(cfg.Runtime)
+	cfg = normalizeConfig(cfg)
 	if cfg.CreatedAt.IsZero() {
 		cfg.CreatedAt = time.Now().UTC()
 	}
@@ -94,6 +129,170 @@ func SaveConfig(path string, cfg Config) error {
 		cfg.UpdatedAt = cfg.CreatedAt
 	}
 	return writeJSONAtomic(path, cfg, 0600)
+}
+
+func DefaultProfile() Profile {
+	return Profile{
+		Name:       "Self-host local",
+		GatewayURL: defaults.DefaultGatewayBaseURL(),
+		MCPURL:     defaults.DefaultGatewayMCPURL(),
+		RelayURL:   defaults.DefaultRelayURL(),
+		ConsoleURL: defaults.DefaultConsoleURL(),
+	}
+}
+
+func ResolveConnection(cfg Config, gatewayFlag string) ResolvedConnection {
+	cfg = normalizeConfig(cfg)
+	profileName := cfg.ActiveProfile
+	profile := cfg.Profiles[profileName]
+	if profileName == "" {
+		profileName = DefaultProfileName
+		profile = DefaultProfile()
+	}
+	resolved := ResolvedConnection{
+		Profile:    profileName,
+		GatewayURL: normalizeGatewayURL(firstNonEmpty(profile.GatewayURL, defaults.DefaultGatewayBaseURL())),
+		MCPURL:     normalizeMCPURL(firstNonEmpty(profile.MCPURL, defaults.DefaultGatewayMCPURL())),
+		RelayURL:   normalizeURL(firstNonEmpty(profile.RelayURL, defaults.DefaultRelayURL())),
+		ConsoleURL: normalizeURL(firstNonEmpty(profile.ConsoleURL, defaults.DefaultConsoleURL())),
+		Source:     "profile:" + profileName,
+	}
+	if envGateway := os.Getenv(GatewayURLEnvName); strings.TrimSpace(envGateway) != "" {
+		resolved.GatewayURL = normalizeGatewayURL(envGateway)
+		resolved.MCPURL = normalizeMCPURL(firstNonEmpty(os.Getenv(GatewayMCPURLEnvName), resolved.GatewayURL+"/mcp"))
+		resolved.Source = "env:" + GatewayURLEnvName
+		resolved.EnvOverride = true
+	}
+	if envMCP := os.Getenv(GatewayMCPURLEnvName); strings.TrimSpace(envMCP) != "" && !resolved.EnvOverride {
+		resolved.MCPURL = normalizeMCPURL(envMCP)
+		resolved.GatewayURL = normalizeGatewayURL(strings.TrimSuffix(resolved.MCPURL, "/mcp"))
+		resolved.Source = "env:" + GatewayMCPURLEnvName
+		resolved.EnvOverride = true
+	}
+	if envRelay := os.Getenv(RelayURLEnvName); strings.TrimSpace(envRelay) != "" {
+		resolved.RelayURL = normalizeURL(envRelay)
+		resolved.EnvOverride = true
+		if !strings.HasPrefix(resolved.Source, "env:") {
+			resolved.Source = "env:" + RelayURLEnvName
+		}
+	}
+	if envConsole := os.Getenv(ConsoleURLEnvName); strings.TrimSpace(envConsole) != "" {
+		resolved.ConsoleURL = normalizeURL(envConsole)
+		resolved.EnvOverride = true
+		if !strings.HasPrefix(resolved.Source, "env:") {
+			resolved.Source = "env:" + ConsoleURLEnvName
+		}
+	}
+	if strings.TrimSpace(gatewayFlag) != "" {
+		resolved.GatewayURL = normalizeGatewayURL(gatewayFlag)
+		resolved.MCPURL = normalizeMCPURL(resolved.GatewayURL + "/mcp")
+		resolved.Source = "flag:gateway"
+	}
+	return resolved
+}
+
+func UseProfile(cfg Config, name string) (Config, error) {
+	cfg = normalizeConfig(cfg)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return cfg, fmt.Errorf("profile name is required")
+	}
+	if _, ok := cfg.Profiles[name]; !ok {
+		return cfg, fmt.Errorf("profile %q does not exist", name)
+	}
+	cfg.ActiveProfile = name
+	cfg.UpdatedAt = time.Now().UTC()
+	return cfg, nil
+}
+
+func SetProfileValue(cfg Config, key, value string) (Config, error) {
+	cfg = normalizeConfig(cfg)
+	key = strings.TrimSpace(strings.ToLower(key))
+	value = strings.TrimSpace(value)
+	if key == "" || value == "" {
+		return cfg, fmt.Errorf("config set requires key and value")
+	}
+	active := firstNonEmpty(cfg.ActiveProfile, DefaultProfileName)
+	profile := cfg.Profiles[active]
+	if profile.Name == "" {
+		profile.Name = active
+	}
+	switch key {
+	case "gateway.url", "gateway_url":
+		profile.GatewayURL = normalizeGatewayURL(value)
+		profile.MCPURL = normalizeMCPURL(profile.GatewayURL + "/mcp")
+	case "gateway.mcp_url", "gateway.mcp", "mcp.url", "mcp_url":
+		profile.MCPURL = normalizeMCPURL(value)
+		profile.GatewayURL = normalizeGatewayURL(strings.TrimSuffix(profile.MCPURL, "/mcp"))
+	case "relay.url", "relay_url":
+		profile.RelayURL = normalizeURL(value)
+	case "console.url", "console_url":
+		profile.ConsoleURL = normalizeURL(value)
+	default:
+		return cfg, fmt.Errorf("unsupported config key %q", key)
+	}
+	cfg.Profiles[active] = profile
+	cfg.UpdatedAt = time.Now().UTC()
+	return cfg, nil
+}
+
+func normalizeConfig(cfg Config) Config {
+	if cfg.Version == 0 {
+		cfg.Version = ConfigVersion
+	}
+	if cfg.DefaultDaemonURL == "" {
+		cfg.DefaultDaemonURL = defaultDaemonURL
+	}
+	if cfg.ActiveProfile == "" {
+		cfg.ActiveProfile = DefaultProfileName
+	}
+	if cfg.Profiles == nil {
+		cfg.Profiles = map[string]Profile{}
+	}
+	if _, ok := cfg.Profiles[DefaultProfileName]; !ok {
+		cfg.Profiles[DefaultProfileName] = DefaultProfile()
+	}
+	for name, profile := range cfg.Profiles {
+		if profile.Name == "" {
+			profile.Name = name
+		}
+		profile.GatewayURL = normalizeGatewayURL(firstNonEmpty(profile.GatewayURL, defaults.DefaultGatewayBaseURL()))
+		profile.MCPURL = normalizeMCPURL(firstNonEmpty(profile.MCPURL, profile.GatewayURL+"/mcp"))
+		profile.RelayURL = normalizeURL(firstNonEmpty(profile.RelayURL, defaults.DefaultRelayURL()))
+		profile.ConsoleURL = normalizeURL(firstNonEmpty(profile.ConsoleURL, defaults.DefaultConsoleURL()))
+		cfg.Profiles[name] = profile
+	}
+	if _, ok := cfg.Profiles[cfg.ActiveProfile]; !ok {
+		cfg.ActiveProfile = DefaultProfileName
+	}
+	return cfg
+}
+
+func normalizeGatewayURL(value string) string {
+	value = normalizeURL(value)
+	value = strings.TrimSuffix(value, "/mcp")
+	return strings.TrimRight(value, "/")
+}
+
+func normalizeMCPURL(value string) string {
+	value = normalizeURL(value)
+	if !strings.HasSuffix(value, "/mcp") {
+		value += "/mcp"
+	}
+	return value
+}
+
+func normalizeURL(value string) string {
+	return strings.TrimRight(strings.TrimSpace(value), "/")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func defaultRuntimeConfig(cfg RuntimeConfig) RuntimeConfig {

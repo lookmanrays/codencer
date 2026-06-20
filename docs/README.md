@@ -5,8 +5,8 @@ Start here for the current open-source local/self-host RC:
 - [Local quickstart](quickstart-local.md)
 - [Local production guide](local-production.md)
 - [Self-host Relay quickstart](quickstart-self-host-relay.md)
-- [Official Gateway activation](activation-official-gateway.md)
-- [Official connector flow](official-connector-flow.md)
+- [Self-host production deployment](deployment/self-host-production.md)
+- [Self-host MCP proof](mcp/self-host-mcp-proof.md)
 - [Account device login](account-device-login.md)
 - [Relay profile registry](relay-profile-registry.md)
 - [Gateway Console status](gateway-console.md)
@@ -25,7 +25,7 @@ Start here for the current open-source local/self-host RC:
 ## MCP Clients
 
 - [MCP integrations](mcp/integrations.md)
-- [Official Gateway activation](activation-official-gateway.md)
+- [Self-host MCP proof](mcp/self-host-mcp-proof.md)
 - [Relay MCP tools](mcp/relay_tools.md)
 - [MCP Gateway model](architecture/mcp-gateway-model.md)
 - [Codex MCP activation](mcp/codex-mcp-live.md)
@@ -36,6 +36,7 @@ Start here for the current open-source local/self-host RC:
 ## Release And Acceptance
 
 - [Acceptance contract](acceptance/local-production-v0.3.yaml)
+- [Public self-host release acceptance](acceptance/public-self-host-release.md)
 - [Public repo release acceptance](acceptance/public-repo-release.yaml)
 - [codencer.dev update pack](site-update-codencer-dev.md)
 - [Release checklist](release-checklist.md)
@@ -51,7 +52,7 @@ Start here for the current open-source local/self-host RC:
 
 ## Historical Docs
 
-Legacy v0.2 beta docs are archived under [archive/v0.2-beta](archive/v0.2-beta/).
+Legacy v0.2 documents are archived under [archive/v0.2-beta](archive/v0.2-beta/).
 They are retained for historical context and are not the current release
 contract.
 

@@ -81,12 +81,12 @@ Use `codencer-connectord enroll` and `codencer-connectord run` only as low-level
 
 ## MCP Client Snippets
 
-Official client snippets should point to Gateway:
+Public self-host client snippets should point to Gateway:
 
 ```bash
-./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+./bin/codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer activation self-host --gateway http://127.0.0.1:19090 --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 Direct Relay snippets are available for advanced/debug mode:
@@ -102,7 +102,7 @@ These commands generate snippets only. They do not write user-level Codex, Claud
 Activation artifacts:
 
 ```bash
-./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer activation self-host --gateway http://127.0.0.1:19090 --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
 ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
 ./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json

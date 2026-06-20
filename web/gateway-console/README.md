@@ -1,7 +1,7 @@
 # Codencer Gateway Console
 
 Public/self-host Gateway Console for Codencer Core, `codencer-gatewayd`,
-self-host Relay, MCP, and controlled pre-production official connector review.
+self-host Relay, MCP, and controlled Gateway client review.
 
 This app is not the private managed Codencer Cloud UI. Do not add billing,
 team/admin workflows, support console, production provider login, managed

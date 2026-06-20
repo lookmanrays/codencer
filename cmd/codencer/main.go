@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -195,8 +196,13 @@ func runLogin(args []string, stdout io.Writer) error {
 	if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
 		return err
 	}
+	localCfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return err
+	}
 	sessionPath := account.SessionPath(paths.Home)
-	gatewayURL := account.NormalizeGatewayURL(parsed.value("gateway"))
+	connection := local.ResolveConnection(localCfg, parsed.value("gateway"))
+	gatewayURL := account.NormalizeGatewayURL(connection.GatewayURL)
 	client := account.NewClient(gatewayURL, "")
 	auth, err := client.DeviceAuthorize(contextBackground(), parsed.value("email"), parsed.value("display-name"))
 	if err != nil {
@@ -334,40 +340,170 @@ func runPaths(args []string, stdout io.Writer) error {
 }
 
 func runConfig(args []string, stdout io.Writer) error {
-	if len(args) == 0 || args[0] != "show" {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer config show [--json] [--config <path>]")
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer config <show|set|profiles> [flags]")
 	}
-	parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+	switch args[0] {
+	case "show":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "config show does not accept positional arguments")
+		}
+		paths, cfg, err := loadLocalConfigForCommand(parsed.value("config"))
+		if err != nil {
+			return err
+		}
+		connection := local.ResolveConnection(cfg, "")
+		payload := map[string]any{"config": cfg, "config_file": paths.ConfigFile, "resolved_connection": connection}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		fmt.Fprintf(stdout, "Config file:        %s\n", paths.ConfigFile)
+		fmt.Fprintf(stdout, "Default daemon URL: %s\n", cfg.DefaultDaemonURL)
+		fmt.Fprintf(stdout, "Active profile:     %s\n", cfg.ActiveProfile)
+		fmt.Fprintf(stdout, "Gateway URL:        %s (%s)\n", connection.GatewayURL, connection.Source)
+		fmt.Fprintf(stdout, "MCP URL:            %s\n", connection.MCPURL)
+		fmt.Fprintf(stdout, "Relay URL:          %s\n", connection.RelayURL)
+		fmt.Fprintf(stdout, "Console URL:        %s\n", connection.ConsoleURL)
+		if cfg.RelayConfigPath != "" {
+			fmt.Fprintf(stdout, "Relay config:       %s\n", cfg.RelayConfigPath)
+		}
+		if cfg.ConnectorConfigPath != "" {
+			fmt.Fprintf(stdout, "Connector config:   %s\n", cfg.ConnectorConfigPath)
+		}
+		if cfg.GatewayConfigPath != "" {
+			fmt.Fprintf(stdout, "Gateway config:     %s\n", cfg.GatewayConfigPath)
+		}
+		return nil
+	case "set":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 2 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer config set <gateway.url|gateway.mcp_url|relay.url|console.url> <value> [--json] [--config <path>]")
+		}
+		paths, cfg, err := loadLocalConfigForCommand(parsed.value("config"))
+		if err != nil {
+			return err
+		}
+		cfg, err = local.SetProfileValue(cfg, parsed.positionals[0], parsed.positionals[1])
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if err := local.SaveConfig(paths.ConfigFile, cfg); err != nil {
+			return err
+		}
+		connection := local.ResolveConnection(cfg, "")
+		payload := map[string]any{"ok": true, "config_file": paths.ConfigFile, "active_profile": cfg.ActiveProfile, "resolved_connection": connection}
+		if parsed.bool("json") {
+			return writeJSON(stdout, payload)
+		}
+		fmt.Fprintf(stdout, "Updated %s in profile %s\n", parsed.positionals[0], cfg.ActiveProfile)
+		fmt.Fprintf(stdout, "Gateway URL: %s\n", connection.GatewayURL)
+		return nil
+	case "profiles":
+		if len(args) < 2 {
+			return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer config profiles <list|use> [flags]")
+		}
+		switch args[1] {
+		case "list":
+			parsed, err := parseArgs(args[2:], []string{"json"}, []string{"config"})
+			if err != nil {
+				return err
+			}
+			if len(parsed.positionals) != 0 {
+				return usageError(parsed.bool("json"), stdout, "config profiles list does not accept positional arguments")
+			}
+			paths, cfg, err := loadLocalConfigForCommand(parsed.value("config"))
+			if err != nil {
+				return err
+			}
+			profiles := profileList(cfg)
+			payload := map[string]any{"config_file": paths.ConfigFile, "active_profile": cfg.ActiveProfile, "profiles": profiles}
+			if parsed.bool("json") {
+				return writeJSON(stdout, payload)
+			}
+			for _, profile := range profiles {
+				marker := " "
+				if active, _ := profile["active"].(bool); active {
+					marker = "*"
+				}
+				fmt.Fprintf(stdout, "%s %s gateway=%s relay=%s\n", marker, profile["name"], profile["gateway_url"], profile["relay_url"])
+			}
+			return nil
+		case "use":
+			parsed, err := parseArgs(args[2:], []string{"json"}, []string{"config"})
+			if err != nil {
+				return err
+			}
+			if len(parsed.positionals) != 1 {
+				return usageError(parsed.bool("json"), stdout, "usage: codencer config profiles use <name> [--json] [--config <path>]")
+			}
+			paths, cfg, err := loadLocalConfigForCommand(parsed.value("config"))
+			if err != nil {
+				return err
+			}
+			cfg, err = local.UseProfile(cfg, parsed.positionals[0])
+			if err != nil {
+				return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+			}
+			if err := local.SaveConfig(paths.ConfigFile, cfg); err != nil {
+				return err
+			}
+			connection := local.ResolveConnection(cfg, "")
+			payload := map[string]any{"ok": true, "config_file": paths.ConfigFile, "active_profile": cfg.ActiveProfile, "resolved_connection": connection}
+			if parsed.bool("json") {
+				return writeJSON(stdout, payload)
+			}
+			fmt.Fprintf(stdout, "Active profile: %s\n", cfg.ActiveProfile)
+			return nil
+		default:
+			return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown config profiles command %q", args[1]))
+		}
+	default:
+		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown config command %q", args[0]))
+	}
+}
+
+func loadLocalConfigForCommand(configPath string) (local.Paths, local.Config, error) {
+	paths, err := local.ResolvePaths("", configPath)
 	if err != nil {
-		return err
+		return local.Paths{}, local.Config{}, err
 	}
-	if len(parsed.positionals) != 0 {
-		return usageError(parsed.bool("json"), stdout, "config show does not accept positional arguments")
-	}
-	paths, err := local.ResolvePaths("", parsed.value("config"))
-	if err != nil {
-		return err
+	if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+		return local.Paths{}, local.Config{}, err
 	}
 	cfg, err := local.LoadConfig(paths.ConfigFile)
 	if err != nil {
-		return err
+		return local.Paths{}, local.Config{}, err
 	}
-	payload := map[string]any{"config": cfg, "config_file": paths.ConfigFile}
-	if parsed.bool("json") {
-		return writeJSON(stdout, payload)
+	return paths, cfg, nil
+}
+
+func profileList(cfg local.Config) []map[string]any {
+	names := make([]string, 0, len(cfg.Profiles))
+	for name := range cfg.Profiles {
+		names = append(names, name)
 	}
-	fmt.Fprintf(stdout, "Config file:        %s\n", paths.ConfigFile)
-	fmt.Fprintf(stdout, "Default daemon URL: %s\n", cfg.DefaultDaemonURL)
-	if cfg.RelayConfigPath != "" {
-		fmt.Fprintf(stdout, "Relay config:       %s\n", cfg.RelayConfigPath)
+	sort.Strings(names)
+	out := make([]map[string]any, 0, len(names))
+	for _, name := range names {
+		profile := cfg.Profiles[name]
+		out = append(out, map[string]any{
+			"name":        name,
+			"display":     profile.Name,
+			"active":      name == cfg.ActiveProfile,
+			"gateway_url": profile.GatewayURL,
+			"mcp_url":     profile.MCPURL,
+			"relay_url":   profile.RelayURL,
+			"console_url": profile.ConsoleURL,
+		})
 	}
-	if cfg.ConnectorConfigPath != "" {
-		fmt.Fprintf(stdout, "Connector config:   %s\n", cfg.ConnectorConfigPath)
-	}
-	if cfg.GatewayConfigPath != "" {
-		fmt.Fprintf(stdout, "Gateway config:     %s\n", cfg.GatewayConfigPath)
-	}
-	return nil
+	return out
 }
 
 func runDoctor(args []string, stdout io.Writer) error {
@@ -682,7 +818,12 @@ func runConnectorLogin(parsed parsedArgs) (map[string]any, error) {
 		return nil, err
 	}
 	daemonURL := firstNonEmpty(parsed.value("daemon-url"), localCfg.DefaultDaemonURL)
+	connection := local.ResolveConnection(localCfg, parsed.value("gateway"))
 	relayID := firstNonEmpty(parsed.value("relay"), "default")
+	if strings.TrimSpace(parsed.value("gateway")) != "" || connection.EnvOverride || strings.TrimSpace(session.GatewayURL) == "" {
+		gatewayURL = connection.GatewayURL
+		client = account.NewClient(gatewayURL, session.AccessToken)
+	}
 	login, err := client.ConnectorLogin(contextBackground(), account.ConnectorLoginRequest{
 		Relay: relayID,
 		Machine: account.MachineInput{
@@ -2273,6 +2414,31 @@ func runSetup(args []string, stdout io.Writer) error {
 			Strict:                parsed.bool("strict"),
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
+	case "self-host":
+		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev"}, []string{"gateway-url", "base-url", "mcp-url", "relay-url", "console-url", "listen", "token-env", "token-file", "gateway-config", "store", "default-relay-token-env", "default-relay-token-file", "oauth-client-secret"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "setup self-host does not accept positional arguments")
+		}
+		gatewayURL := firstNonEmpty(parsed.value("gateway-url"), parsed.value("base-url"))
+		report, err := setuppkg.SelfHost(contextBackground(), setuppkg.SelfHostOptions{
+			GatewayURL:            gatewayURL,
+			MCPURL:                parsed.value("mcp-url"),
+			RelayURL:              parsed.value("relay-url"),
+			ConsoleURL:            parsed.value("console-url"),
+			ListenAddr:            parsed.value("listen"),
+			GatewayConfigPath:     parsed.value("gateway-config"),
+			StorePath:             parsed.value("store"),
+			TokenEnv:              parsed.value("token-env"),
+			TokenFile:             parsed.value("token-file"),
+			DefaultRelayTokenEnv:  parsed.value("default-relay-token-env"),
+			DefaultRelayTokenFile: parsed.value("default-relay-token-file"),
+			EnableOAuthDev:        parsed.bool("enable-oauth-dev"),
+			OAuthClientSecret:     parsed.value("oauth-client-secret"),
+		})
+		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
 		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"client", "relay", "endpoint", "token-env", "token", "name"})
 		if err != nil {
@@ -2282,6 +2448,14 @@ func runSetup(args []string, stdout io.Writer) error {
 			return usageError(parsed.bool("json"), stdout, "setup mcp does not accept positional arguments")
 		}
 		endpoint := firstNonEmpty(parsed.value("endpoint"), parsed.value("relay"))
+		if strings.TrimSpace(endpoint) == "" {
+			paths, cfg, loadErr := loadLocalConfigForCommand("")
+			if loadErr != nil {
+				return jsonAwareError(parsed.bool("json"), stdout, exitUsage, loadErr.Error())
+			}
+			_ = paths
+			endpoint = local.ResolveConnection(cfg, "").MCPURL
+		}
 		report, err := setuppkg.MCP(setuppkg.MCPOptions{
 			Client:   parsed.value("client"),
 			Endpoint: endpoint,
@@ -2326,6 +2500,9 @@ func runActivation(args []string, stdout io.Writer) error {
 		report, err = activation.Package(contextBackground(), opts)
 	case "gateway":
 		report, err = activation.Gateway(contextBackground(), opts)
+	case "self-host":
+		report, err = activation.Gateway(contextBackground(), opts)
+		report.Mode = "self-host"
 	case "official":
 		report, err = activation.Gateway(contextBackground(), opts)
 		report.Mode = "official"

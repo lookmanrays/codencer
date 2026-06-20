@@ -5,8 +5,8 @@ Codex MCP activation generates configuration artifacts only. It does not write u
 ## Generate
 
 ```bash
-./bin/codencer activation official \
-  --gateway https://mcp.codencer.dev \
+./bin/codencer activation self-host \
+  --gateway http://127.0.0.1:19090 \
   --relay https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --project codencer \
@@ -14,7 +14,7 @@ Codex MCP activation generates configuration artifacts only. It does not write u
 ```
 
 The generated package includes a Codex config pointing to
-`https://mcp.codencer.dev/mcp`.
+`http://127.0.0.1:19090/mcp` for local self-host proof.
 
 Direct Relay debug setup remains available:
 
@@ -43,4 +43,6 @@ Ask Codex to:
 4. Use `codencer.submit_project_task_and_wait` for one approved task.
 5. Return blocker JSON when planner decision is required.
 
-Live Codex client proof remains pending until Codex actually connects to the MCP endpoint and calls a tool.
+Protocol proof is covered by `make verify-public-selfhost-release`. Live Codex
+product-client proof remains pending until Codex actually connects to the MCP
+endpoint and calls a tool.

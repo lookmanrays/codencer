@@ -14,7 +14,7 @@ managed Cloud operations dashboard.
 - `codencer login`, `codencer whoami`, and `codencer logout`
 - `codencer connector login`
 - `codencer gateway relay add|list|status|remove`
-- `codencer activation official`
+- `codencer activation self-host`
 - `codencer-gatewayd`
 - `codencer-relayd`
 - `codencer-connectord`
@@ -48,6 +48,17 @@ explicit through `NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo`; visual evidence uses
 that explicit demo mode, while `make verify-gateway-console-live` exercises an
 isolated live Gateway.
 
+Live mode browser code calls the local Next proxy at `/api/gateway/v1/*`.
+Configure that proxy with server-side env vars:
+
+```bash
+CODENCER_GATEWAY_API_BASE=http://127.0.0.1:19090
+CODENCER_GATEWAY_CONSOLE_TOKEN=<gateway-console-token>
+```
+
+`CODENCER_GATEWAY_MCP_TOKEN` and `CODENCER_GATEWAY_TOKEN` are accepted as
+fallback token env names for local/self-host operation.
+
 ## Public Exposure Warning
 
 The public/self-host Gateway Console currently relies on server-side Gateway
@@ -77,7 +88,7 @@ The public/self-host Console covers:
 - settings;
 - device approval;
 - OAuth dev consent;
-- UI system reference.
+- UI system reference with light and terminal code block variants.
 
 ## Future Private Console Scope
 

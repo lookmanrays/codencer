@@ -3,7 +3,7 @@
 `codencer login` performs a device-code style Gateway login:
 
 ```bash
-codencer login --gateway https://mcp.codencer.dev
+codencer login --gateway http://127.0.0.1:19090
 ```
 
 The CLI asks Gateway for a device code, prints the verification URL and user

@@ -1,14 +1,14 @@
 # MCP Gateway Model
 
-Codencer exposes one official project-aware MCP surface through Codencer
-Gateway. The official connector endpoint is:
+Codencer exposes one project-aware MCP surface through self-host Codencer
+Gateway. The public self-host default endpoint is:
 
 ```text
-https://mcp.codencer.dev/mcp
+http://127.0.0.1:19090/mcp
 ```
 
 Self-host Relay `/mcp` remains supported for advanced/direct/debug mode, but it
-is not the primary official ChatGPT, Claude Code, or Codex connector endpoint.
+is not the primary public Gateway client endpoint.
 
 ## Model
 
@@ -16,12 +16,12 @@ is not the primary official ChatGPT, Claude Code, or Codex connector endpoint.
 flowchart LR
   Client["AI client\nChatGPT / Claude Code / Codex"]
   Gateway["Codencer Gateway\n/mcp, auth, workspace store, relay profiles"]
-  Relay["Selected Relay\ndefault managed or self-host"]
+  Relay["Selected Relay\ndefault self-host or user-added"]
   Connector["Local connector\nproject advertisements"]
   Daemon["Local daemon\nruns, steps, evidence"]
   Repo["Local project workspace"]
 
-  Client -->|official MCP tools| Gateway
+  Client -->|Gateway MCP tools| Gateway
   Gateway -->|Relay profile + selectors| Relay
   Relay -->|authorized route| Connector
   Connector -->|local execution contract| Daemon
@@ -34,17 +34,17 @@ Direct Relay MCP is still available:
 AI client -> user Relay /mcp
 ```
 
-Use it for direct self-host debugging, not as the official connector story.
+Use it for direct self-host debugging, not as the standard Gateway client path.
 
 ## Gateway Responsibilities
 
 Gateway:
 
-- authenticates AI clients with bearer-dev auth for Codex/Claude Code pre-prod;
+- authenticates AI clients with bearer-dev auth for self-host operation;
 - exposes OAuth dev and protected-resource metadata for ChatGPT Developer Mode;
 - stores users, personal workspaces, device login sessions, connector bindings,
   and Relay profiles in the Gateway persistent store;
-- creates a default managed Relay profile for each new workspace;
+- creates a default self-host Relay profile for each new workspace;
 - lets users add self-host Relay profiles with `codencer gateway relay add`;
 - aggregates projects across enabled Relay profiles;
 - forwards approved project task/manifest calls to the selected Relay;
@@ -55,7 +55,7 @@ Gateway:
 Relay profiles contain:
 
 - `id`
-- `type` (`managed` or `self_host`)
+- `type` (`self_host`, with future/private builds free to add managed profiles)
 - `url`
 - `token_env` or a token file reference
 - `enabled`

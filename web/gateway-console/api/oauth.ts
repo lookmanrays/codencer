@@ -19,7 +19,7 @@ export async function getOAuthConsent(search: string) {
         codeChallenge: "demo-code-challenge",
         codeChallengeMethod: "S256",
         redirectURI: "http://127.0.0.1/callback",
-        resource: "https://mcp.codencer.dev/mcp",
+        resource: "http://127.0.0.1:19090/mcp",
         responseType: "code",
         scope: "projects:read projects:write",
         scopes: ["projects:read", "projects:write"],

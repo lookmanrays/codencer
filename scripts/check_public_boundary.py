@@ -28,8 +28,10 @@ REQUIRED_FILES = [
     "docs/architecture/public-private-boundary.md",
     "docs/architecture/official-vs-self-host.md",
     "docs/gateway-console.md",
-    "docs/official-connector-flow.md",
+    "docs/deployment/self-host-production.md",
+    "docs/mcp/self-host-mcp-proof.md",
     "docs/relay-profile-registry.md",
+    "docs/acceptance/public-self-host-release.md",
     "docs/acceptance/public-repo-release.yaml",
 ]
 
@@ -37,14 +39,29 @@ TEXT_REQUIREMENTS = [
     ("LICENSE", "Apache License"),
     ("NOTICE", "Lukman Nuriakhmetov and Codencer Contributors"),
     ("TRADEMARKS.md", "mcp.codencer.dev"),
-    ("README.md", "self-hostable Gateway"),
-    ("README.md", "official managed Codencer Cloud service is operated separately"),
+    ("README.md", "Public/self-built Codencer defaults to self-host/local endpoints"),
+    ("README.md", "codencer setup self-host"),
     ("docs/architecture/public-private-boundary.md", "Private Managed Service Candidates"),
-    ("docs/architecture/official-vs-self-host.md", "Direct Relay MCP remains supported"),
+    ("docs/architecture/official-vs-self-host.md", "The public release path is Gateway-first and self-hosted"),
     ("docs/gateway-console.md", "public/self-host Gateway Console live integration implemented"),
-    ("docs/official-connector-flow.md", "AI client -> https://mcp.codencer.dev/mcp -> Codencer Gateway"),
+    ("docs/deployment/self-host-production.md", "CLI flags > env vars > user config profile > build-time defaults > self-host defaults"),
+    ("docs/mcp/self-host-mcp-proof.md", "codencer.run_project_manifest"),
+    ("docs/acceptance/public-self-host-release.md", "make verify-public-selfhost-release"),
     ("docs/architecture/mcp-gateway-model.md", "Direct Relay MCP"),
     ("docs/acceptance/public-repo-release.yaml", "public_managed_codencer_cloud_launch: no_go"),
+]
+
+SELF_HOST_DEFAULT_FILES = [
+    "internal/defaults/defaults.go",
+    "internal/account/session.go",
+    "internal/gateway/config.go",
+    "internal/setup/setup.go",
+    "internal/activation/activation.go",
+    "internal/release/release.go",
+    "cmd/codencer/main.go",
+    "web/gateway-console/api/demo-data.ts",
+    "web/gateway-console/api/workspace.ts",
+    "web/gateway-console/api/oauth.ts",
 ]
 
 PRIVATE_KEY_RE = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
@@ -243,6 +260,16 @@ def scan_source_tree(failures: list[str]) -> None:
         check_tracked_file(rel, failures)
 
 
+def check_self_host_default_files(failures: list[str]) -> None:
+    for rel in SELF_HOST_DEFAULT_FILES:
+        text = read_text(ROOT / rel)
+        if text is None:
+            fail(f"self-host default file missing or unreadable: {rel}", failures)
+            continue
+        if OFFICIAL_ENDPOINT_RE.search(text) or "https://app.codencer.dev" in text:
+            fail(f"commercial endpoint must not be a public default in {rel}", failures)
+
+
 def archive_members(path: Path) -> list[tuple[str, bytes]]:
     members: list[tuple[str, bytes]] = []
     if path.suffix == ".zip":
@@ -319,6 +346,7 @@ def main() -> int:
     failures: list[str] = []
     check_required_files(failures)
     check_text_requirements(failures)
+    check_self_host_default_files(failures)
     scan_source_tree(failures)
     scan_release_artifacts(failures)
     if failures:

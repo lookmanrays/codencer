@@ -210,6 +210,19 @@ verify-public-release: verify-docs-links
 	@echo "==> Checking public repository release boundary..."
 	@python3 scripts/check_public_boundary.py
 
+.PHONY: verify-public-selfhost-release
+verify-public-selfhost-release: build build-mcp-sdk-smoke
+	@echo "==> Running full Go test suite for public self-host release..."
+	@go test ./...
+	@echo "==> Creating release-like snapshot for public self-host release..."
+	@$(MAKE) release-snapshot VERSION=v0.3.0-selfhost-verify
+	@echo "==> Verifying public self-host config precedence and client setup artifacts..."
+	@./scripts/verify_public_selfhost_release.sh
+	@$(MAKE) verify-gateway
+	@$(MAKE) verify-gateway-console
+	@$(MAKE) verify-gateway-console-live
+	@$(MAKE) verify-public-release
+
 .PHONY: verify-gateway-console
 verify-gateway-console:
 	@echo "==> Installing Gateway Console dependencies..."

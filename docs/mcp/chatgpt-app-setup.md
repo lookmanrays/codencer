@@ -5,21 +5,21 @@ ChatGPT product proof is manual and workspace-gated. This repository can prepare
 ## Server Preconditions
 
 ```bash
-./bin/codencer setup gateway \
-  --base-url https://mcp.codencer.dev \
-  --mcp-url https://mcp.codencer.dev/mcp \
-  --default-relay-url https://relay.codencer.dev \
+./bin/codencer setup self-host \
+  --gateway-url http://127.0.0.1:19090 \
+  --mcp-url http://127.0.0.1:19090/mcp \
+  --relay-url http://127.0.0.1:8090 \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
 
-./bin/codencer login --gateway https://mcp.codencer.dev
-./bin/codencer connector login --gateway https://mcp.codencer.dev --relay default --json
+./bin/codencer login --gateway http://127.0.0.1:19090
+./bin/codencer connector login --gateway http://127.0.0.1:19090 --relay default --json
 
-./bin/codencer activation official \
-  --gateway https://mcp.codencer.dev \
-  --relay https://relay.example.com \
+./bin/codencer activation self-host \
+  --gateway http://127.0.0.1:19090 \
+  --relay http://127.0.0.1:8090 \
   --project codencer \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --json
@@ -27,7 +27,7 @@ ChatGPT product proof is manual and workspace-gated. This repository can prepare
 
 Save the generated client secret and operator approval code from `$CODENCER_HOME/tokens`.
 
-`codencer activation gateway --json` writes a package containing ChatGPT setup
+`codencer activation self-host --json` writes a package containing ChatGPT setup
 that points to Gateway. `codencer activation chatgpt --json` remains available
 for direct Relay debug setup. The generated setup sheet includes:
 
@@ -51,11 +51,11 @@ Literal secrets are redacted. File paths are shown only for local token files.
 
 ## App Values
 
-- MCP endpoint: `https://mcp.codencer.dev/mcp`
-- OAuth authorization server metadata: `https://mcp.codencer.dev/.well-known/oauth-authorization-server`
-- OpenID configuration: `https://mcp.codencer.dev/.well-known/openid-configuration`
-- Protected resource metadata: `https://mcp.codencer.dev/.well-known/oauth-protected-resource/mcp`
-- Backend Relay profile target: `https://relay.example.com`
+- MCP endpoint: `http://127.0.0.1:19090/mcp`
+- OAuth authorization server metadata: `http://127.0.0.1:19090/.well-known/oauth-authorization-server`
+- OpenID configuration: `http://127.0.0.1:19090/.well-known/openid-configuration`
+- Protected resource metadata: `http://127.0.0.1:19090/.well-known/oauth-protected-resource/mcp`
+- Backend Relay profile target: `http://127.0.0.1:8090`
 - Required behavior: use `codencer.list_projects` first.
 - OAuth dev redirect behavior: valid redirect URIs are accepted for self-host dev testing. Production must use redirect allowlisting or an external IdP. OAuth dev mode is not public multi-user production.
 
