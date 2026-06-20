@@ -28,7 +28,7 @@ export function RelaysScreen() {
     >
       {relays.isLoading ? <LoadingPanel /> : null}
       {relays.error ? (
-        <Alert title="Relay API unavailable" tone="error">
+        <Alert title="Relay API unavailable" tone="danger">
           {relays.error.message}
         </Alert>
       ) : null}

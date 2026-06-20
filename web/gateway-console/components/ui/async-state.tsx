@@ -24,7 +24,7 @@ export function AsyncState<T>({
   if (isLoading) return <LoadingPanel />;
   if (error) {
     return (
-      <Alert title="Error" tone="error">
+      <Alert title="Error" tone="danger">
         {error.message}
       </Alert>
     );

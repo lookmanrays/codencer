@@ -32,13 +32,26 @@ The public self-host remote bridge contains:
   local outbound connector, explicit project sharing, enrollment, and connector
   config.
 - `cmd/mcp-sdk-smoke`: deterministic MCP SDK proof helper.
-- `web/gateway-console`: public Gateway Console UI foundation for self-host,
+- `web/gateway-console`: public/self-host Gateway Console for self-host,
   community, and controlled pre-production official connector operation.
 - Docs under `docs/mcp`, activation docs, Gateway/Relay quickstarts, and
   self-host references.
 
 These components remain public because they are required for personal,
 corporate, and community self-host deployments.
+
+The public/self-host Gateway Console currently relies on server-side Gateway
+token proxying. It is intended for localhost, internal network, private network,
+or controlled self-host environments unless protected by external auth. Do not
+expose it directly to the public internet without one of:
+
+- reverse proxy authentication;
+- VPN;
+- Zero Trust access;
+- private network only;
+- production auth layer from the future private Codencer Cloud service.
+
+This public repository does not ship managed Codencer Cloud production auth.
 
 ## Public Community Cloud-Control-Plane
 

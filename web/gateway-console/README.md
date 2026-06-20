@@ -33,7 +33,9 @@ via the server-side Next proxy. Configure the proxy with:
 
 ```bash
 CODENCER_GATEWAY_API_BASE=http://127.0.0.1:19090
+CODENCER_GATEWAY_CONSOLE_TOKEN=...
 CODENCER_GATEWAY_MCP_TOKEN=...
+CODENCER_GATEWAY_TOKEN=...
 ```
 
 Demo mode is explicit:
@@ -44,6 +46,23 @@ NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo
 
 Live mode never silently falls back to demo fixtures. Missing Gateway endpoints
 or failed mutations render explicit error/unavailable states.
+
+## Public Exposure Warning
+
+The public/self-host Gateway Console currently relies on server-side Gateway
+token proxying. It is intended for localhost, internal network, private network,
+or controlled self-host environments unless protected by external auth.
+
+Do not expose the Gateway Console directly to the public internet without one
+of:
+
+- reverse proxy authentication;
+- VPN;
+- Zero Trust access;
+- private network only;
+- production auth layer from the future private Codencer Cloud service.
+
+This repository does not implement managed Codencer Cloud production auth.
 
 ## Visual Evidence
 

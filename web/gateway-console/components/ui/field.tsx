@@ -40,7 +40,7 @@ export function FormMessage({
   return (
     <p
       className={cn(
-        "m-0 font-mono text-mono tracking-[0.04em] text-error",
+        "m-0 font-mono text-mono tracking-[0.04em] text-danger",
         className,
       )}
       {...props}

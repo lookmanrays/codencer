@@ -4,7 +4,7 @@ import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Codencer Gateway Console",
-  description: "Public self-host Gateway Console foundation for Codencer.",
+  description: "Public/self-host Gateway Console for Codencer.",
   robots: { index: false, follow: false },
 };
 

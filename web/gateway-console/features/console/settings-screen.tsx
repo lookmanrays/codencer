@@ -25,7 +25,7 @@ export function SettingsScreen() {
     >
       {workspace.isLoading ? <LoadingPanel /> : null}
       {workspace.error ? (
-        <Alert title="Workspace API unavailable" tone="error">
+        <Alert title="Workspace API unavailable" tone="danger">
           {workspace.error.message}
         </Alert>
       ) : null}

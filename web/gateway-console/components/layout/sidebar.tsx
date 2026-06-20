@@ -85,8 +85,9 @@ function NavGroup({
           <li key={item.href}>
             <Link
               className={cn(
-                "flex min-h-10 items-center gap-sm rounded-[var(--radius-card)] px-3 py-2 text-body-sm text-ink-secondary no-underline transition-colors hover:bg-accent-tint-bg hover:text-ink-primary",
-                active && "bg-accent-tint-bg text-ink-primary",
+                "flex min-h-10 items-center gap-sm rounded-[var(--radius-card)] border-l-2 border-transparent px-3 py-2 text-body-sm text-ink-secondary no-underline transition-colors hover:bg-paper-tinted hover:text-ink-primary",
+                active &&
+                  "border-accent bg-paper-tinted text-ink-primary shadow-[inset_0_0_0_1px_var(--color-border)]",
                 collapsed && "justify-center px-2",
               )}
               href={item.href}

@@ -59,7 +59,7 @@ export function OAuthConsentPanel() {
         ) : null}
         {consent.isLoading ? <LoadingPanel /> : null}
         {consent.error ? (
-          <Alert title="OAuth request unavailable" tone="error">
+          <Alert title="OAuth request unavailable" tone="danger">
             {consent.error.message}
           </Alert>
         ) : null}
@@ -89,7 +89,7 @@ export function OAuthConsentPanel() {
               ]}
             />
             {decision.error ? (
-              <Alert title="OAuth consent failed" tone="error">
+              <Alert title="OAuth consent failed" tone="danger">
                 {decision.error.message}
               </Alert>
             ) : null}

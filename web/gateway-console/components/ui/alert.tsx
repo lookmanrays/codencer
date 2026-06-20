@@ -5,16 +5,27 @@ import { cn } from "@/lib/cn";
 type AlertProps = {
   title: string;
   children: ReactNode;
-  tone?: "neutral" | "accent" | "warning" | "error";
+  tone?: "neutral" | "info" | "success" | "warning" | "danger" | "brand";
   className?: string;
 };
 
 const tones = {
   neutral: "border-border bg-paper-strong",
-  accent: "border-accent bg-accent-tint-bg",
-  warning: "border-warning bg-paper-strong",
-  error: "border-error bg-paper-strong",
+  info: "border-info/50 bg-info-soft",
+  success: "border-success/50 bg-success-soft",
+  warning: "border-warning/50 bg-warning-soft",
+  danger: "border-danger/50 bg-danger-soft",
+  brand: "border-accent/50 bg-accent-tint-bg",
 };
+
+const toneBadges = {
+  neutral: "neutral",
+  info: "info",
+  success: "success",
+  warning: "warning",
+  danger: "danger",
+  brand: "brand",
+} as const;
 
 export function Alert({
   children,
@@ -30,19 +41,7 @@ export function Alert({
         className,
       )}
     >
-      <Badge
-        variant={
-          tone === "error"
-            ? "error"
-            : tone === "warning"
-              ? "warning"
-              : tone === "accent"
-                ? "accent"
-                : "neutral"
-        }
-      >
-        {title}
-      </Badge>
+      <Badge variant={toneBadges[tone]}>{title}</Badge>
       <div className="mt-sm min-w-0 break-words text-body-sm text-ink-secondary">
         {children}
       </div>

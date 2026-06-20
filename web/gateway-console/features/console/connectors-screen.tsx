@@ -28,7 +28,7 @@ export function ConnectorsScreen() {
     >
       {machines.isLoading || connectors.isLoading ? <LoadingPanel /> : null}
       {error ? (
-        <Alert title="Connector API unavailable" tone="error">
+        <Alert title="Connector API unavailable" tone="danger">
           {error.message}
         </Alert>
       ) : null}

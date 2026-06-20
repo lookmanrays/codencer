@@ -22,7 +22,9 @@ console surface.
 
 ## Colors
 
-Codencer is a warm paper/ink interface with a single orange accent.
+Codencer is a warm paper/ink interface with a restrained orange brand accent.
+Orange is reserved for primary actions, focus, and official/brand emphasis. It
+is not the generic warning color.
 
 | Token | Value | Use |
 | --- | --- | --- |
@@ -32,15 +34,20 @@ Codencer is a warm paper/ink interface with a single orange accent.
 | `--color-paper` | `#faf9f6` | page background |
 | `--color-paper-tinted` | `#f2f1ed` | alternate surfaces |
 | `--color-paper-strong` | `#ffffff` | raised surfaces |
-| `--color-accent` | `#ff5a1f` | CTAs, kickers, focus |
-| `--color-accent-hover` | `#e64a12` | primary hover |
-| `--color-accent-tint-bg` | `#fff1e8` | highlighted cards |
+| `--color-accent` | `#e4571e` | primary actions, brand/focus |
+| `--color-accent-hover` | `#c94818` | primary hover |
+| `--color-accent-tint-bg` | `#fff4ee` | restrained brand callouts |
+| `--color-info` / `--color-info-soft` | blue semantic pair | informational notices |
+| `--color-success` / `--color-success-soft` | green semantic pair | successful checks/mutations |
+| `--color-warning` / `--color-warning-soft` | amber semantic pair | operator attention |
+| `--color-danger` / `--color-danger-soft` | red semantic pair | errors/destructive states |
 | `--color-border` | `#e8e6e1` | warm separators |
 | `--color-border-strong` | `#d4d4d8` | stronger field/table borders |
 | `--color-code-bg` | `#0f1419` | terminal/code background |
 
 Dark theme keeps the same semantic tokens and changes paper/ink values rather
-than introducing a separate palette.
+than introducing a separate palette. Semantic panels use subtle tinted
+backgrounds with clear borders/text instead of large saturated blocks.
 
 ## Typography
 
@@ -80,11 +87,12 @@ website spacing for page headers.
 
 ## Components
 
-- Buttons: solid accent primary, ink-outline secondary, quiet paper controls,
-  danger outline for destructive placeholders.
+- Buttons: solid brand primary, ink-outline secondary, quiet paper controls,
+  danger outline for destructive actions.
 - Cards: flat bordered surfaces, no nested card stacks.
 - Fields: explicit labels, warm borders, visible focus rings.
-- Code/terminal: dark ink background, mono text, copy button, no raw tokens.
+- Code/terminal: restrained dark ink background, mono text, copy button, no raw
+  tokens.
 - Status: text label plus tone; never color-only.
 
 ## Theme

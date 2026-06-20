@@ -26,7 +26,7 @@ export function ActivationScreen() {
     >
       {activation.isLoading ? <LoadingPanel /> : null}
       {activation.error ? (
-        <Alert title="Activation API unavailable" tone="error">
+        <Alert title="Activation API unavailable" tone="danger">
           {activation.error.message}
         </Alert>
       ) : null}

@@ -15,7 +15,7 @@ const buttonVariants = cva(
         quiet:
           "border border-border bg-paper-strong text-ink-primary hover:border-ink-primary",
         danger:
-          "border border-error bg-transparent text-error hover:bg-error hover:text-paper",
+          "border border-danger bg-transparent text-danger hover:bg-danger hover:text-paper",
         link: "border-0 bg-transparent p-0 font-mono font-normal tracking-[0.04em] text-ink-primary hover:text-accent",
       },
       size: {

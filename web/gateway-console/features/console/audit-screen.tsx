@@ -43,7 +43,7 @@ export function AuditScreen() {
     >
       {audit.isLoading ? <LoadingPanel /> : null}
       {audit.error ? (
-        <Alert title="Audit API unavailable" tone="error">
+        <Alert title="Audit API unavailable" tone="danger">
           {audit.error.message}
         </Alert>
       ) : null}

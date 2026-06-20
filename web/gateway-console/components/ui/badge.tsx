@@ -7,10 +7,13 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: "border-border bg-paper text-ink-secondary",
-        accent: "border-accent bg-accent-tint-bg text-ink-primary",
-        success: "border-success bg-paper text-success",
-        warning: "border-warning bg-paper text-warning",
-        error: "border-error bg-paper text-error",
+        info: "border-info/60 bg-info-soft text-info",
+        brand: "border-accent/60 bg-accent-tint-bg text-ink-primary",
+        accent: "border-accent/60 bg-accent-tint-bg text-ink-primary",
+        success: "border-success/60 bg-success-soft text-success",
+        warning: "border-warning/60 bg-warning-soft text-warning",
+        danger: "border-danger/60 bg-danger-soft text-danger",
+        error: "border-danger/60 bg-danger-soft text-danger",
         dark: "border-ink-primary bg-ink-primary text-paper",
       },
     },
@@ -41,7 +44,7 @@ export function StatusBadge({ status }: { status: string }) {
             normalized.includes("down") ||
             normalized.includes("unavailable") ||
             normalized.includes("disabled")
-          ? "error"
+          ? "danger"
           : "neutral";
   return <Badge variant={variant}>{status}</Badge>;
 }

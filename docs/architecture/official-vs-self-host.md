@@ -34,13 +34,24 @@ Personal, corporate, and internal deployments can self-host:
 - `codencer-gatewayd`;
 - `codencer-relayd`;
 - `codencer-connectord`;
-- the public Gateway Console foundation in `web/gateway-console`;
+- the public/self-host Gateway Console in `web/gateway-console`;
 - local `orchestratord`;
 - local or corporate MCP clients.
 
 This mode is appropriate when the operator owns the Gateway/Relay endpoint,
 auth policy, DNS, TLS, and runtime credentials. It is still Codencer Core; it is
 not the official hosted Codencer service unless operated by Codencer.
+
+The public/self-host Gateway Console relies on server-side Gateway token
+proxying and is intended for localhost, internal network, private network, or
+controlled self-host environments unless protected by external auth. Do not
+expose it directly to the public internet without one of:
+
+- reverse proxy authentication;
+- VPN;
+- Zero Trust access;
+- private network only;
+- production auth layer from the future private Codencer Cloud service.
 
 ## Direct Relay MCP
 

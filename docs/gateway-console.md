@@ -48,9 +48,25 @@ explicit through `NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo`; visual evidence uses
 that explicit demo mode, while `make verify-gateway-console-live` exercises an
 isolated live Gateway.
 
+## Public Exposure Warning
+
+The public/self-host Gateway Console currently relies on server-side Gateway
+token proxying. It is intended for localhost, internal network, private network,
+or controlled self-host environments unless protected by external auth.
+
+Do not expose Gateway Console directly to the public internet without one of:
+
+- reverse proxy authentication;
+- VPN;
+- Zero Trust access;
+- private network only;
+- production auth layer from the future private Codencer Cloud service.
+
+This is not a managed Codencer Cloud production auth implementation.
+
 ## Public Console Scope
 
-The public foundation covers:
+The public/self-host Console covers:
 
 - dashboard;
 - Relay profiles;

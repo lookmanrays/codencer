@@ -43,7 +43,7 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
       </CardHeader>
       <CardContent className="grid min-w-0 gap-md">
         {deleteRelay.error ? (
-          <Alert title="Relay profile was not removed" tone="error">
+          <Alert title="Relay profile was not removed" tone="danger">
             {deleteRelay.error.message}
           </Alert>
         ) : null}

@@ -42,7 +42,7 @@ export function DeviceApprovalPanel() {
           </Alert>
         ) : null}
         {approval.error ? (
-          <Alert title="Device approval failed" tone="error">
+          <Alert title="Device approval failed" tone="danger">
             {approval.error.message}
           </Alert>
         ) : null}

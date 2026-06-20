@@ -80,11 +80,16 @@ const colors = [
   "accent",
   "accent-hover",
   "accent-tint-bg",
+  "info",
+  "info-soft",
+  "success",
+  "success-soft",
+  "warning",
+  "warning-soft",
+  "danger",
+  "danger-soft",
   "border",
   "border-strong",
-  "success",
-  "warning",
-  "error",
   "code-bg",
   "code-fg",
 ];
@@ -176,10 +181,36 @@ export default function UISystemPage() {
               <Button variant="secondary">Secondary</Button>
               <Button variant="quiet">Quiet</Button>
               <Button variant="danger">Danger</Button>
-              <Badge variant="accent">accent</Badge>
+              <Badge variant="brand">brand</Badge>
+              <Badge variant="info">info</Badge>
+              <Badge variant="warning">warning</Badge>
+              <Badge variant="danger">danger</Badge>
               <StatusBadge status="available" />
               <StatusBadge status="unavailable" />
               <ThemeToggle />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Semantic alerts</CardTitle>
+            </CardHeader>
+            <CardContent className="grid min-w-0 gap-sm md:grid-cols-2">
+              <Alert title="Neutral">Default operational note.</Alert>
+              <Alert title="Info" tone="info">
+                Non-blocking context for Gateway operators.
+              </Alert>
+              <Alert title="Success" tone="success">
+                Verification or mutation completed.
+              </Alert>
+              <Alert title="Warning" tone="warning">
+                Requires operator attention, but is not a brand accent.
+              </Alert>
+              <Alert title="Danger" tone="danger">
+                A live API operation failed or is unsafe.
+              </Alert>
+              <Alert title="Brand" tone="brand">
+                Primary Codencer path or official connector callout.
+              </Alert>
             </CardContent>
           </Card>
           <Card>

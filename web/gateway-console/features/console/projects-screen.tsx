@@ -24,7 +24,7 @@ export function ProjectsScreen() {
     >
       {projects.isLoading ? <LoadingPanel /> : null}
       {projects.error ? (
-        <Alert title="Project API unavailable" tone="error">
+        <Alert title="Project API unavailable" tone="danger">
           {projects.error.message}
         </Alert>
       ) : null}

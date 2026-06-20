@@ -52,7 +52,7 @@ export function DashboardScreen() {
   if (firstError) {
     return (
       <DashboardShell>
-        <Alert title="Gateway Console live data unavailable" tone="error">
+        <Alert title="Gateway Console live data unavailable" tone="danger">
           {firstError.message}
         </Alert>
       </DashboardShell>
@@ -144,7 +144,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <PageShell
       breadcrumbs={[{ label: "Console" }]}
-      description="Operational overview for the public Gateway Console foundation."
+      description="Operational overview for the public/self-host Gateway Console."
       kicker="Gateway Console"
       title="Self-host bridge status"
     >

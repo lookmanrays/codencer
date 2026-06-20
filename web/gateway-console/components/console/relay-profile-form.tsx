@@ -38,12 +38,12 @@ export function RelayProfileForm() {
       })}
     >
       {createRelay.error ? (
-        <Alert title="Relay profile was not saved" tone="error">
+        <Alert title="Relay profile was not saved" tone="danger">
           {createRelay.error.message}
         </Alert>
       ) : null}
       {createRelay.isSuccess ? (
-        <Alert title="Relay profile saved" tone="accent">
+        <Alert title="Relay profile saved" tone="brand">
           Gateway persisted the Relay profile and refreshed the list.
         </Alert>
       ) : null}
