@@ -170,10 +170,29 @@ try {
     ).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
+    await page.goto(`${consoleBase}/console/activation`);
+    await expect(
+      page.getByRole("heading", { name: /gateway-first setup/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(`codencer login --gateway ${gatewayBase}`),
+    ).toBeVisible();
+    await assertNoDemoOrSecretLeak(page);
+
     await page.goto(`${consoleBase}/console/audit`);
     await expect(page.getByText(/connector\.login/i)).toBeVisible();
     await expect(page.getByText("relay.add")).toBeVisible();
     await expect(page.getByText("relay.remove")).toBeVisible();
+    await assertNoDemoOrSecretLeak(page);
+
+    await page.goto(`${consoleBase}/console/settings`);
+    await expect(
+      page.getByRole("heading", { name: /console settings/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Personal Gateway Workspace").first(),
+    ).toBeVisible();
+    await expect(page.getByText(`${gatewayBase}/mcp`)).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
     const device = await postJSON(
