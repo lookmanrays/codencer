@@ -108,6 +108,11 @@ func TestBundleIncludesDocsAndScripts(t *testing.T) {
 	for _, rel := range []string{
 		"README.md",
 		"LICENSE",
+		"NOTICE",
+		"TRADEMARKS.md",
+		"SECURITY.md",
+		"CONTRIBUTING.md",
+		"CODE_OF_CONDUCT.md",
 		"QUICKSTART.txt",
 		"scripts/install.sh",
 		"scripts/uninstall.sh",
@@ -220,6 +225,11 @@ func makeReleaseRepo(t *testing.T) string {
 	files := map[string]string{
 		"README.md":                     "readme",
 		"LICENSE":                       "license",
+		"NOTICE":                        "notice",
+		"TRADEMARKS.md":                 "trademarks",
+		"SECURITY.md":                   "security",
+		"CONTRIBUTING.md":               "contributing",
+		"CODE_OF_CONDUCT.md":            "conduct",
 		"scripts/install.sh":            "#!/bin/sh\n",
 		"scripts/uninstall.sh":          "#!/bin/sh\n",
 		"scripts/upgrade.sh":            "#!/bin/sh\n",

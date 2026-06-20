@@ -13,7 +13,7 @@ the implementation brief.
 - The "What exists today" section does not reflect the v0.3 local/self-host RC.
 - Old beta-track language makes cloud/control-plane surfaces sound like the
   current open-source path.
-- Any hosted launch date wording should be replaced with current Gateway MVP
+- Any hosted launch date wording should be replaced with current Gateway RC
   plus future Codencer Cloud positioning.
 - The site must not claim live ChatGPT, Codex, or Claude product proof unless
   actual evidence exists.
@@ -35,6 +35,9 @@ Position Codencer as:
 - activation support for ChatGPT custom MCP app setup, Claude Code MCP setup,
   and Codex MCP setup;
 - future Codencer Cloud as a separate planned managed layer.
+- public repository includes self-host Gateway/Relay/MCP and community
+  cloud-control-plane components, while the official managed Codencer service is
+  separate.
 
 ## Suggested Homepage Sections
 
@@ -104,10 +107,11 @@ available for advanced/debug mode.
 
 ### Self-Host Now, Cloud Later
 
-The open-source path includes Gateway plus self-host Relay and local connector.
-Future Codencer Cloud is a separate managed layer with official service
-identity. The same local connector and project-aware MCP toolset carry forward,
-but hosted Cloud services are not shipped by this repository.
+The open-source repository includes Codencer Core, self-host Gateway,
+self-host Relay, MCP, local connector, and community cloud-control-plane
+components. Future Codencer Cloud is a separate managed layer with official
+service identity. The same local connector and project-aware MCP toolset carry
+forward, but hosted Cloud services are not shipped by this repository.
 
 ### Try It Locally
 
@@ -160,6 +164,7 @@ Recommended repository doc targets:
 - MCP clients: `docs/mcp/integrations.md`
 - Relay MCP tools: `docs/mcp/relay_tools.md`
 - Architecture: `docs/architecture/mcp-gateway-model.md`
+- Public/private boundary: `docs/architecture/public-private-boundary.md`
 - Project config: `docs/project-config.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 
@@ -170,7 +175,7 @@ Recommended repository doc targets:
 | Local CLI/daemon | RC, deterministic proof available |
 | Project config | RC, committed `.codencer/project.json` |
 | Machine identity/routing | RC, selector support by `machine_id` or `host_label` |
-| Codencer Gateway | MVP, deterministic `make verify-gateway` smoke available |
+| Codencer Gateway | RC/pre-production Gateway surface, deterministic `make verify-gateway` smoke available |
 | Self-host Relay | RC backend/direct-debug MCP, deterministic relay/MCP smoke available |
 | Local connector | RC, explicit project sharing |
 | Relay MCP tools | RC, project-aware tools |

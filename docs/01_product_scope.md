@@ -32,7 +32,7 @@ It accepts a structured implementation plan, dispatches each step to a selected 
 ## Product principles
 
 ### 1. Local-first
-No cloud workers in MVP.
+No cloud workers in the initial local bridge scope.
 
 ### 2. Deterministic control plane
 Use LLMs for planning and summarization.
@@ -64,7 +64,7 @@ Human should return only for:
 - unresolved ambiguity
 - policy threshold breaches
 
-## Non-goals in MVP
+## Non-goals in the initial local bridge scope
 
 Do not build:
 - cloud control plane
@@ -77,7 +77,7 @@ Do not build:
 
 ## Success criteria
 
-### MVP success
+### Initial local success
 User can:
 1. start a run
 2. start a step

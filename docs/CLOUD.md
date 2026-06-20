@@ -38,6 +38,10 @@ Use this page for the cloud scope and route contract.
 - `codencer-cloudctl`: admin CLI for cloud bootstrap and control-plane operations
 - `codencer-cloudworkerd`: background worker for provider polling and maintenance
 
+Build these optional self-host/community cloud-control-plane binaries with
+`make build-self-host-cloud` or the lower-level `make build-cloud` alias. They
+are not included in the primary local/self-host release snapshot.
+
 ## Runtime Composition
 
 The cloud daemon serves the cloud API under `/api/cloud/v1/*`.

@@ -121,6 +121,23 @@ profiles:
         commands:
           - test -f docs/site-update-codencer-dev.md
         notes: The codencer.dev website source is not present in this repository; site repo update remains pending.
+      - id: public_repo_release_manifest_present
+        status: sprint_10_implemented
+        commands:
+          - test -f docs/acceptance/public-repo-release.yaml
+          - make verify-public-release
+        notes: Public repository release readiness has a separate acceptance manifest covering public/private boundary, legal files, secret/config safety, release artifact safety, and official-vs-self-host positioning.
+      - id: security_policy_present
+        status: sprint_10_implemented
+        commands:
+          - test -f SECURITY.md
+        notes: SECURITY documents private vulnerability reporting and public secret/config boundaries.
+      - id: public_private_boundary_docs_present
+        status: sprint_10_implemented
+        commands:
+          - test -f docs/architecture/public-private-boundary.md
+          - test -f docs/architecture/official-vs-self-host.md
+        notes: Boundary docs classify public core, public self-host Gateway/Relay/MCP, public community cloud-control-plane, private managed-service candidates, and unsafe public surfaces.
       - id: mcp_gateway_model_doc_present
         status: sprint_7_1_implemented
         commands:
@@ -392,5 +409,6 @@ verification:
     - make acceptance-local-production
     - make verify-release
     - make verify-local-prod
+    - make verify-public-release
     - make release-snapshot VERSION=v0.3.0-local-prod-rc.1
     - make release-snapshot VERSION=v0.3.0-local-prod-rc.1 ALLOW_PARTIAL=1

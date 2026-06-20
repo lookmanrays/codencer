@@ -10,7 +10,9 @@ RELEASE_DOCKER_IMAGE ?= golang:1.25-bookworm
 
 all: lint test build
 
-build-supported: build build-cloud build-mcp-sdk-smoke
+build-supported: build build-mcp-sdk-smoke
+
+build-self-host-cloud: build-cloud
 
 build: build-codencer
 	@mkdir -p bin
@@ -202,6 +204,26 @@ verify-project-config: build-codencer
 .PHONY: verify-docs-links
 verify-docs-links:
 	@python3 scripts/check_docs_links.py
+
+.PHONY: verify-public-release
+verify-public-release: verify-docs-links
+	@echo "==> Checking public repository release boundary..."
+	@python3 scripts/check_public_boundary.py
+
+.PHONY: verify-gateway-console
+verify-gateway-console:
+	@echo "==> Installing Gateway Console dependencies..."
+	@cd web/gateway-console && npm ci
+	@echo "==> Linting Gateway Console..."
+	@cd web/gateway-console && npm run lint
+	@echo "==> Typechecking Gateway Console..."
+	@cd web/gateway-console && npm run typecheck
+	@echo "==> Testing Gateway Console..."
+	@cd web/gateway-console && npm run test
+	@echo "==> Building Gateway Console..."
+	@cd web/gateway-console && npm run build
+	@echo "==> Running Gateway Console browser smoke..."
+	@cd web/gateway-console && npm run test:e2e
 
 verify-local-prod: build-codencer
 	@echo "==> Checking local production formatting..."

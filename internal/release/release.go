@@ -386,7 +386,15 @@ func writeBundleFiles(repo, stage string) error {
 	if err := os.WriteFile(filepath.Join(stage, "QUICKSTART.txt"), []byte(quickstart), 0644); err != nil {
 		return err
 	}
-	for _, rel := range []string{"README.md", "LICENSE"} {
+	for _, rel := range []string{
+		"README.md",
+		"LICENSE",
+		"NOTICE",
+		"TRADEMARKS.md",
+		"SECURITY.md",
+		"CONTRIBUTING.md",
+		"CODE_OF_CONDUCT.md",
+	} {
 		if err := copyFile(filepath.Join(repo, rel), filepath.Join(stage, rel)); err != nil {
 			return fmt.Errorf("copy %s: %w", rel, err)
 		}

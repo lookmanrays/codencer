@@ -60,9 +60,9 @@ Relay profiles contain:
 - `token_env` or a token file reference
 - `enabled`
 
-Literal Relay tokens are not returned to AI clients. In the MVP, Relay token
-references are stored in the Gateway profile and resolved server-side from env
-vars or token files.
+Literal Relay tokens are not returned to AI clients. In the current RC, Relay
+token references are stored in the Gateway profile and resolved server-side
+from env vars or token files.
 
 ## Official Toolset
 

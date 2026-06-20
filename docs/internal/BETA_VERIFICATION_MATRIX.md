@@ -30,7 +30,7 @@ This matrix records the historical phase-by-phase evidence plus the final Phase 
 | Cloud MCP SDK helper compile | `go test ./cmd/mcp-sdk-smoke -count=1` | Pass | Direct Phase 1 run | Confirms the helper binary still builds cleanly after the cloud proof updates. |
 | Baseline cloud smoke | `make cloud-smoke` | Pass | Direct Phase 1 run | Proves bootstrap, status, install, webhook ingest, events, audit, and worker-once behavior. |
 | Composed cloud runtime HTTP + MCP + SDK smoke | `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=... CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1 ./scripts/cloud_smoke.sh` | Pass | Direct Phase 1 run | Proves claimed runtime visibility, run create/get, submit-task, wait/result success, cloud MCP initialize/list/call, and official Go SDK interoperability in one composed flow. |
-| Docker compose cloud stack smoke | `make cloud-stack-smoke` | Blocked | Direct Phase 1 run | Docker CLI was present, but the local Docker daemon/socket was unavailable (`/Users/lookman/.docker/run/docker.sock`). |
+| Docker compose cloud stack smoke | `make cloud-stack-smoke` | Blocked | Direct Phase 1 run | Docker CLI was present, but the local Docker daemon/socket was unavailable (`<docker-socket>`). |
 | Docker compose config validation | `make cloud-stack-config` | Pass | Direct Phase 1 run | Compose baseline still renders cleanly even though the local Docker daemon was unavailable. |
 
 ## Executed In Phase 2 (WS-R1 Relay / Runtime)

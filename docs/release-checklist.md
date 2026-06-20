@@ -17,6 +17,7 @@ make verify-live-matrix
 make acceptance-local-production
 make verify-release
 make verify-local-prod
+make verify-public-release
 ```
 
 ## Release Snapshot
@@ -52,6 +53,11 @@ make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=darwin/arm64,linux/
 
 Every artifact with `status:"built"` in the manifest must exist on disk and match `checksums.txt`. `make verify-release` fails if this is not true.
 
+Release archives must not contain local runtime state, SQLite stores, sessions,
+tokens, non-example env files, or managed-service deployment credentials.
+`make verify-public-release` checks the public boundary and scans built
+artifacts when `dist/manifest.json` is present.
+
 ## Acceptance Evidence
 
 ```bash
@@ -63,4 +69,6 @@ Attach the acceptance report and proof bundle to release notes. Do not mark live
 
 ## Non-Goals
 
-Sprint 6 does not add commercial Codencer Cloud, billing, hosted UI, managed execution, Windows-native daemon production, dangerous bypass by default, or planner-style decision making.
+This release path does not add commercial Codencer Cloud, billing, hosted UI,
+managed execution, Windows-native daemon production, dangerous bypass by
+default, or planner-style decision making.

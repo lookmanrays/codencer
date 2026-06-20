@@ -57,6 +57,7 @@ make verify-release
 make verify-local-prod
 make activation-preflight
 make verify-docs-links
+make verify-public-release
 git diff --check
 ```
 
@@ -74,6 +75,9 @@ convert skipped live-product gates into passed gates.
 3. Update docs when behavior changes.
 4. Include tests or smoke coverage proportional to the risk.
 5. Describe commands run and any skipped live/external checks.
+
+Security issues should not be reported through public issues. See
+[SECURITY.md](SECURITY.md).
 
 ## Contribution Licensing
 

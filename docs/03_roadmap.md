@@ -15,7 +15,7 @@ Deliver:
 - implementation sequence
 
 Exit:
-- MVP scope frozen
+- initial local scope frozen
 - adapter contract frozen
 - no open contradictions in docs
 
@@ -60,7 +60,7 @@ Implement:
 Exit:
 - operator can manage lifecycle without DB access
 
-## Phase 4 — Codex adapter MVP
+## Phase 4 — Codex adapter initial implementation
 Implement:
 - common adapter interface
 - Codex adapter

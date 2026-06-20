@@ -86,10 +86,10 @@ constraints:
      "state": "completed",
      "summary": "Updated internal/app/version.go to v0.2.0-alpha-validation",
      "artifacts": {
-       "result.json": "/home/lookman/projects/codencer/artifacts/val-step-01-a1/result.json",
-       "stdout.log": "/home/lookman/projects/codencer/artifacts/val-step-01-a1/stdout.log"
+       "result.json": "<artifact-root>/val-step-01-a1/result.json",
+       "stdout.log": "<artifact-root>/val-step-01-a1/stdout.log"
      },
-     "raw_output_ref": "/home/lookman/projects/codencer/artifacts/val-step-01-a1/stdout.log"
+     "raw_output_ref": "<artifact-root>/val-step-01-a1/stdout.log"
    }
    ```
 

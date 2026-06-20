@@ -2,7 +2,7 @@
 
 Sprint 1 added the local production foundation for Codencer as a hands-off local automation bridge. Sprint 2 added project-aware local execution through the existing daemon HTTP API. Sprint 3 adds project-aware self-host Relay/MCP routing for remote planners. Sprint 4 adds a conservative user-level runtime supervisor, watchdog, and recovery surface. Sprint 5 adds a live execution matrix and readiness reports that distinguish deterministic checks, skipped live proof, and actual live executor/client evidence. Sprint 7 adds activation packages, client preflight artifacts, and a minimal single-user OAuth dev front-door for ChatGPT testing. Sprint 8 adds the official Gateway MCP surface in front of backend Relays. Codencer accepts approved work, routes it to a local project/runtime/executor, captures structured state and evidence, and returns that state to the planner. Codencer surfaces state; planner decides.
 
-Commercial Codencer Cloud is out of scope for this local production mode. The existing self-host relay, Gateway MVP, and cloud-control-plane code remain in the repository, but this page focuses on the local production, Gateway, and self-host Relay/MCP foundation.
+Commercial Codencer Cloud is out of scope for this local production mode. The existing self-host relay, Gateway RC surface, and cloud-control-plane code remain in the repository, but this page focuses on the local production, Gateway, and self-host Relay/MCP foundation.
 
 ## Modes
 

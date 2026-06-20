@@ -6,6 +6,11 @@ Status: `v0.3.0-local-prod-rc.1`
 License: Apache-2.0
 Primary path: local-first daemon, official Gateway MCP, self-host Relay backend
 
+This repository contains open-source Codencer Core plus self-hostable Gateway,
+Relay, MCP, connector, and community cloud-control-plane components. The
+official managed Codencer Cloud service is operated separately and is not
+shipped by this repository.
+
 Codencer is a bridge, not a planner. The planner decides. The executor works.
 Codencer accepts approved tasks or manifests, routes them to the right local
 project/runtime, records state and evidence, and returns structured results or
@@ -47,9 +52,10 @@ The v0.3 local/self-host RC includes:
 - manifest runner and deterministic fake profiles;
 - structured blockers and validation results;
 - self-host Relay;
-- official Gateway daemon (`codencer-gatewayd`);
+- self-hostable Gateway daemon (`codencer-gatewayd`) implementing the official
+  connector MCP surface;
 - persistent Gateway user/workspace store with device-code login;
-- default personal workspace and default official managed Relay profile;
+- default personal workspace and default managed Relay profile support;
 - Gateway relay profiles for routing to the default Relay or user-added
   self-host Relays;
 - local connector with explicit project sharing;
@@ -80,9 +86,10 @@ This repository does not claim:
   this repository;
 - production multi-user Gateway auth beyond bearer-dev and OAuth dev metadata.
 
-`codencer-gatewayd` is the open-source MVP for the official connector surface.
-The hosted Codencer Gateway/Cloud service is a future managed/commercial layer
-and is not the same thing as the OSS self-host Relay.
+`codencer-gatewayd` is the open-source Gateway implementation used for
+self-host deployments and controlled pre-production connector verification. The
+hosted Codencer Gateway/Cloud service is a separate managed/commercial layer and
+is not the same thing as the OSS self-host Relay.
 
 ## Quickstart: Local
 
@@ -336,6 +343,8 @@ official Codencer service.
 - [Official connector flow](docs/official-connector-flow.md)
 - [Account device login](docs/account-device-login.md)
 - [Relay profile registry](docs/relay-profile-registry.md)
+- [Gateway Console status](docs/gateway-console.md)
+- [Gateway Console design system](docs/ui/design-system.md)
 - [VPS Relay activation](docs/activation-vps-relay.md)
 - [Local connector activation](docs/activation-local-connector.md)
 - [Project config](docs/project-config.md)
@@ -346,10 +355,13 @@ official Codencer service.
 - [MCP integrations](docs/mcp/integrations.md)
 - [Relay MCP tools](docs/mcp/relay_tools.md)
 - [MCP Gateway model](docs/architecture/mcp-gateway-model.md)
+- [Official vs self-host](docs/architecture/official-vs-self-host.md)
+- [Public/private boundary](docs/architecture/public-private-boundary.md)
 - [Runtime supervisor](docs/runtime-supervisor.md)
 - [Live execution matrix](docs/live-execution-matrix.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Acceptance contract](docs/acceptance/local-production-v0.3.yaml)
+- [Public repo release acceptance](docs/acceptance/public-repo-release.yaml)
 - [codencer.dev update pack](docs/site-update-codencer-dev.md)
 
 Legacy v0.2 beta documents are archived under `docs/archive/v0.2-beta/`.
@@ -364,6 +376,8 @@ Core verification:
 gofmt -w ...
 go test ./...
 make build-codencer
+make build-supported
+make build-self-host-cloud   # optional self-host/community cloud-control-plane binaries
 make verify-project-config
 make verify-local-execution
 make verify-local-relay-mcp
@@ -374,6 +388,8 @@ make acceptance-local-production
 make verify-release
 make verify-local-prod
 make activation-preflight
+make verify-public-release
+make verify-gateway-console
 git diff --check
 ```
 

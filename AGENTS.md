@@ -1,63 +1,86 @@
-# Internal Development Rules (AI Assistants)
+# Codencer Agent Notes
 
-> [!IMPORTANT]
-> This file is for **AI Assistants (like Antigravity)** currently working **ON** the Codencer codebase.
-> If you are a specialized **Planner** or **Machine-Operator** using the Codencer Bridge, you **MUST** refer to the **[AI Operator Guide](docs/AI_OPERATOR_GUIDE.md)** as your canonical source of truth for runtime operations.
+This repo follows the global agent working agreement. This file adds only
+Codencer-specific facts and gates.
 
-## Role
-You are a principal engineer implementing a production-oriented local orchestration bridge for coding agents.
+## Project
 
-## General rules
-- follow the docs strictly
-- treat current code, tests, and smoke results as release truth when historical docs disagree
-- implement one phase at a time
-- do not widen scope
-- do not add new cloud product scope; existing self-host cloud control-plane code is in scope for truthful maintenance
-- do not skip tests
-- do not skip docs when behavior changes
-- do not bypass service boundaries
-- do not create fake placeholders unless explicitly necessary
+Codencer is a local/self-host bridge between AI planners and coding executors.
+It is a bridge, not a planner.
 
-## Architecture rules
-Keep separation between:
-- domain
-- state machine
-- services
-- storage
-- adapters
+Languages:
+
+- Go
+- TypeScript / React
+
+## Public Repository Scope
+
+Public Codencer includes:
+
 - CLI
-- MCP
-- IDE extension
+- local daemon
+- local connector
+- Relay
+- Gateway
+- MCP tools/protocol surfaces
+- public Gateway Console
+- self-host/community cloud-control-plane primitives
 
-The orchestrator is the control plane.
-The adapter is not the control plane.
-The IDE extension is not the control plane.
+## Private Managed Service Boundary
 
-## Quality bar
-Code must be:
-- typed
-- testable
-- explicit
-- small and readable
-- safe in error handling
-- operationally boring
+Do not implement or commit private managed-service material here:
 
-Prefer:
-- deterministic behavior
-- strong contracts
-- idempotent operations where practical
-- structured logs
-- narrow diffs
+- production `mcp.codencer.dev` or `relay.codencer.dev` deployment configs
+- production auth/provider/passwordless login
+- billing, plans, or quotas
+- hosted console commercial features
+- KMS/Vault credential storage
+- official connector credentials/secrets
+- managed runners or managed execution environments
+- support/admin console
+- marketplace submission credentials
 
-Avoid:
-- giant god files
-- hidden globals
-- provider leakage into core
-- clever but fragile abstractions
+## Source Of Truth
 
-## Forbidden shortcuts
-- do not put business logic in CLI handlers
-- do not let extension own orchestration state
-- do not store critical state only in memory
-- do not silently skip persistence
-- do not implement universal GUI automation early
+Use these files first when facts conflict:
+
+- `README.md`
+- `docs/architecture/public-private-boundary.md`
+- `docs/architecture/official-vs-self-host.md`
+- `docs/official-connector-flow.md`
+- `docs/relay-profile-registry.md`
+- `docs/ui/*`
+
+## Gotchas
+
+- Official connector clients point to Gateway, normally
+  `https://mcp.codencer.dev/mcp`.
+- Self-host Relay is a backend profile for the official connector path.
+- Direct self-host Relay MCP is advanced/personal/corporate/debug mode.
+- `NEXT_PUBLIC_*` values are build-time browser values; never put secrets in
+  them.
+- Do not render raw tokens, Relay bearer tokens, enrollment secrets, connector
+  private keys, or absolute local filesystem paths in UI.
+- Use Radix + Tailwind + the Codencer design system, not default shadcn visual
+  styling.
+
+## Validation Gates
+
+Go gates:
+
+- `go test ./...`
+- `make verify-official-connector`
+- `make verify-gateway`
+- `make verify-public-release`
+
+Gateway Console UI gates:
+
+- `cd web/gateway-console && npm ci`
+- `cd web/gateway-console && npm run lint`
+- `cd web/gateway-console && npm run typecheck`
+- `cd web/gateway-console && npm run test`
+- `cd web/gateway-console && npm run build`
+- `cd web/gateway-console && npm run test:e2e`
+- `make verify-gateway-console`
+
+Always run `git diff --check` before final reporting.

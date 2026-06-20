@@ -1,0 +1,83 @@
+version: 1
+name: public-repo-release
+goal: public open-source repository release boundary for Codencer Core and self-host components
+status: ready_when_verified
+verdict:
+  public_repo_release_readiness: go_when_all_required_checks_pass
+  self_host_gateway_relay_mcp: go_when_all_required_checks_pass
+  controlled_preprod_official_connector_path: go_when_all_required_checks_pass
+  public_managed_codencer_cloud_launch: no_go
+required_gates:
+  - id: public_private_boundary_docs_present
+    status: implemented
+    evidence:
+      - docs/architecture/public-private-boundary.md
+      - docs/architecture/official-vs-self-host.md
+  - id: license_notice_trademark_security_present
+    status: implemented
+    evidence:
+      - LICENSE
+      - NOTICE
+      - TRADEMARKS.md
+      - SECURITY.md
+      - CONTRIBUTING.md
+  - id: docs_navigation_present
+    status: implemented
+    evidence:
+      - README.md
+      - docs/README.md
+      - docs/architecture/README.md
+  - id: public_secret_config_scan
+    status: required
+    evidence:
+      - make verify-public-release
+    notes: Fails on committed non-example env files, private key blocks, obvious bearer-token leaks, real-user absolute paths, unsafe production endpoint placement, and release archives containing runtime state.
+  - id: official_connector_gateway_first
+    status: implemented
+    evidence:
+      - docs/official-connector-flow.md
+      - docs/activation-official-gateway.md
+      - docs/architecture/mcp-gateway-model.md
+    notes: AI clients point to Gateway; self-host Relay can be a backend profile.
+  - id: direct_self_host_mcp_marked_advanced
+    status: implemented
+    evidence:
+      - README.md
+      - docs/architecture/official-vs-self-host.md
+      - docs/architecture/mcp-gateway-model.md
+    notes: Direct Relay `/mcp` remains supported for advanced self-host, corporate internal, and debug deployments.
+  - id: gateway_console_not_implemented
+    status: documented
+    evidence:
+      - docs/gateway-console.md
+    notes: Hosted UI, billing, support/admin console, managed dashboards, and marketplace console remain future/private.
+  - id: release_artifact_boundary
+    status: implemented
+    evidence:
+      - internal/release/release.go
+      - make verify-release
+      - make verify-public-release
+    notes: Primary local/self-host release archives package core binaries and docs/legal/security files, not local runtime state or community cloud-control-plane binaries.
+  - id: self_host_cloud_control_plane_public_but_not_managed_cloud
+    status: documented
+    evidence:
+      - docs/CLOUD.md
+      - docs/CLOUD_SELF_HOST.md
+      - docs/architecture/public-private-boundary.md
+    notes: Generic self-host/community cloud-control-plane code stays public; private production managed Codencer Cloud remains separate.
+required_commands:
+  - gofmt -w ...
+  - go test ./...
+  - make verify-official-connector
+  - make verify-gateway
+  - make verify-release
+  - make verify-local-prod
+  - make activation-preflight
+  - make verify-docs-links
+  - make verify-public-release
+  - git diff --check
+known_limitations:
+  - Live ChatGPT, Codex, and Claude product-client proof remains pending unless operators run those products and save evidence.
+  - Public managed Codencer Cloud launch remains NO-GO until production auth, hosted console, billing/quotas, abuse controls, operations, and private managed deployment infrastructure exist.
+  - Windows-native daemon support is not claimed; Windows path remains WSL2/Linux.
+  - Release artifacts are not signed or notarized.

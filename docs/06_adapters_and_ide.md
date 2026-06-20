@@ -19,7 +19,7 @@ Conceptual interface:
 Why:
 - directly solves the immediate pain
 - strong local CLI and IDE support
-- first-class fit for MVP
+- first-class fit for the initial local bridge
 
 ### 3. Claude second
 Why:

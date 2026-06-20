@@ -55,7 +55,7 @@ Proof boundary:
 Build the cloud binaries with:
 
 ```bash
-make build-cloud
+make build-self-host-cloud
 ```
 
 This produces:
@@ -63,6 +63,8 @@ This produces:
 - `bin/codencer-cloudctl`
 - `bin/codencer-cloudd`
 - `bin/codencer-cloudworkerd`
+
+`make build-cloud` remains the low-level alias used by smoke targets.
 
 ## Docker Compose Quickstart
 

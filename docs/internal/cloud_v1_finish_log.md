@@ -230,14 +230,14 @@ Current repo truth at the start of this cloud run:
 
 Primary supporting file references:
 
-- [README.md](/Users/lookman/Projects/codencer/README.md)
-- [docs/01_product_scope.md](/Users/lookman/Projects/codencer/docs/01_product_scope.md)
-- [docs/02_architecture.md](/Users/lookman/Projects/codencer/docs/02_architecture.md)
-- [docs/SELF_HOST_REFERENCE.md](/Users/lookman/Projects/codencer/docs/SELF_HOST_REFERENCE.md)
-- [docs/RELAY.md](/Users/lookman/Projects/codencer/docs/RELAY.md)
-- [internal/relay/server.go](/Users/lookman/Projects/codencer/internal/relay/server.go)
-- [internal/relay/store/store.go](/Users/lookman/Projects/codencer/internal/relay/store/store.go)
-- [internal/storage/sqlite/migrations.go](/Users/lookman/Projects/codencer/internal/storage/sqlite/migrations.go)
+- [README.md](../../README.md)
+- [docs/01_product_scope.md](../01_product_scope.md)
+- [docs/02_architecture.md](../02_architecture.md)
+- [docs/SELF_HOST_REFERENCE.md](../SELF_HOST_REFERENCE.md)
+- [docs/RELAY.md](../RELAY.md)
+- [internal/relay/server.go](../../internal/relay/server.go)
+- [internal/relay/store/store.go](../../internal/relay/store/store.go)
+- [internal/storage/sqlite/migrations.go](../../internal/storage/sqlite/migrations.go)
 
 ## Reusable Foundations
 

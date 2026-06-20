@@ -9,6 +9,11 @@ Start here for the current open-source local/self-host RC:
 - [Official connector flow](official-connector-flow.md)
 - [Account device login](account-device-login.md)
 - [Relay profile registry](relay-profile-registry.md)
+- [Gateway Console status](gateway-console.md)
+- [Gateway Console design system](ui/design-system.md)
+- [Gateway Console layout rules](ui/layout-composition-rules.md)
+- [Gateway Console component inventory](ui/component-inventory.md)
+- [Gateway Console IA](ui/public-gateway-console-ia.md)
 - [Project config](project-config.md)
 - [VPS Relay activation](activation-vps-relay.md)
 - [Local connector activation](activation-local-connector.md)
@@ -30,8 +35,18 @@ Start here for the current open-source local/self-host RC:
 ## Release And Acceptance
 
 - [Acceptance contract](acceptance/local-production-v0.3.yaml)
+- [Public repo release acceptance](acceptance/public-repo-release.yaml)
 - [codencer.dev update pack](site-update-codencer-dev.md)
 - [Release checklist](release-checklist.md)
+- [Security policy](../SECURITY.md)
+- [Trademark policy](../TRADEMARKS.md)
+
+## Architecture And Boundary
+
+- [Architecture index](architecture/README.md)
+- [MCP Gateway model](architecture/mcp-gateway-model.md)
+- [Official vs self-host](architecture/official-vs-self-host.md)
+- [Public/private boundary](architecture/public-private-boundary.md)
 
 ## Historical Docs
 
