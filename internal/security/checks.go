@@ -174,9 +174,9 @@ func checkRelayAuthConfig(cfg local.Config, paths local.Paths) Check {
 }
 
 func checkRemotePathSanitizer() Check {
-	sample := []byte(`{"project":{"repo_root":"/Users/example/private/repo","allowed_paths":["."],"forbidden_paths":[".env"],"daemon_url":"http://127.0.0.1:8085"}}`)
+	sample := []byte(`{"project":{"repo_root":"/Users/example/private/repo","project_config_path":"/Users/example/private/repo/.codencer/project.json","allowed_paths":["."],"forbidden_paths":[".env"],"daemon_url":"http://127.0.0.1:8085"}}`)
 	out := string(SanitizeRemoteJSON(sample))
-	if strings.Contains(out, "/Users/example") || strings.Contains(out, "allowed_paths") || strings.Contains(out, "forbidden_paths") || strings.Contains(out, "daemon_url") {
+	if strings.Contains(out, "/Users/example") || strings.Contains(out, "project_config_path") || strings.Contains(out, "allowed_paths") || strings.Contains(out, "forbidden_paths") || strings.Contains(out, "daemon_url") {
 		return Check{ID: "security_remote_path_sanitizer", Status: StatusFailed, Required: true, Reason: "sanitizer leaked local path fields"}
 	}
 	return Check{ID: "security_remote_path_sanitizer", Status: StatusPassed, Required: true}

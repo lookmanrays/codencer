@@ -108,7 +108,7 @@ func sanitizeRemoteValue(value any) any {
 		for key, item := range typed {
 			lower := strings.ToLower(key)
 			switch lower {
-			case "repo_root", "allowed_paths", "forbidden_paths", "daemon_url":
+			case "repo_root", "project_config_path", "allowed_paths", "forbidden_paths", "daemon_url":
 				if lower == "repo_root" {
 					if path, ok := item.(string); ok {
 						label, hash := SafePathLabel(path)

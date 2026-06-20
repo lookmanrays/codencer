@@ -178,7 +178,7 @@ func TestRelayProjectLocationsRoutingAndMCPOutput(t *testing.T) {
 		t.Fatalf("mcp list projects failed: %+v", apiErr)
 	}
 	encoded, _ := json.Marshal(listResult.StructuredContent)
-	if strings.Contains(string(encoded), "/Users/example") || strings.Contains(string(encoded), "/home/example") {
+	if strings.Contains(string(encoded), "/Users/example") || strings.Contains(string(encoded), "/home/example") || strings.Contains(string(encoded), "project_config_path") {
 		t.Fatalf("MCP list_projects leaked absolute paths: %s", encoded)
 	}
 	projects, ok := listResult.StructuredContent.([]any)
@@ -223,7 +223,7 @@ func seedProjectLocation(t *testing.T, server *Server, store *Store, connectorID
 		RepoRoot:       repoRoot,
 		DefaultAdapter: "fake",
 		AdapterProfile: "fake-success",
-		ProjectJSON:    `{"id":"codencer","name":"Codencer","repo_root":"` + repoRoot + `","default_adapter":"fake","adapter_profile":"fake-success"}`,
+		ProjectJSON:    `{"id":"codencer","name":"Codencer","repo_root":"` + repoRoot + `","project_config_path":"` + repoRoot + `/.codencer/project.json","default_adapter":"fake","adapter_profile":"fake-success"}`,
 		LastSeenAt:     time.Now().UTC(),
 	}}); err != nil {
 		t.Fatal(err)

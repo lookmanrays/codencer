@@ -6,9 +6,9 @@ import (
 )
 
 func TestSanitizeRemoteJSONRemovesLocalPathFields(t *testing.T) {
-	in := []byte(`{"project":{"repo_root":"/Users/me/secret/repo","allowed_paths":["."],"forbidden_paths":[".env"],"daemon_url":"http://127.0.0.1:8085","id":"p"}}`)
+	in := []byte(`{"project":{"repo_root":"/Users/me/secret/repo","project_config_path":"/Users/me/secret/repo/.codencer/project.json","allowed_paths":["."],"forbidden_paths":[".env"],"daemon_url":"http://127.0.0.1:8085","id":"p"}}`)
 	out := string(SanitizeRemoteJSON(in))
-	for _, forbidden := range []string{"/Users/me", "allowed_paths", "forbidden_paths", "daemon_url"} {
+	for _, forbidden := range []string{"/Users/me", "project_config_path", "allowed_paths", "forbidden_paths", "daemon_url"} {
 		if strings.Contains(out, forbidden) {
 			t.Fatalf("sanitized payload leaked %q: %s", forbidden, out)
 		}
