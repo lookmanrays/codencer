@@ -16,10 +16,31 @@ const tones = {
   error: "border-error bg-paper-strong",
 };
 
-export function Alert({ children, className, title, tone = "neutral" }: AlertProps) {
+export function Alert({
+  children,
+  className,
+  title,
+  tone = "neutral",
+}: AlertProps) {
   return (
-    <div className={cn("rounded-[var(--radius-card)] border p-md", tones[tone], className)}>
-      <Badge variant={tone === "error" ? "error" : tone === "warning" ? "warning" : tone === "accent" ? "accent" : "neutral"}>
+    <div
+      className={cn(
+        "rounded-[var(--radius-card)] border p-md",
+        tones[tone],
+        className,
+      )}
+    >
+      <Badge
+        variant={
+          tone === "error"
+            ? "error"
+            : tone === "warning"
+              ? "warning"
+              : tone === "accent"
+                ? "accent"
+                : "neutral"
+        }
+      >
         {title}
       </Badge>
       <div className="mt-sm text-body-sm text-ink-secondary">{children}</div>

@@ -1,6 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type IconButtonProps = Omit<ButtonProps, "children" | "size"> & {
   icon: LucideIcon;

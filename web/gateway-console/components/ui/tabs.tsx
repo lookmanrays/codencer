@@ -37,6 +37,10 @@ export const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content className={cn("mt-md", className)} ref={ref} {...props} />
+  <TabsPrimitive.Content
+    className={cn("mt-md", className)}
+    ref={ref}
+    {...props}
+  />
 ));
 TabsContent.displayName = TabsPrimitive.Content.displayName;

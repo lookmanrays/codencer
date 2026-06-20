@@ -18,7 +18,9 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
       <div className="sticky top-0 flex min-h-dvh flex-col">
         <div className="border-b border-border p-md">
           <Link className="text-ink-primary no-underline" href="/console">
-            <span className="block text-h3 font-bold leading-none tracking-[-0.02em]">CODENCER</span>
+            <span className="block text-h3 font-bold leading-none tracking-[-0.02em]">
+              CODENCER
+            </span>
             {!collapsed ? (
               <span className="mt-xs block font-mono text-mono tracking-[0.04em] text-ink-muted">
                 Gateway Console
@@ -27,13 +29,21 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
           </Link>
         </div>
         <nav aria-label="Console" className="flex-1 p-sm">
-          <NavGroup collapsed={collapsed} items={consoleNav} pathname={pathname} />
+          <NavGroup
+            collapsed={collapsed}
+            items={consoleNav}
+            pathname={pathname}
+          />
           <div className="my-md border-t border-border" />
           <NavGroup collapsed={collapsed} items={authNav} pathname={pathname} />
         </nav>
         <div className="border-t border-border p-md">
           <Button asChild className="w-full" size="sm" variant="quiet">
-            <a href="https://github.com/lookmanrays/codencer" rel="noreferrer" target="_blank">
+            <a
+              href="https://github.com/lookmanrays/codencer"
+              rel="noreferrer"
+              target="_blank"
+            >
               {collapsed ? "GH" : "GitHub"}
             </a>
           </Button>
@@ -49,13 +59,20 @@ function NavGroup({
   pathname,
 }: {
   collapsed: boolean;
-  items: readonly { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
+  items: readonly {
+    href: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }[];
   pathname: string;
 }) {
   return (
     <ul className="m-0 grid list-none gap-xs p-0">
       {items.map((item) => {
-        const active = item.href === "/console" ? pathname === item.href : pathname.startsWith(item.href);
+        const active =
+          item.href === "/console"
+            ? pathname === item.href
+            : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (
           <li key={item.href}>

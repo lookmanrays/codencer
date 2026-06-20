@@ -40,7 +40,8 @@ export function OAuthConsentPanel() {
           Codencer Gateway OAuth consent
         </CardTitle>
         <p className="m-0 mt-xs text-body-sm text-ink-secondary">
-          This page mirrors OAuth dev consent. Production provider login remains private/future.
+          This page mirrors OAuth dev consent. Production provider login remains
+          private/future.
         </p>
       </CardHeader>
       <CardContent>
@@ -63,7 +64,9 @@ export function OAuthConsentPanel() {
         />
         {decision ? (
           <div className="mt-md rounded-[var(--radius-card)] border border-border bg-paper-tinted p-md">
-            <p className="m-0 font-semibold">Consent {decision} in mock mode.</p>
+            <p className="m-0 font-semibold">
+              Consent {decision} in mock mode.
+            </p>
             <p className="mb-0 mt-xs text-body-sm text-ink-secondary">
               No authorization code or token was issued.
             </p>
@@ -78,11 +81,19 @@ export function OAuthConsentPanel() {
               id="operator-code"
               label="Operator approval code"
             >
-              <Input id="operator-code" type="password" {...register("operatorCode")} />
+              <Input
+                id="operator-code"
+                type="password"
+                {...register("operatorCode")}
+              />
             </Field>
             <div className="flex flex-wrap gap-sm">
               <Button type="submit">Approve</Button>
-              <Button onClick={() => setDecision("denied")} type="button" variant="danger">
+              <Button
+                onClick={() => setDecision("denied")}
+                type="button"
+                variant="danger"
+              >
                 Deny
               </Button>
             </div>

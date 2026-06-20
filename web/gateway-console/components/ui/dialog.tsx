@@ -25,7 +25,11 @@ export const DialogContent = React.forwardRef<
     >
       {children}
       <DialogPrimitive.Close asChild>
-        <IconButton className="absolute right-3 top-3" icon={X} label="Close dialog" />
+        <IconButton
+          className="absolute right-3 top-3"
+          icon={X}
+          label="Close dialog"
+        />
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>

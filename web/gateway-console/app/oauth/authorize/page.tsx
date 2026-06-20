@@ -3,7 +3,10 @@ import { PageHeader } from "@/components/layout/page-header";
 
 export default function OAuthAuthorizePage() {
   return (
-    <main className="min-h-dvh bg-paper px-[var(--container-pad)] py-xl" id="main-content">
+    <main
+      className="min-h-dvh bg-paper px-[var(--container-pad)] py-xl"
+      id="main-content"
+    >
       <PageHeader
         description="Review client, workspace, resource, and scopes before consent."
         kicker="OAuth dev consent"

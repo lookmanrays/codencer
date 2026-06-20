@@ -11,11 +11,25 @@ type Row = Connector & { machine?: Machine };
 
 const columns: ColumnDef<Row>[] = [
   { header: "Connector", accessorKey: "label" },
-  { header: "Machine", cell: ({ row }) => row.original.machine?.hostLabel ?? row.original.machineId },
-  { header: "OS/Arch", cell: ({ row }) => `${row.original.machine?.os ?? "unknown"}/${row.original.machine?.arch ?? "unknown"}` },
+  {
+    header: "Machine",
+    cell: ({ row }) =>
+      row.original.machine?.hostLabel ?? row.original.machineId,
+  },
+  {
+    header: "OS/Arch",
+    cell: ({ row }) =>
+      `${row.original.machine?.os ?? "unknown"}/${row.original.machine?.arch ?? "unknown"}`,
+  },
   { header: "Relay", accessorKey: "relayProfileId" },
-  { header: "Status", cell: ({ row }) => <ConnectorStatusBadge connector={row.original} /> },
-  { header: "Last seen", cell: ({ row }) => formatDateTime(row.original.lastSeen) },
+  {
+    header: "Status",
+    cell: ({ row }) => <ConnectorStatusBadge connector={row.original} />,
+  },
+  {
+    header: "Last seen",
+    cell: ({ row }) => formatDateTime(row.original.lastSeen),
+  },
 ];
 
 export function MachineConnectorTable({
@@ -31,7 +45,12 @@ export function MachineConnectorTable({
   }));
   return (
     <div className="grid gap-md">
-      <DataTable columns={columns} data={rows} emptyDescription="Run connector login to bind a local machine." emptyTitle="No connectors" />
+      <DataTable
+        columns={columns}
+        data={rows}
+        emptyDescription="Run connector login to bind a local machine."
+        emptyTitle="No connectors"
+      />
       <CommandBlock
         command="codencer connector login --gateway https://mcp.codencer.dev --relay default --json"
         title="Connector login command"

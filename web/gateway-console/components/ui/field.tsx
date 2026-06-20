@@ -11,7 +11,14 @@ type FieldProps = {
   className?: string;
 };
 
-export function Field({ children, className, description, error, id, label }: FieldProps) {
+export function Field({
+  children,
+  className,
+  description,
+  error,
+  id,
+  label,
+}: FieldProps) {
   return (
     <div className={cn("flex flex-col gap-[6px]", className)}>
       <Label htmlFor={id}>{label}</Label>
@@ -24,10 +31,16 @@ export function Field({ children, className, description, error, id, label }: Fi
   );
 }
 
-export function FormMessage({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
+export function FormMessage({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
     <p
-      className={cn("m-0 font-mono text-mono tracking-[0.04em] text-error", className)}
+      className={cn(
+        "m-0 font-mono text-mono tracking-[0.04em] text-error",
+        className,
+      )}
       {...props}
     />
   );

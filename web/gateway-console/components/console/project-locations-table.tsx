@@ -11,8 +11,14 @@ const columns: ColumnDef<Row>[] = [
   { header: "Project", accessorKey: "projectName" },
   { header: "Relay", accessorKey: "relayProfileId" },
   { header: "Machine", accessorKey: "hostLabel" },
-  { header: "Repo", cell: ({ row }) => `${row.original.repoLabel} · ${row.original.repoHash}` },
-  { header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
+  {
+    header: "Repo",
+    cell: ({ row }) => `${row.original.repoLabel} · ${row.original.repoHash}`,
+  },
+  {
+    header: "Status",
+    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+  },
   {
     header: "Ambiguity",
     cell: ({ row }) =>
@@ -26,7 +32,10 @@ const columns: ColumnDef<Row>[] = [
 
 export function ProjectLocationsTable({ projects }: { projects: Project[] }) {
   const rows = projects.flatMap((project) =>
-    project.locations.map((location) => ({ ...location, projectName: project.name })),
+    project.locations.map((location) => ({
+      ...location,
+      projectName: project.name,
+    })),
   );
   return (
     <DataTable

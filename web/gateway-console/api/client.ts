@@ -7,13 +7,18 @@ import {
 import { mockSnapshot } from "@/api/mock-data";
 
 const useMocks = process.env.NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS !== "false";
-const gatewayBase = process.env.NEXT_PUBLIC_CODENCER_GATEWAY_API_BASE ?? "http://127.0.0.1:19090";
+const gatewayBase =
+  process.env.NEXT_PUBLIC_CODENCER_GATEWAY_API_BASE ?? "http://127.0.0.1:19090";
 
 export function isMockMode() {
   return useMocks;
 }
 
-async function fetchJSON<T>(path: string, schema: z.ZodSchema<T>, init?: RequestInit): Promise<T> {
+async function fetchJSON<T>(
+  path: string,
+  schema: z.ZodSchema<T>,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(`${gatewayBase}${path}`, {
     ...init,
     headers: {
@@ -33,7 +38,10 @@ export async function getConsoleSnapshot(): Promise<ConsoleSnapshot> {
     return ConsoleSnapshotSchema.parse(mockSnapshot);
   }
 
-  const relays = await fetchJSON("/api/gateway/v1/relays", RelayListResponseSchema);
+  const relays = await fetchJSON(
+    "/api/gateway/v1/relays",
+    RelayListResponseSchema,
+  );
   return ConsoleSnapshotSchema.parse({
     ...mockSnapshot,
     workspace: { ...mockSnapshot.workspace, mode: "self_host" },
@@ -44,7 +52,9 @@ export async function getConsoleSnapshot(): Promise<ConsoleSnapshot> {
       url: relay.url,
       tokenRef: relay.token_env ?? relay.token_file ?? "server-side",
       enabled: relay.enabled,
-      status: relay.enabled ? ((relay.status as "available" | "unavailable") ?? "checking") : "disabled",
+      status: relay.enabled
+        ? ((relay.status as "available" | "unavailable") ?? "checking")
+        : "disabled",
     })),
   });
 }

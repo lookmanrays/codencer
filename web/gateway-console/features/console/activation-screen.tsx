@@ -8,12 +8,18 @@ import { ConsoleData } from "@/features/console/use-console-data";
 export function ActivationScreen() {
   return (
     <PageShell
-      breadcrumbs={[{ label: "Console", href: "/console" }, { label: "Activation" }]}
+      breadcrumbs={[
+        { label: "Console", href: "/console" },
+        { label: "Activation" },
+      ]}
       description="Copy safe Gateway-first commands for CLI login, connector binding, project sharing, MCP setup, and smoke checks."
       kicker="Activation"
       title="Gateway-first setup"
     >
-      <ConsoleData emptyDescription="Activation commands are generated from the console data layer." emptyTitle="No activation commands">
+      <ConsoleData
+        emptyDescription="Activation commands are generated from the console data layer."
+        emptyTitle="No activation commands"
+      >
         {(snapshot) => (
           <div className="grid gap-lg">
             <OfficialGatewayNotice />

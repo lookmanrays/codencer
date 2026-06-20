@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
 import { PageShell } from "@/components/layout/page-shell";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ConsoleData } from "@/features/console/use-console-data";
 import type { AuditEvent } from "@/schemas/console";
 
@@ -29,16 +35,30 @@ export function AuditScreen() {
       kicker="Audit / events"
       title="Workspace event stream"
     >
-      <ConsoleData emptyDescription="No events have been recorded." emptyTitle="No audit events">
-        {(snapshot) => <AuditContent events={snapshot.auditEvents} filter={filter} />}
+      <ConsoleData
+        emptyDescription="No events have been recorded."
+        emptyTitle="No audit events"
+      >
+        {(snapshot) => (
+          <AuditContent events={snapshot.auditEvents} filter={filter} />
+        )}
       </ConsoleData>
     </PageShell>
   );
 }
 
-function AuditContent({ events, filter }: { events: AuditEvent[]; filter: string }) {
+function AuditContent({
+  events,
+  filter,
+}: {
+  events: AuditEvent[];
+  filter: string;
+}) {
   const filtered = useMemo(
-    () => (filter === "all" ? events : events.filter((event) => event.type === filter)),
+    () =>
+      filter === "all"
+        ? events
+        : events.filter((event) => event.type === filter),
     [events, filter],
   );
   return <AuditEventTimeline events={filtered} />;

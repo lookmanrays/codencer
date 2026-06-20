@@ -24,7 +24,11 @@ export function Topbar({
     <header className="sticky top-0 z-30 border-b border-border bg-paper/95 backdrop-blur">
       <div className="flex min-h-[64px] items-center justify-between gap-md px-md">
         <div className="flex min-w-0 items-center gap-sm">
-          <IconButton icon={Menu} label="Toggle sidebar" onClick={onToggleSidebar} />
+          <IconButton
+            icon={Menu}
+            label="Toggle sidebar"
+            onClick={onToggleSidebar}
+          />
           <div className="min-w-0">
             <p className="m-0 truncate font-semibold">{workspaceName}</p>
             <p className="m-0 font-mono text-mono tracking-[0.04em] text-ink-muted">

@@ -10,12 +10,18 @@ import { ConsoleData } from "@/features/console/use-console-data";
 export function RelaysScreen() {
   return (
     <PageShell
-      breadcrumbs={[{ label: "Console", href: "/console" }, { label: "Relays" }]}
+      breadcrumbs={[
+        { label: "Console", href: "/console" },
+        { label: "Relays" },
+      ]}
       description="Manage Gateway backend Relay profiles without exposing Relay bearer tokens to AI clients."
       kicker="Relay profiles"
       title="Gateway routing backends"
     >
-      <ConsoleData emptyDescription="Add a backend Relay profile to route projects." emptyTitle="No Relay profiles">
+      <ConsoleData
+        emptyDescription="Add a backend Relay profile to route projects."
+        emptyTitle="No Relay profiles"
+      >
         {(snapshot) => (
           <div className="grid gap-lg">
             <OfficialGatewayNotice />

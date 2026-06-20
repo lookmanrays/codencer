@@ -43,7 +43,9 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-xs">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.Viewport className="p-xs">
+        {children}
+      </SelectPrimitive.Viewport>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 ));

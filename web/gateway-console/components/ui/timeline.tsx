@@ -13,12 +13,17 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
     <ol className="m-0 grid list-none gap-md p-0">
       {items.map((item) => (
         <li className="grid grid-cols-[18px_1fr] gap-md" key={item.id}>
-          <span aria-hidden="true" className="mt-[0.55rem] h-2 w-2 rounded-full bg-accent" />
+          <span
+            aria-hidden="true"
+            className="mt-[0.55rem] h-2 w-2 rounded-full bg-accent"
+          />
           <div className="border-b border-border pb-md">
             <div className="flex flex-wrap items-start justify-between gap-sm">
               <div>
                 <p className="m-0 font-semibold">{item.title}</p>
-                <p className="m-0 mt-xs text-body-sm text-ink-secondary">{item.description}</p>
+                <p className="m-0 mt-xs text-body-sm text-ink-secondary">
+                  {item.description}
+                </p>
               </div>
               <StatusBadge status={item.status} />
             </div>

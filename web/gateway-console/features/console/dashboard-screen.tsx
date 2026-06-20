@@ -3,7 +3,11 @@
 import { Boxes, Cable, MonitorCog, Route } from "lucide-react";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
 import { McpEndpointCard } from "@/components/console/mcp-endpoint-card";
-import { MockModeNotice, OfficialGatewayNotice, SelfHostModeNotice } from "@/components/console/mode-notices";
+import {
+  MockModeNotice,
+  OfficialGatewayNotice,
+  SelfHostModeNotice,
+} from "@/components/console/mode-notices";
 import { WorkspaceSummaryCard } from "@/components/console/workspace-summary-card";
 import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,10 +35,34 @@ export function DashboardScreen() {
               <McpEndpointCard endpoint={snapshot.mcpEndpoint} />
             </div>
             <div className="grid gap-md md:grid-cols-2 xl:grid-cols-4">
-              <StatCard description="Enabled Gateway backend profiles." icon={Cable} label="Relays" value={countBy(snapshot.relays, (relay) => relay.enabled)} />
-              <StatCard description="Machines with explicit connector bindings." icon={MonitorCog} label="Connectors" value={snapshot.connectors.length} />
-              <StatCard description="Shared projects visible through Relay profiles." icon={Boxes} label="Projects" value={snapshot.projects.length} />
-              <StatCard description="Locations that need deterministic selectors." icon={Route} label="Ambiguities" value={snapshot.projects.flatMap((p) => p.locations).filter((loc) => loc.ambiguity !== "none").length} />
+              <StatCard
+                description="Enabled Gateway backend profiles."
+                icon={Cable}
+                label="Relays"
+                value={countBy(snapshot.relays, (relay) => relay.enabled)}
+              />
+              <StatCard
+                description="Machines with explicit connector bindings."
+                icon={MonitorCog}
+                label="Connectors"
+                value={snapshot.connectors.length}
+              />
+              <StatCard
+                description="Shared projects visible through Relay profiles."
+                icon={Boxes}
+                label="Projects"
+                value={snapshot.projects.length}
+              />
+              <StatCard
+                description="Locations that need deterministic selectors."
+                icon={Route}
+                label="Ambiguities"
+                value={
+                  snapshot.projects
+                    .flatMap((p) => p.locations)
+                    .filter((loc) => loc.ambiguity !== "none").length
+                }
+              />
             </div>
             <div className="grid gap-lg xl:grid-cols-[1fr_1.2fr]">
               <WorkspaceSummaryCard snapshot={snapshot} />
@@ -43,7 +71,12 @@ export function DashboardScreen() {
                   <CardTitle>Next activation step</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <CommandBlock command={snapshot.activationCommands[0]?.command ?? "codencer login --gateway https://mcp.codencer.dev"} />
+                  <CommandBlock
+                    command={
+                      snapshot.activationCommands[0]?.command ??
+                      "codencer login --gateway https://mcp.codencer.dev"
+                    }
+                  />
                 </CardContent>
               </Card>
             </div>

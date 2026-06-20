@@ -15,7 +15,8 @@ type UIState = {
 export const useUIStore = create<UIState>((set) => ({
   sidebarCollapsed: false,
   theme: "light",
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   setTheme: (theme) => set({ theme }),
 }));

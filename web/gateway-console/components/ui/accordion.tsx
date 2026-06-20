@@ -10,7 +10,11 @@ export const AccordionItem = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>
 >(({ className, ...props }, ref) => (
-  <AccordionPrimitive.Item className={cn("border-b border-border", className)} ref={ref} {...props} />
+  <AccordionPrimitive.Item
+    className={cn("border-b border-border", className)}
+    ref={ref}
+    {...props}
+  />
 ));
 AccordionItem.displayName = AccordionPrimitive.Item.displayName;
 
@@ -20,7 +24,10 @@ export const AccordionTrigger = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <AccordionPrimitive.Header>
     <AccordionPrimitive.Trigger
-      className={cn("flex w-full items-center justify-between py-md text-left font-semibold", className)}
+      className={cn(
+        "flex w-full items-center justify-between py-md text-left font-semibold",
+        className,
+      )}
       ref={ref}
       {...props}
     >
@@ -35,6 +42,10 @@ export const AccordionContent = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>
 >(({ className, ...props }, ref) => (
-  <AccordionPrimitive.Content className={cn("pb-md text-body-sm text-ink-secondary", className)} ref={ref} {...props} />
+  <AccordionPrimitive.Content
+    className={cn("pb-md text-body-sm text-ink-secondary", className)}
+    ref={ref}
+    {...props}
+  />
 ));
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;

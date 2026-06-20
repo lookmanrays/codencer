@@ -20,7 +20,11 @@ export function DataTable<TData>({
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
-  const table = useReactTable({ columns, data, getCoreRowModel: getCoreRowModel() });
+  const table = useReactTable({
+    columns,
+    data,
+    getCoreRowModel: getCoreRowModel(),
+  });
   if (data.length === 0) {
     return <EmptyState description={emptyDescription} title={emptyTitle} />;
   }
@@ -38,7 +42,10 @@ export function DataTable<TData>({
                 >
                   {header.isPlaceholder
                     ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )}
                 </th>
               ))}
             </tr>
@@ -46,9 +53,15 @@ export function DataTable<TData>({
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr className={cn("border-b border-border last:border-b-0")} key={row.id}>
+            <tr
+              className={cn("border-b border-border last:border-b-0")}
+              key={row.id}
+            >
               {row.getVisibleCells().map((cell) => (
-                <td className="px-md py-sm align-top text-body-sm" key={cell.id}>
+                <td
+                  className="px-md py-sm align-top text-body-sm"
+                  key={cell.id}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

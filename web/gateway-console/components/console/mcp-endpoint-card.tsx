@@ -21,8 +21,14 @@ export function McpEndpointCard({ endpoint }: { endpoint: string }) {
         <KeyValueList
           items={[
             { label: "Endpoint", value: <code>{endpoint}</code> },
-            { label: "Client rule", value: "ChatGPT, Claude Code, and Codex connect to Gateway." },
-            { label: "Relay token", value: "Resolved server-side; never shown to AI clients." },
+            {
+              label: "Client rule",
+              value: "ChatGPT, Claude Code, and Codex connect to Gateway.",
+            },
+            {
+              label: "Relay token",
+              value: "Resolved server-side; never shown to AI clients.",
+            },
           ]}
         />
       </CardContent>

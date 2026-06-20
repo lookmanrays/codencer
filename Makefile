@@ -214,6 +214,8 @@ verify-public-release: verify-docs-links
 verify-gateway-console:
 	@echo "==> Installing Gateway Console dependencies..."
 	@cd web/gateway-console && npm ci
+	@echo "==> Checking Gateway Console formatting..."
+	@cd web/gateway-console && npm run format:check
 	@echo "==> Linting Gateway Console..."
 	@cd web/gateway-console && npm run lint
 	@echo "==> Typechecking Gateway Console..."

@@ -7,29 +7,67 @@ import { MachineConnectorTable } from "@/components/console/machine-connector-ta
 import { ProjectLocationsTable } from "@/components/console/project-locations-table";
 import { ActivationCommandPanel } from "@/components/console/activation-command-panel";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
-import { MockModeNotice, OfficialGatewayNotice, SelfHostModeNotice } from "@/components/console/mode-notices";
+import {
+  MockModeNotice,
+  OfficialGatewayNotice,
+  SelfHostModeNotice,
+} from "@/components/console/mode-notices";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PageShell } from "@/components/layout/page-shell";
 import { Alert } from "@/components/ui/alert";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommandBlock } from "@/components/ui/code-block";
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { mockSnapshot } from "@/api/mock-data";
 
 const colors = [
@@ -76,9 +114,14 @@ export default function UISystemPage() {
           <div className="grid gap-md sm:grid-cols-2 lg:grid-cols-4">
             {colors.map((name) => (
               <Card key={name}>
-                <div className="aspect-[16/10]" style={{ background: `var(--color-${name})` }} />
+                <div
+                  className="aspect-[16/10]"
+                  style={{ background: `var(--color-${name})` }}
+                />
                 <CardContent>
-                  <p className="m-0 font-mono text-mono tracking-[0.04em]">--color-{name}</p>
+                  <p className="m-0 font-mono text-mono tracking-[0.04em]">
+                    --color-{name}
+                  </p>
                 </CardContent>
               </Card>
             ))}
@@ -86,8 +129,13 @@ export default function UISystemPage() {
           <Card>
             <CardContent>
               {typeRows.map(([name, className, sample]) => (
-                <div className="grid grid-cols-[180px_1fr] items-baseline gap-md border-t border-border py-md first:border-t-0 max-md:grid-cols-1" key={name}>
-                  <span className="font-mono text-mono text-ink-muted">--text-{name}</span>
+                <div
+                  className="grid grid-cols-[180px_1fr] items-baseline gap-md border-t border-border py-md first:border-t-0 max-md:grid-cols-1"
+                  key={name}
+                >
+                  <span className="font-mono text-mono text-ink-muted">
+                    --text-{name}
+                  </span>
                   <span className={`${className} leading-tight`}>{sample}</span>
                 </div>
               ))}
@@ -101,7 +149,9 @@ export default function UISystemPage() {
             {[1, 2, 3].map((item) => (
               <Card key={item}>
                 <CardContent>
-                  <p className="m-0 font-mono text-mono">dashboard grid {item}</p>
+                  <p className="m-0 font-mono text-mono">
+                    dashboard grid {item}
+                  </p>
                   <p className="mb-0 mt-sm text-body-sm text-ink-secondary">
                     Cards keep 4px radius, 1px warm borders, and clear density.
                   </p>
@@ -134,7 +184,10 @@ export default function UISystemPage() {
             </CardHeader>
             <CardContent className="grid gap-md md:grid-cols-2">
               <Field id="demo-input" label="Input">
-                <Input id="demo-input" placeholder="https://relay.example.com" />
+                <Input
+                  id="demo-input"
+                  placeholder="https://relay.example.com"
+                />
               </Field>
               <Field id="demo-textarea" label="Textarea">
                 <Textarea id="demo-textarea" placeholder="Operator note" />
@@ -172,10 +225,14 @@ export default function UISystemPage() {
             <CardContent className="flex flex-wrap gap-sm">
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button data-testid="dialog-open" variant="quiet">Open dialog</Button>
+                  <Button data-testid="dialog-open" variant="quiet">
+                    Open dialog
+                  </Button>
                 </DialogTrigger>
                 <DialogContent>
-                  <DialogTitle className="m-0 text-h3 font-bold">Gateway dialog</DialogTitle>
+                  <DialogTitle className="m-0 text-h3 font-bold">
+                    Gateway dialog
+                  </DialogTitle>
                   <DialogDescription className="mt-sm text-body text-ink-secondary">
                     Focus is trapped and Escape closes the dialog.
                   </DialogDescription>
@@ -186,7 +243,9 @@ export default function UISystemPage() {
                   <Button variant="danger">Confirm destructive action</Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
-                  <AlertDialogTitle className="m-0 text-h3 font-bold">Remove profile?</AlertDialogTitle>
+                  <AlertDialogTitle className="m-0 text-h3 font-bold">
+                    Remove profile?
+                  </AlertDialogTitle>
                   <AlertDialogDescription className="mt-sm text-body text-ink-secondary">
                     Destructive actions require confirmation.
                   </AlertDialogDescription>
@@ -198,7 +257,9 @@ export default function UISystemPage() {
               </AlertDialog>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button data-testid="dropdown-open" variant="quiet"><MoreHorizontal className="h-4 w-4" /> Menu</Button>
+                  <Button data-testid="dropdown-open" variant="quiet">
+                    <MoreHorizontal className="h-4 w-4" /> Menu
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem>Copy command</DropdownMenuItem>
@@ -209,7 +270,9 @@ export default function UISystemPage() {
                 <PopoverTrigger asChild>
                   <Button variant="quiet">Popover</Button>
                 </PopoverTrigger>
-                <PopoverContent>Relay tokens resolve server-side.</PopoverContent>
+                <PopoverContent>
+                  Relay tokens resolve server-side.
+                </PopoverContent>
               </Popover>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -242,12 +305,16 @@ export default function UISystemPage() {
           </div>
           <RelayProfileCard relay={mockSnapshot.relays[0]!} />
           <RelayProfileForm />
-          <MachineConnectorTable connectors={mockSnapshot.connectors} machines={mockSnapshot.machines} />
+          <MachineConnectorTable
+            connectors={mockSnapshot.connectors}
+            machines={mockSnapshot.machines}
+          />
           <ProjectLocationsTable projects={mockSnapshot.projects} />
           <ActivationCommandPanel commands={mockSnapshot.activationCommands} />
           <AuditEventTimeline events={mockSnapshot.auditEvents} />
           <Alert title="No color-only status">
-            Status text and badge tone are both rendered so color is not the only communication channel.
+            Status text and badge tone are both rendered so color is not the
+            only communication channel.
           </Alert>
           <Separator />
         </section>

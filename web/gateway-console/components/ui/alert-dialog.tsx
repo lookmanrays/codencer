@@ -28,7 +28,10 @@ export const AlertDialogContent = React.forwardRef<
 ));
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName;
 
-export const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+export const AlertDialogFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("mt-lg flex justify-end gap-sm", className)} {...props} />
 );
 export const AlertDialogCancel = React.forwardRef<

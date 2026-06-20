@@ -2,7 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KeyValueList } from "@/components/ui/key-value-list";
 import type { ConsoleSnapshot } from "@/schemas/console";
 
-export function WorkspaceSummaryCard({ snapshot }: { snapshot: ConsoleSnapshot }) {
+export function WorkspaceSummaryCard({
+  snapshot,
+}: {
+  snapshot: ConsoleSnapshot;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -11,7 +15,10 @@ export function WorkspaceSummaryCard({ snapshot }: { snapshot: ConsoleSnapshot }
       <CardContent>
         <KeyValueList
           items={[
-            { label: "Mode", value: snapshot.workspace.mode.replaceAll("_", " ") },
+            {
+              label: "Mode",
+              value: snapshot.workspace.mode.replaceAll("_", " "),
+            },
             { label: "User", value: snapshot.user.email },
             { label: "Relays", value: snapshot.relays.length },
             { label: "Connectors", value: snapshot.connectors.length },

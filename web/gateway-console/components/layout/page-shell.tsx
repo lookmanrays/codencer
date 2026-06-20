@@ -16,7 +16,10 @@ export function PageShell({
   title: string;
 }) {
   return (
-    <main className="mx-auto w-full max-w-[var(--container-max)] px-[var(--container-pad)] py-lg" id="main-content">
+    <main
+      className="mx-auto w-full max-w-[var(--container-max)] px-[var(--container-pad)] py-lg"
+      id="main-content"
+    >
       <PageHeader
         actions={actions}
         breadcrumbs={breadcrumbs}

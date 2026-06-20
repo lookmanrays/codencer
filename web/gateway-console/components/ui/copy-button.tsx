@@ -18,5 +18,11 @@ export function CopyButton({ label = "Copy", value }: CopyButtonProps) {
     window.setTimeout(() => setCopied(false), 1200);
   }
 
-  return <IconButton icon={copied ? Check : Copy} label={copied ? "Copied" : label} onClick={copy} />;
+  return (
+    <IconButton
+      icon={copied ? Check : Copy}
+      label={copied ? "Copied" : label}
+      onClick={copy}
+    />
+  );
 }

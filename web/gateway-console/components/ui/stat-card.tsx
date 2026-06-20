@@ -10,7 +10,13 @@ type StatCardProps = {
   className?: string;
 };
 
-export function StatCard({ className, description, icon: Icon, label, value }: StatCardProps) {
+export function StatCard({
+  className,
+  description,
+  icon: Icon,
+  label,
+  value,
+}: StatCardProps) {
   return (
     <Card className={cn("border-l-[3px] border-l-accent", className)}>
       <CardContent>
@@ -21,9 +27,13 @@ export function StatCard({ className, description, icon: Icon, label, value }: S
             </p>
             <p className="m-0 mt-sm text-h2 font-bold leading-tight">{value}</p>
           </div>
-          {Icon ? <Icon aria-hidden="true" className="h-5 w-5 text-accent" /> : null}
+          {Icon ? (
+            <Icon aria-hidden="true" className="h-5 w-5 text-accent" />
+          ) : null}
         </div>
-        <p className="mb-0 mt-md text-body-sm text-ink-secondary">{description}</p>
+        <p className="mb-0 mt-md text-body-sm text-ink-secondary">
+          {description}
+        </p>
       </CardContent>
     </Card>
   );

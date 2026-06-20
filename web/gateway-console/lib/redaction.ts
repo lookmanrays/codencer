@@ -8,11 +8,17 @@ const secretPatterns = [
 const absolutePathPatterns = [/\/Users\/[^\s"']+/g, /\/home\/[^\s"']+/g];
 
 export function redactSecret(value: string) {
-  return secretPatterns.reduce((out, pattern) => out.replace(pattern, "[redacted]"), value);
+  return secretPatterns.reduce(
+    (out, pattern) => out.replace(pattern, "[redacted]"),
+    value,
+  );
 }
 
 export function stripAbsolutePaths(value: string) {
-  return absolutePathPatterns.reduce((out, pattern) => out.replace(pattern, "<local-path>"), value);
+  return absolutePathPatterns.reduce(
+    (out, pattern) => out.replace(pattern, "<local-path>"),
+    value,
+  );
 }
 
 export function sanitizeForDisplay(value: string) {

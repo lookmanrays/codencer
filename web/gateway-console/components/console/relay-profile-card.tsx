@@ -1,7 +1,13 @@
 import { MoreHorizontal } from "lucide-react";
 import { RelayHealthBadge } from "@/components/console/relay-health-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +30,9 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
           <div>
             <CardTitle>{relay.name}</CardTitle>
             <p className="m-0 mt-xs text-body-sm text-ink-secondary">
-              {relay.type === "managed" ? "Default managed Relay profile" : "User-added backend Relay profile"}
+              {relay.type === "managed"
+                ? "Default managed Relay profile"
+                : "User-added backend Relay profile"}
             </p>
           </div>
           <RelayHealthBadge relay={relay} />
@@ -52,9 +60,12 @@ export function RelayProfileCard({ relay }: { relay: RelayProfile }) {
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
-            <AlertDialogTitle className="m-0 text-h3 font-bold">Remove Relay profile?</AlertDialogTitle>
+            <AlertDialogTitle className="m-0 text-h3 font-bold">
+              Remove Relay profile?
+            </AlertDialogTitle>
             <AlertDialogDescription className="mt-sm text-body text-ink-secondary">
-              This is a placeholder confirmation. Backend removal is not wired from mock mode.
+              This is a placeholder confirmation. Backend removal is not wired
+              from mock mode.
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>

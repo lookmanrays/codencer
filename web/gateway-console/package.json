@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"
+    "format:check": "prettier --check .",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

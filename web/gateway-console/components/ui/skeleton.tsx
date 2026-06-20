@@ -1,7 +1,15 @@
 import { cn } from "@/lib/cn";
 
-export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("animate-pulse rounded-[2px] bg-border", className)} {...props} />;
+export function Skeleton({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("animate-pulse rounded-[2px] bg-border", className)}
+      {...props}
+    />
+  );
 }
 
 export function LoadingPanel() {

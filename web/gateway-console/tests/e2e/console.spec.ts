@@ -51,8 +51,11 @@ test("keyboard navigation opens dialog and dropdown", async ({ page }) => {
   await page.getByTestId("dialog-open").focus();
   await page.keyboard.press("Enter");
   await expect(page.getByText(/focus is trapped/i)).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page.getByTestId("dropdown-open").focus();
-  await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("menuitem", { name: /copy command/i })).toBeVisible();
+  await page.getByRole("button", { name: /close dialog/i }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/focus is trapped/i)).toBeHidden();
+  await page.getByTestId("dropdown-open").press("Enter");
+  await expect(
+    page.getByRole("menuitem", { name: /copy command/i }),
+  ).toBeVisible();
 });
