@@ -19,12 +19,12 @@ export function SelfHostModeNotice() {
   );
 }
 
-export function MockModeNotice() {
+export function DemoModeNotice() {
   return (
-    <Alert title="Mock data mode" tone="warning">
-      This console is rendering seeded demo data because{" "}
-      <code>NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS</code> is enabled. Backend
-      completion is not being faked.
+    <Alert title="Demo data mode" tone="warning">
+      This console is rendering explicit demo data because{" "}
+      <code>NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo</code> is set. Live mode is
+      the default and never falls back to demo fixtures.
     </Alert>
   );
 }

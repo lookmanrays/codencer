@@ -2,12 +2,20 @@
 
 import { RelayProfileCard } from "@/components/console/relay-profile-card";
 import { RelayProfileForm } from "@/components/console/relay-profile-form";
-import { OfficialGatewayNotice } from "@/components/console/mode-notices";
+import {
+  DemoModeNotice,
+  OfficialGatewayNotice,
+} from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
+import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ConsoleData } from "@/features/console/use-console-data";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LoadingPanel } from "@/components/ui/skeleton";
+import { isDemoMode } from "@/api/config";
+import { useRelayProfiles } from "@/api/relays";
 
 export function RelaysScreen() {
+  const relays = useRelayProfiles();
   return (
     <PageShell
       breadcrumbs={[
@@ -18,29 +26,38 @@ export function RelaysScreen() {
       kicker="Relay profiles"
       title="Gateway routing backends"
     >
-      <ConsoleData
-        emptyDescription="Add a backend Relay profile to route projects."
-        emptyTitle="No Relay profiles"
-      >
-        {(snapshot) => (
-          <div className="grid min-w-0 max-w-full gap-lg">
-            <OfficialGatewayNotice />
+      {relays.isLoading ? <LoadingPanel /> : null}
+      {relays.error ? (
+        <Alert title="Relay API unavailable" tone="error">
+          {relays.error.message}
+        </Alert>
+      ) : null}
+      {relays.data ? (
+        <div className="grid min-w-0 max-w-full gap-lg">
+          {isDemoMode() ? <DemoModeNotice /> : null}
+          <OfficialGatewayNotice />
+          {relays.data.relays.length === 0 ? (
+            <EmptyState
+              description="Add a backend Relay profile to route projects."
+              title="No Relay profiles"
+            />
+          ) : (
             <div className="grid min-w-0 gap-md lg:grid-cols-2">
-              {snapshot.relays.map((relay) => (
+              {relays.data.relays.map((relay) => (
                 <RelayProfileCard key={relay.id} relay={relay} />
               ))}
             </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Add self-host Relay profile</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <RelayProfileForm />
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </ConsoleData>
+          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Add self-host Relay profile</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RelayProfileForm />
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </PageShell>
   );
 }

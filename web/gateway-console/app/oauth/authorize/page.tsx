@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { OAuthConsentPanel } from "@/components/console/oauth-consent-panel";
 import { PageHeader } from "@/components/layout/page-header";
+import { LoadingPanel } from "@/components/ui/skeleton";
 
 export default function OAuthAuthorizePage() {
   return (
@@ -12,7 +14,9 @@ export default function OAuthAuthorizePage() {
         kicker="OAuth dev consent"
         title="Authorize Gateway MCP access"
       />
-      <OAuthConsentPanel />
+      <Suspense fallback={<LoadingPanel />}>
+        <OAuthConsentPanel />
+      </Suspense>
     </main>
   );
 }

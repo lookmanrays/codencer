@@ -1,28 +1,36 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KeyValueList } from "@/components/ui/key-value-list";
-import type { ConsoleSnapshot } from "@/schemas/console";
+import type { User, Workspace } from "@/schemas/workspace";
 
 export function WorkspaceSummaryCard({
-  snapshot,
+  connectorCount,
+  projectCount,
+  relayCount,
+  user,
+  workspace,
 }: {
-  snapshot: ConsoleSnapshot;
+  connectorCount: number;
+  projectCount: number;
+  relayCount: number;
+  user: User;
+  workspace: Workspace;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{snapshot.workspace.name}</CardTitle>
+        <CardTitle>{workspace.name}</CardTitle>
       </CardHeader>
       <CardContent>
         <KeyValueList
           items={[
             {
               label: "Mode",
-              value: snapshot.workspace.mode.replaceAll("_", " "),
+              value: workspace.mode,
             },
-            { label: "User", value: snapshot.user.email },
-            { label: "Relays", value: snapshot.relays.length },
-            { label: "Connectors", value: snapshot.connectors.length },
-            { label: "Projects", value: snapshot.projects.length },
+            { label: "User", value: user.email },
+            { label: "Relays", value: relayCount },
+            { label: "Connectors", value: connectorCount },
+            { label: "Projects", value: projectCount },
           ]}
         />
       </CardContent>

@@ -3,6 +3,9 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -252,6 +255,8 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	cfg.Store.Path = filepath.Join(t.TempDir(), "gateway.db")
 	cfg.DefaultRelay.URL = relay.URL
 	cfg.DefaultRelay.TokenEnv = "CODENCER_DEFAULT_RELAY_TOKEN"
+	cfg.OAuthDev.Issuer = "http://127.0.0.1:19090"
+	cfg.OAuthDev.OperatorCodeHash = sha256Hex("operator-code")
 	server, err := NewServer(cfg, ServerOptions{})
 	if err != nil {
 		t.Fatalf("new gateway server: %v", err)
@@ -310,6 +315,66 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		"relay_machine_id":   "mach-relay",
 		"public_key":         "public-key",
 	})
+
+	workspace := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/workspace", token.AccessToken)
+	workspaceBody := mustJSON(t, workspace)
+	if !strings.Contains(workspaceBody, `"mcp_url"`) || strings.Contains(workspaceBody, "relay-secret") {
+		t.Fatalf("workspace response missing metadata or leaked token: %s", workspaceBody)
+	}
+	health := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/relays/default/health", token.AccessToken)
+	if !strings.Contains(mustJSON(t, health), `"status":"available"`) {
+		t.Fatalf("expected default relay health to be available, got %s", mustJSON(t, health))
+	}
+	machines := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/machines", token.AccessToken)
+	if !strings.Contains(mustJSON(t, machines), `"host_label":"macbook"`) {
+		t.Fatalf("machines endpoint missing connector machine: %s", mustJSON(t, machines))
+	}
+	connectors := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/connectors", token.AccessToken)
+	if !strings.Contains(mustJSON(t, connectors), `"status":"online"`) || strings.Contains(mustJSON(t, connectors), "public-key") {
+		t.Fatalf("connectors endpoint missing online binding or leaked public key: %s", mustJSON(t, connectors))
+	}
+	projects := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects", token.AccessToken)
+	projectBody := mustJSON(t, projects)
+	if !strings.Contains(projectBody, `"project_id":"codencer"`) {
+		t.Fatalf("projects endpoint missing relay project: %s", projectBody)
+	}
+	if strings.Contains(projectBody, "/Users/") || strings.Contains(projectBody, "relay-secret") {
+		t.Fatalf("projects endpoint leaked sensitive relay fields: %s", projectBody)
+	}
+	project := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer", token.AccessToken)
+	if !strings.Contains(mustJSON(t, project), `"relay_profile_id":"default"`) {
+		t.Fatalf("project detail missing relay profile: %s", mustJSON(t, project))
+	}
+	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
+	if !strings.Contains(mustJSON(t, audit), `"connector.login"`) {
+		t.Fatalf("audit endpoint missing connector event: %s", mustJSON(t, audit))
+	}
+	activation := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/activation/commands", token.AccessToken)
+	activationBody := mustJSON(t, activation)
+	if !strings.Contains(activationBody, "codencer login --gateway") || strings.Contains(activationBody, "relay-secret") {
+		t.Fatalf("activation commands missing login or leaked token: %s", activationBody)
+	}
+	verifier := "test-code-verifier"
+	oauthQuery := "?response_type=code&client_id=codencer-chatgpt-dev&redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback&scope=projects%3Aread+projects%3Awrite&state=state-1&code_challenge=" + codeChallengeS256(verifier) + "&code_challenge_method=S256&resource=http%3A%2F%2F127.0.0.1%3A19090%2Fmcp"
+	oauthRequest := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/oauth/consent"+oauthQuery, "")
+	if !strings.Contains(mustJSON(t, oauthRequest), `"client_id":"codencer-chatgpt-dev"`) {
+		t.Fatalf("oauth consent request missing client: %s", mustJSON(t, oauthRequest))
+	}
+	oauthDecision := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/oauth/consent", "", map[string]any{
+		"decision":              "approve",
+		"operator_code":         "operator-code",
+		"response_type":         "code",
+		"client_id":             "codencer-chatgpt-dev",
+		"redirect_uri":          "http://127.0.0.1/callback",
+		"scope":                 "projects:read projects:write",
+		"state":                 "state-1",
+		"code_challenge":        codeChallengeS256(verifier),
+		"code_challenge_method": "S256",
+		"resource":              "http://127.0.0.1:19090/mcp",
+	})
+	if !strings.Contains(mustJSON(t, oauthDecision), `"authorization_code_issued":true`) {
+		t.Fatalf("oauth consent did not issue authorization code: %s", mustJSON(t, oauthDecision))
+	}
 
 	readOnlyToken, err := server.store.CreateAccessToken(context.Background(), token.UserID, token.WorkspaceID, "test-readonly", cfg.MCPURL, []string{"projects:read"}, time.Hour)
 	if err != nil {
@@ -525,6 +590,16 @@ func mustJSON(t *testing.T, value any) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+func sha256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func codeChallengeS256(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 func writeTestJSON(t *testing.T, w http.ResponseWriter, value any) {

@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
+import { DemoModeNotice } from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
+import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LoadingPanel } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -10,11 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ConsoleData } from "@/features/console/use-console-data";
-import type { AuditEvent } from "@/schemas/console";
+import { isDemoMode } from "@/api/config";
+import { useAuditEvents } from "@/api/audit";
+import type { AuditEvent } from "@/schemas/audit";
 
 export function AuditScreen() {
   const [filter, setFilter] = useState("all");
+  const audit = useAuditEvents();
   return (
     <PageShell
       actions={
@@ -35,14 +41,25 @@ export function AuditScreen() {
       kicker="Audit / events"
       title="Workspace event stream"
     >
-      <ConsoleData
-        emptyDescription="No events have been recorded."
-        emptyTitle="No audit events"
-      >
-        {(snapshot) => (
-          <AuditContent events={snapshot.auditEvents} filter={filter} />
-        )}
-      </ConsoleData>
+      {audit.isLoading ? <LoadingPanel /> : null}
+      {audit.error ? (
+        <Alert title="Audit API unavailable" tone="error">
+          {audit.error.message}
+        </Alert>
+      ) : null}
+      {audit.data ? (
+        <div className="grid gap-md">
+          {isDemoMode() ? <DemoModeNotice /> : null}
+          {audit.data.auditEvents.length === 0 ? (
+            <EmptyState
+              description="No events have been recorded."
+              title="No audit events"
+            />
+          ) : (
+            <AuditContent events={audit.data.auditEvents} filter={filter} />
+          )}
+        </div>
+      ) : null}
     </PageShell>
   );
 }

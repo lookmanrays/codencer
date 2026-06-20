@@ -1,6 +1,6 @@
 import { CommandBlock } from "@/components/ui/code-block";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ActivationCommand } from "@/schemas/console";
+import type { ActivationCommand } from "@/schemas/activation";
 
 export function ActivationCommandPanel({
   commands,

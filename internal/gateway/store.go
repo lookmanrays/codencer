@@ -578,6 +578,44 @@ func (s *Store) GetMachine(ctx context.Context, machineID, workspaceID string) (
 	return rec, nil
 }
 
+func (s *Store) GetUser(ctx context.Context, userID string) (User, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, email, display_name, created_at, updated_at FROM users WHERE id = ?`, userID)
+	var user User
+	if err := scanUser(row, &user); err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
+func (s *Store) GetWorkspace(ctx context.Context, workspaceID string) (Workspace, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, name, owner_user_id, kind, created_at, updated_at FROM workspaces WHERE id = ?`, workspaceID)
+	var workspace Workspace
+	if err := scanWorkspace(row, &workspace); err != nil {
+		return Workspace{}, err
+	}
+	return workspace, nil
+}
+
+func (s *Store) ListMachines(ctx context.Context, workspaceID string) ([]MachineRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, user_id, hostname, host_label, os, arch, status, created_at, updated_at FROM machines WHERE workspace_id = ? ORDER BY host_label, id`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MachineRecord
+	for rows.Next() {
+		var rec MachineRecord
+		var created, updated string
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.UserID, &rec.Hostname, &rec.HostLabel, &rec.OS, &rec.Arch, &rec.Status, &created, &updated); err != nil {
+			return nil, err
+		}
+		rec.CreatedAt = parseStoreTime(created)
+		rec.UpdatedAt = parseStoreTime(updated)
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CreateConnectorBinding(ctx context.Context, workspaceID, machineID, relayProfileID string) (ConnectorBinding, error) {
 	id, err := randomStoreID("conn")
 	if err != nil {
@@ -614,6 +652,27 @@ func (s *Store) GetConnectorBinding(ctx context.Context, id string) (ConnectorBi
 	return rec, nil
 }
 
+func (s *Store) ListConnectorBindings(ctx context.Context, workspaceID string) ([]ConnectorBinding, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, machine_id, relay_profile_id, relay_connector_id, relay_machine_id, public_key, status, last_seen_at, created_at, updated_at FROM connector_bindings WHERE workspace_id = ? ORDER BY updated_at DESC, id`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ConnectorBinding
+	for rows.Next() {
+		var rec ConnectorBinding
+		var lastSeen, created, updated string
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.MachineID, &rec.RelayProfileID, &rec.RelayConnectorID, &rec.RelayMachineID, &rec.PublicKey, &rec.Status, &lastSeen, &created, &updated); err != nil {
+			return nil, err
+		}
+		rec.LastSeenAt = parseStoreTime(lastSeen)
+		rec.CreatedAt = parseStoreTime(created)
+		rec.UpdatedAt = parseStoreTime(updated)
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) RecordAudit(ctx context.Context, event AuditEvent) error {
 	if strings.TrimSpace(event.Type) == "" {
 		return nil
@@ -631,6 +690,28 @@ func (s *Store) RecordAudit(ctx context.Context, event AuditEvent) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO audit_events (id, workspace_id, actor_user_id, type, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		event.ID, event.WorkspaceID, event.ActorUserID, event.Type, event.Summary, formatStoreTime(event.CreatedAt))
 	return err
+}
+
+func (s *Store) ListAuditEvents(ctx context.Context, workspaceID string, limit int) ([]AuditEvent, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, actor_user_id, type, summary, created_at FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?`, workspaceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AuditEvent
+	for rows.Next() {
+		var event AuditEvent
+		var created string
+		if err := rows.Scan(&event.ID, &event.WorkspaceID, &event.ActorUserID, &event.Type, &event.Summary, &created); err != nil {
+			return nil, err
+		}
+		event.CreatedAt = parseStoreTime(created)
+		out = append(out, event)
+	}
+	return out, rows.Err()
 }
 
 func (p RelayProfileRecord) ToRelayProfile() RelayProfile {

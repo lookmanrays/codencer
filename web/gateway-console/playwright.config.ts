@@ -9,7 +9,8 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 19575",
+    command:
+      "NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo npm run dev -- --hostname 127.0.0.1 --port 19575",
     url: "http://127.0.0.1:19575",
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

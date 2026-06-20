@@ -9,7 +9,8 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run start -- --hostname 127.0.0.1 --port 19575",
+    command:
+      "NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo npm run start -- --hostname 127.0.0.1 --port 19575",
     url: "http://127.0.0.1:19575",
     reuseExistingServer: false,
     timeout: 120000,

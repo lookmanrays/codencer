@@ -1,6 +1,6 @@
 import { Timeline } from "@/components/ui/timeline";
 import { formatDateTime } from "@/lib/format";
-import type { AuditEvent } from "@/schemas/console";
+import type { AuditEvent } from "@/schemas/audit";
 
 export function AuditEventTimeline({ events }: { events: AuditEvent[] }) {
   return (

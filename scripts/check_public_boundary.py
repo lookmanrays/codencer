@@ -41,7 +41,7 @@ TEXT_REQUIREMENTS = [
     ("README.md", "official managed Codencer Cloud service is operated separately"),
     ("docs/architecture/public-private-boundary.md", "Private Managed Service Candidates"),
     ("docs/architecture/official-vs-self-host.md", "Direct Relay MCP remains supported"),
-    ("docs/gateway-console.md", "public UI foundation implemented"),
+    ("docs/gateway-console.md", "public/self-host Gateway Console live integration implemented"),
     ("docs/official-connector-flow.md", "AI client -> https://mcp.codencer.dev/mcp -> Codencer Gateway"),
     ("docs/architecture/mcp-gateway-model.md", "Direct Relay MCP"),
     ("docs/acceptance/public-repo-release.yaml", "public_managed_codencer_cloud_launch: no_go"),

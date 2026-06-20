@@ -229,6 +229,15 @@ verify-gateway-console:
 	@echo "==> Capturing Gateway Console visual evidence..."
 	@cd web/gateway-console && npm run visual:evidence
 
+.PHONY: verify-gateway-console-live
+verify-gateway-console-live: build-gateway
+	@echo "==> Installing Gateway Console dependencies..."
+	@cd web/gateway-console && npm ci
+	@echo "==> Building Gateway Console for isolated live-mode verification..."
+	@cd web/gateway-console && npm run build
+	@echo "==> Running isolated Gateway Console live-mode browser verification..."
+	@cd web/gateway-console && node tests/live/verify-live.mjs
+
 verify-local-prod: build-codencer
 	@echo "==> Checking local production formatting..."
 	@fmt=$$(gofmt -l internal/project internal/local cmd/codencer); \

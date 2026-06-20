@@ -1,6 +1,6 @@
 # Codencer Gateway Console
 
-Public Gateway Console UI foundation for Codencer Core, self-host Gateway,
+Public/self-host Gateway Console for Codencer Core, `codencer-gatewayd`,
 self-host Relay, MCP, and controlled pre-production official connector review.
 
 This app is not the private managed Codencer Cloud UI. Do not add billing,
@@ -26,18 +26,24 @@ Repository-level verification:
 make verify-gateway-console
 ```
 
-## Mock Mode
+## Mode
 
-The console is mock-backed by default:
+The console defaults to live mode and reads/writes through `codencer-gatewayd`
+via the server-side Next proxy. Configure the proxy with:
 
 ```bash
-NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=true
+CODENCER_GATEWAY_API_BASE=http://127.0.0.1:19090
+CODENCER_GATEWAY_MCP_TOKEN=...
 ```
 
-Set `NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false` only when a compatible local
-Gateway API is available. Current live API coverage is limited to the read-only
-paths actually wired in `api/client.ts`; do not claim broader production API
-coverage from mock screenshots.
+Demo mode is explicit:
+
+```bash
+NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo
+```
+
+Live mode never silently falls back to demo fixtures. Missing Gateway endpoints
+or failed mutations render explicit error/unavailable states.
 
 ## Visual Evidence
 
@@ -55,7 +61,9 @@ Artifacts are written under:
 
 The visual evidence run asserts that mobile document/body widths do not exceed
 the `390px` viewport and that generated mobile PNGs are exactly `390px` wide.
-`make verify-gateway-console` includes this visual gate.
+`make verify-gateway-console` includes this visual gate and runs in explicit
+demo mode. `make verify-gateway-console-live` runs browser flows against an
+isolated live Gateway.
 
 Timestamped PNG artifacts are ignored by default. Commit screenshot tooling and
 small curated evidence only when a review specifically needs it.

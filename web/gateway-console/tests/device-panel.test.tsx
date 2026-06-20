@@ -5,7 +5,7 @@ import { Providers } from "@/components/providers";
 import { DeviceApprovalPanel } from "@/components/console/device-approval-panel";
 
 describe("DeviceApprovalPanel", () => {
-  it("validates and approves in mock mode without issuing tokens", async () => {
+  it("validates and approves in explicit demo mode without issuing tokens", async () => {
     const user = userEvent.setup();
     render(
       <Providers>
@@ -18,7 +18,9 @@ describe("DeviceApprovalPanel", () => {
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText(/user code/i), "ABCD-EFGH");
     await user.click(screen.getByRole("button", { name: /approve device/i }));
-    expect(await screen.findByText(/form validated/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/device login approved/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/access_token/i)).not.toBeInTheDocument();
   });
 });

@@ -70,13 +70,14 @@ Implemented under `web/gateway-console/components/console`:
 - `McpEndpointCard`
 - `SelfHostModeNotice`
 - `OfficialGatewayNotice`
-- `MockModeNotice`
+- `DemoModeNotice`
 
 ## Data And State Layers
 
-- Zod schemas: `web/gateway-console/schemas/console.ts`
-- API/mock data layer: `web/gateway-console/api/*`
+- Zod schemas: domain-specific files under `web/gateway-console/schemas/`
+- API data layer: domain-specific modules under `web/gateway-console/api/`
 - Server state: TanStack Query
 - Local UI state: Zustand in `stores/ui-store.ts`
 
-Mock mode is explicit through `NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=true`.
+Live mode is the default. Demo mode is explicit through
+`NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo`.

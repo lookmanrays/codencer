@@ -8,7 +8,7 @@ import { ProjectLocationsTable } from "@/components/console/project-locations-ta
 import { ActivationCommandPanel } from "@/components/console/activation-command-panel";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
 import {
-  MockModeNotice,
+  DemoModeNotice,
   OfficialGatewayNotice,
   SelfHostModeNotice,
 } from "@/components/console/mode-notices";
@@ -68,7 +68,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { mockSnapshot } from "@/api/mock-data";
+import { demoSnapshot } from "@/api/demo-data";
 
 const colors = [
   "ink-primary",
@@ -306,19 +306,19 @@ export default function UISystemPage() {
         <section className="grid min-w-0 max-w-full gap-md">
           <h2 className="m-0 text-h2 font-bold">Console modules</h2>
           <div className="grid min-w-0 gap-md lg:grid-cols-3">
-            <MockModeNotice />
+            <DemoModeNotice />
             <OfficialGatewayNotice />
             <SelfHostModeNotice />
           </div>
-          <RelayProfileCard relay={mockSnapshot.relays[0]!} />
+          <RelayProfileCard relay={demoSnapshot.relays[0]!} />
           <RelayProfileForm />
           <MachineConnectorTable
-            connectors={mockSnapshot.connectors}
-            machines={mockSnapshot.machines}
+            connectors={demoSnapshot.connectors}
+            machines={demoSnapshot.machines}
           />
-          <ProjectLocationsTable projects={mockSnapshot.projects} />
-          <ActivationCommandPanel commands={mockSnapshot.activationCommands} />
-          <AuditEventTimeline events={mockSnapshot.auditEvents} />
+          <ProjectLocationsTable projects={demoSnapshot.projects} />
+          <ActivationCommandPanel commands={demoSnapshot.activationCommands} />
+          <AuditEventTimeline events={demoSnapshot.auditEvents} />
           <Alert title="No color-only status">
             Status text and badge tone are both rendered so color is not the
             only communication channel.

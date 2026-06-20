@@ -1,10 +1,11 @@
 # Gateway Console
 
-Status: public UI foundation implemented under `web/gateway-console`.
+Status: public/self-host Gateway Console live integration implemented under
+`web/gateway-console`.
 
 The current public repository ships command-line and API surfaces for local
 Codencer Core, self-host Gateway, self-host Relay, MCP, activation, community
-cloud-control-plane operation, and a public Gateway Console foundation. It does
+cloud-control-plane operation, and a public/self-host Gateway Console. It does
 not ship billing UI, team/admin UI, support console, marketplace console, or
 managed Cloud operations dashboard.
 
@@ -18,7 +19,7 @@ managed Cloud operations dashboard.
 - `codencer-relayd`
 - `codencer-connectord`
 - community cloud-control-plane CLIs documented in [CLOUD.md](CLOUD.md)
-- `web/gateway-console` Next.js UI foundation
+- `web/gateway-console` Next.js public/self-host Gateway Console
 
 ## Verification And Visual Evidence
 
@@ -42,9 +43,10 @@ screenshots, interaction-state screenshots, `index.md`, and
 PNG widths at exactly `390px`. Timestamped PNGs are ignored by default to avoid
 repository bloat. See [UI visual evidence](ui/visual-evidence.md).
 
-The console is mock-backed by default unless
-`NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false` is configured. Live Gateway API
-coverage is limited to the read-only paths actually wired in the UI data client.
+The console defaults to live mode over `codencer-gatewayd`. Demo mode is
+explicit through `NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo`; visual evidence uses
+that explicit demo mode, while `make verify-gateway-console-live` exercises an
+isolated live Gateway.
 
 ## Public Console Scope
 

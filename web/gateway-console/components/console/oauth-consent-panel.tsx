@@ -2,35 +2,42 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { useOAuthConsent, useOAuthConsentDecision } from "@/api/oauth";
+import { isDemoMode } from "@/api/config";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { KeyValueList } from "@/components/ui/key-value-list";
-import { OAuthConsentSchema, type OAuthConsent } from "@/schemas/console";
+import { LoadingPanel } from "@/components/ui/skeleton";
 
-const defaultConsent: OAuthConsent = {
-  clientId: "chatgpt-dev-client",
-  clientName: "ChatGPT custom MCP app",
-  workspaceId: "ws_personal",
-  resource: "https://mcp.codencer.dev/mcp",
-  scopes: ["projects:read", "projects:write"],
-  operatorCode: "",
-};
+const OperatorCodeSchema = z.object({
+  operatorCode: z.string().min(6, "Approval code is required"),
+});
+
+type OperatorCode = z.infer<typeof OperatorCodeSchema>;
 
 export function OAuthConsentPanel() {
-  const [decision, setDecision] = useState<"approved" | "denied" | null>(null);
+  const search = useSearchParams();
+  const consent = useOAuthConsent(
+    search.toString() ? `?${search.toString()}` : "",
+  );
+  const decision = useOAuthConsentDecision();
   const {
     formState: { errors },
     handleSubmit,
     register,
-  } = useForm<OAuthConsent>({
-    resolver: zodResolver(OAuthConsentSchema),
-    defaultValues: defaultConsent,
+  } = useForm<OperatorCode>({
+    resolver: zodResolver(OperatorCodeSchema),
+    defaultValues: { operatorCode: "" },
   });
+  const request = consent.data?.request;
 
   return (
     <Card className="mx-auto max-w-[720px]">
@@ -45,36 +52,68 @@ export function OAuthConsentPanel() {
         </p>
       </CardHeader>
       <CardContent>
-        <KeyValueList
-          items={[
-            { label: "Client", value: defaultConsent.clientName },
-            { label: "Workspace", value: defaultConsent.workspaceId },
-            { label: "Resource", value: defaultConsent.resource },
-            {
-              label: "Scopes",
-              value: (
-                <span className="flex flex-wrap gap-xs">
-                  {defaultConsent.scopes.map((scope) => (
-                    <Badge key={scope}>{scope}</Badge>
-                  ))}
-                </span>
-              ),
-            },
-          ]}
-        />
-        {decision ? (
+        {isDemoMode() ? (
+          <Alert title="Demo mode" tone="warning">
+            OAuth consent is simulated only because demo mode is explicit.
+          </Alert>
+        ) : null}
+        {consent.isLoading ? <LoadingPanel /> : null}
+        {consent.error ? (
+          <Alert title="OAuth request unavailable" tone="error">
+            {consent.error.message}
+          </Alert>
+        ) : null}
+        {request && (!request.redirectURI || !request.codeChallenge) ? (
+          <EmptyState
+            description="Open this page from an OAuth authorization request with redirect_uri and PKCE parameters."
+            title="No OAuth authorization request"
+          />
+        ) : null}
+        {request && request.redirectURI && request.codeChallenge ? (
+          <>
+            <KeyValueList
+              items={[
+                { label: "Client", value: request.clientName },
+                { label: "Workspace", value: request.workspaceId },
+                { label: "Resource", value: request.resource },
+                {
+                  label: "Scopes",
+                  value: (
+                    <span className="flex flex-wrap gap-xs">
+                      {request.scopes.map((scope) => (
+                        <Badge key={scope}>{scope}</Badge>
+                      ))}
+                    </span>
+                  ),
+                },
+              ]}
+            />
+            {decision.error ? (
+              <Alert title="OAuth consent failed" tone="error">
+                {decision.error.message}
+              </Alert>
+            ) : null}
+          </>
+        ) : null}
+        {decision.data ? (
           <div className="mt-md rounded-[var(--radius-card)] border border-border bg-paper-tinted p-md">
             <p className="m-0 font-semibold">
-              Consent {decision} in mock mode.
+              Consent {decision.data.decision}.
             </p>
             <p className="mb-0 mt-xs text-body-sm text-ink-secondary">
-              No authorization code or token was issued.
+              Redirect target: <code>{decision.data.redirect_uri}</code>
             </p>
           </div>
-        ) : (
+        ) : request && request.redirectURI && request.codeChallenge ? (
           <form
             className="mt-md grid gap-md"
-            onSubmit={handleSubmit(() => setDecision("approved"))}
+            onSubmit={handleSubmit((values) =>
+              decision.mutate({
+                decision: "approve",
+                operatorCode: values.operatorCode,
+                request,
+              }),
+            )}
           >
             <Field
               error={errors.operatorCode?.message}
@@ -88,9 +127,17 @@ export function OAuthConsentPanel() {
               />
             </Field>
             <div className="flex flex-wrap gap-sm">
-              <Button type="submit">Approve</Button>
+              <Button disabled={decision.isPending} type="submit">
+                Approve
+              </Button>
               <Button
-                onClick={() => setDecision("denied")}
+                disabled={decision.isPending}
+                onClick={() =>
+                  decision.mutate({
+                    decision: "deny",
+                    request,
+                  })
+                }
                 type="button"
                 variant="danger"
               >
@@ -98,7 +145,7 @@ export function OAuthConsentPanel() {
               </Button>
             </div>
           </form>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

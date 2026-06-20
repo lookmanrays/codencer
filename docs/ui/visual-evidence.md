@@ -70,7 +70,7 @@ Review the generated `index.md` and PNGs for:
 - weak focus states;
 - inconsistent badges/forms;
 - command block readability;
-- unclear mock/demo notices;
+- unclear demo-mode notices;
 - token or absolute path leakage.
 
 Fix only low-risk UI issues in this public repository. Do not add billing,
@@ -79,7 +79,7 @@ Cloud UI, or new backend product APIs as part of visual review.
 
 ## Known Limits
 
-The console is mock-backed by default unless
-`NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false` is configured. Live Gateway API
-coverage is limited to the read-only paths actually wired in the UI data client.
+The visual evidence run starts the console in explicit
+`NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo` so screenshot review is deterministic.
+Live/default Gateway behavior is covered by `make verify-gateway-console-live`.
 Private managed Codencer Cloud features are intentionally out of scope.

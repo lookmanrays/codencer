@@ -3,7 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import type { Project, ProjectLocation } from "@/schemas/console";
+import type { Project, ProjectLocation } from "@/schemas/projects";
 
 type Row = ProjectLocation & { projectName: string };
 

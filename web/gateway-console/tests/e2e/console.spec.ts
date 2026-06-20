@@ -37,7 +37,7 @@ test("device form validation works", async ({ page }) => {
   await expect(page.locator("#user-code-message")).toBeVisible();
   await page.getByLabel(/user code/i).fill("ABCD-EFGH");
   await page.getByRole("button", { name: /approve device/i }).click();
-  await expect(page.getByText(/form validated/i)).toBeVisible();
+  await expect(page.getByText(/device login approved/i)).toBeVisible();
 });
 
 test("oauth approve and deny controls exist", async ({ page }) => {

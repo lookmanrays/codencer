@@ -100,7 +100,7 @@ async function captureInteractions(page: Page) {
   await page.getByLabel(/profile name/i).fill("");
   await page.getByLabel(/relay url/i).fill("not-a-url");
   await page.getByLabel(/token environment variable/i).fill("");
-  await page.getByRole("button", { name: /validate form/i }).click();
+  await page.getByRole("button", { name: /save relay profile/i }).click();
   await expect(page.getByText(/name is required/i)).toBeVisible();
   await capture(
     page,
@@ -475,9 +475,9 @@ function writeReports() {
       "",
       "## Remaining Concerns",
       "",
-      "- Mock-backed console.",
-      "- Limited live API integration.",
-      "- Private Cloud out of scope.",
+      "- This screenshot run uses explicit `NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo`; live readiness is covered by `make verify-gateway-console-live`.",
+      "- Live Gateway API integration is limited to the public/self-host console resources wired in the UI data client.",
+      "- Private managed Cloud features are intentionally out of scope.",
       "",
       "## Screenshots Not Captured",
       "",

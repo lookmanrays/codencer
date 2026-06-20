@@ -1,6 +1,26 @@
-import type { ConsoleSnapshot } from "@/schemas/console";
+import type { ActivationCommand } from "@/schemas/activation";
+import type { AuditEvent } from "@/schemas/audit";
+import type { Connector } from "@/schemas/connectors";
+import type { Machine } from "@/schemas/machines";
+import type { Project } from "@/schemas/projects";
+import type { RelayHealth } from "@/schemas/relay-health";
+import type { RelayProfile } from "@/schemas/relays";
+import type { User, Workspace } from "@/schemas/workspace";
 
-export const mockSnapshot: ConsoleSnapshot = {
+type DemoSnapshot = {
+  activationCommands: ActivationCommand[];
+  auditEvents: AuditEvent[];
+  connectors: Connector[];
+  machines: Machine[];
+  mcpEndpoint: string;
+  projects: Project[];
+  relayHealth: RelayHealth[];
+  relays: RelayProfile[];
+  user: User;
+  workspace: Workspace;
+};
+
+export const demoSnapshot: DemoSnapshot = {
   user: {
     id: "user_demo",
     email: "operator@example.com",
@@ -8,9 +28,10 @@ export const mockSnapshot: ConsoleSnapshot = {
   },
   workspace: {
     id: "ws_personal",
+    kind: "demo",
     name: "Personal Gateway Workspace",
     slug: "personal",
-    mode: "mock",
+    mode: "demo",
   },
   mcpEndpoint: "https://mcp.codencer.dev/mcp",
   relays: [
@@ -20,6 +41,7 @@ export const mockSnapshot: ConsoleSnapshot = {
       type: "managed",
       url: "https://relay.codencer.dev",
       tokenRef: "CODENCER_DEFAULT_RELAY_TOKEN",
+      tokenConfigured: true,
       enabled: true,
       status: "available",
     },
@@ -29,6 +51,7 @@ export const mockSnapshot: ConsoleSnapshot = {
       type: "self_host",
       url: "https://relay.example.com",
       tokenRef: "CODENCER_RELAY_PERSONAL_TOKEN",
+      tokenConfigured: true,
       enabled: true,
       status: "available",
     },
@@ -38,6 +61,7 @@ export const mockSnapshot: ConsoleSnapshot = {
       type: "self_host",
       url: "https://relay-lab.example.com",
       tokenRef: "CODENCER_RELAY_LAB_TOKEN",
+      tokenConfigured: true,
       enabled: false,
       status: "disabled",
     },

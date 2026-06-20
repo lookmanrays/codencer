@@ -42,16 +42,15 @@ Not implemented here:
 - marketplace credentials;
 - managed execution environments.
 
-## Backend Integration Plan
+## Backend Integration Status
 
-Current foundation defaults to seeded mock data. Read-only Gateway integration is
-scaffolded for Relay profiles behind:
+The console defaults to live mode over `codencer-gatewayd` through the
+server-side Next proxy. Demo data is explicit and only enabled with:
 
 ```text
-NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false
-NEXT_PUBLIC_CODENCER_GATEWAY_API_BASE=http://127.0.0.1:19090
+NEXT_PUBLIC_CODENCER_CONSOLE_MODE=demo
 ```
 
-Next phase should add a browser-safe session model, then wire read-only
-workspace, machine, connector, project, and audit APIs before enabling write
-flows.
+Live mode reads workspace, relay, relay health, machine, connector, project,
+activation, audit, device, and OAuth data through Gateway APIs. Relay profile
+add/remove, device approval, and OAuth consent are live Gateway mutations.

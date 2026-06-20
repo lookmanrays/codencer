@@ -5,7 +5,8 @@ import { ConnectorStatusBadge } from "@/components/console/connector-status-badg
 import { CommandBlock } from "@/components/ui/code-block";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/format";
-import type { Connector, Machine } from "@/schemas/console";
+import type { Connector } from "@/schemas/connectors";
+import type { Machine } from "@/schemas/machines";
 
 type Row = Connector & { machine?: Machine };
 

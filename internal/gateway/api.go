@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"agent-bridge/internal/security"
 )
@@ -146,6 +148,56 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+func (s *Server) authenticateConsoleAPI(w http.ResponseWriter, r *http.Request, scopes []string) (*authPrincipal, bool) {
+	principal, apiErr := s.authenticate(r)
+	if apiErr != nil {
+		s.addAuthChallenge(w, r, strings.Join(scopes, " "))
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return nil, false
+	}
+	if !principalAllows(principal, scopes) {
+		writeAPIError(w, http.StatusForbidden, "insufficient_scope", "Gateway token is missing required scope")
+		return nil, false
+	}
+	if principal.WorkspaceID == "" {
+		writeAPIError(w, http.StatusForbidden, "workspace_required", "Gateway token is not bound to a workspace")
+		return nil, false
+	}
+	return principal, true
+}
+
+func (s *Server) handleWorkspace(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	user, err := s.store.GetUser(r.Context(), principal.UserID)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	workspace, err := s.store.GetWorkspace(r.Context(), principal.WorkspaceID)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user":            user,
+		"workspace":       workspace,
+		"mcp_url":         s.cfg.MCPURL,
+		"public_base_url": s.cfg.PublicBaseURL,
+		"mode":            "live",
+	})
+}
+
 func (s *Server) handleRelays(w http.ResponseWriter, r *http.Request) {
 	if apiErr := s.requireStore(); apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
@@ -236,9 +288,49 @@ func (s *Server) handleRelayByID(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/relays/"), "/")
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/relays/"), "/"), "/")
+	id := ""
+	if len(parts) > 0 {
+		id = parts[0]
+	}
 	if id == "" {
 		writeAPIError(w, http.StatusBadRequest, "relay_profile_required", "relay profile id is required")
+		return
+	}
+	if len(parts) == 2 && parts[1] == "health" {
+		if r.Method != http.MethodGet {
+			writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if !principalAllows(principal, []string{"projects:read"}) {
+			writeAPIError(w, http.StatusForbidden, "insufficient_scope", "Gateway token is missing required scope")
+			return
+		}
+		profile, err := s.store.GetRelayProfile(r.Context(), principal.WorkspaceID, id)
+		if err != nil {
+			writeAPIError(w, http.StatusNotFound, "relay_profile_not_found", "relay profile not found")
+			return
+		}
+		status := "disabled"
+		var latency *int64
+		if profile.Enabled {
+			started := time.Now()
+			status = s.relayAvailability(r.Context(), profile.ToRelayProfile())
+			ms := time.Since(started).Milliseconds()
+			if status == "available" {
+				latency = &ms
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"health": map[string]any{
+			"relay_profile_id": profile.ID,
+			"status":           status,
+			"latency_ms":       latency,
+			"checked_at":       time.Now().UTC(),
+		}})
+		return
+	}
+	if len(parts) > 1 {
+		writeAPIError(w, http.StatusNotFound, "route_not_found", "relay route not found")
 		return
 	}
 	switch r.Method {
@@ -270,6 +362,231 @@ func (s *Server) handleRelayByID(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "relay_profile_id": id})
 	default:
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	}
+}
+
+func (s *Server) handleMachines(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	machines, err := s.store.ListMachines(r.Context(), principal.WorkspaceID)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"machines": machines})
+}
+
+func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	connectors, err := s.store.ListConnectorBindings(r.Context(), principal.WorkspaceID)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	out := make([]map[string]any, 0, len(connectors))
+	for _, connector := range connectors {
+		out = append(out, map[string]any{
+			"id":                 connector.ID,
+			"workspace_id":       connector.WorkspaceID,
+			"machine_id":         connector.MachineID,
+			"relay_profile_id":   connector.RelayProfileID,
+			"relay_connector_id": connector.RelayConnectorID,
+			"relay_machine_id":   connector.RelayMachineID,
+			"status":             connector.Status,
+			"last_seen_at":       connector.LastSeenAt,
+			"created_at":         connector.CreatedAt,
+			"updated_at":         connector.UpdatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"connectors": out})
+}
+
+func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	projects, relayErrors := s.aggregateProjects(r.Context(), principal)
+	writeJSON(w, http.StatusOK, map[string]any{"projects": projects, "relay_errors": relayErrors})
+}
+
+func (s *Server) handleProjectByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	projectID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/projects/"), "/")
+	if projectID == "" {
+		writeAPIError(w, http.StatusBadRequest, "project_id_required", "project id is required")
+		return
+	}
+	projects, relayErrors := s.aggregateProjects(r.Context(), principal)
+	for _, project := range projects {
+		if project.ProjectID == projectID {
+			writeJSON(w, http.StatusOK, map[string]any{"project": project, "relay_errors": relayErrors})
+			return
+		}
+	}
+	writeAPIError(w, http.StatusNotFound, "project_not_found", "project not found")
+}
+
+func (s *Server) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	events, err := s.store.ListAuditEvents(r.Context(), principal.WorkspaceID, 100)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"audit_events": events})
+}
+
+func (s *Server) handleActivationCommands(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
+	if !ok {
+		return
+	}
+	gatewayURL := strings.TrimRight(s.cfg.PublicBaseURL, "/")
+	mcpURL := strings.TrimRight(firstNonEmpty(s.cfg.MCPURL, gatewayURL+"/mcp"), "/")
+	writeJSON(w, http.StatusOK, map[string]any{"activation_commands": []map[string]any{
+		{"id": "login", "title": "Log in to Gateway", "description": "Creates a workspace-bound Gateway session under CODENCER_HOME.", "target": "gateway", "command": "codencer login --gateway " + gatewayURL},
+		{"id": "connector-login", "title": "Bind local connector", "description": "Requests a short-lived Relay enrollment secret through Gateway; output is redacted.", "target": "gateway", "command": "codencer connector login --gateway " + gatewayURL + " --relay default --json"},
+		{"id": "project-init", "title": "Create project config", "description": "Commits only .codencer/project.json; local state stays in CODENCER_HOME.", "target": "local", "command": "codencer project init --repo . --json"},
+		{"id": "project-share", "title": "Share project explicitly", "description": "Connector advertises this project to the selected Relay.", "target": "local", "command": "codencer project share <project-id> --json"},
+		{"id": "codex", "title": "Codex MCP setup", "description": "AI clients point to Gateway, not a user Relay.", "target": "client", "command": "codencer setup mcp --client codex --endpoint " + mcpURL + " --json"},
+		{"id": "claude", "title": "Claude Code MCP setup", "description": "Generates the Gateway MCP command for Claude Code.", "target": "client", "command": "codencer setup mcp --client claude-code --endpoint " + mcpURL + " --json"},
+		{"id": "chatgpt", "title": "ChatGPT custom MCP setup", "description": "Uses Gateway OAuth dev metadata for controlled testing.", "target": "client", "command": "codencer activation official --gateway " + gatewayURL + " --project <project-id> --token-env CODENCER_GATEWAY_MCP_TOKEN --json"},
+		{"id": "curl", "title": "Gateway curl smoke", "description": "Runs MCP initialize/tools/list against Gateway.", "target": "gateway", "command": "curl -fsS " + mcpURL + " -H 'Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN'"},
+	}, "workspace_id": principal.WorkspaceID})
+}
+
+func (s *Server) handleOAuthConsent(w http.ResponseWriter, r *http.Request) {
+	if s.oauth == nil {
+		writeAPIError(w, http.StatusNotFound, "oauth_dev_not_configured", "Gateway OAuth dev mode is not enabled")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		values := r.URL.Query()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"request": oauthConsentRequest(values, s.oauth.cfg.ClientID, s.oauth.defaultWorkspaceID, s.oauth.issuer(s.baseURL(r))),
+		})
+	case http.MethodPost:
+		var req struct {
+			Decision            string `json:"decision"`
+			OperatorCode        string `json:"operator_code"`
+			ResponseType        string `json:"response_type"`
+			ClientID            string `json:"client_id"`
+			RedirectURI         string `json:"redirect_uri"`
+			Scope               string `json:"scope"`
+			State               string `json:"state"`
+			CodeChallenge       string `json:"code_challenge"`
+			CodeChallengeMethod string `json:"code_challenge_method"`
+			Resource            string `json:"resource"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeAPIError(w, http.StatusBadRequest, "malformed_request", err.Error())
+			return
+		}
+		values := url.Values{}
+		values.Set("response_type", req.ResponseType)
+		values.Set("client_id", req.ClientID)
+		values.Set("redirect_uri", req.RedirectURI)
+		values.Set("scope", req.Scope)
+		values.Set("state", req.State)
+		values.Set("code_challenge", req.CodeChallenge)
+		values.Set("code_challenge_method", req.CodeChallengeMethod)
+		values.Set("resource", req.Resource)
+		if strings.EqualFold(strings.TrimSpace(req.Decision), "deny") {
+			location, err := appendRedirectParams(req.RedirectURI, map[string]string{"error": "access_denied", "state": req.State})
+			if err != nil {
+				writeAPIError(w, http.StatusBadRequest, "invalid_redirect_uri", err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "decision": "denied", "redirect_uri": location})
+			return
+		}
+		values.Set("operator_code", req.OperatorCode)
+		code, redirectURI, state, apiErr := s.oauth.CreateAuthorizationCode(values, s.baseURL(r))
+		if apiErr != nil {
+			writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+			return
+		}
+		location, err := appendRedirectParams(redirectURI, map[string]string{"code": code, "state": state})
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "invalid_redirect_uri", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "decision": "approved", "redirect_uri": location, "authorization_code_issued": true})
+	default:
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	}
+}
+
+func oauthConsentRequest(values url.Values, defaultClientID, workspaceID, issuer string) map[string]any {
+	scope := strings.Fields(strings.TrimSpace(values.Get("scope")))
+	if len(scope) == 0 {
+		scope = []string{"projects:read"}
+	}
+	resource := strings.TrimRight(strings.TrimSpace(values.Get("resource")), "/")
+	if resource == "" {
+		resource = strings.TrimRight(issuer, "/") + "/mcp"
+	}
+	return map[string]any{
+		"response_type":         values.Get("response_type"),
+		"client_id":             firstNonEmpty(values.Get("client_id"), defaultClientID),
+		"client_name":           "Codencer MCP client",
+		"workspace_id":          workspaceID,
+		"redirect_uri":          values.Get("redirect_uri"),
+		"scope":                 strings.Join(scope, " "),
+		"scopes":                scope,
+		"state":                 values.Get("state"),
+		"code_challenge":        values.Get("code_challenge"),
+		"code_challenge_method": values.Get("code_challenge_method"),
+		"resource":              resource,
 	}
 }
 
