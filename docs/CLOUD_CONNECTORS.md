@@ -10,7 +10,7 @@ Status labels in the matrix below mean:
 - `proven`: directly exercised by current repo tests or smoke.
 - `partial`: implemented and usable within a narrow scope, but proof or operator packaging is still thin.
 - `expected-only`: code/docs suggest it should work, but the repo does not directly prove it today.
-- `deferred`: intentionally outside the current provider beta promise.
+- `deferred`: intentionally outside the current provider release promise.
 
 ## Generic Install And Validate Contract
 

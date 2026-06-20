@@ -1,16 +1,17 @@
 # ChatGPT OAuth Dev Mode
 
 Codencer provides a minimal single-user OAuth dev front-door for ChatGPT
-Developer Mode testing. The official connector path uses `codencer-gatewayd`;
+Developer Mode testing. The public connector path uses `codencer-gatewayd`;
 Relay OAuth dev remains available for direct self-host testing. This is not
 enterprise IAM and does not implement refresh tokens.
 
 ## Enable
 
 ```bash
-./bin/codencer setup gateway \
-  --base-url https://mcp.codencer.dev \
-  --mcp-url https://mcp.codencer.dev/mcp \
+./bin/codencer setup self-host \
+  --gateway-url https://gateway.example.com \
+  --mcp-url https://gateway.example.com/mcp \
+  --relay-url https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
@@ -36,7 +37,7 @@ The flow uses authorization code plus PKCE S256. Access tokens are opaque, hashe
 
 For direct Relay OAuth dev mode, use `codencer setup relay
 --enable-chatgpt-oauth-dev`. That path is for advanced/direct/debug testing, not
-the official connector endpoint.
+the public Gateway-first connector endpoint.
 
 ## Dev No-Auth
 

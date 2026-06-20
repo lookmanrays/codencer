@@ -34,13 +34,13 @@ Only `shared_to_relay:true` projects are advertised. The connector skips unreach
 
 ## MCP Auth Fails
 
-Official MCP clients should authenticate to Codencer Gateway. Gateway supports
-bearer-dev auth and OAuth dev mode for pre-prod product setup:
+MCP clients should authenticate to the operator's self-host Gateway. Gateway
+supports bearer-dev auth and OAuth dev mode for pre-prod product setup:
 
 ```bash
-./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+./bin/codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer setup mcp --client chatgpt --endpoint http://127.0.0.1:19090/mcp --json
 ```
 
 Direct Relay MCP auth is still available for advanced/direct/debug mode. It
@@ -55,7 +55,7 @@ a token Codencer accepts:
 
 ChatGPT product UI proof requires public HTTPS, OAuth-style product setup, and
 an eligible workspace. For Gateway-first testing, generate the server-side
-activation artifacts with `codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --auth oauth --json`.
+activation artifacts with `codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --auth oauth --json`.
 Keep product proof pending until the actual product flow is exercised.
 
 ## Connector Enrollment Fails

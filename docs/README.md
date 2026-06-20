@@ -38,7 +38,6 @@ Start here for the current open-source local/self-host RC:
 - [Acceptance contract](acceptance/local-production-v0.3.yaml)
 - [Public self-host release acceptance](acceptance/public-self-host-release.md)
 - [Public repo release acceptance](acceptance/public-repo-release.yaml)
-- [codencer.dev update pack](site-update-codencer-dev.md)
 - [Release checklist](release-checklist.md)
 - [Security policy](../SECURITY.md)
 - [Trademark policy](../TRADEMARKS.md)
@@ -52,7 +51,8 @@ Start here for the current open-source local/self-host RC:
 
 ## Historical Docs
 
-Legacy v0.2 documents are archived under [archive/v0.2-beta](archive/v0.2-beta/).
+Legacy setup and release-track documents are archived under
+[archive/legacy-local-track](archive/legacy-local-track/).
 They are retained for historical context and are not the current release
 contract.
 

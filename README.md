@@ -359,8 +359,8 @@ official Codencer service.
 - [Local quickstart](docs/quickstart-local.md)
 - [Local production guide](docs/local-production.md)
 - [Self-host Relay quickstart](docs/quickstart-self-host-relay.md)
-- [Official Gateway activation](docs/activation-official-gateway.md)
-- [Official connector flow](docs/official-connector-flow.md)
+- [Self-host production deployment](docs/deployment/self-host-production.md)
+- [Self-host MCP proof](docs/mcp/self-host-mcp-proof.md)
 - [Account device login](docs/account-device-login.md)
 - [Relay profile registry](docs/relay-profile-registry.md)
 - [Gateway Console status](docs/gateway-console.md)
@@ -381,10 +381,10 @@ official Codencer service.
 - [Live execution matrix](docs/live-execution-matrix.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Acceptance contract](docs/acceptance/local-production-v0.3.yaml)
+- [Public self-host release acceptance](docs/acceptance/public-self-host-release.md)
 - [Public repo release acceptance](docs/acceptance/public-repo-release.yaml)
-- [codencer.dev update pack](docs/site-update-codencer-dev.md)
 
-Legacy v0.2 documents are archived under `docs/archive/v0.2-beta/`.
+Legacy setup and release-track documents are archived under `docs/archive/legacy-local-track/`.
 
 ## Development
 

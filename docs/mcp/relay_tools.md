@@ -1,7 +1,7 @@
 # Relay MCP Tools
 
 Codencer exposes a direct MCP surface from the Relay for advanced/direct/debug
-mode. Official client setup should use Codencer Gateway instead:
+mode. Public client setup should use the self-host Gateway instead:
 
 ```text
 AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> project
@@ -9,7 +9,7 @@ AI client -> Codencer Gateway -> selected Relay -> local connector -> daemon -> 
 
 This page is about direct relay mode.
 
-For official Gateway setup, see [Official Gateway activation](../activation-official-gateway.md) and [MCP Gateway model](../architecture/mcp-gateway-model.md). Experimental cloud-control-plane MCP behavior is documented separately in [Cloud MCP Tools](cloud_tools.md) and is not the hosted Codencer Gateway/Cloud service.
+For self-host Gateway setup, see [Self-host MCP proof](self-host-mcp-proof.md) and [MCP Gateway model](../architecture/mcp-gateway-model.md). Experimental cloud-control-plane MCP behavior is documented separately in [Cloud MCP Tools](cloud_tools.md) and is not the hosted Codencer Gateway/Cloud service.
 
 For the current planner/client matrix and client-specific packaging notes, see [MCP Integrations](integrations.md).
 

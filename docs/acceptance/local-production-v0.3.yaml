@@ -79,9 +79,9 @@ profiles:
       - id: setup_mcp_snippets
         status: sprint_8_gateway_updated
         commands:
-          - ./bin/codencer setup mcp --client codex --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-          - ./bin/codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-          - ./bin/codencer setup mcp --client chatgpt --endpoint https://mcp.codencer.dev/mcp --json
+          - ./bin/codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer setup mcp --client chatgpt --endpoint http://127.0.0.1:19090/mcp --json
         notes: Direct Relay MCP snippets remain available only for advanced/direct/debug mode.
       - id: activation_package_and_preflight
         status: sprint_7_implemented
@@ -105,28 +105,30 @@ profiles:
         status: sprint_7_1_implemented
         commands:
           - go test ./internal/mcpconfig ./internal/activation ./cmd/codencer
-        notes: Gateway canonical order is claude mcp add --transport http --header "Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN" codencer https://mcp.codencer.dev/mcp. Direct Relay remains advanced/debug only.
+        notes: Gateway canonical order is claude mcp add --transport http --header "Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN" codencer http://127.0.0.1:19090/mcp for local proof. Direct Relay remains advanced/debug only.
       - id: chatgpt_setup_sheet_complete
         status: sprint_8_gateway_updated
         commands:
-          - ./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --auth oauth --json
+          - ./bin/codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --auth oauth --json
         notes: JSON setup sheet includes Gateway endpoint, auth mode, client id, local token file paths, OAuth endpoints/metadata, scopes, expected tools, UI steps, test prompts, relay profile guidance, and evidence checklist.
       - id: curl_smoke_real_mcp_flow
         status: sprint_7_1_implemented
         commands:
           - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
         notes: curl-smoke.sh initializes MCP, captures/reuses MCP-Session-Id, lists tools, calls codencer.list_projects, and has an opt-in fake manifest call.
-      - id: site_update_pack_present
-        status: sprint_7_1_implemented
+      - id: public_self_host_release_docs_present
+        status: sprint_10_implemented
         commands:
-          - test -f docs/site-update-codencer-dev.md
-        notes: The codencer.dev website source is not present in this repository; site repo update remains pending.
+          - test -f docs/deployment/self-host-production.md
+          - test -f docs/mcp/self-host-mcp-proof.md
+          - test -f docs/acceptance/public-self-host-release.md
+        notes: Public docs describe the self-host Gateway/Relay/MCP path. Website implementation work is outside this repository.
       - id: public_repo_release_manifest_present
         status: sprint_10_implemented
         commands:
           - test -f docs/acceptance/public-repo-release.yaml
           - make verify-public-release
-        notes: Public repository release readiness has a separate acceptance manifest covering public/private boundary, legal files, secret/config safety, release artifact safety, and official-vs-self-host positioning.
+        notes: Public repository release readiness has a separate acceptance manifest covering public/private boundary, legal files, secret/config safety, release artifact safety, and self-host-vs-future-managed positioning.
       - id: security_policy_present
         status: sprint_10_implemented
         commands:
@@ -199,7 +201,7 @@ profiles:
         status: sprint_9_implemented
         commands:
           - make verify-official-connector
-        notes: Verifies `codencer login`, default personal workspace, default managed Relay profile, `codencer connector login`, user-added self-host Relay profile, Gateway MCP tools, default/self-host routing, ambiguity blockers, relay-down blocker, token redaction, and no absolute local path leakage in isolated temp services with random ports.
+        notes: Verifies `codencer login`, default personal workspace, default self-host Relay profile, `codencer connector login`, user-added self-host Relay profile, Gateway MCP tools, default/self-host routing, ambiguity blockers, relay-down blocker, token redaction, and no absolute local path leakage in isolated temp services with random ports.
       - id: gateway_account_device_login
         status: sprint_9_implemented
         commands:
@@ -214,13 +216,13 @@ profiles:
         status: sprint_9_implemented
         commands:
           - go test ./internal/activation ./cmd/codencer
-          - ./bin/codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
         notes: Activation package contains Gateway curl smoke, Codex config, Claude Code command, ChatGPT setup, relay profile setup, connector login instructions, and evidence checklist.
-      - id: official_connector_docs_use_gateway_url
+      - id: public_connector_docs_use_gateway_url
         status: sprint_8_implemented
         commands:
-          - rg "https://mcp.codencer.dev/mcp" README.md docs
-        notes: Primary client docs use Gateway as the official connector URL.
+          - rg "127.0.0.1:19090/mcp|gateway.example.com/mcp" README.md docs
+        notes: Primary client docs use operator-owned self-host Gateway URLs as the public connector examples.
       - id: self_host_direct_marked_advanced
         status: sprint_8_implemented
         commands:
@@ -271,7 +273,7 @@ profiles:
           - test -f docs/quickstart-self-host-relay.md
           - test -f docs/activation-vps-relay.md
           - test -f docs/activation-local-connector.md
-        notes: Self-host docs keep Relay/connector as backend and direct-debug paths while official client activation uses Gateway.
+        notes: Self-host docs keep Relay/connector as backend and direct-debug paths while public client activation uses Gateway.
       - id: mcp_client_docs_current
         status: sprint_7_3_implemented
         commands:
@@ -283,14 +285,14 @@ profiles:
       - id: legacy_docs_archived_or_bannered
         status: sprint_7_3_implemented
         commands:
-          - test -d docs/archive/v0.2-beta
-          - rg "Legacy v0.2 Beta Document" docs/archive/v0.2-beta
-        notes: Public v0.2 beta/setup docs are archived; internal historical docs carry legacy warnings.
+          - test -d docs/archive/legacy-local-track
+          - rg "Legacy" docs/archive/legacy-local-track
+        notes: Public legacy setup and release-track docs are archived; internal historical docs carry legacy warnings.
       - id: no_stale_primary_v0_2_claims
         status: sprint_7_3_implemented
         commands:
           - test -f docs/README.md
-        notes: Primary current docs present v0.3 local/self-host RC; v0.2 references are limited to archived or historical contexts.
+        notes: Primary current docs present v0.3 local/self-host RC; old release-track references are limited to archived or historical contexts.
       - id: no_mit_primary_claims
         status: sprint_7_3_implemented
         commands:

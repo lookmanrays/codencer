@@ -94,7 +94,7 @@ For Claude attempts, the standard evidence set includes:
 - `stderr.log`
 - `result.json`
 
-### OpenClaw ACPX (Experimental / Alpha)
+### OpenClaw ACPX (Experimental)
 Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. Use `--wait --json` for synchronous machine-safe handoffs.
 ```bash
 ./bin/orchestratorctl submit my-run \

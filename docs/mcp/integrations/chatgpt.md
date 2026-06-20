@@ -9,15 +9,15 @@ Use this page with:
 
 - [ChatGPT custom MCP app setup](../chatgpt-app-setup.md)
 - [ChatGPT OAuth dev mode](../chatgpt-oauth-dev.md)
-- [Official Gateway activation](../../activation-official-gateway.md)
+- [Self-host MCP proof](../self-host-mcp-proof.md)
 - [MCP integrations](../integrations.md)
 
 ## Current Supported Surface
 
-ChatGPT must target the official Gateway MCP endpoint:
+ChatGPT must target an operator-owned public HTTPS self-host Gateway endpoint:
 
 ```text
-https://mcp.codencer.dev/mcp
+https://gateway.example.com/mcp
 ```
 
 Do not point ChatGPT at:
@@ -33,7 +33,7 @@ Do not point ChatGPT at:
 
 - A public HTTPS Gateway endpoint.
 - Gateway bearer-dev auth or Gateway OAuth dev mode for single-user testing.
-- A default managed Relay profile or a backend self-host Relay profile in Gateway.
+- A backend self-host Relay profile in Gateway.
 - A local connector bound with `codencer connector login`.
 - At least one explicitly shared project.
 - An eligible ChatGPT workspace with custom MCP/developer mode access.
@@ -41,10 +41,10 @@ Do not point ChatGPT at:
 Generate setup materials:
 
 ```bash
-codencer login --gateway https://mcp.codencer.dev
-codencer connector login --gateway https://mcp.codencer.dev --relay default --json
-codencer gateway relay add --gateway https://mcp.codencer.dev --name personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
-codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+codencer login --gateway https://gateway.example.com
+codencer connector login --gateway https://gateway.example.com --relay personal --json
+codencer gateway relay add --gateway https://gateway.example.com --name personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 ## Narrow Product Smoke
@@ -64,8 +64,8 @@ Until then, ChatGPT proof is pending/manual, not passed.
 ## Expected Tools
 
 Gateway exposes project-aware `codencer.*` tools. See
-[Official Gateway activation](../../activation-official-gateway.md) for the
-exact Gateway tool list and selector behavior.
+[Self-host MCP proof](../self-host-mcp-proof.md) for the exact Gateway tool list
+and selector behavior.
 
 Project listings include `locations[]`. If more than one online machine
 advertises the same `project_id`, ChatGPT must provide `machine_id` or

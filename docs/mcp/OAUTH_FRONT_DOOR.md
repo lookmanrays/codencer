@@ -1,8 +1,8 @@
 # OAuth Front Door For Remote MCP
 
-> Legacy/direct Relay note: the official Sprint 8 connector path is Codencer
-> Gateway at `https://mcp.codencer.dev/mcp`. Use this front-door pattern only
-> for advanced direct Relay deployments or operator-owned experiments.
+> Direct Relay note: the public connector path is the operator's self-host
+> Gateway. Use this front-door pattern only for advanced direct Relay
+> deployments or operator-owned experiments.
 
 Codencer supports OAuth-capable remote MCP as a resource server. It exposes protected-resource metadata and bearer challenges, but it does not issue OAuth authorization-code tokens.
 

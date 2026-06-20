@@ -68,7 +68,7 @@ Current auth model is intentionally small:
 - explicit scopes
 - optional instance scoping
 - OAuth protected-resource metadata and bearer challenges for product-facing MCP front doors
-- suitable for narrow self-host beta use
+- suitable for narrow self-host use
 
 It is not enterprise IAM and does not issue OAuth authorization-code tokens.
 

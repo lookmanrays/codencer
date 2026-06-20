@@ -101,11 +101,11 @@ Fallback remains available through `codencer-connectord enroll` and `codencer-co
 
 ## Activation Package
 
-Generate official Gateway-first operator artifacts:
+Generate self-host Gateway-first operator artifacts:
 
 ```bash
-./bin/codencer activation gateway \
-  --gateway https://mcp.codencer.dev \
+./bin/codencer activation self-host \
+  --gateway http://127.0.0.1:19090 \
   --relay https://relay.example.com \
   --project codencer \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \

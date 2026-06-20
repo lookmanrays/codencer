@@ -76,6 +76,16 @@ if CURRENT_HOME.startswith("/Users/"):
     LOCAL_PATH_PATTERNS.append(r"/Users/[^/\s]+/Projects/codencer\b")
 LOCAL_PATH_RE = re.compile("|".join(LOCAL_PATH_PATTERNS))
 OFFICIAL_ENDPOINT_RE = re.compile(r"https://(?:mcp|relay)\.codencer\.dev(?:/mcp)?")
+PRIMARY_STALE_RE = re.compile(
+    r"\b(beta|alpha|staging)\b"
+    r"|v0\.2"
+    r"|https://(?:mcp|relay|app)\.codencer\.dev(?:/mcp)?"
+    r"|default managed Relay"
+    r"|official managed Relay"
+    r"|activation official"
+    r"|setup gateway",
+    re.IGNORECASE,
+)
 SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)\b[A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|CLIENT_SECRET)[A-Z0-9_]*\s*[:=]\s*['\"]?([^'\"\s#]+)"
 )
@@ -208,6 +218,20 @@ def should_scan_secret_assignment(rel: str) -> bool:
     return True
 
 
+def should_scan_primary_stale_reference(rel: str) -> bool:
+    if rel.startswith("docs/archive/") or rel.startswith("docs/internal/"):
+        return False
+    if rel.endswith("package-lock.json"):
+        return False
+    if rel == "TRADEMARKS.md":
+        return False
+    if rel in {"README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}:
+        return True
+    if rel.startswith("docs/") or rel.startswith("web/gateway-console/"):
+        return Path(rel).suffix in TEXT_SUFFIXES
+    return False
+
+
 def endpoint_allowed(rel: str) -> bool:
     return rel.startswith(ALLOWED_ENDPOINT_PREFIXES)
 
@@ -253,6 +277,10 @@ def check_tracked_file(rel: str, failures: list[str]) -> None:
             value = match.group(2)
             if len(value) >= 12 and not is_safe_placeholder(value):
                 fail(f"secret-looking assignment in tracked file {rel}: {match.group(0)}", failures)
+    if should_scan_primary_stale_reference(rel):
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if PRIMARY_STALE_RE.search(line):
+                fail(f"stale primary release reference in {rel}:{line_number}: {line.strip()}", failures)
 
 
 def scan_source_tree(failures: list[str]) -> None:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check local Markdown links in current public docs.
 
-Archived v0.2 docs and internal historical notes are intentionally skipped by
+Archived legacy docs and internal historical notes are intentionally skipped by
 default. They are preserved for history and may contain stale relative links.
 """
 

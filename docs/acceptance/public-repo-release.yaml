@@ -5,7 +5,7 @@ status: ready_when_verified
 verdict:
   public_repo_release_readiness: go_when_all_required_checks_pass
   self_host_gateway_relay_mcp: go_when_all_required_checks_pass
-  controlled_preprod_official_connector_path: go_when_all_required_checks_pass
+  controlled_preprod_self_host_connector_path: go_when_all_required_checks_pass
   public_managed_codencer_cloud_launch: no_go
 required_gates:
   - id: public_private_boundary_docs_present
@@ -32,13 +32,13 @@ required_gates:
     evidence:
       - make verify-public-release
     notes: Fails on committed non-example env files, private key blocks, obvious bearer-token leaks, real-user absolute paths, unsafe production endpoint placement, and release archives containing runtime state.
-  - id: official_connector_gateway_first
+  - id: public_self_host_connector_gateway_first
     status: implemented
     evidence:
-      - docs/official-connector-flow.md
-      - docs/activation-official-gateway.md
+      - docs/deployment/self-host-production.md
+      - docs/mcp/self-host-mcp-proof.md
       - docs/architecture/mcp-gateway-model.md
-    notes: AI clients point to Gateway; self-host Relay can be a backend profile.
+    notes: AI clients point to the operator's self-host Gateway; self-host Relay is the backend profile.
   - id: direct_self_host_mcp_marked_advanced
     status: implemented
     evidence:

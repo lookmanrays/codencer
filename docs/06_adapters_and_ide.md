@@ -28,7 +28,7 @@ Why:
 - good contrast for adapter-neutral design
 
 Status:
-- **Implemented wrapper path (alpha-grade)**: the CLI wrapper contract is implemented and covered by fake-binary integration tests, prompt/normalization unit tests, lifecycle tests, and simulation conformance tests.
+- **Implemented wrapper path (lower maturity)**: the CLI wrapper contract is implemented and covered by fake-binary integration tests, prompt/normalization unit tests, lifecycle tests, and simulation conformance tests.
 - **Not covered in repo tests**: live authenticated Claude service calls.
 
 Current v1 contract:
@@ -39,11 +39,11 @@ Current v1 contract:
 - evidence model: `prompt.txt`, raw `stdout.log`, raw `stderr.log`, plus a synthesized `result.json`
 
 ### 4. OpenClaw ACPX
-- **Status**: 🧪 **Experimental (Alpha)**
+- **Status**: **Experimental**
 - **Description**: Standardized ACP (Agent Control Protocol) bridge to the OpenClaw ecosystem.
 - **Binary**: `acpx` (configurable via `OPENCLAW_ACPX_BINARY`)
 - **Key Capability**: Cross-platform agent communication using a standard protocol interface.
-- **Lifecycle**: Experimental. While basic polling and cancellation are implemented, this adapter is currently lower-maturity than the core Codex/Claude adapters and is considered an alpha-tier executor.
+- **Lifecycle**: Experimental. While basic polling and cancellation are implemented, this adapter is currently lower-maturity than the core Codex/Claude adapters.
 - **Evidence**: Captures standard execution logs (`stdout.log`) and any ACP-compatible session artifacts (`acp-status.json`, `result.json`) present in the task artifact root.
 
 ## Adapter design rules

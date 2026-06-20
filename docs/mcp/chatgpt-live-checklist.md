@@ -4,7 +4,7 @@ ChatGPT product proof is manual until an operator actually exercises the product
 
 ## Prerequisites
 
-- Public HTTPS Gateway endpoint, normally `https://mcp.codencer.dev/mcp`.
+- Public HTTPS Gateway endpoint, such as `https://gateway.example.com/mcp`.
 - Gateway OAuth dev mode or equivalent OAuth/front-door mode when required by
   the ChatGPT workspace.
 - Eligible ChatGPT workspace with developer mode/custom MCP access.
@@ -43,7 +43,7 @@ Gateway activation generates values for the product flow without claiming a
 pass:
 
 ```bash
-./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 The command is configuration proof only. A passed ChatGPT gate requires an

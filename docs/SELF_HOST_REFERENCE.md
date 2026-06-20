@@ -416,19 +416,21 @@ This is recommended operator topology, not an automated smoke proof. See [WSL / 
 
 ## Sprint 8 Gateway Short Path
 
-Official client setup is Gateway-first. A self-host Relay is still the backend
-transport, but ChatGPT, Claude Code, and Codex should point at Gateway:
+Public client setup is Gateway-first. A self-host Relay is still the backend
+transport, and ChatGPT, Claude Code, and Codex should point at the operator's
+self-host Gateway:
 
 ```bash
 make build
-./bin/codencer setup gateway \
-  --base-url https://mcp.codencer.dev \
-  --mcp-url https://mcp.codencer.dev/mcp \
+./bin/codencer setup self-host \
+  --gateway-url http://127.0.0.1:19090 \
+  --mcp-url http://127.0.0.1:19090/mcp \
+  --relay-url https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
 ./bin/codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
-./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer activation self-host --gateway http://127.0.0.1:19090 --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 ## Sprint 7 Direct Relay Short Path

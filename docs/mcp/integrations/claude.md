@@ -1,21 +1,23 @@
 # Claude Code MCP Integration Notes
 
 Claude Code MCP setup is configuration/preflight proof until Claude Code
-actually connects to the official Codencer Gateway, calls a tool, and evidence
-is saved. Do not mark live Claude Code proof passed from repository-only tests.
+actually connects to the operator's self-host Gateway, calls a tool, and
+evidence is saved. Do not mark live Claude Code proof passed from
+repository-only tests.
 
 Use this page with:
 
 - [Claude Code MCP activation](../claude-code-mcp-live.md)
-- [Official Gateway activation](../../activation-official-gateway.md)
+- [Self-host MCP proof](../self-host-mcp-proof.md)
 - [MCP integrations](../integrations.md)
 
 ## Current Supported Surface
 
-Claude Code should target the official Gateway MCP endpoint:
+Claude Code should target the self-host Gateway MCP endpoint. For a local
+operator proof:
 
 ```text
-https://mcp.codencer.dev/mcp
+http://127.0.0.1:19090/mcp
 ```
 
 Do not point Claude Code at:
@@ -30,8 +32,8 @@ Do not point Claude Code at:
 ## Generate Setup
 
 ```bash
-codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-codencer setup mcp --client claude-code --endpoint https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+codencer activation self-host --gateway http://127.0.0.1:19090 --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 Canonical command shape:
@@ -41,11 +43,11 @@ claude mcp add \
   --transport http \
   --header "Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN" \
   codencer \
-  https://mcp.codencer.dev/mcp
+  http://127.0.0.1:19090/mcp
 ```
 
 Direct self-host Relay snippets remain available for advanced/direct/debug
-testing, but they are not the official connector path.
+testing, but they are not the public Gateway-first connector path.
 
 ## Narrow Product Smoke
 

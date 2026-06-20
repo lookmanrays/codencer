@@ -105,9 +105,9 @@ Analyze the JSON payload from `submit` to decide your next move.
 
 ## 🧪 Experimental Path: OpenClaw (ACPX)
 
-Codencer provides experimental (Alpha) support for the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to any ACP-compliant agent in the OpenClaw ecosystem. 
+Codencer provides experimental support for the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to any ACP-compliant agent in the OpenClaw ecosystem.
 
-### Pattern: OpenClaw Submission (Alpha)
+### Pattern: OpenClaw Submission
 ```bash
 ./bin/orchestratorctl submit my-run-id \
   --goal "Fix broken test case in auth_test.go" \

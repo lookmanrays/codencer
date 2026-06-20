@@ -2,8 +2,9 @@
 
 This page consolidates current v0.3 local/self-host RC boundaries. Start with
 [README](../README.md), [Local Quickstart](quickstart-local.md), and
-[Self-Host Relay Quickstart](quickstart-self-host-relay.md). Historical beta
-docs are archived under [archive/v0.2-beta](archive/v0.2-beta/).
+[Self-Host Relay Quickstart](quickstart-self-host-relay.md). Historical setup
+and release-track docs are archived under
+[archive/legacy-local-track](archive/legacy-local-track/).
 
 | Surface | Known Limitation | Workaround or Plan | Severity |
 | --- | --- | --- | --- |

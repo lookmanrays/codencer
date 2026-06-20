@@ -32,7 +32,7 @@ The repo now includes a practical Docker baseline under `deploy/cloud/`:
 - `deploy/cloud/config/relay.json`
 - `deploy/cloud/smoke.sh`
 
-This stack is beta-track, SQLite-backed, and meant to be a serious self-host baseline rather than a production-ready managed deployment recipe.
+This stack is SQLite-backed and meant to be a serious self-host baseline rather than a production-ready managed deployment recipe.
 
 ## Compose Reality
 

@@ -45,7 +45,7 @@ Authorization: Bearer <gateway-token>
 ```
 
 OAuth protected-resource metadata and bearer challenges exist for product-facing
-MCP setup. For ChatGPT testing, `codencer setup gateway --enable-oauth-dev`
+MCP setup. For ChatGPT testing, `codencer setup self-host --enable-oauth-dev`
 enables a minimal single-user OAuth dev issuer.
 Production IAM should use an operator-owned OAuth issuer/front door that
 translates to a bearer token Codencer accepts.

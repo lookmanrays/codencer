@@ -1,6 +1,6 @@
 # Local Production Foundation
 
-Sprint 1 added the local production foundation for Codencer as a hands-off local automation bridge. Sprint 2 added project-aware local execution through the existing daemon HTTP API. Sprint 3 adds project-aware self-host Relay/MCP routing for remote planners. Sprint 4 adds a conservative user-level runtime supervisor, watchdog, and recovery surface. Sprint 5 adds a live execution matrix and readiness reports that distinguish deterministic checks, skipped live proof, and actual live executor/client evidence. Sprint 7 adds activation packages, client preflight artifacts, and a minimal single-user OAuth dev front-door for ChatGPT testing. Sprint 8 adds the official Gateway MCP surface in front of backend Relays. Codencer accepts approved work, routes it to a local project/runtime/executor, captures structured state and evidence, and returns that state to the planner. Codencer surfaces state; planner decides.
+Sprint 1 added the local production foundation for Codencer as a hands-off local automation bridge. Sprint 2 added project-aware local execution through the existing daemon HTTP API. Sprint 3 adds project-aware self-host Relay/MCP routing for remote planners. Sprint 4 adds a conservative user-level runtime supervisor, watchdog, and recovery surface. Sprint 5 adds a live execution matrix and readiness reports that distinguish deterministic checks, skipped live proof, and actual live executor/client evidence. Sprint 7 adds activation packages, client preflight artifacts, and a minimal single-user OAuth dev front-door for ChatGPT testing. Sprint 8 adds the self-host Gateway MCP surface in front of backend Relays. Codencer accepts approved work, routes it to a local project/runtime/executor, captures structured state and evidence, and returns that state to the planner. Codencer surfaces state; planner decides.
 
 Commercial Codencer Cloud is out of scope for this local production mode. The existing self-host relay, Gateway RC surface, and cloud-control-plane code remain in the repository, but this page focuses on the local production, Gateway, and self-host Relay/MCP foundation.
 
@@ -8,7 +8,7 @@ Commercial Codencer Cloud is out of scope for this local production mode. The ex
 
 Local CLI mode runs on one machine and uses the `codencer` facade for project registration, local configuration, health checks, status, run creation, task submission, and manifest execution. Execution is daemon-first: `codencer` talks to `/api/v1/runs`, `/api/v1/runs/{run}/steps`, `/api/v1/steps/{id}`, `/result`, `/artifacts`, `/validations`, and `/logs`. It does not shell out to `orchestratorctl`, create a second orchestration engine, or auto-start production daemons from normal commands.
 
-Gateway mode exposes the official MCP connector surface through `codencer-gatewayd`. Gateway stores users, personal workspaces, sessions, connector bindings, and Relay profiles, aggregates projects, routes execution to the selected Relay, and returns structured results/blockers without exposing backend Relay tokens or absolute local paths.
+Gateway mode exposes the public self-host MCP connector surface through `codencer-gatewayd`. Gateway stores users, personal workspaces, sessions, connector bindings, and Relay profiles, aggregates projects, routes execution to the selected Relay, and returns structured results/blockers without exposing backend Relay tokens or absolute local paths.
 
 Self-host Relay/MCP mode keeps execution local and provides the backend route through `codencer-relayd` and `codencer-connectord`. Direct Relay `/mcp` remains available for advanced/direct/debug mode; the local daemon MCP endpoint is still a compatibility/admin bridge, not the public remote planner contract.
 
@@ -20,7 +20,7 @@ Live matrix mode reports what is installed, configured, skipped, blocked, or act
 
 Activation mode prepares self-host operators for real client setup. `codencer activation package` writes a package under `$CODENCER_HOME/artifacts/activation/`; `codencer activation check` validates local or remote relay readiness; and `codencer activation chatgpt|codex|claude-code` emits client-specific setup guidance without writing user client config. See [VPS Relay Activation](activation-vps-relay.md), [Local Connector Activation](activation-local-connector.md), and [MCP integration notes](mcp/integrations.md).
 
-Gateway activation mode writes Gateway-first client artifacts with `codencer activation official` (or the compatible `activation gateway` alias). See [Official Gateway Activation](activation-official-gateway.md).
+Self-host Gateway activation writes Gateway-first client artifacts with `codencer activation self-host`. See [Self-host MCP proof](mcp/self-host-mcp-proof.md) and [Self-host production deployment](deployment/self-host-production.md).
 
 ## Sprint 1 Capabilities
 
@@ -94,9 +94,9 @@ OAuth dev mode is for self-host testing, not enterprise IAM. Dev no-auth is priv
 
 - `codencer-gatewayd` deployable Gateway binary.
 - Gateway config at `$CODENCER_HOME/runtime/gateway/config.json`.
-- `codencer setup gateway --json`.
+- `codencer setup self-host --json`.
 - `codencer gateway relay add|list|status --json`.
-- `codencer activation gateway --json`.
+- `codencer activation self-host --json`.
 - Gateway MCP tools for `codencer.list_relays`, project listing, project location listing, manifest/task forwarding, run reports, and blockers.
 - Routing by `relay_profile_id`, `machine_id`, and `host_label`.
 - Structured blockers `ambiguous_relay_profile`, `ambiguous_project_location`, and `relay_unavailable`.
@@ -107,7 +107,7 @@ OAuth dev mode is for self-host testing, not enterprise IAM. Dev no-auth is priv
 
 - `codencer login`, `codencer whoami`, and `codencer logout`.
 - Device-code style Gateway login with local session at `$CODENCER_HOME/session.json`.
-- Default personal workspace and default managed Relay profile creation.
+- Default personal workspace and default self-host Relay profile creation.
 - Persistent Gateway store for workspace Relay profiles and connector bindings.
 - `codencer connector login --gateway ... --relay default|<profile>`.
 - Remote `codencer gateway relay add|list|status|remove` against the Gateway workspace registry.
@@ -302,7 +302,7 @@ Recovery is intentionally conservative. Dry-run reports planned actions. Non-dry
 
 ## Relay And MCP
 
-Official client setup uses Gateway. See [Official Gateway Activation](activation-official-gateway.md).
+Public client setup uses the self-host Gateway. See [Self-host MCP proof](mcp/self-host-mcp-proof.md) and [MCP Gateway model](architecture/mcp-gateway-model.md).
 
 Self-host Relay also exposes direct/advanced/debug surfaces:
 

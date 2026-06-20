@@ -94,11 +94,11 @@ export CODENCER_MCP_TOKEN=<planner-token>
 
 The check verifies protected-resource metadata, unauthenticated MCP challenge behavior, MCP initialize/tools list, project visibility, and path redaction. Add `--run-fake-manifest` only when the fake project/profile is intentionally registered for server preflight.
 
-For official client activation, generate the Gateway package instead:
+For public client activation, generate the self-host Gateway package instead:
 
 ```bash
-./bin/codencer activation gateway \
-  --gateway https://mcp.codencer.dev \
+./bin/codencer activation self-host \
+  --gateway http://127.0.0.1:19090 \
   --relay https://relay.example.com \
   --project codencer \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \

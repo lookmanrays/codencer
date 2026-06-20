@@ -9,7 +9,7 @@ managed Codencer Cloud console.
 - `/ui-system`: live design-system and component reference.
 - `/console`: workspace dashboard with MCP endpoint, Relay, connector, project,
   audit, and activation summaries.
-- `/console/relays`: default managed Relay and user-added self-host Relay
+- `/console/relays`: default self-host Relay and user-added self-host Relay
   backend profiles.
 - `/console/connectors`: machines, host labels, connector bindings, and login
   command.
