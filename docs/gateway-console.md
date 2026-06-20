@@ -20,6 +20,31 @@ managed Cloud operations dashboard.
 - community cloud-control-plane CLIs documented in [CLOUD.md](CLOUD.md)
 - `web/gateway-console` Next.js UI foundation
 
+## Verification And Visual Evidence
+
+Run the standard UI gate:
+
+```bash
+make verify-gateway-console
+```
+
+Generate browser screenshot evidence:
+
+```bash
+cd web/gateway-console
+npm run visual:evidence
+```
+
+The visual run writes local artifacts under
+`reports/gateway-console-screenshots/YYYY-MM-DD-HHMM/` with full-page route
+screenshots, interaction-state screenshots, `index.md`, and
+`visual-review.md`. Timestamped PNGs are ignored by default to avoid repository
+bloat. See [UI visual evidence](ui/visual-evidence.md).
+
+The console is mock-backed by default unless
+`NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false` is configured. Live Gateway API
+coverage is limited to the read-only paths actually wired in the UI data client.
+
 ## Public Console Scope
 
 The public foundation covers:

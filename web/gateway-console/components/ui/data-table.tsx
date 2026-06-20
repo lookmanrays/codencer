@@ -30,45 +30,75 @@ export function DataTable<TData>({
   }
 
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-border bg-paper-strong">
-      <table className="w-full min-w-[760px] border-collapse text-left">
-        <thead className="border-b border-border bg-paper-tinted">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th
-                  className="px-md py-sm font-mono text-mono uppercase tracking-[0.12em] text-ink-muted"
-                  key={header.id}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr
-              className={cn("border-b border-border last:border-b-0")}
-              key={row.id}
-            >
+    <>
+      <div className="grid gap-sm md:hidden">
+        {table.getRowModel().rows.map((row) => (
+          <article
+            className="rounded-[var(--radius-card)] border border-border bg-paper-strong p-md"
+            key={row.id}
+          >
+            <dl className="m-0 grid gap-sm">
               {row.getVisibleCells().map((cell) => (
-                <td
-                  className="px-md py-sm align-top text-body-sm"
+                <div
+                  className="grid gap-xs border-t border-border py-sm first:border-t-0 first:pt-0 last:pb-0"
                   key={cell.id}
                 >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
+                  <dt className="font-mono text-mono uppercase tracking-[0.12em] text-ink-muted">
+                    {headerText(cell.column.columnDef.header, cell.column.id)}
+                  </dt>
+                  <dd className="m-0 min-w-0 break-words text-body-sm text-ink-primary">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </dd>
+                </div>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto rounded-[var(--radius-card)] border border-border bg-paper-strong md:block">
+        <table className="w-full min-w-[760px] border-collapse text-left">
+          <thead className="border-b border-border bg-paper-tinted">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <th
+                    className="px-md py-sm font-mono text-mono uppercase tracking-[0.12em] text-ink-muted"
+                    key={header.id}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                className={cn("border-b border-border last:border-b-0")}
+                key={row.id}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td
+                    className="px-md py-sm align-top text-body-sm"
+                    key={cell.id}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
+}
+
+function headerText(header: unknown, fallback: string) {
+  return typeof header === "string" ? header : fallback;
 }

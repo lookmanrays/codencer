@@ -13,7 +13,9 @@ describe("DeviceApprovalPanel", () => {
       </Providers>,
     );
     await user.click(screen.getByRole("button", { name: /approve device/i }));
-    expect(await screen.findByText(/too small/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/enter a device code like ABCD-EFGH/i),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText(/user code/i), "ABCD-EFGH");
     await user.click(screen.getByRole("button", { name: /approve device/i }));
     expect(await screen.findByText(/form validated/i)).toBeInTheDocument();

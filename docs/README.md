@@ -14,6 +14,7 @@ Start here for the current open-source local/self-host RC:
 - [Gateway Console layout rules](ui/layout-composition-rules.md)
 - [Gateway Console component inventory](ui/component-inventory.md)
 - [Gateway Console IA](ui/public-gateway-console-ia.md)
+- [Gateway Console visual evidence](ui/visual-evidence.md)
 - [Project config](project-config.md)
 - [VPS Relay activation](activation-vps-relay.md)
 - [Local connector activation](activation-local-connector.md)

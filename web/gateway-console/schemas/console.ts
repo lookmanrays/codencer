@@ -78,7 +78,7 @@ export const AuditEventSchema = z.object({
 });
 
 export const DeviceCodeSchema = z.object({
-  userCode: z.string().min(4),
+  userCode: z.string().min(4, "Enter a device code like ABCD-EFGH"),
   email: z.string().email().optional(),
   displayName: z.string().optional(),
 });

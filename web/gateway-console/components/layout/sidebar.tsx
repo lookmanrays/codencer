@@ -6,12 +6,19 @@ import { authNav, consoleNav } from "@/components/layout/nav";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
-export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
+export function Sidebar({
+  collapsed = false,
+  variant = "desktop",
+}: {
+  collapsed?: boolean;
+  variant?: "desktop" | "mobile";
+}) {
   const pathname = usePathname();
   return (
     <aside
       className={cn(
-        "hidden min-h-dvh border-r border-border bg-paper-strong lg:block",
+        "min-h-dvh border-r border-border bg-paper-strong",
+        variant === "desktop" ? "hidden lg:block" : "block",
         collapsed ? "w-[76px]" : "w-[260px]",
       )}
     >
