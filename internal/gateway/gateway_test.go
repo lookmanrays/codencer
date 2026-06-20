@@ -2,12 +2,15 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConfigValidationAndRedaction(t *testing.T) {
@@ -237,8 +240,91 @@ func TestGatewayAmbiguityAndRelayUnavailableBlockers(t *testing.T) {
 	assertToolErrorContains(t, relayDown, "relay_unavailable")
 }
 
+func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
+	relay := newFakeRelay(t, fakeRelayOptions{allowEnrollment: true})
+	defer relay.Close()
+	t.Setenv("CODENCER_DEFAULT_RELAY_TOKEN", "relay-secret")
+	t.Setenv("CODENCER_SELFHOST_RELAY_TOKEN", "relay-secret")
+
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "http://127.0.0.1:19090"
+	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.Store.Path = filepath.Join(t.TempDir(), "gateway.db")
+	cfg.DefaultRelay.URL = relay.URL
+	cfg.DefaultRelay.TokenEnv = "CODENCER_DEFAULT_RELAY_TOKEN"
+	server, err := NewServer(cfg, ServerOptions{})
+	if err != nil {
+		t.Fatalf("new gateway server: %v", err)
+	}
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	auth := apiPost[DeviceAuthorization](t, httpServer.URL+"/api/gateway/v1/device/authorize", "", map[string]any{
+		"email":        "dev@example.com",
+		"display_name": "Developer",
+	})
+	if auth.DeviceCode == "" || auth.UserCode == "" {
+		t.Fatalf("device authorization missing codes: %+v", auth)
+	}
+	apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/device/approve", "", map[string]any{"user_code": auth.UserCode})
+	token := apiPost[TokenResponse](t, httpServer.URL+"/api/gateway/v1/device/token", "", map[string]any{"device_code": auth.DeviceCode})
+	if token.AccessToken == "" || token.UserID == "" || token.WorkspaceID == "" {
+		t.Fatalf("token was not workspace-bound: %+v", token)
+	}
+
+	who := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/whoami", token.AccessToken)
+	if who["workspace_id"] != token.WorkspaceID {
+		t.Fatalf("whoami workspace = %v want %s", who["workspace_id"], token.WorkspaceID)
+	}
+	relays := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/relays", token.AccessToken)
+	relayBody := mustJSON(t, relays)
+	if !strings.Contains(relayBody, `"id":"default"`) || strings.Contains(relayBody, "relay-secret") {
+		t.Fatalf("default relay missing or token leaked: %s", relayBody)
+	}
+	selfHost := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/relays", token.AccessToken, map[string]any{
+		"name":      "Personal",
+		"url":       relay.URL,
+		"token_env": "CODENCER_SELFHOST_RELAY_TOKEN",
+	})
+	selfHostBody := mustJSON(t, selfHost)
+	if !strings.Contains(selfHostBody, `"token_configured":true`) || strings.Contains(selfHostBody, "relay-secret") {
+		t.Fatalf("self-host relay response unsafe: %s", selfHostBody)
+	}
+
+	connectorLogin := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/connectors/login", token.AccessToken, map[string]any{
+		"relay": "default",
+		"machine": map[string]any{
+			"machine_id": "mach-local",
+			"hostname":   "dev-host",
+			"host_label": "macbook",
+			"os":         "darwin",
+			"arch":       "arm64",
+		},
+	})
+	if connectorLogin["enrollment_token"] != "enroll-secret" {
+		t.Fatalf("connector login did not return enrollment secret to authenticated CLI: %s", mustJSON(t, connectorLogin))
+	}
+	apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/connectors/complete", token.AccessToken, map[string]any{
+		"binding_id":         connectorLogin["binding_id"],
+		"relay_connector_id": "conn-relay",
+		"relay_machine_id":   "mach-relay",
+		"public_key":         "public-key",
+	})
+
+	readOnlyToken, err := server.store.CreateAccessToken(context.Background(), token.UserID, token.WorkspaceID, "test-readonly", cfg.MCPURL, []string{"projects:read"}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := apiRaw(t, httpServer.URL+"/api/gateway/v1/relays", readOnlyToken.AccessToken, map[string]any{"name": "denied", "url": relay.URL, "token_env": "CODENCER_SELFHOST_RELAY_TOKEN"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected read-only relay add to be forbidden, status=%d body=%s", resp.StatusCode, readBody(t, resp))
+	}
+}
+
 type fakeRelayOptions struct {
 	multipleLocations bool
+	allowEnrollment   bool
 }
 
 type fakeRelay struct {
@@ -285,6 +371,14 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 	mux.HandleFunc("/api/v2/status", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		writeTestJSON(t, w, map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/v2/connectors/enrollment-tokens", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		if !opts.allowEnrollment {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writeTestJSON(t, w, map[string]any{"secret": "enroll-secret"})
 	})
 	mux.HandleFunc("/api/v2/projects", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
@@ -446,4 +540,62 @@ func readBody(t *testing.T, resp *http.Response) string {
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(resp.Body)
 	return buf.String()
+}
+
+func apiGet[T any](t *testing.T, url, token string) T {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		t.Fatalf("GET %s status=%d body=%s", url, resp.StatusCode, readBody(t, resp))
+	}
+	var out T
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode GET %s: %v", url, err)
+	}
+	return out
+}
+
+func apiPost[T any](t *testing.T, url, token string, payload map[string]any) T {
+	t.Helper()
+	resp := apiRaw(t, url, token, payload)
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		t.Fatalf("POST %s status=%d body=%s", url, resp.StatusCode, readBody(t, resp))
+	}
+	var out T
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode POST %s: %v", url, err)
+	}
+	return out
+}
+
+func apiRaw(t *testing.T, url, token string, payload map[string]any) *http.Response {
+	t.Helper()
+	data, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
 }

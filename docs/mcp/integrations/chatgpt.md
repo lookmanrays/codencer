@@ -33,17 +33,18 @@ Do not point ChatGPT at:
 
 - A public HTTPS Gateway endpoint.
 - Gateway bearer-dev auth or Gateway OAuth dev mode for single-user testing.
-- A backend self-host Relay profile configured in Gateway.
-- A local connector enrolled with the Relay.
+- A default managed Relay profile or a backend self-host Relay profile in Gateway.
+- A local connector bound with `codencer connector login`.
 - At least one explicitly shared project.
 - An eligible ChatGPT workspace with custom MCP/developer mode access.
 
 Generate setup materials:
 
 ```bash
-codencer setup gateway --base-url https://mcp.codencer.dev --mcp-url https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json
-codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
-codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+codencer login --gateway https://mcp.codencer.dev
+codencer connector login --gateway https://mcp.codencer.dev --relay default --json
+codencer gateway relay add --gateway https://mcp.codencer.dev --name personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 ## Narrow Product Smoke
@@ -76,6 +77,6 @@ advertises the same `project_id`, ChatGPT must provide `machine_id` or
 - If ChatGPT cannot reach the MCP server, confirm the Gateway URL is public
   HTTPS.
 - If auth fails, confirm Gateway OAuth dev metadata or bearer-dev token setup.
-- If no projects appear, confirm connector enrollment and `codencer project
-  share`, then confirm the Gateway relay profile points to the backend Relay.
+- If no projects appear, confirm `codencer connector login`, `codencer project
+  share`, and the selected Gateway relay profile.
 - If execution is ambiguous, pass `machine_id` or `host_label`.

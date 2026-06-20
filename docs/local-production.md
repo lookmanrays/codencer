@@ -8,7 +8,7 @@ Commercial Codencer Cloud is out of scope for this local production mode. The ex
 
 Local CLI mode runs on one machine and uses the `codencer` facade for project registration, local configuration, health checks, status, run creation, task submission, and manifest execution. Execution is daemon-first: `codencer` talks to `/api/v1/runs`, `/api/v1/runs/{run}/steps`, `/api/v1/steps/{id}`, `/result`, `/artifacts`, `/validations`, and `/logs`. It does not shell out to `orchestratorctl`, create a second orchestration engine, or auto-start production daemons from normal commands.
 
-Gateway mode exposes the official MCP connector surface through `codencer-gatewayd`. Gateway stores Relay profiles, aggregates projects, routes execution to the selected Relay, and returns structured results/blockers without exposing backend Relay tokens or absolute local paths.
+Gateway mode exposes the official MCP connector surface through `codencer-gatewayd`. Gateway stores users, personal workspaces, sessions, connector bindings, and Relay profiles, aggregates projects, routes execution to the selected Relay, and returns structured results/blockers without exposing backend Relay tokens or absolute local paths.
 
 Self-host Relay/MCP mode keeps execution local and provides the backend route through `codencer-relayd` and `codencer-connectord`. Direct Relay `/mcp` remains available for advanced/direct/debug mode; the local daemon MCP endpoint is still a compatibility/admin bridge, not the public remote planner contract.
 
@@ -20,7 +20,7 @@ Live matrix mode reports what is installed, configured, skipped, blocked, or act
 
 Activation mode prepares self-host operators for real client setup. `codencer activation package` writes a package under `$CODENCER_HOME/artifacts/activation/`; `codencer activation check` validates local or remote relay readiness; and `codencer activation chatgpt|codex|claude-code` emits client-specific setup guidance without writing user client config. See [VPS Relay Activation](activation-vps-relay.md), [Local Connector Activation](activation-local-connector.md), and [MCP integration notes](mcp/integrations.md).
 
-Gateway activation mode writes Gateway-first client artifacts with `codencer activation gateway`. See [Official Gateway Activation](activation-official-gateway.md).
+Gateway activation mode writes Gateway-first client artifacts with `codencer activation official` (or the compatible `activation gateway` alias). See [Official Gateway Activation](activation-official-gateway.md).
 
 ## Sprint 1 Capabilities
 
@@ -102,6 +102,20 @@ OAuth dev mode is for self-host testing, not enterprise IAM. Dev no-auth is priv
 - Structured blockers `ambiguous_relay_profile`, `ambiguous_project_location`, and `relay_unavailable`.
 - Bearer-dev auth plus OAuth dev/protected-resource metadata for ChatGPT Developer Mode.
 - Deterministic `make verify-gateway` E2E with isolated daemon, Relay, connector instances, Gateway, random free ports, and fake adapter execution.
+
+## Sprint 9 Capabilities
+
+- `codencer login`, `codencer whoami`, and `codencer logout`.
+- Device-code style Gateway login with local session at `$CODENCER_HOME/session.json`.
+- Default personal workspace and default managed Relay profile creation.
+- Persistent Gateway store for workspace Relay profiles and connector bindings.
+- `codencer connector login --gateway ... --relay default|<profile>`.
+- Remote `codencer gateway relay add|list|status|remove` against the Gateway workspace registry.
+- Gateway MCP authorization using workspace-bound scopes.
+- Deterministic `make verify-official-connector` E2E with isolated Gateway,
+  default official Relay, self-host Relay, daemon, connectors, project, random
+  free ports, MCP execution through both Relay profiles, ambiguity blockers,
+  relay-down blocker, token redaction, and no absolute path leakage.
 
 ## Build
 

@@ -463,16 +463,82 @@ RELAY_TOKEN_ENV="${RELAY_TOKEN_ENV:-CODENCER_RELAY_PERSONAL_TOKEN}"
 GATEWAY_TOKEN_ENV=%q
 
 # This configures Gateway's backend Relay profile. It does not put backend Relay tokens in client configs.
-codencer setup gateway --base-url "${GATEWAY_URL}" --mcp-url "${GATEWAY_URL}/mcp" --token-env "${GATEWAY_TOKEN_ENV}" --enable-oauth-dev --json
+codencer login --gateway "${GATEWAY_URL}"
 codencer gateway relay add \
+  --gateway "${GATEWAY_URL}" \
   --id "${RELAY_PROFILE_ID}" \
   --name "${RELAY_PROFILE_NAME}" \
   --url "${RELAY_URL}" \
   --token-env "${RELAY_TOKEN_ENV}" \
   --json
 
-codencer gateway relay list --json
+codencer gateway relay list --gateway "${GATEWAY_URL}" --json
 `, gatewayURL, relayURL, env)) + "\n"
+}
+
+func gatewayRelayProfileMarkdownContent(opts Options, gatewayURL, relayURL string) string {
+	env := firstNonEmpty(opts.TokenEnv, "CODENCER_GATEWAY_MCP_TOKEN")
+	return strings.TrimSpace(fmt.Sprintf(`# Gateway Relay Profile Setup
+
+This configures a backend Relay profile in Codencer Gateway. AI clients still
+connect to the Gateway MCP endpoint, not directly to this Relay.
+
+~~~bash
+export %s=<gateway-client-token>
+export CODENCER_RELAY_PERSONAL_TOKEN=<relay-planner-token>
+
+codencer gateway relay add \
+  --gateway %s \
+  --name personal \
+  --url %s \
+  --token-env CODENCER_RELAY_PERSONAL_TOKEN \
+  --json
+
+codencer gateway relay list --gateway %s --json
+~~~
+
+Backend Relay tokens stay server-side in Gateway. Do not put Relay tokens in
+ChatGPT, Claude Code, or Codex client configuration.
+`, env, gatewayURL, relayURL, gatewayURL)) + "\n"
+}
+
+func gatewayConnectorLoginContent(opts Options, gatewayURL string) string {
+	return strings.TrimSpace(fmt.Sprintf(`# Connector Login
+
+Use this on each local machine that should expose explicitly shared Codencer
+projects through the official Gateway path.
+
+~~~bash
+codencer login --gateway %s
+codencer connector login --gateway %s --relay default --json
+codencer project share %s --json
+codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
+~~~
+
+For a user-added self-host Relay profile, replace --relay default with the
+profile id, for example --relay personal.
+
+codencer connector login writes local connector identity and private key under
+$CODENCER_HOME/runtime/connector/. It does not write enrollment secrets or
+private keys to the project repository and does not print them in JSON output.
+`, gatewayURL, gatewayURL, firstNonEmpty(opts.ProjectID, "codencer"))) + "\n"
+}
+
+func gatewayEvidenceChecklistContent() string {
+	return strings.TrimSpace(`# Official Gateway Evidence Checklist
+
+Do not mark public/product proof complete until the relevant evidence exists.
+
+- codencer login succeeded and $CODENCER_HOME/session.json exists locally.
+- codencer connector login succeeded without printing enrollment secrets.
+- codencer.list_relays shows the default Relay profile and any user-added profile.
+- codencer.list_projects shows the intended project through Gateway.
+- codencer.run_project_manifest returned a completed run or structured blocker.
+- codencer.get_run_report returned the run report through Gateway.
+- Ambiguous relay/profile/location cases return structured blockers.
+- MCP outputs contain no backend Relay tokens and no absolute local repo paths.
+- ChatGPT, Claude Code, or Codex product UI proof is attached only if actually run.
+`) + "\n"
 }
 
 func stringValue(value any) string {

@@ -8,17 +8,16 @@ ChatGPT product proof is manual and workspace-gated. This repository can prepare
 ./bin/codencer setup gateway \
   --base-url https://mcp.codencer.dev \
   --mcp-url https://mcp.codencer.dev/mcp \
+  --default-relay-url https://relay.codencer.dev \
+  --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
 
-./bin/codencer gateway relay add \
-  --id personal \
-  --url https://relay.example.com \
-  --token-env CODENCER_RELAY_PERSONAL_TOKEN \
-  --json
+./bin/codencer login --gateway https://mcp.codencer.dev
+./bin/codencer connector login --gateway https://mcp.codencer.dev --relay default --json
 
-./bin/codencer activation gateway \
+./bin/codencer activation official \
   --gateway https://mcp.codencer.dev \
   --relay https://relay.example.com \
   --project codencer \

@@ -26,46 +26,57 @@ Gateway config is local runtime state:
 $CODENCER_HOME/runtime/gateway/config.json
 ```
 
-Create it with bearer-dev auth and OAuth dev metadata:
+Create it with bearer-dev auth, OAuth dev metadata, persistent Gateway store,
+and default managed Relay settings:
 
 ```bash
 codencer setup gateway \
   --base-url https://mcp.codencer.dev \
   --mcp-url https://mcp.codencer.dev/mcp \
   --listen 127.0.0.1:19090 \
+  --default-relay-url https://relay.codencer.dev \
+  --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
 ```
 
-Add a backend Relay profile. The profile stores only the Relay URL, token env
-name or token-file reference, and enabled status. It does not store literal
-Relay tokens by default.
+Start the Gateway with server-side Relay token environment variables:
 
 ```bash
+export CODENCER_DEFAULT_RELAY_TOKEN=<managed-relay-planner-token>
+codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
+```
+
+Then perform self-service local connector setup:
+
+```bash
+codencer login --gateway https://mcp.codencer.dev
+codencer connector login --gateway https://mcp.codencer.dev --relay default --json
+codencer project share codencer --json
+codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
+```
+
+Optional: add a self-host Relay profile. This requires `codencer login` because
+profiles are stored in the Gateway workspace registry.
+
+```bash
+export CODENCER_RELAY_PERSONAL_TOKEN=<relay-planner-token>
+
 codencer gateway relay add \
-  --id personal \
-  --name "Personal self-host Relay" \
+  --gateway https://mcp.codencer.dev \
+  --name personal \
   --url https://relay.example.com \
   --token-env CODENCER_RELAY_PERSONAL_TOKEN \
   --json
 
-codencer gateway relay list --json
-codencer gateway status --json
-```
-
-Start the Gateway:
-
-```bash
-export CODENCER_GATEWAY_MCP_TOKEN=<gateway-client-token>
-export CODENCER_RELAY_PERSONAL_TOKEN=<relay-planner-token>
-codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
+codencer gateway relay list --gateway https://mcp.codencer.dev --json
 ```
 
 ## Generate Client Activation Package
 
 ```bash
-codencer activation gateway \
+codencer activation official \
   --gateway https://mcp.codencer.dev \
   --relay https://relay.example.com \
   --project codencer \
@@ -80,6 +91,7 @@ The package contains:
 - Claude Code command pointing to `https://mcp.codencer.dev/mcp`;
 - ChatGPT custom MCP app setup pointing to `https://mcp.codencer.dev/mcp`;
 - relay-profile setup instructions;
+- connector login instructions;
 - evidence checklist.
 
 ## Gateway MCP Tools
@@ -125,14 +137,15 @@ Gateway never chooses randomly.
 ## Deterministic Verification
 
 ```bash
-make verify-gateway
+make verify-official-connector
 ```
 
 The verifier uses isolated temp homes and random free ports. It starts a temp
-daemon, self-host Relay, two connectors, and Gateway, then verifies MCP
-initialize, tools/list, relay/project listing, fake manifest execution, run
-report retrieval, ambiguity blockers, relay-down blocker, and no obvious local
-path/token leakage.
+Gateway, default official Relay, self-host Relay, local daemon, connectors, and
+project, then verifies device login, connector login, Relay profile add, MCP
+initialize, tools/list, relay/project listing, fake manifest execution through
+default and self-host profiles, run report retrieval, ambiguity blockers,
+relay-down blocker, and no obvious local path/token leakage.
 
 Live ChatGPT, Codex, and Claude product proof remains pending until those
 products actually connect to the Gateway MCP endpoint and evidence is saved.

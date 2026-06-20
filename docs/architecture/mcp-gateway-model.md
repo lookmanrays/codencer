@@ -15,8 +15,8 @@ is not the primary official ChatGPT, Claude Code, or Codex connector endpoint.
 ```mermaid
 flowchart LR
   Client["AI client\nChatGPT / Claude Code / Codex"]
-  Gateway["Codencer Gateway\n/mcp, auth, relay profiles"]
-  Relay["Selected Relay\nself-host or managed"]
+  Gateway["Codencer Gateway\n/mcp, auth, workspace store, relay profiles"]
+  Relay["Selected Relay\ndefault managed or self-host"]
   Connector["Local connector\nproject advertisements"]
   Daemon["Local daemon\nruns, steps, evidence"]
   Repo["Local project workspace"]
@@ -42,7 +42,10 @@ Gateway:
 
 - authenticates AI clients with bearer-dev auth for Codex/Claude Code pre-prod;
 - exposes OAuth dev and protected-resource metadata for ChatGPT Developer Mode;
-- loads Relay profiles from `$CODENCER_HOME/runtime/gateway/config.json`;
+- stores users, personal workspaces, device login sessions, connector bindings,
+  and Relay profiles in the Gateway persistent store;
+- creates a default managed Relay profile for each new workspace;
+- lets users add self-host Relay profiles with `codencer gateway relay add`;
 - aggregates projects across enabled Relay profiles;
 - forwards approved project task/manifest calls to the selected Relay;
 - normalizes Codencer results, blockers, and evidence;
@@ -52,11 +55,14 @@ Gateway:
 Relay profiles contain:
 
 - `id`
+- `type` (`managed` or `self_host`)
 - `url`
 - `token_env` or a token file reference
 - `enabled`
 
-Literal Relay tokens should not be stored in Gateway config by default.
+Literal Relay tokens are not returned to AI clients. In the MVP, Relay token
+references are stored in the Gateway profile and resolved server-side from env
+vars or token files.
 
 ## Official Toolset
 
@@ -114,11 +120,14 @@ Backend Relay blockers are forwarded in normalized Codencer blocker shape.
 Use:
 
 ```bash
+make verify-official-connector
 make verify-gateway
 ```
 
-The verifier starts isolated temp daemon, Relay, connector instances, and
-Gateway on random free ports. It checks MCP initialize, tools/list,
-`codencer.list_relays`, `codencer.list_projects`, fake manifest execution,
-run report retrieval, ambiguity blockers, relay-down blocker, and no obvious
-absolute path or token leakage.
+`make verify-official-connector` starts isolated temp Gateway, default official
+Relay, self-host Relay, local daemon, connectors, and project on random free
+ports. It checks `codencer login`, `codencer connector login`, Relay profile
+add, MCP initialize/tools/list, `codencer.list_relays`,
+`codencer.list_projects`, fake manifest execution through default and self-host
+profiles, run report retrieval, ambiguity blockers, relay-down blocker, and no
+obvious absolute path or token leakage.

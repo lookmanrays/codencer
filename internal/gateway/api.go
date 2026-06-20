@@ -86,7 +86,7 @@ func (s *Server) handleDeviceToken(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	writeJSON(w, http.StatusOK, token)
+	writePrivateJSON(w, http.StatusOK, token)
 }
 
 func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {

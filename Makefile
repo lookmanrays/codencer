@@ -271,6 +271,19 @@ verify-gateway: build build-gateway
 	@echo "==> Running Gateway E2E smoke..."
 	@./scripts/verify_gateway.sh
 
+verify-official-connector: build build-gateway
+	@echo "==> Checking official connector formatting..."
+	@fmt=$$(gofmt -l internal/account internal/gateway internal/connector internal/connectorops internal/setup cmd/codencer cmd/codencer-gatewayd); \
+	if [ -n "$$fmt" ]; then \
+		echo "$$fmt"; \
+		echo "ERROR: gofmt required for official connector files."; \
+		exit 1; \
+	fi
+	@echo "==> Running official connector unit tests..."
+	@go test ./internal/account ./internal/gateway ./internal/connector ./internal/connectorops ./internal/setup ./cmd/codencer ./cmd/codencer-gatewayd
+	@echo "==> Running official connector isolated E2E..."
+	@./scripts/verify_official_connector.sh
+
 verify-runtime-recovery: build
 	@echo "==> Checking runtime supervisor formatting..."
 	@fmt=$$(gofmt -l internal/supervisor internal/local/config.go internal/service/recovery_service.go internal/app/bootstrap.go internal/app/routes.go cmd/codencer); \

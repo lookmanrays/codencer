@@ -141,7 +141,7 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	writeJSON(w, http.StatusOK, response)
+	writePrivateJSON(w, http.StatusOK, response)
 }
 
 func (o *oauthDevService) Metadata(baseURL string) map[string]any {

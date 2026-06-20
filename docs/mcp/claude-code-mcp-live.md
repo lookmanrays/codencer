@@ -5,7 +5,7 @@ Claude Code MCP activation generates setup artifacts only. It does not write `.m
 ## Generate
 
 ```bash
-./bin/codencer activation gateway \
+./bin/codencer activation official \
   --gateway https://mcp.codencer.dev \
   --relay https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \

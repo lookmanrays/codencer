@@ -292,6 +292,9 @@ func Gateway(ctx context.Context, opts Options) (Report, error) {
 		{"claude-code-command.sh", claudeCommandContent(opts, mcpURL)},
 		{"chatgpt-app-setup.md", chatGPTContent(opts, gatewayURL, mcpURL)},
 		{"relay-profile-setup.sh", gatewayRelayProfileContent(opts, gatewayURL, relayURL)},
+		{"relay-profile-setup.md", gatewayRelayProfileMarkdownContent(opts, gatewayURL, relayURL)},
+		{"connector-login.md", gatewayConnectorLoginContent(opts, gatewayURL)},
+		{"evidence-checklist.md", gatewayEvidenceChecklistContent()},
 	}
 	written := make([]string, 0, len(files)+1)
 	for _, file := range files {

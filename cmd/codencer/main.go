@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"agent-bridge/internal/acceptance"
+	"agent-bridge/internal/account"
 	"agent-bridge/internal/activation"
 	"agent-bridge/internal/app"
 	"agent-bridge/internal/buildinfo"
+	"agent-bridge/internal/connector"
 	"agent-bridge/internal/connectorops"
 	gatewaypkg "agent-bridge/internal/gateway"
 	"agent-bridge/internal/live"
@@ -68,6 +70,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runVersion(args[1:], stdout)
 	case "init":
 		return runInit(args[1:], stdout)
+	case "login":
+		return runLogin(args[1:], stdout)
+	case "whoami":
+		return runWhoami(args[1:], stdout)
+	case "logout":
+		return runLogout(args[1:], stdout)
 	case "paths":
 		return runPaths(args[1:], stdout)
 	case "config":
@@ -169,6 +177,140 @@ func runInit(args []string, stdout io.Writer) error {
 	} else {
 		fmt.Fprintln(stdout, "Local production files already exist.")
 	}
+	return nil
+}
+
+func runLogin(args []string, stdout io.Writer) error {
+	parsed, err := parseArgs(args, []string{"json", "dev-approve"}, []string{"gateway", "email", "display-name", "timeout", "config"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "login does not accept positional arguments")
+	}
+	paths, err := local.ResolvePaths("", parsed.value("config"))
+	if err != nil {
+		return err
+	}
+	if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+		return err
+	}
+	sessionPath := account.SessionPath(paths.Home)
+	gatewayURL := account.NormalizeGatewayURL(parsed.value("gateway"))
+	client := account.NewClient(gatewayURL, "")
+	auth, err := client.DeviceAuthorize(contextBackground(), parsed.value("email"), parsed.value("display-name"))
+	if err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+	}
+	if !parsed.bool("json") {
+		fmt.Fprintf(stdout, "Open %s\n", auth.VerificationURI)
+		fmt.Fprintf(stdout, "Code: %s\n", auth.UserCode)
+	}
+	if parsed.bool("dev-approve") {
+		if err := client.DeviceApprove(contextBackground(), auth.UserCode); err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+	}
+	timeout, err := parseDurationOrDefault(parsed.value("timeout"), 2*time.Minute)
+	if err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	}
+	interval := time.Duration(auth.Interval) * time.Second
+	if interval <= 0 {
+		interval = time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	var token account.TokenResponse
+	for {
+		token, err = client.DeviceToken(contextBackground(), auth.DeviceCode)
+		if err == nil {
+			break
+		}
+		apiErr, ok := err.(*account.APIError)
+		if !ok || apiErr.Code != "authorization_pending" {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+		if time.Now().Add(interval).After(deadline) {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, "device authorization timed out")
+		}
+		time.Sleep(interval)
+	}
+	session := account.NewSession(gatewayURL, token, time.Now().UTC())
+	if err := account.SaveSession(sessionPath, session); err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+	}
+	payload := map[string]any{
+		"ok":           true,
+		"action":       "login",
+		"session":      session.Safe(sessionPath),
+		"device":       map[string]any{"verification_uri": auth.VerificationURI, "user_code": auth.UserCode, "expires_in": auth.ExpiresIn},
+		"token_stored": true,
+	}
+	if parsed.bool("json") {
+		return writeJSON(stdout, payload)
+	}
+	fmt.Fprintf(stdout, "Logged in to %s\n", session.GatewayURL)
+	fmt.Fprintf(stdout, "Workspace: %s\n", session.WorkspaceID)
+	return nil
+}
+
+func runWhoami(args []string, stdout io.Writer) error {
+	parsed, err := parseArgs(args, []string{"json"}, []string{"gateway", "config"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "whoami does not accept positional arguments")
+	}
+	paths, sessionPath, session, err := loadCodencerSession(parsed.value("config"))
+	if err != nil {
+		_ = paths
+		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	}
+	gatewayURL := firstNonEmpty(parsed.value("gateway"), session.GatewayURL)
+	client := account.NewClient(gatewayURL, session.AccessToken)
+	who, err := client.Whoami(contextBackground())
+	if err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+	}
+	payload := map[string]any{"ok": true, "session": session.Safe(sessionPath), "gateway": who}
+	if parsed.bool("json") {
+		return writeJSON(stdout, payload)
+	}
+	fmt.Fprintf(stdout, "Gateway:   %s\n", gatewayURL)
+	fmt.Fprintf(stdout, "MCP URL:   %s\n", who.MCPURL)
+	fmt.Fprintf(stdout, "User:      %s\n", who.UserID)
+	fmt.Fprintf(stdout, "Workspace: %s\n", who.WorkspaceID)
+	return nil
+}
+
+func runLogout(args []string, stdout io.Writer) error {
+	parsed, err := parseArgs(args, []string{"json"}, []string{"gateway", "config"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "logout does not accept positional arguments")
+	}
+	_, sessionPath, pathErr := resolveSessionPath(parsed.value("config"))
+	if pathErr != nil {
+		return pathErr
+	}
+	_, _, session, err := loadCodencerSession(parsed.value("config"))
+	if err == nil {
+		gatewayURL := firstNonEmpty(parsed.value("gateway"), session.GatewayURL)
+		_ = account.NewClient(gatewayURL, session.AccessToken).Logout(contextBackground())
+	} else if !os.IsNotExist(err) {
+		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	}
+	if err := account.RemoveSession(sessionPath); err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+	}
+	payload := map[string]any{"ok": true, "action": "logout", "session_path": sessionPath}
+	if parsed.bool("json") {
+		return writeJSON(stdout, payload)
+	}
+	fmt.Fprintln(stdout, "Logged out.")
 	return nil
 }
 
@@ -408,9 +550,28 @@ func runMachine(args []string, stdout io.Writer) error {
 
 func runConnector(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer connector <enroll|run|status|config show> [flags]")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer connector <login|enroll|run|status|config show> [flags]")
 	}
 	switch args[0] {
+	case "login":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"gateway", "relay", "daemon-url", "config", "codencer-home", "label"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "connector login does not accept positional arguments")
+		}
+		report, err := runConnectorLogin(parsed)
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+		}
+		if parsed.bool("json") {
+			return writeJSON(stdout, report)
+		}
+		fmt.Fprintf(stdout, "Connector logged in: %s\n", report["connector_id"])
+		fmt.Fprintf(stdout, "Relay profile: %s\n", report["relay_profile_id"])
+		fmt.Fprintf(stdout, "Config: %s\n", report["config_path"])
+		return nil
 	case "enroll":
 		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"relay-url", "daemon-url", "enrollment-token", "config", "codencer-home", "label"})
 		if err != nil {
@@ -497,6 +658,91 @@ func runConnector(args []string, stdout io.Writer) error {
 	}
 }
 
+func runConnectorLogin(parsed parsedArgs) (map[string]any, error) {
+	paths, err := local.ResolvePathsForHome("", "", parsed.value("codencer-home"))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	sessionPath := account.SessionPath(paths.Home)
+	session, err := account.LoadSession(sessionPath)
+	if err != nil {
+		return nil, fmt.Errorf("codencer login required: %w", err)
+	}
+	gatewayURL := firstNonEmpty(parsed.value("gateway"), session.GatewayURL)
+	client := account.NewClient(gatewayURL, session.AccessToken)
+	machine, _, err := local.EnsureMachine(paths.MachineFile, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	localCfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return nil, err
+	}
+	daemonURL := firstNonEmpty(parsed.value("daemon-url"), localCfg.DefaultDaemonURL)
+	relayID := firstNonEmpty(parsed.value("relay"), "default")
+	login, err := client.ConnectorLogin(contextBackground(), account.ConnectorLoginRequest{
+		Relay: relayID,
+		Machine: account.MachineInput{
+			MachineID: machine.MachineID,
+			Hostname:  machine.Hostname,
+			HostLabel: machine.HostLabel,
+			OS:        machine.OS,
+			Arch:      machine.Arch,
+		},
+		Label: firstNonEmpty(parsed.value("label"), machine.HostLabel, machine.MachineID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(login.EnrollmentToken) == "" {
+		return nil, fmt.Errorf("Gateway did not return connector enrollment token")
+	}
+	enroll, err := connectorops.Enroll(contextBackground(), connectorops.EnrollOptions{
+		RelayURL:        login.RelayURL,
+		DaemonURL:       daemonURL,
+		EnrollmentToken: login.EnrollmentToken,
+		ConfigPath:      parsed.value("config"),
+		CodencerHome:    paths.Home,
+		Label:           firstNonEmpty(parsed.value("label"), machine.HostLabel, machine.MachineID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := connector.LoadConfig(enroll.ConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := client.ConnectorComplete(contextBackground(), account.ConnectorCompleteRequest{
+		BindingID:        login.BindingID,
+		RelayConnectorID: enroll.ConnectorID,
+		RelayMachineID:   enroll.MachineID,
+		PublicKey:        cfg.PublicKey,
+	}); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":                   true,
+		"action":               "connector_login",
+		"gateway_url":          account.NormalizeGatewayURL(gatewayURL),
+		"workspace_id":         login.WorkspaceID,
+		"binding_id":           login.BindingID,
+		"relay_profile_id":     firstNonEmpty(login.RelayProfile.RelayProfileID, login.RelayProfile.ID),
+		"relay_profile":        login.RelayProfile,
+		"relay_url":            login.RelayURL,
+		"local_machine_id":     machine.MachineID,
+		"host_label":           machine.HostLabel,
+		"connector_id":         enroll.ConnectorID,
+		"relay_machine_id":     enroll.MachineID,
+		"config_path":          enroll.ConfigPath,
+		"codencer_home":        paths.Home,
+		"daemon_url":           daemonURL,
+		"local_config_updated": enroll.LocalConfigUpdated,
+	}, nil
+}
+
 func runGateway(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer gateway <relay|status|config> [flags]")
@@ -565,20 +811,16 @@ func runGateway(args []string, stdout io.Writer) error {
 
 func runGatewayRelay(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer gateway relay <add|list|status> [flags]")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer gateway relay <add|list|status|remove> [flags]")
 	}
 	switch args[0] {
 	case "add":
-		parsed, err := parseArgs(args[1:], []string{"json", "disabled"}, []string{"config", "id", "name", "url", "token-env", "token-file"})
+		parsed, err := parseArgs(args[1:], []string{"json", "disabled"}, []string{"config", "gateway", "id", "name", "url", "token-env", "token-file"})
 		if err != nil {
 			return err
 		}
 		if len(parsed.positionals) != 0 {
 			return usageError(parsed.bool("json"), stdout, "gateway relay add does not accept positional arguments")
-		}
-		id := strings.TrimSpace(parsed.value("id"))
-		if id == "" {
-			return usageError(parsed.bool("json"), stdout, "gateway relay add requires --id")
 		}
 		relayURL := strings.TrimSpace(parsed.value("url"))
 		if relayURL == "" {
@@ -586,6 +828,35 @@ func runGatewayRelay(args []string, stdout io.Writer) error {
 		}
 		if parsed.value("token-env") == "" && parsed.value("token-file") == "" {
 			return usageError(parsed.bool("json"), stdout, "gateway relay add requires --token-env or --token-file")
+		}
+		client, session, remote, err := gatewayRelayRemoteClient(parsed.value("config"), parsed.value("gateway"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if remote {
+			enabled := !parsed.bool("disabled")
+			relay, err := client.AddRelay(contextBackground(), account.RelayProfileInput{
+				ID:        parsed.value("id"),
+				Name:      parsed.value("name"),
+				URL:       relayURL,
+				TokenEnv:  parsed.value("token-env"),
+				TokenFile: parsed.value("token-file"),
+				Type:      "self_host",
+				Enabled:   &enabled,
+			})
+			if err != nil {
+				return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+			}
+			payload := map[string]any{"ok": true, "gateway_url": session.GatewayURL, "relay": relay}
+			if parsed.bool("json") {
+				return writeJSON(stdout, payload)
+			}
+			fmt.Fprintf(stdout, "Gateway relay profile %q saved in workspace %s\n", firstNonEmpty(relay.RelayProfileID, relay.ID), session.WorkspaceID)
+			return nil
+		}
+		id := strings.TrimSpace(firstNonEmpty(parsed.value("id"), parsed.value("name")))
+		if id == "" {
+			return usageError(parsed.bool("json"), stdout, "gateway relay add requires --id or --name")
 		}
 		path, cfg, err := loadOrDefaultGatewayConfig(parsed.value("config"))
 		if err != nil {
@@ -612,16 +883,62 @@ func runGatewayRelay(args []string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "Gateway relay profile %q saved in %s\n", id, path)
 		return nil
 	case "list", "status":
-		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config"})
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config", "gateway"})
 		if err != nil {
 			return err
 		}
-		if len(parsed.positionals) != 0 {
-			return usageError(parsed.bool("json"), stdout, "gateway relay "+args[0]+" does not accept positional arguments")
+		if args[0] == "list" && len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "gateway relay list does not accept positional arguments")
+		}
+		if args[0] == "status" && len(parsed.positionals) > 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer gateway relay status [id] [--json]")
+		}
+		client, session, remote, err := gatewayRelayRemoteClient(parsed.value("config"), parsed.value("gateway"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if remote {
+			if args[0] == "status" && len(parsed.positionals) == 1 {
+				relay, err := client.GetRelay(contextBackground(), parsed.positionals[0])
+				if err != nil {
+					return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+				}
+				payload := map[string]any{"ok": true, "gateway_url": session.GatewayURL, "relay": relay}
+				if parsed.bool("json") {
+					return writeJSON(stdout, payload)
+				}
+				fmt.Fprintf(stdout, "%s\t%s\tenabled=%t\tstatus=%s\n", firstNonEmpty(relay.RelayProfileID, relay.ID), relay.URL, relay.Enabled, relay.Status)
+				return nil
+			}
+			relays, err := client.ListRelays(contextBackground())
+			if err != nil {
+				return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+			}
+			payload := map[string]any{"ok": true, "gateway_url": session.GatewayURL, "relays": relays}
+			if parsed.bool("json") {
+				return writeJSON(stdout, payload)
+			}
+			for _, relay := range relays {
+				fmt.Fprintf(stdout, "%s\t%s\tenabled=%t\tstatus=%s\ttoken_configured=%t\n", firstNonEmpty(relay.RelayProfileID, relay.ID), relay.URL, relay.Enabled, relay.Status, relay.TokenConfigured)
+			}
+			return nil
 		}
 		path, cfg, err := loadGatewayConfig(parsed.value("config"))
 		if err != nil {
 			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if args[0] == "status" && len(parsed.positionals) == 1 {
+			id := parsed.positionals[0]
+			profile, apiErr := gatewayProfileByID(cfg, id)
+			if apiErr != nil {
+				return jsonAwareError(parsed.bool("json"), stdout, exitUsage, apiErr.Error())
+			}
+			payload := map[string]any{"config_file": path, "relay": gatewaypkg.RelayStatus(profile)}
+			if parsed.bool("json") {
+				return writeJSON(stdout, payload)
+			}
+			fmt.Fprintf(stdout, "%s\t%s\tenabled=%t\ttoken_env=%s\n", profile.ID, profile.URL, profile.Enabled, profile.TokenEnv)
+			return nil
 		}
 		payload := map[string]any{"config_file": path, "relays": gatewayRelayStatuses(cfg)}
 		if parsed.bool("json") {
@@ -631,9 +948,63 @@ func runGatewayRelay(args []string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "%s\t%s\tenabled=%t\ttoken_env=%s\n", profile.ID, profile.URL, profile.Enabled, profile.TokenEnv)
 		}
 		return nil
+	case "remove":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"config", "gateway"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer gateway relay remove <id> [--json]")
+		}
+		client, session, remote, err := gatewayRelayRemoteClient(parsed.value("config"), parsed.value("gateway"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if remote {
+			if err := client.RemoveRelay(contextBackground(), parsed.positionals[0]); err != nil {
+				return jsonAwareError(parsed.bool("json"), stdout, exitFailed, err.Error())
+			}
+			payload := map[string]any{"ok": true, "gateway_url": session.GatewayURL, "relay_profile_id": parsed.positionals[0]}
+			if parsed.bool("json") {
+				return writeJSON(stdout, payload)
+			}
+			fmt.Fprintf(stdout, "Gateway relay profile %q removed from workspace %s\n", parsed.positionals[0], session.WorkspaceID)
+			return nil
+		}
+		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, "gateway relay remove requires codencer login or --gateway")
 	default:
 		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown gateway relay command %q", args[0]))
 	}
+}
+
+func gatewayRelayRemoteClient(configFlag, gatewayFlag string) (*account.Client, account.Session, bool, error) {
+	if strings.TrimSpace(configFlag) != "" && strings.TrimSpace(gatewayFlag) == "" {
+		return nil, account.Session{}, false, nil
+	}
+	_, sessionPath, session, err := loadCodencerSession(configFlag)
+	if err != nil {
+		if strings.TrimSpace(gatewayFlag) != "" {
+			return nil, account.Session{}, false, fmt.Errorf("codencer login required: %w", err)
+		}
+		if os.IsNotExist(err) {
+			return nil, account.Session{}, false, nil
+		}
+		return nil, account.Session{}, false, err
+	}
+	_ = sessionPath
+	gatewayURL := firstNonEmpty(gatewayFlag, session.GatewayURL)
+	session.GatewayURL = account.NormalizeGatewayURL(gatewayURL)
+	return account.NewClient(gatewayURL, session.AccessToken), session, true, nil
+}
+
+func gatewayProfileByID(cfg *gatewaypkg.Config, id string) (gatewaypkg.RelayProfile, error) {
+	id = strings.TrimSpace(id)
+	for _, profile := range cfg.RelayProfiles {
+		if profile.ID == id {
+			return profile, nil
+		}
+	}
+	return gatewaypkg.RelayProfile{}, fmt.Errorf("relay profile %q not found", id)
 }
 
 func gatewayConfigPath(flagValue string) (string, error) {
@@ -1872,7 +2243,7 @@ func runSetup(args []string, stdout io.Writer) error {
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "gateway":
-		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
+		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "store", "default-relay-url", "default-relay-token-env", "default-relay-token-file", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
 		if err != nil {
 			return err
 		}
@@ -1880,22 +2251,26 @@ func runSetup(args []string, stdout io.Writer) error {
 			return usageError(parsed.bool("json"), stdout, "setup gateway does not accept positional arguments")
 		}
 		report, err := setuppkg.Gateway(contextBackground(), setuppkg.GatewayOptions{
-			BaseURL:           parsed.value("base-url"),
-			MCPURL:            parsed.value("mcp-url"),
-			ListenAddr:        parsed.value("listen"),
-			GatewayConfigPath: parsed.value("gateway-config"),
-			AuthMode:          parsed.value("auth"),
-			TokenEnv:          parsed.value("token-env"),
-			TokenFile:         parsed.value("token-file"),
-			EnableOAuthDev:    parsed.bool("enable-oauth-dev"),
-			OAuthIssuer:       parsed.value("oauth-issuer"),
-			OAuthClientID:     parsed.value("oauth-client-id"),
-			OAuthClientSecret: parsed.value("oauth-client-secret"),
-			InstallServices:   parsed.bool("install-services"),
-			StartServices:     parsed.bool("start-services"),
-			Manager:           parsed.value("manager"),
-			BinDir:            parsed.value("bin-dir"),
-			Strict:            parsed.bool("strict"),
+			BaseURL:               parsed.value("base-url"),
+			MCPURL:                parsed.value("mcp-url"),
+			ListenAddr:            parsed.value("listen"),
+			GatewayConfigPath:     parsed.value("gateway-config"),
+			StorePath:             parsed.value("store"),
+			AuthMode:              parsed.value("auth"),
+			TokenEnv:              parsed.value("token-env"),
+			TokenFile:             parsed.value("token-file"),
+			DefaultRelayURL:       parsed.value("default-relay-url"),
+			DefaultRelayTokenEnv:  parsed.value("default-relay-token-env"),
+			DefaultRelayTokenFile: parsed.value("default-relay-token-file"),
+			EnableOAuthDev:        parsed.bool("enable-oauth-dev"),
+			OAuthIssuer:           parsed.value("oauth-issuer"),
+			OAuthClientID:         parsed.value("oauth-client-id"),
+			OAuthClientSecret:     parsed.value("oauth-client-secret"),
+			InstallServices:       parsed.bool("install-services"),
+			StartServices:         parsed.bool("start-services"),
+			Manager:               parsed.value("manager"),
+			BinDir:                parsed.value("bin-dir"),
+			Strict:                parsed.bool("strict"),
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
@@ -1922,7 +2297,7 @@ func runSetup(args []string, stdout io.Writer) error {
 
 func runActivation(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer activation <check|package|gateway|chatgpt|codex|claude-code> [--json]")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer activation <check|package|gateway|official|chatgpt|codex|claude-code> [--json]")
 	}
 	parsed, err := parseArgs(args[1:], []string{"json", "run-fake-manifest", "check-oauth", "check-chatgpt-readiness"}, []string{"gateway", "relay", "mcp-url", "token-env", "token", "project", "auth"})
 	if err != nil {
@@ -1951,6 +2326,9 @@ func runActivation(args []string, stdout io.Writer) error {
 		report, err = activation.Package(contextBackground(), opts)
 	case "gateway":
 		report, err = activation.Gateway(contextBackground(), opts)
+	case "official":
+		report, err = activation.Gateway(contextBackground(), opts)
+		report.Mode = "official"
 	case "chatgpt":
 		report, err = activation.ChatGPT(opts)
 		if err != nil {
@@ -2152,7 +2530,7 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|login|whoami|logout|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func printPaths(w io.Writer, paths local.Paths) {
@@ -2441,6 +2819,47 @@ func adapterProfileAlias(adapterProfile, profile string) (string, error) {
 		return adapterProfile, nil
 	}
 	return profile, nil
+}
+
+func resolveSessionPath(configOverride string) (local.Paths, string, error) {
+	paths, err := local.ResolvePaths("", configOverride)
+	if err != nil {
+		return local.Paths{}, "", err
+	}
+	return paths, account.SessionPath(paths.Home), nil
+}
+
+func loadCodencerSession(configOverride string) (local.Paths, string, account.Session, error) {
+	paths, sessionPath, err := resolveSessionPath(configOverride)
+	if err != nil {
+		return local.Paths{}, "", account.Session{}, err
+	}
+	session, err := account.LoadSession(sessionPath)
+	if err != nil {
+		return paths, sessionPath, account.Session{}, err
+	}
+	return paths, sessionPath, session, nil
+}
+
+func parseDurationOrDefault(value string, fallback time.Duration) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback, nil
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds <= 0 {
+			return 0, fmt.Errorf("duration must be positive")
+		}
+		return time.Duration(seconds) * time.Second, nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, err
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("duration must be positive")
+	}
+	return duration, nil
 }
 
 func firstNonEmpty(values ...string) string {

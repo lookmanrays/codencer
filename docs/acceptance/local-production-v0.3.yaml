@@ -178,12 +178,27 @@ profiles:
           - go test ./internal/gateway
           - make verify-gateway
         notes: Gateway exposes protected-resource metadata and OAuth dev authorization-server metadata for product-facing MCP setup.
+      - id: official_connector_self_service_flow
+        status: sprint_9_implemented
+        commands:
+          - make verify-official-connector
+        notes: Verifies `codencer login`, default personal workspace, default managed Relay profile, `codencer connector login`, user-added self-host Relay profile, Gateway MCP tools, default/self-host routing, ambiguity blockers, relay-down blocker, token redaction, and no absolute local path leakage in isolated temp services with random ports.
+      - id: gateway_account_device_login
+        status: sprint_9_implemented
+        commands:
+          - go test ./internal/gateway ./cmd/codencer
+        notes: Device login stores workspace-bound Gateway session in `$CODENCER_HOME/session.json`; CLI JSON output does not print the access token.
+      - id: gateway_relay_registry_persistent
+        status: sprint_9_implemented
+        commands:
+          - go test ./internal/gateway ./cmd/codencer
+        notes: Relay profiles are stored in the Gateway persistent workspace store. Local config-file relay commands remain available for operator/debug compatibility.
       - id: gateway_activation_package
-        status: sprint_8_implemented
+        status: sprint_9_implemented
         commands:
           - go test ./internal/activation ./cmd/codencer
-          - ./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
-        notes: Activation package contains Gateway curl smoke, Codex config, Claude Code command, ChatGPT setup, relay profile setup instructions, and evidence checklist.
+          - ./bin/codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+        notes: Activation package contains Gateway curl smoke, Codex config, Claude Code command, ChatGPT setup, relay profile setup, connector login instructions, and evidence checklist.
       - id: official_connector_docs_use_gateway_url
         status: sprint_8_implemented
         commands:

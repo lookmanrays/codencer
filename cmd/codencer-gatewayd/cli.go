@@ -45,6 +45,9 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(cfg.Store.Path) == "" && len(cfg.RelayProfiles) == 0 {
+		cfg.Store.Path = filepath.Join(filepath.Dir(path), "gateway.db")
+	}
 	server, err := gateway.NewServer(cfg, gateway.ServerOptions{})
 	if err != nil {
 		return err

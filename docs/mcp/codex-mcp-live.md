@@ -5,7 +5,7 @@ Codex MCP activation generates configuration artifacts only. It does not write u
 ## Generate
 
 ```bash
-./bin/codencer activation gateway \
+./bin/codencer activation official \
   --gateway https://mcp.codencer.dev \
   --relay https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \

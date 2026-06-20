@@ -73,7 +73,7 @@ func TestGatewayPackagePointsClientsAtGatewayURL(t *testing.T) {
 	if !report.OK || report.PackagePath == "" {
 		t.Fatalf("expected gateway package success, got %+v", report)
 	}
-	expected := []string{"activation-package.json", "README.md", "gateway-curl-smoke.sh", "codex-config.toml", "claude-code-command.sh", "chatgpt-app-setup.md", "relay-profile-setup.sh"}
+	expected := []string{"activation-package.json", "README.md", "gateway-curl-smoke.sh", "codex-config.toml", "claude-code-command.sh", "chatgpt-app-setup.md", "relay-profile-setup.sh", "relay-profile-setup.md", "connector-login.md", "evidence-checklist.md"}
 	for _, name := range expected {
 		data, err := os.ReadFile(filepath.Join(report.PackagePath, name))
 		if err != nil {
@@ -95,7 +95,7 @@ func TestGatewayPackagePointsClientsAtGatewayURL(t *testing.T) {
 		t.Fatalf("gateway README missing official routing path:\n%s", readme)
 	}
 	relaySetup, _ := os.ReadFile(filepath.Join(report.PackagePath, "relay-profile-setup.sh"))
-	for _, want := range []string{"codencer setup gateway", "codencer gateway relay add", "https://relay.example.com"} {
+	for _, want := range []string{"codencer login --gateway", "codencer gateway relay add", "https://relay.example.com"} {
 		if !strings.Contains(string(relaySetup), want) {
 			t.Fatalf("relay profile setup missing %q:\n%s", want, relaySetup)
 		}

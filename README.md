@@ -48,7 +48,10 @@ The v0.3 local/self-host RC includes:
 - structured blockers and validation results;
 - self-host Relay;
 - official Gateway daemon (`codencer-gatewayd`);
-- Gateway relay profiles for routing to one or more backend Relays;
+- persistent Gateway user/workspace store with device-code login;
+- default personal workspace and default official managed Relay profile;
+- Gateway relay profiles for routing to the default Relay or user-added
+  self-host Relays;
 - local connector with explicit project sharing;
 - Relay-hosted MCP server and project-aware `codencer.*` MCP tools;
 - Gateway-hosted official MCP server and project-aware `codencer.*` MCP tools;
@@ -196,8 +199,9 @@ choosing randomly.
 ## Quickstart: Gateway
 
 Official ChatGPT, Claude Code, and Codex connector setup should point at the
-Gateway MCP URL, for example `https://mcp.codencer.dev/mcp`. A self-host Relay
-remains the backend target that Gateway routes to.
+Gateway MCP URL, for example `https://mcp.codencer.dev/mcp`. Gateway routes to
+the default official managed Relay profile or to user-added self-host Relay
+profiles.
 
 ```bash
 make build-gateway
@@ -206,24 +210,42 @@ codencer setup gateway \
   --base-url https://mcp.codencer.dev \
   --mcp-url https://mcp.codencer.dev/mcp \
   --listen 127.0.0.1:19090 \
+  --default-relay-url https://relay.codencer.dev \
+  --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
   --json
 
+export CODENCER_DEFAULT_RELAY_TOKEN=<managed-relay-planner-token>
+codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
+```
+
+Self-service local connector setup:
+
+```bash
+codencer login --gateway https://mcp.codencer.dev
+codencer connector login --gateway https://mcp.codencer.dev --relay default --json
+codencer project share codencer --json
+codencer connector run --config "$CODENCER_HOME/runtime/connector/config.json"
+```
+
+Optionally add a self-host Relay as a backend relay profile:
+
+```bash
 codencer gateway relay add \
-  --id personal \
+  --gateway https://mcp.codencer.dev \
   --name "Personal self-host Relay" \
   --url https://relay.example.com \
   --token-env CODENCER_RELAY_PERSONAL_TOKEN \
   --json
 
-codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
+codencer connector login --gateway https://mcp.codencer.dev --relay personal --json
 ```
 
 Generate Gateway-first activation artifacts:
 
 ```bash
-codencer activation gateway \
+codencer activation official \
   --gateway https://mcp.codencer.dev \
   --relay https://relay.example.com \
   --project codencer \
@@ -311,6 +333,9 @@ official Codencer service.
 - [Local production guide](docs/local-production.md)
 - [Self-host Relay quickstart](docs/quickstart-self-host-relay.md)
 - [Official Gateway activation](docs/activation-official-gateway.md)
+- [Official connector flow](docs/official-connector-flow.md)
+- [Account device login](docs/account-device-login.md)
+- [Relay profile registry](docs/relay-profile-registry.md)
 - [VPS Relay activation](docs/activation-vps-relay.md)
 - [Local connector activation](docs/activation-local-connector.md)
 - [Project config](docs/project-config.md)

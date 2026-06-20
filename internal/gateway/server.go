@@ -34,14 +34,16 @@ const (
 var supportedProtocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26"}
 
 type Server struct {
-	cfg      *Config
-	store    *Store
-	client   *http.Client
-	tools    map[string]Tool
-	oauth    *oauthDevService
-	mu       sync.Mutex
-	sessions map[string]*session
-	started  time.Time
+	cfg            *Config
+	store          *Store
+	client         *http.Client
+	tools          map[string]Tool
+	oauth          *oauthDevService
+	mu             sync.Mutex
+	sessions       map[string]*session
+	started        time.Time
+	devUserID      string
+	devWorkspaceID string
 }
 
 type Tool struct {
@@ -137,10 +139,14 @@ func NewServer(cfg *Config, opts ServerOptions) (*Server, error) {
 		sessions: make(map[string]*session),
 		started:  time.Now().UTC(),
 	}
-	if server.oauth != nil && server.store != nil {
-		if account, err := server.store.EnsureUserWorkspace(context.Background(), "oauth-dev@codencer.local", "OAuth Dev User", cfg.DefaultRelay); err == nil {
-			server.oauth.defaultUserID = account.User.ID
-			server.oauth.defaultWorkspaceID = account.Workspace.ID
+	if server.store != nil {
+		if account, err := server.store.EnsureUserWorkspace(context.Background(), "gateway-dev@codencer.local", "Gateway Dev User", cfg.DefaultRelay); err == nil {
+			server.devUserID = account.User.ID
+			server.devWorkspaceID = account.Workspace.ID
+			if server.oauth != nil {
+				server.oauth.defaultUserID = account.User.ID
+				server.oauth.defaultWorkspaceID = account.Workspace.ID
+			}
 		}
 	}
 	server.tools = buildTools(server)
@@ -458,7 +464,7 @@ func (s *Server) authenticate(r *http.Request) (*authPrincipal, *apiError) {
 	}
 	expected, err := s.cfg.Auth.Token()
 	if err == nil && expected != "" && token == expected {
-		return &authPrincipal{Name: "gateway-bearer-dev", TokenHash: tokenHash(token), Scopes: []string{"*"}}, nil
+		return &authPrincipal{Name: "gateway-bearer-dev", TokenHash: tokenHash(token), UserID: s.devUserID, WorkspaceID: s.devWorkspaceID, Scopes: []string{"*"}}, nil
 	}
 	if s.oauth != nil {
 		if principal, apiErr := s.oauth.Authenticate(token); apiErr == nil && principal != nil {

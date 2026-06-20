@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	gatewaypkg "agent-bridge/internal/gateway"
 )
 
 func TestVersionPathsAndDoctorJSON(t *testing.T) {
@@ -688,6 +690,103 @@ func TestProjectConfigInitAdoptScanAndMachineJSON(t *testing.T) {
 	}
 }
 
+func TestAccountLoginRelayRegistryAndConnectorLoginJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+	t.Setenv("CODENCER_DEFAULT_RELAY_TOKEN", "relay-secret")
+	t.Setenv("CODENCER_SELFHOST_RELAY_TOKEN", "relay-secret")
+
+	relay := newOfficialConnectorFakeRelay(t)
+	defer relay.Close()
+	cfg := gatewaypkg.DefaultConfig()
+	cfg.PublicBaseURL = "http://127.0.0.1:19090"
+	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.Store.Path = filepath.Join(t.TempDir(), "gateway.db")
+	cfg.DefaultRelay.URL = relay.URL
+	cfg.DefaultRelay.TokenEnv = "CODENCER_DEFAULT_RELAY_TOKEN"
+	server, err := gatewaypkg.NewServer(cfg, gatewaypkg.ServerOptions{})
+	if err != nil {
+		t.Fatalf("new gateway: %v", err)
+	}
+	gatewayServer := httptest.NewServer(server.Handler())
+	defer gatewayServer.Close()
+
+	stdout, stderr, err := runCLI("login", "--gateway", gatewayServer.URL, "--email", "dev@example.com", "--display-name", "Dev", "--dev-approve", "--timeout", "5s", "--json")
+	if err != nil {
+		t.Fatalf("login failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if strings.Contains(stdout, "access_token") || strings.Contains(stdout, "relay-secret") {
+		t.Fatalf("login output leaked token material: %s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(home, "session.json")); err != nil {
+		t.Fatalf("session not written: %v", err)
+	}
+
+	stdout, stderr, err = runCLI("whoami", "--json")
+	if err != nil {
+		t.Fatalf("whoami failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"workspace_id"`) || strings.Contains(stdout, "access_token") {
+		t.Fatalf("whoami output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("gateway", "relay", "list", "--json")
+	if err != nil {
+		t.Fatalf("remote relay list failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"id": "default"`) || strings.Contains(stdout, "relay-secret") {
+		t.Fatalf("remote relay list output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("gateway", "relay", "add", "--name", "personal", "--url", relay.URL, "--token-env", "CODENCER_SELFHOST_RELAY_TOKEN", "--json")
+	if err != nil {
+		t.Fatalf("remote relay add failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"id": "personal"`) || !strings.Contains(stdout, `"token_configured": true`) || strings.Contains(stdout, "relay-secret") {
+		t.Fatalf("remote relay add output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("gateway", "relay", "status", "personal", "--json")
+	if err != nil {
+		t.Fatalf("remote relay status failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"id": "personal"`) || strings.Contains(stdout, "relay-secret") {
+		t.Fatalf("remote relay status output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("connector", "login", "--gateway", gatewayServer.URL, "--relay", "default", "--json")
+	if err != nil {
+		t.Fatalf("connector login failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"connector_id": "conn-fake"`) || !strings.Contains(stdout, `"relay_profile_id": "default"`) {
+		t.Fatalf("connector login output missing ids: %s", stdout)
+	}
+	for _, forbidden := range []string{"enroll-secret", "private_key", "relay-secret"} {
+		if strings.Contains(stdout, forbidden) {
+			t.Fatalf("connector login output leaked %q: %s", forbidden, stdout)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "runtime", "connector", "config.json")); err != nil {
+		t.Fatalf("connector config not written: %v", err)
+	}
+
+	stdout, stderr, err = runCLI("gateway", "relay", "remove", "personal", "--json")
+	if err != nil {
+		t.Fatalf("remote relay remove failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"relay_profile_id": "personal"`) {
+		t.Fatalf("remote relay remove output wrong: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("logout", "--json")
+	if err != nil {
+		t.Fatalf("logout failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if _, err := os.Stat(filepath.Join(home, "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("session still present after logout: %v", err)
+	}
+}
+
 func TestProjectListBackfillsOldRegistryMachineMetadata(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CODENCER_HOME", home)
@@ -728,6 +827,53 @@ func runCLI(args ...string) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 	err := run(args, &stdout, &stderr)
 	return stdout.String(), stderr.String(), err
+}
+
+func newOfficialConnectorFakeRelay(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	requireRelayAuth := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Header.Get("Authorization") != "Bearer relay-secret" {
+			writeHTTPJSON(t, w, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "auth_failed", "message": "bad relay token"}})
+			return false
+		}
+		return true
+	}
+	var server *httptest.Server
+	mux.HandleFunc("/api/v2/status", func(w http.ResponseWriter, r *http.Request) {
+		if !requireRelayAuth(w, r) {
+			return
+		}
+		writeHTTPJSON(t, w, http.StatusOK, map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/v2/connectors/enrollment-tokens", func(w http.ResponseWriter, r *http.Request) {
+		if !requireRelayAuth(w, r) {
+			return
+		}
+		writeHTTPJSON(t, w, http.StatusOK, map[string]any{"secret": "enroll-secret"})
+	})
+	mux.HandleFunc("/api/v2/connectors/enroll", func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeHTTPJSON(t, w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			return
+		}
+		if req["enrollment_token"] != "enroll-secret" && req["enrollment_secret"] != "enroll-secret" {
+			writeHTTPJSON(t, w, http.StatusForbidden, map[string]any{"error": "bad enrollment token"})
+			return
+		}
+		writeHTTPJSON(t, w, http.StatusOK, map[string]any{
+			"connector_id": "conn-fake",
+			"machine_id":   "mach-relay",
+			"relay": map[string]any{
+				"relay_url":                  server.URL,
+				"websocket_url":              strings.Replace(server.URL, "http://", "ws://", 1) + "/api/v2/connectors/ws",
+				"heartbeat_interval_seconds": 15,
+			},
+		})
+	})
+	server = httptest.NewServer(mux)
+	return server
 }
 
 func listRelativeFiles(t *testing.T, root string) []string {

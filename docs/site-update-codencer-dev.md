@@ -131,9 +131,10 @@ codencer activation package --relay https://relay.example.com --project codencer
 ### Connect Through Gateway
 
 ```bash
-codencer setup gateway --base-url https://mcp.codencer.dev --mcp-url https://mcp.codencer.dev/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json
-codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
-codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+codencer login --gateway https://mcp.codencer.dev
+codencer connector login --gateway https://mcp.codencer.dev --relay default --json
+codencer gateway relay add --gateway https://mcp.codencer.dev --name personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
 ## Navigation Updates

@@ -88,23 +88,27 @@ type RelayOptions struct {
 }
 
 type GatewayOptions struct {
-	BaseURL           string
-	MCPURL            string
-	ListenAddr        string
-	GatewayConfigPath string
-	AuthMode          string
-	TokenEnv          string
-	TokenFile         string
-	EnableOAuthDev    bool
-	OAuthIssuer       string
-	OAuthClientID     string
-	OAuthClientSecret string
-	InstallServices   bool
-	StartServices     bool
-	Manager           string
-	BinDir            string
-	Strict            bool
-	Now               func() time.Time
+	BaseURL               string
+	MCPURL                string
+	ListenAddr            string
+	GatewayConfigPath     string
+	StorePath             string
+	AuthMode              string
+	TokenEnv              string
+	TokenFile             string
+	DefaultRelayURL       string
+	DefaultRelayTokenEnv  string
+	DefaultRelayTokenFile string
+	EnableOAuthDev        bool
+	OAuthIssuer           string
+	OAuthClientID         string
+	OAuthClientSecret     string
+	InstallServices       bool
+	StartServices         bool
+	Manager               string
+	BinDir                string
+	Strict                bool
+	Now                   func() time.Time
 }
 
 type MCPOptions struct {
@@ -430,6 +434,7 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 	report.add("init_home", "passed", paths.Home)
 
 	gatewayConfigPath := firstNonEmpty(opts.GatewayConfigPath, filepath.Join(paths.RuntimeDir, "gateway", "config.json"))
+	storePath := firstNonEmpty(opts.StorePath, filepath.Join(paths.RuntimeDir, "gateway", "gateway.db"))
 	baseURL := strings.TrimRight(firstNonEmpty(opts.BaseURL, "https://mcp.codencer.dev"), "/")
 	mcpURL := strings.TrimRight(firstNonEmpty(opts.MCPURL, baseURL+"/mcp"), "/")
 	if !strings.HasSuffix(mcpURL, "/mcp") {
@@ -439,6 +444,10 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 	cfg.PublicBaseURL = baseURL
 	cfg.MCPURL = mcpURL
 	cfg.ListenAddr = firstNonEmpty(opts.ListenAddr, gateway.DefaultListenAddr)
+	cfg.Store.Path = storePath
+	cfg.DefaultRelay.URL = strings.TrimRight(firstNonEmpty(opts.DefaultRelayURL, gateway.DefaultRelayURL), "/")
+	cfg.DefaultRelay.TokenEnv = firstNonEmpty(opts.DefaultRelayTokenEnv, gateway.DefaultRelayToken)
+	cfg.DefaultRelay.TokenFile = strings.TrimSpace(opts.DefaultRelayTokenFile)
 	cfg.Auth.Mode = firstNonEmpty(opts.AuthMode, "bearer-dev")
 	cfg.Auth.TokenEnv = firstNonEmpty(opts.TokenEnv, gateway.DefaultGatewayToken)
 	cfg.Auth.TokenFile = strings.TrimSpace(opts.TokenFile)
@@ -511,9 +520,11 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 	report.Configured = true
 	report.NextCommands = []string{
 		"export " + cfg.Auth.TokenEnv + "=<gateway-client-token>",
-		"codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json",
+		"export " + cfg.DefaultRelay.TokenEnv + "=<default-managed-relay-token>",
 		"codencer-gatewayd serve --config " + gatewayConfigPath,
-		"codencer activation gateway --gateway " + baseURL + " --relay https://relay.example.com --project codencer --token-env " + cfg.Auth.TokenEnv + " --json",
+		"codencer login --gateway " + baseURL,
+		"codencer connector login --gateway " + baseURL + " --relay default --json",
+		"codencer activation official --gateway " + baseURL + " --project codencer --token-env " + cfg.Auth.TokenEnv + " --json",
 	}
 	report.Output = map[string]any{
 		"base_url":       baseURL,
@@ -522,7 +533,13 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 		"auth_mode":      cfg.Auth.Mode,
 		"token_env":      cfg.Auth.TokenEnv,
 		"gateway_config": gatewayConfigPath,
-		"oauth_dev":      oauthOutput,
+		"store_path":     storePath,
+		"default_relay": map[string]any{
+			"url":              cfg.DefaultRelay.URL,
+			"token_env":        cfg.DefaultRelay.TokenEnv,
+			"token_configured": cfg.DefaultRelay.TokenEnv != "" || cfg.DefaultRelay.TokenFile != "",
+		},
+		"oauth_dev": oauthOutput,
 	}
 	_ = ctx
 	return report.finish(exitForSteps(report.Steps, opts.Strict)), nil

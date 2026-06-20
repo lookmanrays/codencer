@@ -53,7 +53,7 @@ translates to a bearer token Codencer accepts.
 
 | Client path | Status | Repo proof | Notes |
 | --- | --- | --- | --- |
-| Gateway MCP | proven | Gateway tests and `make verify-gateway` | Official connector endpoint and project-aware tools. |
+| Gateway MCP | proven | Gateway tests, `make verify-gateway`, and `make verify-official-connector` | Official connector endpoint and project-aware tools. |
 | Relay HTTP | proven | relay tests and smoke | Planner API under `/api/v2/...`. |
 | Relay MCP | proven direct/debug | relay MCP tests, SDK helper, `make verify-local-relay-mcp` | Advanced direct Relay endpoint. |
 | Generic HTTP/MCP callers | proven for protocol | curl/tests/SDK helper | Specific product UIs are not universally proven. |
@@ -90,6 +90,7 @@ exist for the same `project_id`, Codencer returns structured blocker
 ```bash
 make activation-preflight
 ./bin/codencer activation gateway --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+./bin/codencer activation official --gateway https://mcp.codencer.dev --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
 ./bin/codencer activation chatgpt --relay https://relay.example.com --project codencer --auth oauth --json
 ./bin/codencer activation codex --relay https://relay.example.com --token-env CODENCER_MCP_TOKEN --json
