@@ -80,6 +80,7 @@ test("captures Gateway Console visual evidence", async ({ page }) => {
   await captureInteractions(page);
   assertGeneratedMobileScreenshotWidths();
   writeReports();
+  assertVisualReviewHasNoPlaceholders();
 
   expect(securityFindings, securityFindings.join("\n")).toEqual([]);
   console.log(`Gateway Console visual evidence: ${runDir}`);
@@ -474,9 +475,9 @@ function writeReports() {
       "",
       "## Remaining Concerns",
       "",
-      "- Console is mock-backed by default unless `NEXT_PUBLIC_CODENCER_CONSOLE_MOCKS=false` is configured.",
-      "- Live Gateway API coverage is limited to the read-only paths actually wired in the UI data client.",
-      "- Private managed Cloud features are intentionally out of scope.",
+      "- Mock-backed console.",
+      "- Limited live API integration.",
+      "- Private Cloud out of scope.",
       "",
       "## Screenshots Not Captured",
       "",
@@ -488,6 +489,11 @@ function writeReports() {
       "",
     ].join("\n"),
   );
+}
+
+function assertVisualReviewHasNoPlaceholders() {
+  const review = fs.readFileSync(path.join(runDir, "visual-review.md"), "utf8");
+  expect(review).not.toContain("Fill this section");
 }
 
 function slug(routePath: string) {
