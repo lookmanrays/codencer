@@ -4,13 +4,19 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 
 const repoRoot = path.resolve(process.cwd(), "../..");
+const codencerBinary = path.join(repoRoot, "bin", "codencer");
+const connectorBinary = path.join(repoRoot, "bin", "codencer-connectord");
+const daemonBinary = path.join(repoRoot, "bin", "orchestratord");
 const gatewayBinary = path.join(repoRoot, "bin", "codencer-gatewayd");
+const relayBinary = path.join(repoRoot, "bin", "codencer-relayd");
 const gatewayToken = "gateway-live-secret";
 const relayToken = "relay-live-secret";
 const operatorCode = "operator-code";
+const execFileAsync = promisify(execFile);
 
 const tmpRoot = await fs.mkdtemp(
   path.join(os.tmpdir(), "codencer-console-live-"),
@@ -21,7 +27,7 @@ const servers = [];
 try {
   const codencerHome = path.join(tmpRoot, "codencer-home");
   await fs.mkdir(codencerHome, { recursive: true });
-  const relay = await startFakeRelay();
+  const stack = await startLocalSelfHostStack(tmpRoot);
   const gatewayPort = await freePort();
   const consolePort = await freePort();
   const gatewayBase = `http://127.0.0.1:${gatewayPort}`;
@@ -36,7 +42,7 @@ try {
         listen_addr: `127.0.0.1:${gatewayPort}`,
         store: { path: path.join(tmpRoot, "gateway.db") },
         default_relay: {
-          url: relay.url,
+          url: stack.relayUrl,
           token_env: "CODENCER_LIVE_RELAY_TOKEN",
         },
         auth: {
@@ -72,23 +78,7 @@ try {
   );
   await waitForJSON(`${gatewayBase}/health`);
 
-  const connectorLogin = await gatewayFetch(gatewayBase, "/connectors/login", {
-    relay: "default",
-    machine: {
-      machine_id: "mach-live",
-      hostname: "live-host.local",
-      host_label: "live-host",
-      os: "linux",
-      arch: "amd64",
-    },
-    label: "live connector",
-  });
-  await gatewayFetch(gatewayBase, "/connectors/complete", {
-    binding_id: connectorLogin.binding_id,
-    relay_connector_id: "conn-relay-live",
-    relay_machine_id: "mach-live",
-    public_key: "live-public-key",
-  });
+  await startConnectorThroughGateway(gatewayBase, stack);
 
   spawnProcess(
     "npm",
@@ -127,7 +117,7 @@ try {
     await page.goto(`${consoleBase}/console/relays`);
     await expect(page.getByText("Default Codencer Relay")).toBeVisible();
     await page.getByLabel(/profile name/i).fill("test-self-host");
-    await page.getByLabel(/relay url/i).fill(relay.url);
+    await page.getByLabel(/relay url/i).fill(stack.relayUrl);
     await page
       .getByLabel(/token environment variable/i)
       .fill("CODENCER_LIVE_RELAY_TOKEN");
@@ -158,7 +148,9 @@ try {
 
     await page.goto(`${consoleBase}/console/connectors`);
     await expect(page.getByRole("cell", { name: "live-host" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "linux/amd64" })).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: /darwin\/arm64|linux\/amd64/ }),
+    ).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/projects`);
@@ -166,8 +158,17 @@ try {
       page.getByRole("cell", { name: "Codencer", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("cell", { name: "codencer · repo_live_hash" }),
+      page.getByRole("row", {
+        name: /Codencer default live-host repo · [a-f0-9]{16} online none/i,
+      }),
     ).toBeVisible();
+    await page
+      .getByLabel(/goal/i)
+      .fill("Run fake-safe task from live Gateway Console.");
+    await page.getByRole("button", { name: /^submit$/i }).click();
+    await expect(page.getByText(/run completed/i)).toBeVisible();
+    await expect(page.getByText(/run_id=run-/i)).toBeVisible();
+    await expect(page.getByText(/status=completed run_id=run-/i)).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/activation`);
@@ -248,58 +249,181 @@ try {
   }
 
   console.log(
-    `gateway-console-live: ok gateway=${gatewayBase} console=${consoleBase} relay=${relay.url}`,
+    `gateway-console-live: ok gateway=${gatewayBase} console=${consoleBase} relay=${stack.relayUrl}`,
   );
 } finally {
-  for (const child of processes.reverse()) child.kill("SIGTERM");
+  for (const child of processes.reverse()) await stopProcess(child);
   for (const server of servers.reverse())
     await new Promise((resolve) => server.close(resolve));
   await fs.rm(tmpRoot, { force: true, recursive: true });
 }
 
-async function startFakeRelay() {
-  const server = http.createServer((req, res) => {
-    if (req.headers.authorization !== `Bearer ${relayToken}`) {
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "unauthorized" }));
-      return;
-    }
-    const project = {
-      project_id: "codencer",
-      name: "Codencer",
-      online: true,
-      status: "available",
-      locations: [
-        {
-          machine_id: "mach-live",
-          host_label: "live-host",
-          hostname: "live-host.local",
-          connector_id: "conn-relay-live",
-          repo_label: "codencer",
-          repo_root_hash: "repo_live_hash",
-          online: true,
-          status: "available",
-        },
-      ],
-    };
-    if (req.url === "/api/v2/status") {
-      return writeJSON(res, { ok: true });
-    }
-    if (req.url === "/api/v2/connectors/enrollment-tokens") {
-      return writeJSON(res, { secret: "relay-enroll-secret" });
-    }
-    if (req.url === "/api/v2/projects") {
-      return writeJSON(res, [project]);
-    }
-    if (req.url === "/api/v2/projects/codencer") {
-      return writeJSON(res, project);
-    }
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "not_found" }));
+async function startLocalSelfHostStack(root) {
+  const repo = path.join(root, "repo");
+  const state = path.join(root, "daemon-state");
+  const connectorHome = path.join(root, "connector-home");
+  const connectorConfig = path.join(root, "connector.json");
+  await fs.mkdir(repo, { recursive: true });
+  await fs.writeFile(
+    path.join(repo, "README.md"),
+    "console live verification\n",
+  );
+  await runCommand("git", ["-C", repo, "init", "-q"]);
+  await runCommand("git", ["-C", repo, "add", "README.md"]);
+  await runCommand("git", [
+    "-C",
+    repo,
+    "-c",
+    "user.name=Codencer",
+    "-c",
+    "user.email=codencer@example.invalid",
+    "commit",
+    "-q",
+    "-m",
+    "initial",
+  ]);
+
+  const daemonPort = await freePort();
+  const relayPort = await freePort();
+  const daemonUrl = `http://127.0.0.1:${daemonPort}`;
+  const relayUrl = `http://127.0.0.1:${relayPort}`;
+  const daemonConfig = path.join(root, "daemon.json");
+  await fs.writeFile(
+    daemonConfig,
+    JSON.stringify(
+      {
+        log_level: "error",
+        db_path: path.join(state, "codencer.db"),
+        artifact_root: path.join(state, "artifacts"),
+        workspace_root: path.join(state, "workspace"),
+        repo_root: repo,
+        host: "127.0.0.1",
+        port: daemonPort,
+      },
+      null,
+      2,
+    ),
+  );
+  spawnProcess(daemonBinary, ["--config", daemonConfig, "--repo-root", repo], {
+    ARTIFACT_ROOT: path.join(state, "artifacts"),
+    DB_PATH: path.join(state, "codencer.db"),
+    HOST: "127.0.0.1",
+    LOG_LEVEL: "error",
+    PORT: String(daemonPort),
+    REPO_ROOT: repo,
+    WORKSPACE_ROOT: path.join(state, "workspace"),
   });
-  await listen(server, 0);
-  servers.push(server);
-  return { url: `http://127.0.0.1:${server.address().port}` };
+  await waitForJSON(`${daemonUrl}/health`);
+
+  const relayConfig = path.join(root, "relay.json");
+  await fs.writeFile(
+    relayConfig,
+    JSON.stringify(
+      {
+        host: "127.0.0.1",
+        port: relayPort,
+        db_path: path.join(root, "relay.db"),
+        planner_tokens: [
+          { name: "operator", token: relayToken, scopes: ["*"] },
+        ],
+        proxy_timeout_seconds: 90,
+        public_base_url: relayUrl,
+      },
+      null,
+      2,
+    ),
+  );
+  spawnProcess(relayBinary, ["--config", relayConfig], {});
+  await waitFor(async () => {
+    const response = await fetch(`${relayUrl}/api/v2/status`, {
+      headers: { Authorization: `Bearer ${relayToken}` },
+    });
+    return response.ok;
+  }, `waiting for ${relayUrl}/api/v2/status`);
+
+  await runCommand(codencerBinary, ["init", "--json"], {
+    CODENCER_HOME: connectorHome,
+  });
+  await runCommand(
+    codencerBinary,
+    ["machine", "set-label", "live-host", "--json"],
+    {
+      CODENCER_HOME: connectorHome,
+    },
+  );
+  await runCommand(
+    codencerBinary,
+    [
+      "project",
+      "init",
+      "--id",
+      "codencer",
+      "--repo",
+      repo,
+      "--adapter",
+      "fake",
+      "--profile",
+      "fake-success",
+      "--daemon-url",
+      daemonUrl,
+      "--share-to-relay",
+      "--json",
+    ],
+    { CODENCER_HOME: connectorHome },
+  );
+
+  return { connectorConfig, connectorHome, daemonUrl, relayUrl, repo };
+}
+
+async function startConnectorThroughGateway(gatewayBase, stack) {
+  const connectorLogin = await gatewayFetch(gatewayBase, "/connectors/login", {
+    relay: "default",
+    machine: {
+      machine_id: "mach-live",
+      hostname: "live-host.local",
+      host_label: "live-host",
+      os: process.platform === "darwin" ? "darwin" : "linux",
+      arch: process.arch === "arm64" ? "arm64" : "amd64",
+    },
+    label: "live connector",
+  });
+  await runCommand(
+    connectorBinary,
+    [
+      "enroll",
+      "--relay-url",
+      connectorLogin.relay_url,
+      "--daemon-url",
+      stack.daemonUrl,
+      "--enrollment-token",
+      connectorLogin.enrollment_token,
+      "--config",
+      stack.connectorConfig,
+      "--codencer-home",
+      stack.connectorHome,
+      "--label",
+      "live-host",
+    ],
+    {},
+  );
+  const connectorConfig = JSON.parse(
+    await fs.readFile(stack.connectorConfig, "utf8"),
+  );
+  await gatewayFetch(gatewayBase, "/connectors/complete", {
+    binding_id: connectorLogin.binding_id,
+    relay_connector_id: connectorConfig.connector_id,
+    relay_machine_id: connectorConfig.machine_id,
+    public_key: connectorConfig.public_key,
+  });
+  spawnProcess(connectorBinary, ["run", "--config", stack.connectorConfig], {});
+  await waitFor(async () => {
+    const response = await fetch(`${gatewayBase}/api/gateway/v1/projects`, {
+      headers: { Authorization: `Bearer ${gatewayToken}` },
+    });
+    if (!response.ok) return false;
+    const payload = await response.json();
+    return JSON.stringify(payload).includes('"project_id":"codencer"');
+  }, "waiting for Gateway to list connector project");
 }
 
 function spawnProcess(command, args, env) {
@@ -312,6 +436,37 @@ function spawnProcess(command, args, env) {
   child.stderr.on("data", (data) => process.stderr.write(`[live] ${data}`));
   processes.push(child);
   return child;
+}
+
+async function stopProcess(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve();
+    }, 5_000);
+    child.once("close", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    child.kill("SIGTERM");
+  });
+}
+
+async function runCommand(command, args, env = {}) {
+  try {
+    return await execFileAsync(command, args, {
+      cwd: repoRoot,
+      env: { ...process.env, ...env },
+      maxBuffer: 4 * 1024 * 1024,
+    });
+  } catch (error) {
+    const stdout = error.stdout ? `\nstdout:\n${error.stdout}` : "";
+    const stderr = error.stderr ? `\nstderr:\n${error.stderr}` : "";
+    throw new Error(
+      `${command} ${args.join(" ")} failed: ${error.message}${stdout}${stderr}`,
+    );
+  }
 }
 
 async function gatewayFetch(base, path, body) {
@@ -388,11 +543,6 @@ function listen(server, port) {
   return new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
 }
 
-function writeJSON(res, value) {
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(value));
-}
-
 async function assertNoDemoOrSecretLeak(page) {
   const html = await page.content();
   for (const forbidden of [
@@ -406,7 +556,13 @@ async function assertNoDemoOrSecretLeak(page) {
     "relay-enroll-secret",
     "live-public-key",
     "/Users/",
+    "/tmp/",
+    "/var/folders/",
     "/home/",
+    "report_path",
+    "logs_ref",
+    "normalized_task_ref",
+    "original_input_ref",
   ]) {
     if (html.includes(forbidden)) {
       throw new Error(`live console leaked forbidden content: ${forbidden}`);

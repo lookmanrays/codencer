@@ -52,6 +52,15 @@ print_json() {
   fi
 }
 
+assert_no_mcp_leaks() {
+  local file="$1"
+  if grep -Eq '/Users/|/tmp/|/var/folders/|CODENCER_HOME|\.codencer-live-test|report_path|logs_ref|normalized_task_ref|original_input_ref|"path"' "$file"; then
+    echo "MCP output leaked a local path or unsafe path field: $file" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
 repo="$TMPDIR_ROOT/repo"
 home="$TMPDIR_ROOT/home"
 home2="$TMPDIR_ROOT/home2"
@@ -344,6 +353,7 @@ done
 
 mcp_tool "codencer.list_relays" '{}' "$TMPDIR_ROOT/list-relays.json"
 grep -q '"personal"' "$TMPDIR_ROOT/list-relays.json" || { cat "$TMPDIR_ROOT/list-relays.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/list-relays.json"
 if grep -q "$planner_token\|$gateway_token" "$TMPDIR_ROOT/list-relays.json"; then
   echo "gateway list_relays leaked a token" >&2
   cat "$TMPDIR_ROOT/list-relays.json" >&2
@@ -352,6 +362,7 @@ fi
 
 mcp_tool "codencer.list_projects" '{}' "$TMPDIR_ROOT/list-projects.json"
 grep -q '"project_id":"codencer"\|"project_id": "codencer"' "$TMPDIR_ROOT/list-projects.json" || { cat "$TMPDIR_ROOT/list-projects.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/list-projects.json"
 if grep -q "$repo\|$planner_token\|$gateway_token" "$TMPDIR_ROOT/list-projects.json"; then
   echo "gateway list_projects leaked local path or token" >&2
   cat "$TMPDIR_ROOT/list-projects.json" >&2
@@ -366,6 +377,7 @@ print(json.dumps({"relay_profile_id":"personal","project_id":"codencer","machine
 PY
 mcp_tool "codencer.run_project_manifest" "$(cat "$TMPDIR_ROOT/run-args.json")" "$TMPDIR_ROOT/run-through-gateway.json"
 grep -q '"ok":true\|"ok": true' "$TMPDIR_ROOT/run-through-gateway.json" || { cat "$TMPDIR_ROOT/run-through-gateway.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/run-through-gateway.json"
 run_id="$(python3 - "$TMPDIR_ROOT/run-through-gateway.json" <<'PY'
 import json, sys
 payload=json.load(open(sys.argv[1]))
@@ -377,18 +389,22 @@ test -n "$run_id"
 
 mcp_tool "codencer.get_run_report" "{\"relay_profile_id\":\"personal\",\"project_id\":\"codencer\",\"machine_id\":\"$machine_id\",\"run_id\":\"$run_id\"}" "$TMPDIR_ROOT/run-report.json"
 grep -q "$run_id" "$TMPDIR_ROOT/run-report.json" || { cat "$TMPDIR_ROOT/run-report.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/run-report.json"
 
 mcp_tool "codencer.run_project_manifest" "{\"project_id\":\"codencer\",\"manifest_text\":\"version: v0.3\\nkind: codencer.run_plan\\n\",\"wait\":true}" "$TMPDIR_ROOT/ambiguous-relay.json"
 grep -q 'ambiguous_relay_profile' "$TMPDIR_ROOT/ambiguous-relay.json" || { cat "$TMPDIR_ROOT/ambiguous-relay.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/ambiguous-relay.json"
 
 mcp_tool "codencer.run_project_manifest" "{\"relay_profile_id\":\"personal\",\"project_id\":\"codencer\",\"manifest_text\":\"version: v0.3\\nkind: codencer.run_plan\\n\",\"wait\":true}" "$TMPDIR_ROOT/ambiguous-location.json"
 grep -q 'ambiguous_project_location' "$TMPDIR_ROOT/ambiguous-location.json" || { cat "$TMPDIR_ROOT/ambiguous-location.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/ambiguous-location.json"
 
 kill "$RELAY_PID" 2>/dev/null || true
 wait "$RELAY_PID" 2>/dev/null || true
 RELAY_PID=""
 mcp_tool "codencer.run_project_manifest" "{\"relay_profile_id\":\"personal\",\"project_id\":\"codencer\",\"machine_id\":\"$machine_id\",\"manifest_text\":\"version: v0.3\\nkind: codencer.run_plan\\n\",\"wait\":true}" "$TMPDIR_ROOT/relay-down.json"
 grep -q 'relay_unavailable' "$TMPDIR_ROOT/relay-down.json" || { cat "$TMPDIR_ROOT/relay-down.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/relay-down.json"
 
 echo "--- Gateway Smoke Summary ---"
 echo "Daemon:  $daemon_url"

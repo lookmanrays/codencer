@@ -31,6 +31,20 @@ test("theme toggle changes theme", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("project task form submits demo run without unsafe output", async ({
+  page,
+}) => {
+  await page.goto("/console/projects");
+  await page.getByLabel(/goal/i).fill("Run fake-safe task from browser smoke.");
+  await page.getByRole("button", { name: /^submit$/i }).click();
+  await expect(page.getByText(/run completed/i)).toBeVisible();
+  await expect(page.getByText(/run_demo_console/i)).toBeVisible();
+  const html = await page.content();
+  expect(html).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);
+  expect(html).not.toContain("report_path");
+  expect(html).not.toContain("logs_ref");
+});
+
 test("device form validation works", async ({ page }) => {
   await page.goto("/device");
   await page.getByRole("button", { name: /approve device/i }).click();

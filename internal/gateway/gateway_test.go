@@ -87,8 +87,12 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	if !strings.Contains(runBody, `"run_id":"run-gateway-test"`) {
 		t.Fatalf("expected forwarded run id, got %s", runBody)
 	}
-	if strings.Contains(runBody, "/Users/") || strings.Contains(runBody, "relay-secret") {
-		t.Fatalf("sensitive relay output leaked: %s", runBody)
+	assertNoGatewayMCPLeak(t, runBody)
+	if !strings.Contains(runBody, `"artifact_id":"artifact-run"`) || !strings.Contains(runBody, `"hash":"hash-run"`) {
+		t.Fatalf("safe artifact metadata was not preserved in run response: %s", runBody)
+	}
+	if strings.Contains(runBody, `"state":"running"`) || !strings.Contains(runBody, `"state":"completed"`) {
+		t.Fatalf("run response exposed contradictory state: %s", runBody)
 	}
 	if relay.lastMachineID != "mach-1" {
 		t.Fatalf("expected machine_id selector to reach relay, got %q", relay.lastMachineID)
@@ -102,6 +106,10 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	reportBody := mustJSON(t, report)
 	if !strings.Contains(reportBody, `"status":"completed"`) {
 		t.Fatalf("expected run report, got %s", reportBody)
+	}
+	assertNoGatewayMCPLeak(t, reportBody)
+	if !strings.Contains(reportBody, `"artifact_id":"artifact-report"`) || !strings.Contains(reportBody, `"mime_type":"text/plain"`) {
+		t.Fatalf("safe artifact metadata was not preserved in run report: %s", reportBody)
 	}
 
 	locations := mcpToolCall(t, server.URL, session, "codencer.list_project_locations", map[string]any{
@@ -127,6 +135,7 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	if !strings.Contains(submitBody, `"step_id":"step-gateway-test"`) {
 		t.Fatalf("expected forwarded submit response, got %s", submitBody)
 	}
+	assertNoGatewayMCPLeak(t, submitBody)
 	if relay.lastHostLabel != "macbook" {
 		t.Fatalf("expected host_label selector to reach relay, got %q", relay.lastHostLabel)
 	}
@@ -140,6 +149,7 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	if !strings.Contains(blockerBody, `"type":"needs_planner_decision"`) {
 		t.Fatalf("expected blocker report, got %s", blockerBody)
 	}
+	assertNoGatewayMCPLeak(t, blockerBody)
 }
 
 func TestGatewayAuthMetadataAndChallenge(t *testing.T) {
@@ -345,6 +355,18 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if !strings.Contains(mustJSON(t, project), `"relay_profile_id":"default"`) {
 		t.Fatalf("project detail missing relay profile: %s", mustJSON(t, project))
 	}
+	runResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"title":            "Gateway Console task",
+		"goal":             "Return deterministic evidence.",
+		"timeout_seconds":  30,
+	})
+	runResultBody := mustJSON(t, runResult)
+	if !strings.Contains(runResultBody, `"step_id":"step-gateway-test"`) {
+		t.Fatalf("project run endpoint did not submit through relay: %s", runResultBody)
+	}
+	assertNoGatewayMCPLeak(t, runResultBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	if !strings.Contains(mustJSON(t, audit), `"connector.login"`) {
 		t.Fatalf("audit endpoint missing connector event: %s", mustJSON(t, audit))
@@ -457,29 +479,80 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 		requireRelayAuth(t, r)
 		relay.lastMachineID = r.URL.Query().Get("machine_id")
 		writeTestJSON(t, w, map[string]any{
-			"ok":        true,
-			"run_id":    "run-gateway-test",
-			"repo_root": "/Users/example/codencer",
-			"token":     "relay-secret",
+			"ok":          true,
+			"status":      "completed",
+			"run_id":      "run-gateway-test",
+			"repo_root":   "/Users/example/codencer",
+			"report_path": "/tmp/codencer/run-plans/run-gateway-test.json",
+			"run":         map[string]any{"id": "run-gateway-test", "state": "running"},
+			"evidence": map[string]any{
+				"logs_ref": "/var/folders/test/codencer/stdout.log",
+				"artifacts": []map[string]any{{
+					"id":        "artifact-run",
+					"name":      "stdout.log",
+					"type":      "stdout",
+					"mime_type": "text/plain",
+					"size":      12,
+					"hash":      "hash-run",
+					"path":      "/Users/example/.codencer-live-test/artifacts/stdout.log",
+				}},
+			},
+			"token": "relay-secret",
 		})
 	})
 	mux.HandleFunc("/api/v2/projects/codencer/submit", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		relay.lastHostLabel = r.URL.Query().Get("host_label")
-		writeTestJSON(t, w, map[string]any{"ok": true, "step_id": "step-gateway-test"})
+		writeTestJSON(t, w, map[string]any{
+			"ok":      true,
+			"status":  "completed",
+			"step_id": "step-gateway-test",
+			"task": map[string]any{
+				"run_id": "run-gateway-test",
+				"evidence": map[string]any{
+					"logs_ref": "/Users/example/.codencer-live-test/runtime/daemon/state/artifacts/task.log",
+				},
+			},
+		})
 	})
 	mux.HandleFunc("/api/v2/projects/codencer/reports/run-plans/run-gateway-test", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
-		writeTestJSON(t, w, map[string]any{"run_id": "run-gateway-test", "status": "completed"})
+		writeTestJSON(t, w, map[string]any{
+			"run_id":      "run-gateway-test",
+			"status":      "completed",
+			"report_path": "/Users/example/.codencer-live-test/artifacts/run-plans/run-gateway-test.json",
+			"run":         map[string]any{"id": "run-gateway-test", "state": "running"},
+			"tasks": []map[string]any{{
+				"task_id": "fake",
+				"evidence": map[string]any{
+					"logs_ref": "/tmp/codencer/stdout.log",
+					"artifacts": []map[string]any{{
+						"id":        "artifact-report",
+						"name":      "stdout.log",
+						"type":      "stdout",
+						"mime_type": "text/plain",
+						"size":      24,
+						"hash":      "hash-report",
+						"path":      "/var/folders/test/codencer/stdout.log",
+					}},
+					"result": map[string]any{"artifacts": map[string]any{
+						"normalized_task_ref": "/Users/example/.codencer-live-test/normalized-task.json",
+						"original_input_ref":  "/Users/example/.codencer-live-test/original-input.txt",
+					}},
+				},
+			}},
+		})
 	})
 	mux.HandleFunc("/api/v2/projects/codencer/reports/run-plans/run-blocked", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		writeTestJSON(t, w, map[string]any{
-			"run_id": "run-blocked",
-			"status": "blocked",
+			"run_id":      "run-blocked",
+			"status":      "blocked",
+			"report_path": "/Users/example/.codencer-live-test/artifacts/run-plans/run-blocked.json",
 			"blocker": map[string]any{
 				"type":                      "needs_planner_decision",
 				"planner_decision_required": true,
+				"evidence_refs":             []string{"/tmp/codencer/blocker.json"},
 			},
 		})
 	})
@@ -580,6 +653,26 @@ func assertToolErrorContains(t *testing.T, response map[string]any, want string)
 	body := mustJSON(t, response)
 	if !strings.Contains(body, `"isError":true`) || !strings.Contains(body, want) {
 		t.Fatalf("expected tool error containing %q, got %s", want, body)
+	}
+}
+
+func assertNoGatewayMCPLeak(t *testing.T, body string) {
+	t.Helper()
+	for _, forbidden := range []string{
+		"/Users/",
+		"/tmp/",
+		"/var/folders/",
+		".codencer-live-test",
+		"relay-secret",
+		"report_path",
+		"logs_ref",
+		"normalized_task_ref",
+		"original_input_ref",
+		`"path"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Gateway MCP output leaked %q: %s", forbidden, body)
+		}
 	}
 }
 

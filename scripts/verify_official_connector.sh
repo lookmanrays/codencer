@@ -407,7 +407,8 @@ mcp_tool "codencer.run_project_manifest" "{\"relay_profile_id\":\"personal\",\"p
 grep -q 'relay_unavailable' "$TMPDIR_ROOT/mcp-relay-down.json" || { cat "$TMPDIR_ROOT/mcp-relay-down.json" >&2; exit 1; }
 
 for out in "$TMPDIR_ROOT"/mcp-*.json; do
-  if grep -q "$repo\|$official_token\|$selfhost_token\|$gateway_token\|$gateway_access_token" "$out"; then
+  if grep -q "$repo\|$official_token\|$selfhost_token\|$gateway_token\|$gateway_access_token" "$out" ||
+    grep -Eq '/Users/|/tmp/|/var/folders/|CODENCER_HOME|\.codencer-live-test|report_path|logs_ref|normalized_task_ref|original_input_ref|"path"' "$out"; then
     echo "MCP output leaked path or token: $out" >&2
     cat "$out" >&2
     exit 1

@@ -436,17 +436,29 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleProjectByID(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/projects/"), "/"), "/")
+	projectID := ""
+	if len(parts) > 0 {
+		projectID = parts[0]
+	}
+	if projectID == "" {
+		writeAPIError(w, http.StatusBadRequest, "project_id_required", "project id is required")
+		return
+	}
+	if len(parts) == 2 && parts[1] == "runs" {
+		s.handleProjectRunCreate(w, r, projectID)
+		return
+	}
+	if len(parts) > 1 {
+		writeAPIError(w, http.StatusNotFound, "route_not_found", "project route not found")
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read"})
 	if !ok {
-		return
-	}
-	projectID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/projects/"), "/")
-	if projectID == "" {
-		writeAPIError(w, http.StatusBadRequest, "project_id_required", "project id is required")
 		return
 	}
 	projects, relayErrors := s.aggregateProjects(r.Context(), principal)
@@ -457,6 +469,49 @@ func (s *Server) handleProjectByID(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeAPIError(w, http.StatusNotFound, "project_not_found", "project not found")
+}
+
+func (s *Server) handleProjectRunCreate(w http.ResponseWriter, r *http.Request, projectID string) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:write"})
+	if !ok {
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", err.Error())
+		return
+	}
+	if req == nil {
+		req = map[string]any{}
+	}
+	req["project_id"] = projectID
+	mode := strings.TrimSpace(stringArg(req, "mode"))
+	route := submitProjectTaskRoute
+	if mode == "manifest" {
+		route = runProjectManifestRoute
+	}
+	match, apiErr := s.resolveProject(r.Context(), principal, projectID, req, true)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	path, body, apiErr := route(req)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	path = appendSelector(path, req)
+	_, response, apiErr := s.callRelay(r.Context(), match.Profile, http.MethodPost, path, body)
+	payload, apiErr := responsePayload(match.Profile, response, apiErr)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "result": payload})
 }
 
 func (s *Server) handleAuditEvents(w http.ResponseWriter, r *http.Request) {

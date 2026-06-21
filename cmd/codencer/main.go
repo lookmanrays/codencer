@@ -61,6 +61,10 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
+	if wantsHelp(args) {
+		printCommandHelp(stdout, helpPath(args))
+		return nil
+	}
 	if len(args) == 0 {
 		printUsage(stderr)
 		return exitError{code: exitUsage, message: "missing command", printed: true}
@@ -2708,6 +2712,73 @@ func contextBackground() context.Context {
 
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: codencer <version|init|login|whoami|logout|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+}
+
+func wantsHelp(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			return true
+		}
+	}
+	return false
+}
+
+func helpPath(args []string) []string {
+	out := []string{}
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
+}
+
+func printCommandHelp(w io.Writer, path []string) {
+	key := strings.Join(path, " ")
+	switch key {
+	case "":
+		printHelpBlock(w, "codencer [command] [flags]", "version, init, login, paths, config, doctor, status, project, machine, connector, gateway, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
+	case "project":
+		printHelpBlock(w, "codencer project <init|adopt|scan|list|get|use|status|share|unshare|remove> [flags]", "init, adopt, scan, list, get, use, status, share, unshare, remove", "--json, --config <path>, --repo <path>", "codencer project init --repo . --adapter fake --profile fake-success --share-to-relay --json")
+	case "project init":
+		printHelpBlock(w, "codencer project init [--repo <path>] [--id <id>] [flags]", "none", "--json, --repo <path>, --id <id>, --adapter <name>, --profile <id>, --daemon-url <url>, --share-to-relay, --force", "codencer project init --repo . --id codencer --adapter fake --profile fake-success --share-to-relay --json")
+	case "project get":
+		printHelpBlock(w, "codencer project get <project-id> [flags]", "none", "--json, --config <path>", "codencer project get codencer --json")
+	case "project list":
+		printHelpBlock(w, "codencer project list [flags]", "none", "--json, --config <path>", "codencer project list --json")
+	case "project status":
+		printHelpBlock(w, "codencer project status [project-id] [flags]", "none", "--json, --config <path>, --repo <path>", "codencer project status codencer --json")
+	case "machine":
+		printHelpBlock(w, "codencer machine <show|set-label> [flags]", "show, set-label", "--json, --config <path>", "codencer machine set-label laptop-a --json")
+	case "connector":
+		printHelpBlock(w, "codencer connector <login|enroll|run|status|config show> [flags]", "login, enroll, run, status, config show", "--json, --config <path>, --codencer-home <path>", "codencer connector login --gateway http://127.0.0.1:19090 --relay default --json")
+	case "connector login":
+		printHelpBlock(w, "codencer connector login [flags]", "none", "--json, --gateway <url>, --relay <id>, --daemon-url <url>, --config <path>, --codencer-home <path>, --label <name>", "codencer connector login --gateway http://127.0.0.1:19090 --relay default --daemon-url http://127.0.0.1:8085 --json")
+	case "connector status":
+		printHelpBlock(w, "codencer connector status [flags]", "none", "--json, --config <path>", "codencer connector status --json")
+	case "gateway":
+		printHelpBlock(w, "codencer gateway <relay|status|config> [flags]", "relay, status, config show", "--json, --config <path>, --gateway <url>", "codencer gateway status --json")
+	case "gateway relay":
+		printHelpBlock(w, "codencer gateway relay <add|list|status|remove> [flags]", "add, list, status, remove", "--json, --config <path>, --gateway <url>, --id <id>, --url <relay-url>, --token-env <env>", "codencer gateway relay add --id personal --url http://127.0.0.1:8090 --token-env CODENCER_RELAY_TOKEN --json")
+	case "login":
+		printHelpBlock(w, "codencer login [flags]", "none", "--json, --gateway <url>, --device-code <code>", "codencer login --gateway http://127.0.0.1:19090 --json")
+	case "setup":
+		printHelpBlock(w, "codencer setup <local|self-host|mcp> [flags]", "local, self-host, mcp", "--json, --gateway-url <url>, --relay-url <url>, --token-env <env>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --token-env CODENCER_GATEWAY_MCP_TOKEN --json")
+	case "activation":
+		printHelpBlock(w, "codencer activation <package|check|chatgpt|codex|claude-code|self-host> [flags]", "package, check, chatgpt, codex, claude-code, self-host", "--json, --gateway <url>, --relay <url>, --project <id>, --token-env <env>", "codencer activation self-host --gateway http://127.0.0.1:19090 --relay http://127.0.0.1:8090 --project codencer --json")
+	case "config":
+		printHelpBlock(w, "codencer config <show|set|profiles> [flags]", "show, set, profiles list, profiles use", "--json, --config <path>", "codencer config set gateway.url http://127.0.0.1:19090 --json")
+	default:
+		printHelpBlock(w, "codencer "+key+" [flags]", "see parent command", "--json, --config <path>", "codencer --help")
+	}
+}
+
+func printHelpBlock(w io.Writer, usage, subcommands, flags, example string) {
+	fmt.Fprintf(w, "Usage: %s\n\n", usage)
+	fmt.Fprintf(w, "Subcommands: %s\n\n", subcommands)
+	fmt.Fprintf(w, "Common flags: %s\n\n", flags)
+	fmt.Fprintf(w, "Examples:\n  %s\n", example)
 }
 
 func printPaths(w io.Writer, paths local.Paths) {

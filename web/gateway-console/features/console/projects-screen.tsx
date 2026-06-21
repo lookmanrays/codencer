@@ -1,6 +1,7 @@
 "use client";
 
 import { ProjectLocationsTable } from "@/components/console/project-locations-table";
+import { TaskRunForm } from "@/components/console/task-run-form";
 import { DemoModeNotice } from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
 import { Alert } from "@/components/ui/alert";
@@ -42,7 +43,10 @@ export function ProjectsScreen() {
               title="No projects"
             />
           ) : (
-            <ProjectLocationsTable projects={projects.data.projects} />
+            <>
+              <TaskRunForm projects={projects.data.projects} />
+              <ProjectLocationsTable projects={projects.data.projects} />
+            </>
           )}
           {projects.data.relayErrors.length > 0 ? (
             <Alert title="Some Relay profiles are unavailable" tone="warning">

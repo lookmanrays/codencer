@@ -131,32 +131,8 @@ func buildTools(server *Server) map[string]Tool {
 				return successToolResult("Listed project locations.", map[string]any{"project_id": projectID, "locations": locations, "relay_errors": relayErrors}), nil
 			},
 		},
-		"codencer.run_project_manifest": server.projectForwardTool("codencer.run_project_manifest", "Run a project manifest through the selected Gateway relay.", []string{"project_id"}, func(args map[string]any) (string, []byte, *apiError) {
-			projectID, apiErr := requiredString(args, "project_id")
-			if apiErr != nil {
-				return "", nil, apiErr
-			}
-			payload := map[string]any{}
-			copyOptional(payload, args, "manifest", "manifest_text", "manifest_name", "wait")
-			body, apiErr := jsonBody(payload)
-			if apiErr != nil {
-				return "", nil, apiErr
-			}
-			return "/api/v2/projects/" + projectID + "/run-plan", body, nil
-		}),
-		"codencer.submit_project_task_and_wait": server.projectForwardTool("codencer.submit_project_task_and_wait", "Submit one approved task through the selected Gateway relay and wait for evidence.", []string{"project_id"}, func(args map[string]any) (string, []byte, *apiError) {
-			projectID, apiErr := requiredString(args, "project_id")
-			if apiErr != nil {
-				return "", nil, apiErr
-			}
-			payload := map[string]any{"wait": true}
-			copyOptional(payload, args, "run_id", "goal", "prompt", "task", "profile", "adapter_profile", "title", "timeout_seconds")
-			body, apiErr := jsonBody(payload)
-			if apiErr != nil {
-				return "", nil, apiErr
-			}
-			return "/api/v2/projects/" + projectID + "/submit", body, nil
-		}),
+		"codencer.run_project_manifest":         server.projectForwardTool("codencer.run_project_manifest", "Run a project manifest through the selected Gateway relay.", []string{"project_id"}, runProjectManifestRoute),
+		"codencer.submit_project_task_and_wait": server.projectForwardTool("codencer.submit_project_task_and_wait", "Submit one approved task through the selected Gateway relay and wait for evidence.", []string{"project_id"}, submitProjectTaskRoute),
 		"codencer.get_run_report": server.projectForwardTool("codencer.get_run_report", "Get a normalized run-plan report through the selected Gateway relay.", []string{"project_id", "run_id"}, func(args map[string]any) (string, []byte, *apiError) {
 			projectID, apiErr := requiredString(args, "project_id")
 			if apiErr != nil {
@@ -255,22 +231,58 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				method = http.MethodPost
 			}
 			_, response, apiErr := s.callRelay(ctx, match.Profile, method, path, body)
+			payload, apiErr := responsePayload(match.Profile, response, apiErr)
 			if apiErr != nil {
 				return ToolResult{}, apiErr
-			}
-			var payload any
-			if len(response) == 0 {
-				payload = map[string]any{"ok": true}
-			} else if err := json.Unmarshal(response, &payload); err != nil {
-				payload = map[string]any{"raw": string(response)}
-			}
-			if obj, ok := payload.(map[string]any); ok {
-				obj["relay_profile_id"] = match.Profile.ID
-				payload = obj
 			}
 			return successToolResult(description, payload), nil
 		},
 	}
+}
+
+func responsePayload(profile RelayProfile, response []byte, apiErr *apiError) (any, *apiError) {
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	var payload any
+	if len(response) == 0 {
+		payload = map[string]any{"ok": true}
+	} else if err := json.Unmarshal(response, &payload); err != nil {
+		payload = map[string]any{"raw": string(response)}
+	}
+	if obj, ok := payload.(map[string]any); ok {
+		obj["relay_profile_id"] = profile.ID
+		payload = obj
+	}
+	return payload, nil
+}
+
+func submitProjectTaskRoute(args map[string]any) (string, []byte, *apiError) {
+	projectID, apiErr := requiredString(args, "project_id")
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	payload := map[string]any{"wait": true}
+	copyOptional(payload, args, "run_id", "goal", "prompt", "task", "profile", "adapter_profile", "title", "timeout_seconds")
+	body, apiErr := jsonBody(payload)
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	return "/api/v2/projects/" + projectID + "/submit", body, nil
+}
+
+func runProjectManifestRoute(args map[string]any) (string, []byte, *apiError) {
+	projectID, apiErr := requiredString(args, "project_id")
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	payload := map[string]any{}
+	copyOptional(payload, args, "manifest", "manifest_text", "manifest_name", "wait")
+	body, apiErr := jsonBody(payload)
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	return "/api/v2/projects/" + projectID + "/run-plan", body, nil
 }
 
 func (s *Server) relayAvailability(ctx context.Context, profile RelayProfile) string {

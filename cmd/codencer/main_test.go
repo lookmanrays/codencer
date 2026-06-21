@@ -50,6 +50,62 @@ func TestVersionPathsAndDoctorJSON(t *testing.T) {
 	}
 }
 
+func TestHelpCommandsExitZeroAndDescribeSelfHost(t *testing.T) {
+	commands := [][]string{
+		{"--help"},
+		{"project", "--help"},
+		{"project", "init", "--help"},
+		{"project", "get", "--help"},
+		{"project", "list", "--help"},
+		{"project", "status", "--help"},
+		{"machine", "--help"},
+		{"connector", "--help"},
+		{"connector", "login", "--help"},
+		{"connector", "status", "--help"},
+		{"gateway", "--help"},
+		{"gateway", "relay", "--help"},
+		{"login", "--help"},
+		{"setup", "--help"},
+		{"activation", "--help"},
+		{"config", "--help"},
+	}
+	for _, command := range commands {
+		stdout, stderr, err := runCLI(command...)
+		if err != nil {
+			t.Fatalf("%v help failed: %v stderr=%s stdout=%s", command, err, stderr, stdout)
+		}
+		if stderr != "" {
+			t.Fatalf("%v help wrote stderr: %s", command, stderr)
+		}
+		for _, forbidden := range []string{"unknown command", "unknown project command", "unknown connector command", "unknown flag --help"} {
+			if strings.Contains(stdout, forbidden) {
+				t.Fatalf("%v help contained %q: %s", command, forbidden, stdout)
+			}
+		}
+		for _, want := range []string{"Usage:", "Subcommands:", "Common flags:", "Examples:"} {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("%v help missing %q: %s", command, want, stdout)
+			}
+		}
+	}
+
+	for _, command := range [][]string{
+		{"connector", "login", "--help"},
+		{"gateway", "relay", "--help"},
+		{"setup", "--help"},
+		{"activation", "--help"},
+		{"login", "--help"},
+	} {
+		stdout, _, err := runCLI(command...)
+		if err != nil {
+			t.Fatalf("%v help failed: %v", command, err)
+		}
+		if !strings.Contains(stdout, "127.0.0.1") {
+			t.Fatalf("%v help missing self-host example: %s", command, stdout)
+		}
+	}
+}
+
 func TestConfigProfilesAndSelfHostDefaultsJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CODENCER_HOME", home)

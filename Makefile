@@ -245,7 +245,7 @@ verify-gateway-console:
 	@cd web/gateway-console && npm run visual:evidence
 
 .PHONY: verify-gateway-console-live
-verify-gateway-console-live: build-gateway
+verify-gateway-console-live: build
 	@echo "==> Installing Gateway Console dependencies..."
 	@cd web/gateway-console && npm ci
 	@echo "==> Building Gateway Console for isolated live-mode verification..."

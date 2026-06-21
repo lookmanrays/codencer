@@ -6,6 +6,7 @@ import { ConnectorSchema } from "@/schemas/connectors";
 import { MachineSchema } from "@/schemas/machines";
 import { ProjectListResponseSchema, ProjectSchema } from "@/schemas/projects";
 import { RelayListResponseSchema, RelayProfileSchema } from "@/schemas/relays";
+import { RunSubmitResponseSchema } from "@/schemas/runs";
 import { WorkspaceResponseSchema, WorkspaceSchema } from "@/schemas/workspace";
 
 describe("domain schemas", () => {
@@ -64,6 +65,19 @@ describe("domain schemas", () => {
             relay_profiles: [],
           },
         ],
+      }),
+    ).toThrow();
+  });
+
+  it("rejects unsafe Gateway run output shapes", () => {
+    expect(() =>
+      RunSubmitResponseSchema.parse({
+        ok: true,
+        project_id: "codencer",
+        result: {
+          ok: true,
+          report_path: "/Users/operator/.codencer-live-test/report.json",
+        },
       }),
     ).toThrow();
   });

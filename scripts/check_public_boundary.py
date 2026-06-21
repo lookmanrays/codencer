@@ -166,17 +166,9 @@ def repository_files() -> list[str]:
         stderr=subprocess.PIPE,
         check=True,
     )
-    untracked = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=True,
-    )
     values = []
     seen = set()
-    for line in tracked.stdout.splitlines() + untracked.stdout.splitlines():
+    for line in tracked.stdout.splitlines():
         rel = line.strip()
         if not rel or rel in seen:
             continue
