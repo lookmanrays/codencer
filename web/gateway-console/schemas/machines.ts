@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { collectionField } from "@/schemas/collections";
 
 export const MachineSchema = z.object({
   arch: z.string(),
@@ -11,7 +12,7 @@ export const MachineSchema = z.object({
 
 export const MachineListResponseSchema = z
   .object({
-    machines: z.array(
+    machines: collectionField(
       z.object({
         arch: z.string().optional(),
         host_label: z.string().optional(),
@@ -30,7 +31,12 @@ export const MachineListResponseSchema = z
         hostname: machine.hostname ?? "",
         id: machine.id,
         os: machine.os ?? "unknown",
-        status: machine.status === "active" ? "online" : "unknown",
+        status:
+          machine.status === "active" || machine.status === "online"
+            ? "online"
+            : machine.status === "offline"
+              ? "offline"
+              : "unknown",
       }),
     ),
   }));

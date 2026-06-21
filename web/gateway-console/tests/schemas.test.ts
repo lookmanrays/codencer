@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { demoSnapshot } from "@/api/demo-data";
-import { ActivationCommandSchema } from "@/schemas/activation";
-import { AuditEventSchema } from "@/schemas/audit";
-import { ConnectorSchema } from "@/schemas/connectors";
-import { MachineSchema } from "@/schemas/machines";
+import {
+  ActivationCommandListResponseSchema,
+  ActivationCommandSchema,
+} from "@/schemas/activation";
+import {
+  AuditEventListResponseSchema,
+  AuditEventSchema,
+} from "@/schemas/audit";
+import {
+  ConnectorListResponseSchema,
+  ConnectorSchema,
+} from "@/schemas/connectors";
+import { MachineListResponseSchema, MachineSchema } from "@/schemas/machines";
 import { ProjectListResponseSchema, ProjectSchema } from "@/schemas/projects";
 import { RelayListResponseSchema, RelayProfileSchema } from "@/schemas/relays";
 import { RunSubmitResponseSchema } from "@/schemas/runs";
@@ -80,5 +89,50 @@ describe("domain schemas", () => {
         },
       }),
     ).toThrow();
+  });
+
+  it("normalizes null or missing Gateway collection fields defensively", () => {
+    expect(
+      MachineListResponseSchema.parse({ machines: null }).machines,
+    ).toEqual([]);
+    expect(MachineListResponseSchema.parse({}).machines).toEqual([]);
+    expect(
+      ConnectorListResponseSchema.parse({ connectors: null }).connectors,
+    ).toEqual([]);
+    expect(
+      ProjectListResponseSchema.parse({
+        projects: null,
+        relay_errors: null,
+      }),
+    ).toMatchObject({ projects: [], relayErrors: [] });
+    expect(
+      AuditEventListResponseSchema.parse({ audit_events: null }).auditEvents,
+    ).toEqual([]);
+    expect(
+      AuditEventListResponseSchema.parse({ events: null }).auditEvents,
+    ).toEqual([]);
+    expect(
+      ActivationCommandListResponseSchema.parse({
+        activation_commands: null,
+      }).activationCommands,
+    ).toEqual([]);
+    expect(
+      ActivationCommandListResponseSchema.parse({ commands: null })
+        .activationCommands,
+    ).toEqual([]);
+    expect(RelayListResponseSchema.parse({ relays: null }).relays).toEqual([]);
+  });
+
+  it("maps relay-derived machine statuses to dashboard states", () => {
+    expect(
+      MachineListResponseSchema.parse({
+        machines: [{ id: "mach-1", status: "online" }],
+      }).machines[0]?.status,
+    ).toBe("online");
+    expect(
+      MachineListResponseSchema.parse({
+        machines: [{ id: "mach-2", status: "offline" }],
+      }).machines[0]?.status,
+    ).toBe("offline");
   });
 });

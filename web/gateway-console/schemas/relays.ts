@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { collectionField } from "@/schemas/collections";
 
 export const RelayProfileSchema = z.object({
   enabled: z.boolean(),
@@ -29,7 +30,7 @@ export const RelayProfileResponseSchema = z
 
 export const RelayListResponseSchema = z
   .object({
-    relays: z.array(
+    relays: collectionField(
       z.object({
         enabled: z.boolean(),
         id: z.string(),

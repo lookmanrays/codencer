@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { collectionField } from "@/schemas/collections";
 
 export const ProjectLocationSchema = z.object({
   ambiguity: z.enum(["none", "relay_profile", "machine_location"]),
@@ -23,18 +24,21 @@ export const ProjectSchema = z.object({
 const RawProjectSchema = z.object({
   name: z.string().optional(),
   project_id: z.string(),
-  relay_profiles: z.array(
+  relay_profiles: collectionField(
     z.object({
       locations: z
-        .array(
-          z.object({
-            host_label: z.string().optional(),
-            machine_id: z.string().optional(),
-            online: z.boolean().optional(),
-            repo_label: z.string().optional(),
-            repo_root_hash: z.string().optional(),
-            status: z.string().optional(),
-          }),
+        .preprocess(
+          (value) => value ?? [],
+          z.array(
+            z.object({
+              host_label: z.string().optional(),
+              machine_id: z.string().optional(),
+              online: z.boolean().optional(),
+              repo_label: z.string().optional(),
+              repo_root_hash: z.string().optional(),
+              status: z.string().optional(),
+            }),
+          ),
         )
         .optional(),
       relay_profile_id: z.string(),
@@ -43,10 +47,12 @@ const RawProjectSchema = z.object({
   ),
 });
 
+const RelayErrorSchema = z.record(z.string(), z.unknown());
+
 export const ProjectListResponseSchema = z
   .object({
-    projects: z.array(RawProjectSchema),
-    relay_errors: z.array(z.record(z.string(), z.unknown())).optional(),
+    projects: collectionField(RawProjectSchema),
+    relay_errors: collectionField(RelayErrorSchema).optional(),
   })
   .transform(({ projects, relay_errors }) => ({
     projects: projects.map(normalizeProject),
@@ -56,7 +62,7 @@ export const ProjectListResponseSchema = z
 export const ProjectResponseSchema = z
   .object({
     project: RawProjectSchema,
-    relay_errors: z.array(z.record(z.string(), z.unknown())).optional(),
+    relay_errors: collectionField(RelayErrorSchema).optional(),
   })
   .transform(({ project, relay_errors }) => ({
     project: normalizeProject(project),

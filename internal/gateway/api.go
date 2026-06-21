@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -383,6 +384,7 @@ func (s *Server) handleMachines(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
 		return
 	}
+	machines = s.mergeProjectLocationMachines(r.Context(), principal, machines)
 	writeJSON(w, http.StatusOK, map[string]any{"machines": machines})
 }
 
@@ -419,6 +421,7 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 			"updated_at":         connector.UpdatedAt,
 		})
 	}
+	out = s.mergeProjectLocationConnectors(r.Context(), principal, out)
 	writeJSON(w, http.StatusOK, map[string]any{"connectors": out})
 }
 
@@ -532,7 +535,7 @@ func (s *Server) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"audit_events": events})
+	writeJSON(w, http.StatusOK, map[string]any{"audit_events": events, "events": events})
 }
 
 func (s *Server) handleActivationCommands(w http.ResponseWriter, r *http.Request) {
@@ -546,7 +549,7 @@ func (s *Server) handleActivationCommands(w http.ResponseWriter, r *http.Request
 	}
 	gatewayURL := strings.TrimRight(s.cfg.PublicBaseURL, "/")
 	mcpURL := strings.TrimRight(firstNonEmpty(s.cfg.MCPURL, gatewayURL+"/mcp"), "/")
-	writeJSON(w, http.StatusOK, map[string]any{"activation_commands": []map[string]any{
+	commands := []map[string]any{
 		{"id": "login", "title": "Log in to Gateway", "description": "Creates a workspace-bound Gateway session under CODENCER_HOME.", "target": "gateway", "command": "codencer login --gateway " + gatewayURL},
 		{"id": "connector-login", "title": "Bind local connector", "description": "Requests a short-lived Relay enrollment secret through Gateway; output is redacted.", "target": "gateway", "command": "codencer connector login --gateway " + gatewayURL + " --relay default --json"},
 		{"id": "project-init", "title": "Create project config", "description": "Commits only .codencer/project.json; local state stays in CODENCER_HOME.", "target": "local", "command": "codencer project init --repo . --json"},
@@ -555,7 +558,109 @@ func (s *Server) handleActivationCommands(w http.ResponseWriter, r *http.Request
 		{"id": "claude", "title": "Claude Code MCP setup", "description": "Generates the Gateway MCP command for Claude Code.", "target": "client", "command": "codencer setup mcp --client claude-code --endpoint " + mcpURL + " --json"},
 		{"id": "chatgpt", "title": "ChatGPT custom MCP setup", "description": "Uses Gateway OAuth dev metadata for controlled testing.", "target": "client", "command": "codencer activation self-host --gateway " + gatewayURL + " --project <project-id> --token-env CODENCER_GATEWAY_MCP_TOKEN --json"},
 		{"id": "curl", "title": "Gateway curl smoke", "description": "Runs MCP initialize/tools/list against Gateway.", "target": "gateway", "command": "curl -fsS " + mcpURL + " -H 'Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN'"},
-	}, "workspace_id": principal.WorkspaceID})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"activation_commands": commands, "commands": commands, "workspace_id": principal.WorkspaceID})
+}
+
+func (s *Server) mergeProjectLocationMachines(ctx context.Context, principal *authPrincipal, stored []MachineRecord) []MachineRecord {
+	out := append([]MachineRecord{}, stored...)
+	seen := make(map[string]bool, len(out))
+	for _, machine := range out {
+		if strings.TrimSpace(machine.ID) != "" {
+			seen[machine.ID] = true
+		}
+	}
+	projects, _ := s.aggregateProjects(ctx, principal)
+	now := time.Now().UTC()
+	for _, project := range projects {
+		for _, relay := range project.RelayProfiles {
+			for _, location := range relay.Locations {
+				machineID := strings.TrimSpace(location.MachineID)
+				if machineID == "" || seen[machineID] {
+					continue
+				}
+				seen[machineID] = true
+				status := locationStatus(location)
+				out = append(out, MachineRecord{
+					ID:          machineID,
+					WorkspaceID: principal.WorkspaceID,
+					UserID:      principal.UserID,
+					Hostname:    location.Hostname,
+					HostLabel:   firstNonEmpty(location.HostLabel, machineID),
+					OS:          "unknown",
+					Arch:        "unknown",
+					Status:      status,
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				})
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		left := firstNonEmpty(out[i].HostLabel, out[i].ID)
+		right := firstNonEmpty(out[j].HostLabel, out[j].ID)
+		if left == right {
+			return out[i].ID < out[j].ID
+		}
+		return left < right
+	})
+	return out
+}
+
+func (s *Server) mergeProjectLocationConnectors(ctx context.Context, principal *authPrincipal, stored []map[string]any) []map[string]any {
+	out := append([]map[string]any{}, stored...)
+	seen := make(map[string]bool, len(out))
+	for _, connector := range out {
+		if id, _ := connector["id"].(string); strings.TrimSpace(id) != "" {
+			seen[id] = true
+		}
+		if relayID, _ := connector["relay_connector_id"].(string); strings.TrimSpace(relayID) != "" {
+			seen[relayID] = true
+		}
+	}
+	projects, _ := s.aggregateProjects(ctx, principal)
+	now := time.Now().UTC()
+	for _, project := range projects {
+		for _, relay := range project.RelayProfiles {
+			for _, location := range relay.Locations {
+				connectorID := strings.TrimSpace(location.ConnectorID)
+				machineID := strings.TrimSpace(location.MachineID)
+				if connectorID == "" || seen[connectorID] {
+					continue
+				}
+				seen[connectorID] = true
+				out = append(out, map[string]any{
+					"id":                 connectorID,
+					"workspace_id":       principal.WorkspaceID,
+					"machine_id":         machineID,
+					"relay_profile_id":   relay.RelayProfileID,
+					"relay_connector_id": connectorID,
+					"relay_machine_id":   machineID,
+					"status":             locationStatus(location),
+					"last_seen_at":       now,
+					"created_at":         now,
+					"updated_at":         now,
+				})
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		left, _ := out[i]["id"].(string)
+		right, _ := out[j]["id"].(string)
+		return left < right
+	})
+	return out
+}
+
+func locationStatus(location projectLocation) string {
+	if location.Online {
+		return "online"
+	}
+	status := strings.TrimSpace(location.Status)
+	if status != "" {
+		return status
+	}
+	return "offline"
 }
 
 func (s *Server) handleOAuthConsent(w http.ResponseWriter, r *http.Request) {

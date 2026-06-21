@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { collectionField } from "@/schemas/collections";
 
 export const ActivationCommandSchema = z.object({
   command: z.string(),
@@ -10,10 +11,11 @@ export const ActivationCommandSchema = z.object({
 
 export const ActivationCommandListResponseSchema = z
   .object({
-    activation_commands: z.array(ActivationCommandSchema),
+    activation_commands: collectionField(ActivationCommandSchema).optional(),
+    commands: collectionField(ActivationCommandSchema).optional(),
   })
-  .transform(({ activation_commands }) => ({
-    activationCommands: activation_commands,
+  .transform(({ activation_commands, commands }) => ({
+    activationCommands: activation_commands ?? commands ?? [],
   }));
 
 export type ActivationCommand = z.infer<typeof ActivationCommandSchema>;

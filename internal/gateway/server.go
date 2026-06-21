@@ -737,14 +737,44 @@ func successToolResult(summary string, payload any) ToolResult {
 func sanitizeAny(value any) any {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return security.RedactJSON(value)
+		return normalizeGatewayCollections(security.RedactJSON(value))
 	}
 	data = security.SanitizeRemoteJSON(data)
 	var out any
 	if json.Unmarshal(data, &out) != nil {
-		return security.RedactJSON(value)
+		return normalizeGatewayCollections(security.RedactJSON(value))
 	}
-	return security.RedactJSON(out)
+	return normalizeGatewayCollections(security.RedactJSON(out))
+}
+
+func normalizeGatewayCollections(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			if item == nil && isGatewayCollectionKey(key) {
+				typed[key] = []any{}
+				continue
+			}
+			typed[key] = normalizeGatewayCollections(item)
+		}
+		return typed
+	case []any:
+		for i, item := range typed {
+			typed[i] = normalizeGatewayCollections(item)
+		}
+		return typed
+	default:
+		return value
+	}
+}
+
+func isGatewayCollectionKey(key string) bool {
+	switch key {
+	case "activation_commands", "audit_events", "commands", "connectors", "events", "locations", "machines", "projects", "relay_errors", "relay_profiles", "relays":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeMap(value map[string]any) map[string]any {

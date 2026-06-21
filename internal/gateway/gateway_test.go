@@ -253,6 +253,69 @@ func TestGatewayAmbiguityAndRelayUnavailableBlockers(t *testing.T) {
 	assertToolErrorContains(t, relayDown, "relay_unavailable")
 }
 
+func TestGatewayConsoleCollectionResponsesUseEmptyArrays(t *testing.T) {
+	relay := newProjectListRelay(t, []map[string]any{})
+	defer relay.Close()
+	httpServer, token := newGatewayStoreAPIServer(t, relay.URL)
+	defer httpServer.Close()
+
+	for _, tc := range []struct {
+		path string
+		keys []string
+	}{
+		{path: "/api/gateway/v1/relays", keys: []string{"relays"}},
+		{path: "/api/gateway/v1/machines", keys: []string{"machines"}},
+		{path: "/api/gateway/v1/connectors", keys: []string{"connectors"}},
+		{path: "/api/gateway/v1/projects", keys: []string{"projects", "relay_errors"}},
+		{path: "/api/gateway/v1/audit-events", keys: []string{"audit_events", "events"}},
+		{path: "/api/gateway/v1/activation/commands", keys: []string{"activation_commands", "commands"}},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			payload := apiGet[map[string]any](t, httpServer.URL+tc.path, token.AccessToken)
+			body := mustJSON(t, payload)
+			if strings.Contains(body, ":null") {
+				t.Fatalf("collection response serialized null: %s", body)
+			}
+			for _, key := range tc.keys {
+				values := requireJSONArray(t, payload, key)
+				if tc.path != "/api/gateway/v1/activation/commands" && tc.path != "/api/gateway/v1/relays" && len(values) != 0 {
+					t.Fatalf("%s expected empty array for %q, got %s", tc.path, key, body)
+				}
+				if tc.path == "/api/gateway/v1/activation/commands" && len(values) == 0 {
+					t.Fatalf("%s expected activation commands for %q, got %s", tc.path, key, body)
+				}
+			}
+		})
+	}
+}
+
+func TestGatewayConsoleCollectionsSynthesizeRelayLocationMetadata(t *testing.T) {
+	relay := newFakeRelay(t, fakeRelayOptions{})
+	defer relay.Close()
+	httpServer, token := newGatewayStoreAPIServer(t, relay.URL)
+	defer httpServer.Close()
+
+	projects := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects", token.AccessToken)
+	projectBody := mustJSON(t, projects)
+	if !strings.Contains(projectBody, `"connector_id":"connector-1"`) || !strings.Contains(projectBody, `"machine_id":"mach-1"`) {
+		t.Fatalf("project location did not include live relay metadata: %s", projectBody)
+	}
+
+	machines := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/machines", token.AccessToken)
+	machineBody := mustJSON(t, machines)
+	if !strings.Contains(machineBody, `"id":"mach-1"`) || !strings.Contains(machineBody, `"host_label":"macbook"`) || !strings.Contains(machineBody, `"hostname":"dev-host"`) || !strings.Contains(machineBody, `"status":"online"`) {
+		t.Fatalf("machines endpoint did not synthesize safe relay metadata: %s", machineBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, machineBody)
+
+	connectors := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/connectors", token.AccessToken)
+	connectorBody := mustJSON(t, connectors)
+	if !strings.Contains(connectorBody, `"id":"connector-1"`) || !strings.Contains(connectorBody, `"machine_id":"mach-1"`) || !strings.Contains(connectorBody, `"relay_profile_id":"default"`) || !strings.Contains(connectorBody, `"status":"online"`) {
+		t.Fatalf("connectors endpoint did not synthesize safe relay metadata: %s", connectorBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, connectorBody)
+}
+
 func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	relay := newFakeRelay(t, fakeRelayOptions{allowEnrollment: true})
 	defer relay.Close()
@@ -560,6 +623,46 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 	return relay
 }
 
+func newProjectListRelay(t *testing.T, projects []map[string]any) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/status", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		writeTestJSON(t, w, map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/v2/projects", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		writeTestJSON(t, w, projects)
+	})
+	return httptest.NewServer(mux)
+}
+
+func newGatewayStoreAPIServer(t *testing.T, relayURL string) (*httptest.Server, TokenResponse) {
+	t.Helper()
+	t.Setenv("CODENCER_TEST_GATEWAY_TOKEN", "gateway-secret")
+	t.Setenv("CODENCER_DEFAULT_RELAY_TOKEN", "relay-secret")
+
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "http://127.0.0.1:19090"
+	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.Auth.TokenEnv = "CODENCER_TEST_GATEWAY_TOKEN"
+	cfg.Store.Path = filepath.Join(t.TempDir(), "gateway.db")
+	cfg.DefaultRelay.URL = relayURL
+	cfg.DefaultRelay.TokenEnv = "CODENCER_DEFAULT_RELAY_TOKEN"
+	cfg.OAuthDev.Issuer = "http://127.0.0.1:19090"
+	cfg.OAuthDev.OperatorCodeHash = sha256Hex("operator-code")
+	server, err := NewServer(cfg, ServerOptions{})
+	if err != nil {
+		t.Fatalf("new gateway server: %v", err)
+	}
+	httpServer := httptest.NewServer(server.Handler())
+	return httpServer, TokenResponse{
+		AccessToken: "gateway-secret",
+		UserID:      server.devUserID,
+		WorkspaceID: server.devWorkspaceID,
+	}
+}
+
 func requireRelayAuth(t *testing.T, r *http.Request) {
 	t.Helper()
 	if got := r.Header.Get("Authorization"); got != "Bearer relay-secret" {
@@ -674,6 +777,39 @@ func assertNoGatewayMCPLeak(t *testing.T, body string) {
 			t.Fatalf("Gateway MCP output leaked %q: %s", forbidden, body)
 		}
 	}
+}
+
+func assertNoGatewayConsoleSensitiveLeak(t *testing.T, body string) {
+	t.Helper()
+	for _, forbidden := range []string{
+		"/Users/",
+		"/tmp/",
+		"/var/folders/",
+		".codencer-live-test",
+		"relay-secret",
+		"planner_token",
+		"daemon_url",
+		"public_key",
+		`"repo_root"`,
+		`"path"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Gateway Console output leaked %q: %s", forbidden, body)
+		}
+	}
+}
+
+func requireJSONArray(t *testing.T, payload map[string]any, key string) []any {
+	t.Helper()
+	value, ok := payload[key]
+	if !ok {
+		t.Fatalf("missing %q in payload: %s", key, mustJSON(t, payload))
+	}
+	values, ok := value.([]any)
+	if !ok {
+		t.Fatalf("%q is %T, want JSON array in payload: %s", key, value, mustJSON(t, payload))
+	}
+	return values
 }
 
 func mustJSON(t *testing.T, value any) string {

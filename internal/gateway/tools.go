@@ -318,7 +318,7 @@ func (s *Server) aggregateProjects(ctx context.Context, principal *authPrincipal
 	profiles, apiErr := s.relayProfiles(ctx, principal)
 	if apiErr != nil {
 		relayErrors = append(relayErrors, map[string]any{"code": apiErr.Code, "message": apiErr.Message})
-		return nil, relayErrors
+		return []aggregatedProject{}, relayErrors
 	}
 	for _, profile := range profiles {
 		if !profile.Enabled {

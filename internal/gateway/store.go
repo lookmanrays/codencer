@@ -602,7 +602,7 @@ func (s *Store) ListMachines(ctx context.Context, workspaceID string) ([]Machine
 		return nil, err
 	}
 	defer rows.Close()
-	var out []MachineRecord
+	out := []MachineRecord{}
 	for rows.Next() {
 		var rec MachineRecord
 		var created, updated string
@@ -658,7 +658,7 @@ func (s *Store) ListConnectorBindings(ctx context.Context, workspaceID string) (
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ConnectorBinding
+	out := []ConnectorBinding{}
 	for rows.Next() {
 		var rec ConnectorBinding
 		var lastSeen, created, updated string
@@ -701,7 +701,7 @@ func (s *Store) ListAuditEvents(ctx context.Context, workspaceID string, limit i
 		return nil, err
 	}
 	defer rows.Close()
-	var out []AuditEvent
+	out := []AuditEvent{}
 	for rows.Next() {
 		var event AuditEvent
 		var created string

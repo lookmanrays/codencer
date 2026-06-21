@@ -78,7 +78,12 @@ try {
   );
   await waitForJSON(`${gatewayBase}/health`);
 
-  await startConnectorThroughGateway(gatewayBase, stack);
+  await assertGatewayCollectionEndpoints(
+    gatewayBase,
+    gatewayToken,
+    "direct Gateway empty collections",
+    { expectLiveMetadata: false },
+  );
 
   spawnProcess(
     "npm",
@@ -100,6 +105,12 @@ try {
   );
   const consoleBase = `http://127.0.0.1:${consolePort}`;
   await waitForHTML(consoleBase);
+  await assertGatewayCollectionEndpoints(
+    consoleBase,
+    "",
+    "Console proxy empty collections",
+    { expectLiveMetadata: false },
+  );
 
   const browser = await chromium.launch();
   try {
@@ -111,7 +122,33 @@ try {
     await expect(
       page.getByRole("heading", { name: /self-host bridge status/i }),
     ).toBeVisible();
+    await expect(
+      page.getByText(/Gateway Console live data unavailable/i),
+    ).toBeHidden();
+    await assertNoDemoOrSecretLeak(page);
+
+    await startConnectorThroughGateway(gatewayBase, stack);
+    await assertGatewayCollectionEndpoints(
+      gatewayBase,
+      gatewayToken,
+      "direct Gateway live metadata",
+      { expectLiveMetadata: true },
+    );
+    await assertGatewayCollectionEndpoints(
+      consoleBase,
+      "",
+      "Console proxy live metadata",
+      { expectLiveMetadata: true },
+    );
+
+    await page.goto(`${consoleBase}/console`);
+    await expect(
+      page.getByRole("heading", { name: /self-host bridge status/i }),
+    ).toBeVisible();
     await expect(page.getByText("gateway-dev@codencer.local")).toBeVisible();
+    await expect(
+      page.getByText(/Gateway Console live data unavailable/i),
+    ).toBeHidden();
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/relays`);
@@ -486,6 +523,127 @@ async function runCommand(command, args, env = {}) {
 
 async function gatewayFetch(base, path, body) {
   return postJSON(`${base}/api/gateway/v1${path}`, body, gatewayToken);
+}
+
+async function assertGatewayCollectionEndpoints(
+  base,
+  token,
+  label,
+  { expectLiveMetadata },
+) {
+  const machines = await getJSON(`${base}/api/gateway/v1/machines`, token);
+  const connectors = await getJSON(`${base}/api/gateway/v1/connectors`, token);
+  const projects = await getJSON(`${base}/api/gateway/v1/projects`, token);
+  const audit = await getJSON(`${base}/api/gateway/v1/audit-events`, token);
+  const activation = await getJSON(
+    `${base}/api/gateway/v1/activation/commands`,
+    token,
+  );
+
+  const machineList = assertArrayField(machines, "machines", label);
+  const connectorList = assertArrayField(connectors, "connectors", label);
+  const projectList = assertArrayField(projects, "projects", label);
+  assertArrayField(projects, "relay_errors", label);
+  assertArrayField(audit, "audit_events", label);
+  assertArrayField(audit, "events", label);
+  assertArrayField(activation, "activation_commands", label);
+  assertArrayField(activation, "commands", label);
+
+  const serialized = JSON.stringify({
+    activation,
+    audit,
+    connectors,
+    machines,
+    projects,
+  });
+  if (serialized.includes(":null")) {
+    throw new Error(`${label} returned a null collection: ${serialized}`);
+  }
+  assertNoSensitiveEndpointLeak(serialized, label);
+
+  if (expectLiveMetadata) {
+    if (
+      !machineList.some(
+        (machine) =>
+          machine.host_label === "live-host" &&
+          (machine.status === "online" || machine.status === "active"),
+      )
+    ) {
+      throw new Error(
+        `${label} did not expose live machine metadata: ${JSON.stringify(
+          machines,
+        )}`,
+      );
+    }
+    if (
+      !connectorList.some(
+        (connector) =>
+          connector.machine_id &&
+          connector.relay_profile_id === "default" &&
+          connector.status === "online",
+      )
+    ) {
+      throw new Error(
+        `${label} did not expose live connector metadata: ${JSON.stringify(
+          connectors,
+        )}`,
+      );
+    }
+    if (
+      !projectList.some((project) =>
+        JSON.stringify(project).includes('"host_label":"live-host"'),
+      )
+    ) {
+      throw new Error(
+        `${label} did not expose live project location metadata: ${JSON.stringify(
+          projects,
+        )}`,
+      );
+    }
+  }
+}
+
+function assertArrayField(payload, key, label) {
+  if (!Array.isArray(payload?.[key])) {
+    throw new Error(
+      `${label} expected ${key} to be an array: ${JSON.stringify(payload)}`,
+    );
+  }
+  return payload[key];
+}
+
+function assertNoSensitiveEndpointLeak(body, label) {
+  for (const forbidden of [
+    "/Users/",
+    "/tmp/",
+    "/var/folders/",
+    ".codencer-live-test",
+    "relay-live-secret",
+    "gateway-live-secret",
+    "public_key",
+    "daemon_url",
+    "planner_token",
+    '"repo_root"',
+    '"path"',
+  ]) {
+    if (body.includes(forbidden)) {
+      throw new Error(`${label} leaked ${forbidden}: ${body}`);
+    }
+  }
+}
+
+async function getJSON(url, token = "") {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}: ${text}`);
+  }
+  return JSON.parse(text);
 }
 
 async function postJSON(url, body, token = "") {

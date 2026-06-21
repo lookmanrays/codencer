@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { collectionField } from "@/schemas/collections";
 
 export const ConnectorSchema = z.object({
   id: z.string(),
@@ -11,7 +12,7 @@ export const ConnectorSchema = z.object({
 
 export const ConnectorListResponseSchema = z
   .object({
-    connectors: z.array(
+    connectors: collectionField(
       z.object({
         id: z.string(),
         last_seen_at: z.string().optional(),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { collectionField } from "@/schemas/collections";
 
 export const AuditEventSchema = z.object({
   actor: z.string(),
@@ -9,20 +10,21 @@ export const AuditEventSchema = z.object({
   type: z.string(),
 });
 
+const RawAuditEventSchema = z.object({
+  actor_user_id: z.string().optional(),
+  created_at: z.string(),
+  id: z.string(),
+  summary: z.string(),
+  type: z.string(),
+});
+
 export const AuditEventListResponseSchema = z
   .object({
-    audit_events: z.array(
-      z.object({
-        actor_user_id: z.string().optional(),
-        created_at: z.string(),
-        id: z.string(),
-        summary: z.string(),
-        type: z.string(),
-      }),
-    ),
+    audit_events: collectionField(RawAuditEventSchema).optional(),
+    events: collectionField(RawAuditEventSchema).optional(),
   })
-  .transform(({ audit_events }) => ({
-    auditEvents: audit_events.map((event) =>
+  .transform(({ audit_events, events }) => ({
+    auditEvents: (audit_events ?? events ?? []).map((event) =>
       AuditEventSchema.parse({
         actor: event.actor_user_id || "gateway",
         createdAt: event.created_at,
