@@ -14,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
@@ -46,5 +46,34 @@ jobs:
       - name: Build supported public binaries
         run: make build-supported
 
-      - name: Run supported public verification
-        run: make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host
+      - name: Run full Go test suite
+        timeout-minutes: 15
+        run: go test ./...
+
+      - name: Create public self-host release snapshot
+        timeout-minutes: 10
+        run: make release-snapshot VERSION=v0.3.0-selfhost-verify TARGETS=host REQUIRE_TARGETS=host
+
+      - name: Verify release artifact self-host proof
+        timeout-minutes: 20
+        run: make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host
+
+      - name: Verify public self-host config and client artifacts
+        timeout-minutes: 10
+        run: ./scripts/verify_public_selfhost_release.sh
+
+      - name: Verify Gateway MCP and routing
+        timeout-minutes: 15
+        run: make verify-gateway
+
+      - name: Verify Gateway Console
+        timeout-minutes: 25
+        run: make verify-gateway-console
+
+      - name: Verify Gateway Console live path
+        timeout-minutes: 20
+        run: make verify-gateway-console-live
+
+      - name: Verify public release boundary
+        timeout-minutes: 10
+        run: make verify-public-release
