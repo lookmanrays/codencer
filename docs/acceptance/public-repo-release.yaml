@@ -56,8 +56,9 @@ required_gates:
     evidence:
       - internal/release/release.go
       - make verify-release
+      - make verify-release-artifact-selfhost
       - make verify-public-release
-    notes: Primary local/self-host release archives package core binaries and docs/legal/security files, not local runtime state or community cloud-control-plane binaries.
+    notes: Primary local/self-host release archives package core binaries and docs/legal/security files, not local runtime state or community cloud-control-plane binaries; binary readiness requires unpacked-artifact self-host proof, not only source-tree bin proof.
   - id: self_host_cloud_control_plane_public_but_not_managed_cloud
     status: documented
     evidence:
@@ -70,6 +71,7 @@ required_commands:
   - go test ./...
   - make verify-official-connector
   - make verify-gateway
+  - make verify-release-artifact-selfhost
   - make verify-release
   - make verify-local-prod
   - make activation-preflight

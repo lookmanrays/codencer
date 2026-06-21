@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN_DIR="${CODENCER_BIN_DIR:-$ROOT/bin}"
+MANIFEST_FILE="${CODENCER_MANIFEST_FILE:-$ROOT/testdata/manifests/fake-success.yaml}"
 TMPDIR_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/codencer-gateway.XXXXXX")"
 DAEMON_PID=""
 RELAY_PID=""
@@ -93,7 +95,7 @@ env \
   WORKSPACE_ROOT="$state/workspace" \
   LOG_LEVEL="error" \
   REPO_ROOT="$repo" \
-  "$ROOT/bin/orchestratord" --config "$daemon_config" --repo-root "$repo" > "$TMPDIR_ROOT/daemon.log" 2>&1 &
+  "$BIN_DIR/orchestratord" --config "$daemon_config" --repo-root "$repo" > "$TMPDIR_ROOT/daemon.log" 2>&1 &
 DAEMON_PID="$!"
 if ! wait_http "$daemon_url/health"; then
   echo "daemon did not become healthy; log follows" >&2
@@ -102,9 +104,9 @@ if ! wait_http "$daemon_url/health"; then
 fi
 
 export CODENCER_HOME="$home"
-"$ROOT/bin/codencer" init --json >/dev/null
-"$ROOT/bin/codencer" machine set-label gateway-host --json >/dev/null
-"$ROOT/bin/codencer" project init \
+"$BIN_DIR/codencer" init --json >/dev/null
+"$BIN_DIR/codencer" machine set-label gateway-host --json >/dev/null
+"$BIN_DIR/codencer" project init \
   --id codencer \
   --repo "$repo" \
   --adapter fake \
@@ -113,9 +115,9 @@ export CODENCER_HOME="$home"
   --share-to-relay \
   --json >/dev/null
 
-CODENCER_HOME="$home2" "$ROOT/bin/codencer" init --json >/dev/null
-CODENCER_HOME="$home2" "$ROOT/bin/codencer" machine set-label gateway-host-2 --json >/dev/null
-CODENCER_HOME="$home2" "$ROOT/bin/codencer" project init \
+CODENCER_HOME="$home2" "$BIN_DIR/codencer" init --json >/dev/null
+CODENCER_HOME="$home2" "$BIN_DIR/codencer" machine set-label gateway-host-2 --json >/dev/null
+CODENCER_HOME="$home2" "$BIN_DIR/codencer" project init \
   --id codencer \
   --repo "$repo" \
   --adapter fake \
@@ -142,7 +144,7 @@ cat > "$relay_config" <<JSON
   "public_base_url": "$relay_url"
 }
 JSON
-"$ROOT/bin/codencer-relayd" --config "$relay_config" > "$TMPDIR_ROOT/relay.log" 2>&1 &
+"$BIN_DIR/codencer-relayd" --config "$relay_config" > "$TMPDIR_ROOT/relay.log" 2>&1 &
 RELAY_PID="$!"
 if ! wait_http "$relay_url/api/v2/status" -H "Authorization: Bearer $planner_token"; then
   echo "relay did not become healthy; log follows" >&2
@@ -156,7 +158,7 @@ enroll_connector() {
   local output="$3"
   local connector_home="$4"
   local enrollment_json="$TMPDIR_ROOT/enrollment-$label.json"
-  "$ROOT/bin/codencer-relayd" enrollment-token create \
+  "$BIN_DIR/codencer-relayd" enrollment-token create \
     --config "$relay_config" \
     --label "$label" \
     --expires-in-seconds 600 \
@@ -167,14 +169,14 @@ import json, sys
 print(json.load(open(sys.argv[1]))["secret"])
 PY
 )"
-  "$ROOT/bin/codencer-connectord" enroll \
+  "$BIN_DIR/codencer-connectord" enroll \
     --relay-url "$relay_url" \
     --daemon-url "$daemon_url" \
     --enrollment-token "$enrollment_secret" \
     --config "$config" \
     --codencer-home "$connector_home" \
     --label "$label" >/dev/null
-  "$ROOT/bin/codencer-connectord" run --config "$config" > "$output" 2>&1 &
+  "$BIN_DIR/codencer-connectord" run --config "$config" > "$output" 2>&1 &
   echo "$!"
 }
 
@@ -270,7 +272,7 @@ JSON
 
 export CODENCER_GATEWAY_MCP_TOKEN="$gateway_token"
 export CODENCER_RELAY_PERSONAL_TOKEN="$planner_token"
-"$ROOT/bin/codencer-gatewayd" --config "$gateway_config" > "$TMPDIR_ROOT/gateway.log" 2>&1 &
+"$BIN_DIR/codencer-gatewayd" --config "$gateway_config" > "$TMPDIR_ROOT/gateway.log" 2>&1 &
 GATEWAY_PID="$!"
 if ! wait_http "$gateway_url/health"; then
   echo "gateway did not become healthy; log follows" >&2
@@ -356,7 +358,7 @@ if grep -q "$repo\|$planner_token\|$gateway_token" "$TMPDIR_ROOT/list-projects.j
   exit 1
 fi
 
-python3 - "$ROOT/testdata/manifests/fake-success.yaml" "$machine_id" > "$TMPDIR_ROOT/run-args.json" <<'PY'
+python3 - "$MANIFEST_FILE" "$machine_id" > "$TMPDIR_ROOT/run-args.json" <<'PY'
 import json, sys
 manifest=open(sys.argv[1]).read()
 machine_id=sys.argv[2]

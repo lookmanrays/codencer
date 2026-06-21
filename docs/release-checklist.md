@@ -17,6 +17,7 @@ make verify-live-matrix
 make acceptance-local-production
 make verify-release
 make verify-local-prod
+make verify-release-artifact-selfhost VERSION=v0.3.0-local-prod-rc.1 TARGETS=host REQUIRE_TARGETS=host
 make verify-public-release
 ```
 
@@ -52,6 +53,18 @@ make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=darwin/arm64,linux/
 ```
 
 Every artifact with `status:"built"` in the manifest must exist on disk and match `checksums.txt`. `make verify-release` fails if this is not true.
+
+Binary release readiness also requires unpacked-artifact proof:
+
+```bash
+make verify-release-artifact-selfhost VERSION=v0.3.0-local-prod-rc.1 TARGETS=host REQUIRE_TARGETS=host
+```
+
+That gate selects the host artifact from `dist/manifest.json`, checks
+`dist/checksums.txt`, extracts the archive to a temp directory, verifies the
+required unpacked binaries, and runs the self-host Gateway/Relay/Connector/MCP
+proof using only the unpacked `bin/` directory. Passing source-tree `./bin`
+proof alone is not enough for binary release readiness.
 
 Release archives must not contain local runtime state, SQLite stores, sessions,
 tokens, non-example env files, or managed-service deployment credentials.

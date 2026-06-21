@@ -122,12 +122,20 @@ Self-host cloud-control-plane binaries are built through `make build-cloud` or
 `make build-self-host-cloud`; they are not included in the primary local/self-
 host release archive unless a future release target explicitly says so.
 
+Binary release readiness also requires unpacked-artifact proof. `make
+verify-release-artifact-selfhost` selects the host archive from
+`dist/manifest.json`, verifies checksums, extracts it to a temp directory, and
+runs the self-host Gateway/Relay/Connector/MCP flow using only the unpacked
+`bin/` directory. Source-tree `./bin` proof alone is not enough to publish a
+binary release.
+
 ## Verification
 
 Run:
 
 ```bash
 make verify-public-release
+make verify-release-artifact-selfhost
 make verify-public-selfhost-release
 ```
 

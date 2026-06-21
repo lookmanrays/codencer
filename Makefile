@@ -7,6 +7,7 @@ TARGETS ?= darwin/arm64,darwin/amd64,linux/amd64
 REQUIRE_TARGETS ?=
 ALLOW_PARTIAL ?= 0
 RELEASE_DOCKER_IMAGE ?= golang:1.25-bookworm
+DIST ?= dist
 
 all: lint test build
 
@@ -216,6 +217,7 @@ verify-public-selfhost-release: build build-mcp-sdk-smoke
 	@go test ./...
 	@echo "==> Creating release-like snapshot for public self-host release..."
 	@$(MAKE) release-snapshot VERSION=v0.3.0-selfhost-verify
+	@$(MAKE) verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS="$(TARGETS)" REQUIRE_TARGETS="$(REQUIRE_TARGETS)"
 	@echo "==> Verifying public self-host config precedence and client setup artifacts..."
 	@./scripts/verify_public_selfhost_release.sh
 	@$(MAKE) verify-gateway
@@ -425,12 +427,20 @@ release-snapshot:
 	if [ "$(ALLOW_PARTIAL)" = "1" ]; then partial_flag="--allow-partial"; fi; \
 	go run ./internal/release/cmd \
 		--version "$(VERSION)" \
-		--dist dist \
+		--dist "$(DIST)" \
 		--targets "$(TARGETS)" \
 		--require-targets "$(REQUIRE_TARGETS)" \
 		--docker-image "$(RELEASE_DOCKER_IMAGE)" \
 		$$partial_flag \
 		--json
+
+.PHONY: verify-release-artifact-selfhost
+verify-release-artifact-selfhost:
+	@artifact_targets="$(TARGETS)"; \
+	artifact_required="$(REQUIRE_TARGETS)"; \
+	if [ "$$artifact_targets" = "darwin/arm64,darwin/amd64,linux/amd64" ]; then artifact_targets="host"; fi; \
+	if [ -z "$$artifact_required" ]; then artifact_required="host"; fi; \
+	VERSION="$(VERSION)" TARGETS="$$artifact_targets" REQUIRE_TARGETS="$$artifact_required" DIST="$(DIST)" ./scripts/verify_release_artifact_selfhost.sh
 
 verify-release:
 	@echo "==> Checking Sprint 6 formatting..."

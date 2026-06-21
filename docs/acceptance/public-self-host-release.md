@@ -12,7 +12,9 @@ make verify-public-selfhost-release
 
 This gate must pass in an isolated environment. It uses temporary
 `CODENCER_HOME` directories, temporary repos, random local ports, generated
-tokens, and release-like binaries from `bin/`.
+tokens, source-tree binaries where appropriate, and an unpacked release archive
+for the binary artifact proof. Binary release readiness is not satisfied by
+source-tree `./bin` proof alone.
 
 ## Acceptance Evidence
 
@@ -22,7 +24,12 @@ The gate proves:
 - config precedence is `CLI flags > env vars > user config profile >
   build-time defaults > self-host defaults`;
 - Codex, Claude Code, and ChatGPT setup artifacts point to Gateway, not Relay;
-- release snapshot tooling runs;
+- release snapshot tooling runs and writes checksum-verified artifacts;
+- the host release archive is unpacked and the self-host Gateway/Relay/Connector/MCP
+  proof runs using only unpacked `bin/` binaries;
+- the release archive safety check rejects runtime databases, sessions,
+  non-example env files, private-key material, token leaks, local absolute paths,
+  screenshot dumps, and managed-service deployment secrets;
 - self-host Gateway and Relay start;
 - local daemon and connector participate;
 - project sharing reaches Relay/Gateway;

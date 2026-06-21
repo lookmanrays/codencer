@@ -370,6 +370,7 @@ Live Codex or Claude authentication is not required in Sprint 1. If live proof i
 - `make verify-release` passes.
 - `make release-snapshot VERSION=v0.3.0-local-prod-rc.1` writes real release archives, checksums, and an honest manifest for required Darwin arm64, Darwin amd64, and Linux amd64 targets.
 - `release_artifacts_present` passes when every manifest artifact with `status:"built"` exists on disk and matches `dist/checksums.txt`; a source ZIP is not a release artifact.
+- `make verify-release-artifact-selfhost VERSION=v0.3.0-local-prod-rc.1 TARGETS=host REQUIRE_TARGETS=host` unpacks the host release archive and proves the self-host Gateway/Relay/Connector/MCP flow using only the unpacked `bin/` directory.
 - `make verify-local-execution` passes.
 - `make verify-local-relay-mcp` passes.
 - `make verify-runtime-recovery` passes.

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,44 @@ func TestInstallAndUpgradeScriptsPassWithRequiredBinaries(t *testing.T) {
 		if payload["ok"] != true || payload["partial"] != false {
 			t.Fatalf("%s should report ok=true partial=false: %+v", script, payload)
 		}
+	}
+}
+
+func TestReleaseArtifactSelfHostVerifierContract(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	scriptPath := filepath.Join(repo, "scripts", "verify_release_artifact_selfhost.sh")
+	info, err := os.Stat(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0111 == 0 {
+		t.Fatalf("expected %s to be executable, got %v", scriptPath, info.Mode())
+	}
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"release-snapshot",
+		"manifest.json",
+		"checksums.txt",
+		"CODENCER_BIN_DIR=\"$bin_dir\"",
+		"CODENCER_MANIFEST_FILE=\"$manifest_file\"",
+		"codencer-gatewayd",
+		"codencer-connectord",
+		"private key block",
+		"generated report/screenshot artifact",
+	} {
+		if !strings.Contains(string(script), want) {
+			t.Fatalf("release artifact verifier missing contract marker %q", want)
+		}
+	}
+	makefile, err := os.ReadFile(filepath.Join(repo, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(makefile), ".PHONY: verify-release-artifact-selfhost") ||
+		!strings.Contains(string(makefile), "verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify") {
+		t.Fatal("Makefile does not expose verify-release-artifact-selfhost in the public self-host gate")
 	}
 }
