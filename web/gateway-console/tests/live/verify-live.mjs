@@ -229,7 +229,7 @@ try {
     await expect(page.getByText(/consent approved/i)).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
-    gateway.kill("SIGTERM");
+    signalProcess(gateway, "SIGTERM");
     await waitForGatewayDown(gatewayBase);
     const brokenContext = await browser.newContext({
       viewport: { width: 1280, height: 900 },
@@ -427,8 +427,10 @@ async function startConnectorThroughGateway(gatewayBase, stack) {
 }
 
 function spawnProcess(command, args, env) {
+  const detached = process.platform !== "win32";
   const child = spawn(command, args, {
     cwd: process.cwd(),
+    detached,
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -442,15 +444,28 @@ async function stopProcess(child) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   await new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
+      signalProcess(child, "SIGKILL");
       resolve();
     }, 5_000);
     child.once("close", () => {
       clearTimeout(timeout);
       resolve();
     });
-    child.kill("SIGTERM");
+    signalProcess(child, "SIGTERM");
   });
+}
+
+function signalProcess(child, signal) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+  }
+  child.kill(signal);
 }
 
 async function runCommand(command, args, env = {}) {
