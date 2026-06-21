@@ -51,6 +51,26 @@ TEXT_REQUIREMENTS = [
     ("docs/acceptance/public-repo-release.yaml", "public_managed_codencer_cloud_launch: no_go"),
 ]
 
+GROVE_ACTIVE_DOC_FILES = [
+    "README.md",
+    "docs/README.md",
+    "docs/EXAMPLES.md",
+    "docs/project-config.md",
+]
+
+GROVE_CONTRACT_DOC_FILES = [
+    "docs/EXAMPLES.md",
+    "docs/project-config.md",
+]
+
+GROVE_CONTRACT_PHRASES = [
+    "Codencer is Grove-compatible.",
+    "Codencer can read a safe subset of `grove.yaml` and `.groverc.json`.",
+    "Native `.codencer/workspace.json` has precedence.",
+    "Codencer does not depend on the Grove CLI.",
+    "Codencer does not write Grove state files.",
+]
+
 SELF_HOST_DEFAULT_FILES = [
     "internal/defaults/defaults.go",
     "internal/account/session.go",
@@ -253,6 +273,26 @@ def check_text_requirements(failures: list[str]) -> None:
             fail(f"{rel} missing required text: {needle}", failures)
 
 
+def normalized_contains(text: str, needle: str) -> bool:
+    return " ".join(needle.split()) in " ".join(text.split())
+
+
+def check_active_grove_docs(failures: list[str]) -> None:
+    source = read_text(ROOT / "internal/workspace/config.go") or ""
+    if "grove.yaml" not in source or ".groverc.json" not in source:
+        return
+
+    for rel in GROVE_ACTIVE_DOC_FILES:
+        text = read_text(ROOT / rel)
+        if text is None or "Grove" not in text:
+            fail(f"{rel} must mention active Grove compatibility while workspace config supports Grove files", failures)
+
+    contract_text = "\n".join(read_text(ROOT / rel) or "" for rel in GROVE_CONTRACT_DOC_FILES)
+    for phrase in GROVE_CONTRACT_PHRASES:
+        if not normalized_contains(contract_text, phrase):
+            fail(f"active Grove docs missing compatibility contract phrase: {phrase}", failures)
+
+
 def check_tracked_file(rel: str, failures: list[str]) -> None:
     path = ROOT / rel
     name = Path(rel).name
@@ -382,6 +422,7 @@ def main() -> int:
     failures: list[str] = []
     check_required_files(failures)
     check_text_requirements(failures)
+    check_active_grove_docs(failures)
     check_self_host_default_files(failures)
     scan_source_tree(failures)
     scan_release_artifacts(failures)

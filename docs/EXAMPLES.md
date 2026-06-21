@@ -8,6 +8,20 @@ This document provides specialized and legacy configuration snippets for advance
 
 Configure how isolated worktrees are prepared before an agent executes.
 
+Codencer is Grove-compatible. Codencer can read a safe subset of `grove.yaml`
+and `.groverc.json`. It uses those files only when native
+`.codencer/workspace.json` is absent or incomplete. Native
+`.codencer/workspace.json` has precedence. Codencer does not depend on the Grove
+CLI. Codencer does not write Grove state files.
+
+The native file lives at `.codencer/workspace.json` and is opt-in; `codencer
+project init` still creates only `.codencer/project.json` by default. Grove
+compatibility is read-only fallback mapping for provisioning fields:
+
+- `grove.yaml`: `workspace.setup.copy`, `workspace.setup.symlinks`, and
+  `workspace.hooks.post_create`.
+- `.groverc.json`: `symlink` and `afterCreate`.
+
 ### Node.js / TypeScript
 Efficiently share `node_modules` avoiding costly file copies.
 ```json

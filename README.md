@@ -48,6 +48,9 @@ The v0.3 local/self-host RC includes:
 - local daemon-first execution;
 - project registry in `$CODENCER_HOME/projects.json`;
 - project-local committed `.codencer/project.json`;
+- Grove-compatible workspace provisioning with native `.codencer/workspace.json`
+  precedence and fallback reads from a safe subset of `grove.yaml` and
+  `.groverc.json`;
 - machine identity and editable `host_label` in `$CODENCER_HOME/machine.json`;
 - manifest runner and deterministic fake profiles;
 - structured blockers and validation results;

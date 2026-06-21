@@ -39,6 +39,28 @@ Minimum shape:
 
 `workspace.root` and forbidden paths must be relative repository paths. Project config validation rejects absolute paths, URLs, and token-like fields such as `token`, `secret`, `private_key`, `daemon_url`, `relay_url`, `connector_id`, and `machine_id`.
 
+## Workspace provisioning and Grove compatibility
+
+Workspace provisioning is opt-in and separate from `.codencer/project.json`.
+Codencer reads native provisioning settings from `.codencer/workspace.json` when
+that file exists, but `codencer project init` does not create it by default.
+
+Codencer is Grove-compatible. Codencer can read a safe subset of `grove.yaml`
+and `.groverc.json`. It uses those files only if native
+`.codencer/workspace.json` is absent or incomplete. Native
+`.codencer/workspace.json` has precedence. Codencer does not depend on the Grove
+CLI. Codencer does not write Grove state files.
+
+Current Grove-compatible reads are limited to provisioning-oriented fields:
+
+- `grove.yaml`: `workspace.setup.copy`, `workspace.setup.symlinks`, and
+  `workspace.hooks.post_create`.
+- `.groverc.json`: `symlink` and `afterCreate`.
+
+Codencer merges these as fallbacks only for missing native provisioning fields;
+it does not treat Grove files as project identity, routing, credential, daemon,
+Relay, or connector configuration.
+
 ## Local State
 
 Machine-local state stays in `$CODENCER_HOME`:

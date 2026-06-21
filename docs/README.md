@@ -16,6 +16,8 @@ Start here for the current open-source local/self-host RC:
 - [Gateway Console IA](ui/public-gateway-console-ia.md)
 - [Gateway Console visual evidence](ui/visual-evidence.md)
 - [Project config](project-config.md)
+- [Workspace provisioning and Grove compatibility](project-config.md#workspace-provisioning-and-grove-compatibility)
+- [Provisioning examples](EXAMPLES.md#-workspace-provisioning-workspacejson)
 - [VPS Relay activation](activation-vps-relay.md)
 - [Local connector activation](activation-local-connector.md)
 - [Runtime supervisor](runtime-supervisor.md)
