@@ -262,6 +262,34 @@ func TestProfileAndDaemonNotRunningJSON(t *testing.T) {
 	if !strings.Contains(stdout, `"fake-success"`) {
 		t.Fatalf("profile list missing fake profile: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("executor", "list", "--json")
+	if err != nil {
+		t.Fatalf("executor list failed: %v stderr=%s", err, stderr)
+	}
+	if !strings.Contains(stdout, `"executors"`) || !strings.Contains(stdout, `"fake-success"`) {
+		t.Fatalf("executor list missing fake profile: %s", stdout)
+	}
+	stdout, stderr, err = runCLI("executor", "test", "fake-success", "--json")
+	if err != nil {
+		t.Fatalf("executor test fake failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"installed": true`) || !strings.Contains(stdout, `"adapter": "fake"`) {
+		t.Fatalf("executor test fake output wrong: %s", stdout)
+	}
+	stdout, stderr, err = runCLI("executor", "default", "fake-blocker", "--repo", repo, "--json")
+	if err != nil {
+		t.Fatalf("executor default failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"registry_updated": true`) || !strings.Contains(stdout, `"id": "fake-blocker"`) {
+		t.Fatalf("executor default output wrong: %s", stdout)
+	}
+	projectJSON, err := os.ReadFile(filepath.Join(repo, ".codencer", "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(projectJSON), `"default_profile": "fake-blocker"`) {
+		t.Fatalf("executor default did not update project config: %s", string(projectJSON))
+	}
 
 	stdout, _, err = runCLI("submit", "--project", "proj", "--goal", "do it", "--wait", "--json")
 	if err == nil {

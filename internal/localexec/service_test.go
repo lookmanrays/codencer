@@ -137,6 +137,56 @@ func TestSubmitWaitMapsCompletedAndQuestionBlocker(t *testing.T) {
 	}
 }
 
+func TestSubmitPersistsReportForGetRunPlanReport(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+			writeTestJSON(t, w, http.StatusCreated, domain.Run{ID: "run-submit", ProjectID: "proj", State: domain.RunStateRunning})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-submit/steps":
+			var task domain.TaskSpec
+			if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+				t.Fatalf("decode task: %v", err)
+			}
+			writeTestJSON(t, w, http.StatusAccepted, domain.Step{ID: "step-submit", Title: task.Title, State: domain.StepStateRunning, Adapter: task.AdapterProfile})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-submit":
+			writeTestJSON(t, w, http.StatusOK, domain.Step{ID: "step-submit", State: domain.StepStateCompleted, Adapter: "fake-success"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-submit/result":
+			writeTestJSON(t, w, http.StatusOK, domain.ResultSpec{StepID: "step-submit", State: domain.StepStateCompleted, Summary: "simple task completed"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-submit/artifacts":
+			writeTestJSON(t, w, http.StatusOK, []*domain.Artifact{})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-submit/validations":
+			writeTestJSON(t, w, http.StatusOK, map[string][]*domain.ValidationResult{})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-submit/logs":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("logs"))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	service.PollInterval = time.Millisecond
+	submit, err := service.Submit(context.Background(), SubmitOptions{BaseOptions: base, Goal: "do it", Wait: true})
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if submit.Run == nil || submit.Run.ID != "run-submit" {
+		t.Fatalf("submit missing run id: %+v", submit)
+	}
+	report, err := service.GetRunPlanReport(context.Background(), RunPlanReportOptions{BaseOptions: base, RunID: submit.Run.ID})
+	if err != nil {
+		t.Fatalf("GetRunPlanReport error: %v", err)
+	}
+	if !report.OK || report.Status != string(domain.StepStateCompleted) || len(report.Tasks) != 1 {
+		t.Fatalf("unexpected persisted report: %+v", report)
+	}
+	if report.Tasks[0].StepID != "step-submit" || report.Tasks[0].Summary != "simple task completed" {
+		t.Fatalf("unexpected persisted task report: %+v", report.Tasks[0])
+	}
+}
+
 func setupProject(t *testing.T, daemonURL, adapter, adapterProfile string) BaseOptions {
 	t.Helper()
 	home := t.TempDir()

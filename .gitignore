@@ -27,6 +27,8 @@ service.test
 
 # Local data & logs
 .codencer/
+.codencer-user-home/
+reports/public-selfhost-rc/
 codencer.db
 *.log
 

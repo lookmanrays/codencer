@@ -32,15 +32,19 @@ type projectLocation struct {
 }
 
 type aggregatedProject struct {
-	ProjectID     string                `json:"project_id"`
-	Name          string                `json:"name,omitempty"`
-	RelayProfiles []projectRelayProfile `json:"relay_profiles"`
+	ProjectID      string                `json:"project_id"`
+	Name           string                `json:"name,omitempty"`
+	DefaultAdapter string                `json:"default_adapter,omitempty"`
+	AdapterProfile string                `json:"adapter_profile,omitempty"`
+	RelayProfiles  []projectRelayProfile `json:"relay_profiles"`
 }
 
 type projectRelayProfile struct {
 	RelayProfileID string            `json:"relay_profile_id"`
 	Name           string            `json:"name,omitempty"`
 	Status         string            `json:"status"`
+	DefaultAdapter string            `json:"default_adapter,omitempty"`
+	AdapterProfile string            `json:"adapter_profile,omitempty"`
 	Locations      []projectLocation `json:"locations,omitempty"`
 }
 
@@ -217,12 +221,16 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 			if apiErr != nil {
 				return ToolResult{}, apiErr
 			}
+			s.recordGatewayAudit(ctx, principal, "task_submitted", "Submitted "+executionKindLabel(name)+" for project "+projectID)
 			match, apiErr := s.resolveProject(ctx, principal, projectID, args, true)
 			if apiErr != nil {
+				s.recordGatewayAudit(ctx, principal, "run_failed", "Route resolution failed for project "+projectID+": "+apiErr.Code)
 				return ToolResult{}, apiErr
 			}
+			s.recordProjectRouteAudit(ctx, principal, match, args)
 			path, body, apiErr := route(args)
 			if apiErr != nil {
+				s.recordGatewayAudit(ctx, principal, "run_failed", "Run request validation failed for project "+projectID+": "+apiErr.Code)
 				return ToolResult{}, apiErr
 			}
 			path = appendSelector(path, args)
@@ -230,10 +238,23 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 			if body != nil {
 				method = http.MethodPost
 			}
+			if name != "codencer.get_run_report" {
+				s.recordGatewayAudit(ctx, principal, "run_started", "Started "+executionKindLabel(name)+" for project "+projectID)
+			}
 			_, response, apiErr := s.callRelay(ctx, match.Profile, method, path, body)
 			payload, apiErr := responsePayload(match.Profile, response, apiErr)
 			if apiErr != nil {
+				eventType := "run_failed"
+				if name == "codencer.get_run_report" {
+					eventType = "report_read"
+				}
+				s.recordGatewayAudit(ctx, principal, eventType, "Gateway relay call failed for project "+projectID+": "+apiErr.Code)
 				return ToolResult{}, apiErr
+			}
+			if name == "codencer.get_run_report" {
+				s.recordGatewayAudit(ctx, principal, "report_read", "Read run report "+requiredStringValue(args, "run_id")+" for project "+projectID)
+			} else {
+				s.recordGatewayAudit(ctx, principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload))
 			}
 			return successToolResult(description, payload), nil
 		},
@@ -255,6 +276,114 @@ func responsePayload(profile RelayProfile, response []byte, apiErr *apiError) (a
 		payload = obj
 	}
 	return payload, nil
+}
+
+func executionKindLabel(value string) string {
+	switch value {
+	case "manifest", "codencer.run_project_manifest":
+		return "manifest / run plan"
+	default:
+		return "simple task"
+	}
+}
+
+func selectedProjectLocation(project relayProject, args map[string]any) projectLocation {
+	locations := filterLocations(project.Locations, args)
+	for _, location := range locations {
+		if location.Online {
+			return location
+		}
+	}
+	if len(locations) > 0 {
+		return locations[0]
+	}
+	return projectLocation{}
+}
+
+func resolvedExecutorLabel(project relayProject, args map[string]any) string {
+	return firstNonEmpty(
+		strings.TrimSpace(stringArg(args, "profile")),
+		strings.TrimSpace(stringArg(args, "adapter_profile")),
+		strings.TrimSpace(project.AdapterProfile),
+		strings.TrimSpace(project.DefaultAdapter),
+		"project default",
+	)
+}
+
+func terminalAuditType(payload any) string {
+	obj, _ := payload.(map[string]any)
+	if obj == nil {
+		return "run_completed"
+	}
+	if blocker, ok := obj["blocker"]; ok && blocker != nil {
+		return "blocker"
+	}
+	if task, _ := obj["task"].(map[string]any); task != nil {
+		if blocker, ok := task["blocker"]; ok && blocker != nil {
+			return "blocker"
+		}
+	}
+	status := strings.ToLower(firstNonEmpty(
+		stringValueFromAny(obj["status"]),
+		nestedString(obj, "task", "status"),
+	))
+	switch status {
+	case "failed", "failed_adapter", "failed_bridge", "failed_validation", "timeout", "adapter_error", "bridge_error":
+		return "run_failed"
+	case "blocked", "question", "manual_approval_required", "validation_failed":
+		return "blocker"
+	default:
+		return "run_completed"
+	}
+}
+
+func terminalAuditSummary(projectID string, payload any) string {
+	runID := runIDFromPayload(payload)
+	outcome := "completed"
+	switch terminalAuditType(payload) {
+	case "run_failed":
+		outcome = "failed"
+	case "blocker":
+		outcome = "reached blocker"
+	}
+	if runID == "" {
+		return "Run " + outcome + " for project " + projectID
+	}
+	return "Run " + runID + " " + outcome + " for project " + projectID
+}
+
+func runIDFromPayload(payload any) string {
+	obj, _ := payload.(map[string]any)
+	if obj == nil {
+		return ""
+	}
+	return firstNonEmpty(
+		stringValueFromAny(obj["run_id"]),
+		nestedString(obj, "run", "id"),
+		nestedString(obj, "task", "run_id"),
+	)
+}
+
+func nestedString(obj map[string]any, keys ...string) string {
+	var current any = obj
+	for _, key := range keys {
+		next, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current = next[key]
+	}
+	return stringValueFromAny(current)
+}
+
+func stringValueFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 func submitProjectTaskRoute(args map[string]any) (string, []byte, *apiError) {
@@ -332,14 +461,24 @@ func (s *Server) aggregateProjects(ctx context.Context, principal *authPrincipal
 		for _, project := range projects {
 			current := byID[project.ProjectID]
 			if current == nil {
-				current = &aggregatedProject{ProjectID: project.ProjectID, Name: project.Name}
+				current = &aggregatedProject{
+					ProjectID:      project.ProjectID,
+					Name:           project.Name,
+					DefaultAdapter: project.DefaultAdapter,
+					AdapterProfile: project.AdapterProfile,
+				}
 				byID[project.ProjectID] = current
 				order = append(order, project.ProjectID)
+			} else {
+				current.DefaultAdapter = firstNonEmpty(current.DefaultAdapter, project.DefaultAdapter)
+				current.AdapterProfile = firstNonEmpty(current.AdapterProfile, project.AdapterProfile)
 			}
 			current.RelayProfiles = append(current.RelayProfiles, projectRelayProfile{
 				RelayProfileID: profile.ID,
 				Name:           profile.Name,
 				Status:         project.Status,
+				DefaultAdapter: project.DefaultAdapter,
+				AdapterProfile: project.AdapterProfile,
 				Locations:      project.Locations,
 			})
 		}
@@ -571,12 +710,16 @@ func filterLocations(locations []projectLocation, args map[string]any) []project
 
 func gatewayProjectPayload(profile RelayProfile, project relayProject) map[string]any {
 	return map[string]any{
-		"project_id": project.ProjectID,
-		"name":       project.Name,
+		"project_id":      project.ProjectID,
+		"name":            project.Name,
+		"default_adapter": project.DefaultAdapter,
+		"adapter_profile": project.AdapterProfile,
 		"relay_profiles": []projectRelayProfile{{
 			RelayProfileID: profile.ID,
 			Name:           profile.Name,
 			Status:         project.Status,
+			DefaultAdapter: project.DefaultAdapter,
+			AdapterProfile: project.AdapterProfile,
 			Locations:      project.Locations,
 		}},
 	}

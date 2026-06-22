@@ -139,6 +139,20 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	if relay.lastHostLabel != "macbook" {
 		t.Fatalf("expected host_label selector to reach relay, got %q", relay.lastHostLabel)
 	}
+	submitRunID := runIDFromPayload(mcpStructuredContent(t, submit))
+	if submitRunID == "" {
+		t.Fatalf("submit response did not expose a run_id for report lookup: %s", submitBody)
+	}
+	submitReport := mcpToolCall(t, server.URL, session, "codencer.get_run_report", map[string]any{
+		"relay_profile_id": "personal",
+		"project_id":       "codencer",
+		"run_id":           submitRunID,
+	})
+	submitReportBody := mustJSON(t, submitReport)
+	if !strings.Contains(submitReportBody, `"status":"completed"`) || !strings.Contains(submitReportBody, `"run_id":"`+submitRunID+`"`) {
+		t.Fatalf("expected simple submit run report, got %s", submitReportBody)
+	}
+	assertNoGatewayMCPLeak(t, submitReportBody)
 
 	blocker := mcpToolCall(t, server.URL, session, "codencer.get_blocker", map[string]any{
 		"relay_profile_id": "personal",
@@ -430,9 +444,32 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("project run endpoint did not submit through relay: %s", runResultBody)
 	}
 	assertNoGatewayMCPLeak(t, runResultBody)
+	report := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-gateway-test/report?relay_profile_id=default&machine_id=mach-1", token.AccessToken)
+	reportBody := mustJSON(t, report)
+	if !strings.Contains(reportBody, `"status":"completed"`) || !strings.Contains(reportBody, `"run_id":"run-gateway-test"`) {
+		t.Fatalf("project run report endpoint did not fetch report: %s", reportBody)
+	}
+	assertNoGatewayMCPLeak(t, reportBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
-	if !strings.Contains(mustJSON(t, audit), `"connector.login"`) {
-		t.Fatalf("audit endpoint missing connector event: %s", mustJSON(t, audit))
+	auditBody := mustJSON(t, audit)
+	for _, eventType := range []string{
+		"connector.login",
+		"task_submitted",
+		"route_resolved",
+		"relay_selected",
+		"connector_selected",
+		"executor_selected",
+		"run_started",
+		"run_completed",
+		"report_read",
+	} {
+		if !strings.Contains(auditBody, `"`+eventType+`"`) {
+			t.Fatalf("audit endpoint missing %s event: %s", eventType, auditBody)
+		}
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, auditBody)
+	if strings.Contains(auditBody, "relay-secret") || strings.Contains(auditBody, relay.URL) {
+		t.Fatalf("audit endpoint leaked relay secret or daemon URL: %s", auditBody)
 	}
 	activation := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/activation/commands", token.AccessToken)
 	activationBody := mustJSON(t, activation)
@@ -509,13 +546,15 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			})
 		}
 		return map[string]any{
-			"project_id": "codencer",
-			"name":       "Codencer",
-			"online":     true,
-			"status":     "available",
-			"locations":  locations,
-			"repo_root":  "/Users/example/codencer",
-			"token":      "relay-secret",
+			"project_id":      "codencer",
+			"name":            "Codencer",
+			"online":          true,
+			"status":          "available",
+			"default_adapter": "fake",
+			"adapter_profile": "fake-success",
+			"locations":       locations,
+			"repo_root":       "/Users/example/codencer",
+			"token":           "relay-secret",
 		}
 	}
 	mux.HandleFunc("/api/v2/status", func(w http.ResponseWriter, r *http.Request) {
@@ -725,6 +764,19 @@ func mcpToolCall(t *testing.T, baseURL, sessionID, name string, args map[string]
 		t.Fatalf("decode MCP response: %v", err)
 	}
 	return decoded
+}
+
+func mcpStructuredContent(t *testing.T, response map[string]any) any {
+	t.Helper()
+	result, ok := response["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("MCP response missing result object: %s", mustJSON(t, response))
+	}
+	payload, ok := result["structuredContent"]
+	if !ok {
+		t.Fatalf("MCP response missing structuredContent: %s", mustJSON(t, response))
+	}
+	return payload
 }
 
 func doMCPRequest(t *testing.T, baseURL, sessionID string, payload map[string]any) *http.Response {

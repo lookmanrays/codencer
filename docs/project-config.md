@@ -39,6 +39,29 @@ Minimum shape:
 
 `workspace.root` and forbidden paths must be relative repository paths. Project config validation rejects absolute paths, URLs, and token-like fields such as `token`, `secret`, `private_key`, `daemon_url`, `relay_url`, `connector_id`, and `machine_id`.
 
+## Execution defaults and overrides
+
+`execution.default_adapter` and `execution.default_profile` define the project
+default executor profile. Codencer uses that default unless a run supplies a
+task-level override through `--profile`, Gateway API `profile` /
+`adapter_profile`, or MCP tool arguments.
+
+Useful commands:
+
+```bash
+codencer executor list --json
+codencer executor scan --json
+codencer executor default codex-workspace --repo . --json
+codencer submit --project codencer --profile codex-workspace --goal "Run the approved task" --wait --json
+```
+
+`codencer executor default` updates `.codencer/project.json` and the local
+registry entry when the project has already been adopted. It does not create
+additional `.codencer/` files and does not write executor secrets or local
+machine state into the repository.
+
+See [Executor Profiles](executor-profiles.md).
+
 ## Workspace provisioning and Grove compatibility
 
 Workspace provisioning is opt-in and separate from `.codencer/project.json`.

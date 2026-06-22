@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Play, RotateCcw } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useCallback, useEffect, useMemo } from "react";
-import { useSubmitProjectRun } from "@/api/runs";
+import { useProjectRunReport, useSubmitProjectRun } from "@/api/runs";
 import type { Project } from "@/schemas/projects";
 import {
   TaskRunInputSchema,
@@ -48,11 +48,37 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
       relayProfileId: firstLocation?.relayProfileId ?? "",
       hostLabel: firstLocation?.hostLabel ?? "",
       machineId: firstLocation?.machineId ?? "",
+      executorProfile: "",
       timeoutSeconds: 120,
       title: "Gateway Console fake-safe task",
     },
   });
   const mode = form.watch("mode");
+  const locationId = form.watch("locationId");
+  const executorProfile = form.watch("executorProfile");
+  const selectedLocation = useMemo(
+    () => locations.find((location) => location.id === locationId),
+    [locationId, locations],
+  );
+  const selectedProject = useMemo(
+    () =>
+      projects.find((project) => project.id === selectedLocation?.projectId),
+    [projects, selectedLocation?.projectId],
+  );
+  const resolvedExecutor =
+    executorProfile?.trim() ||
+    selectedProject?.profile ||
+    selectedProject?.adapter ||
+    "project default";
+  const report = useProjectRunReport({
+    enabled: Boolean(submitRun.data?.runId),
+    hostLabel: selectedLocation?.hostLabel,
+    machineId: selectedLocation?.machineId,
+    projectId: submitRun.data?.projectId ?? selectedProject?.id,
+    relayProfileId:
+      submitRun.data?.relayProfileId ?? selectedLocation?.relayProfileId,
+    runId: submitRun.data?.runId,
+  });
 
   const applyLocation = useCallback(
     (locationId: string) => {
@@ -98,6 +124,19 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
                 status={submitRun.data.status ?? "completed"} run_id=
                 {submitRun.data.runId ?? "n/a"} step_id=
                 {submitRun.data.stepId ?? "n/a"}
+              </span>
+              <span className="mt-xs block min-w-0 break-words">
+                executor={submitRun.data.executorProfile ?? resolvedExecutor}
+              </span>
+              <span className="mt-xs block min-w-0 break-words">
+                report=
+                {report.isPending
+                  ? "loading"
+                  : report.data?.status
+                    ? report.data.status
+                    : report.error
+                      ? "unavailable"
+                      : "pending"}
               </span>
               {submitRun.data.summary ? (
                 <span className="mt-xs block min-w-0 break-words">
@@ -158,11 +197,9 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="task">
-                        submit_project_task_and_wait
-                      </SelectItem>
+                      <SelectItem value="task">Simple task</SelectItem>
                       <SelectItem value="manifest">
-                        run_project_manifest
+                        Manifest / run plan
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -170,6 +207,20 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
               />
             </Field>
           </div>
+          <Alert title="Executor routing" tone="info">
+            <span className="block min-w-0 break-words">
+              Codencer is not the agent. Codencer routes this task to the
+              selected executor.
+            </span>
+            <span className="mt-xs block min-w-0 break-words">
+              relay={selectedLocation?.relayProfileId ?? "n/a"} connector=
+              {selectedLocation?.connectorId || "n/a"} machine=
+              {selectedLocation?.hostLabel ||
+                selectedLocation?.machineId ||
+                "n/a"}{" "}
+              executor={resolvedExecutor}
+            </span>
+          </Alert>
           <div className="grid min-w-0 gap-md md:grid-cols-[1fr_160px]">
             <Field
               error={form.formState.errors.title?.message}
@@ -191,6 +242,23 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
               />
             </Field>
           </div>
+          <Field
+            error={form.formState.errors.executorProfile?.message}
+            id="run-executor-profile"
+            label="Executor profile override"
+          >
+            <Input
+              id="run-executor-profile"
+              placeholder={selectedProject?.profile ?? "project default"}
+              {...form.register("executorProfile")}
+            />
+          </Field>
+          {mode === "manifest" ? (
+            <Alert title="Advanced execution type" tone="warning">
+              Manifest / run plan mode expects a valid Codencer run manifest and
+              should be used when a planner has already produced the task plan.
+            </Alert>
+          ) : null}
           {mode === "manifest" ? (
             <Field
               error={form.formState.errors.manifestText?.message}

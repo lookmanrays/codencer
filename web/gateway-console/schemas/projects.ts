@@ -3,7 +3,9 @@ import { collectionField } from "@/schemas/collections";
 
 export const ProjectLocationSchema = z.object({
   ambiguity: z.enum(["none", "relay_profile", "machine_location"]),
+  connectorId: z.string(),
   hostLabel: z.string(),
+  hostname: z.string(),
   id: z.string(),
   machineId: z.string(),
   projectId: z.string(),
@@ -22,16 +24,22 @@ export const ProjectSchema = z.object({
 });
 
 const RawProjectSchema = z.object({
+  adapter_profile: z.string().optional(),
+  default_adapter: z.string().optional(),
   name: z.string().optional(),
   project_id: z.string(),
   relay_profiles: collectionField(
     z.object({
+      adapter_profile: z.string().optional(),
+      default_adapter: z.string().optional(),
       locations: z
         .preprocess(
           (value) => value ?? [],
           z.array(
             z.object({
+              connector_id: z.string().optional(),
               host_label: z.string().optional(),
+              hostname: z.string().optional(),
               machine_id: z.string().optional(),
               online: z.boolean().optional(),
               repo_label: z.string().optional(),
@@ -71,6 +79,13 @@ export const ProjectResponseSchema = z
 
 function normalizeProject(project: z.infer<typeof RawProjectSchema>) {
   const multiRelay = project.relay_profiles.length > 1;
+  const firstRelayWithExecutor = project.relay_profiles.find(
+    (relay) => relay.adapter_profile || relay.default_adapter,
+  );
+  const adapter =
+    project.default_adapter ?? firstRelayWithExecutor?.default_adapter;
+  const profile =
+    project.adapter_profile ?? firstRelayWithExecutor?.adapter_profile;
   const locations = project.relay_profiles.flatMap((relay) => {
     const relayLocations = relay.locations ?? [];
     const multiMachine =
@@ -82,7 +97,9 @@ function normalizeProject(project: z.infer<typeof RawProjectSchema>) {
           : multiMachine
             ? "machine_location"
             : "none",
+        connectorId: location.connector_id ?? "",
         hostLabel: location.host_label ?? "",
+        hostname: location.hostname ?? "",
         id: `${project.project_id}:${relay.relay_profile_id}:${location.machine_id ?? index}`,
         machineId: location.machine_id ?? "",
         projectId: project.project_id,
@@ -94,11 +111,11 @@ function normalizeProject(project: z.infer<typeof RawProjectSchema>) {
     );
   });
   return ProjectSchema.parse({
-    adapter: "gateway",
+    adapter: adapter ?? "project default",
     id: project.project_id,
     locations,
     name: project.name ?? project.project_id,
-    profile: "gateway",
+    profile: profile ?? adapter ?? "project default",
   });
 }
 

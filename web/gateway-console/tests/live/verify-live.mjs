@@ -8,15 +8,25 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const repoRoot = path.resolve(process.cwd(), "../..");
-const codencerBinary = path.join(repoRoot, "bin", "codencer");
-const connectorBinary = path.join(repoRoot, "bin", "codencer-connectord");
-const daemonBinary = path.join(repoRoot, "bin", "orchestratord");
-const gatewayBinary = path.join(repoRoot, "bin", "codencer-gatewayd");
-const relayBinary = path.join(repoRoot, "bin", "codencer-relayd");
+const binaryDir =
+  process.env.CODENCER_E2E_BIN_DIR ?? path.join(repoRoot, "bin");
+const codencerBinary = path.join(binaryDir, "codencer");
+const connectorBinary = path.join(binaryDir, "codencer-connectord");
+const daemonBinary = path.join(binaryDir, "orchestratord");
+const gatewayBinary = path.join(binaryDir, "codencer-gatewayd");
+const relayBinary = path.join(binaryDir, "codencer-relayd");
 const gatewayToken = "gateway-live-secret";
 const relayToken = "relay-live-secret";
 const operatorCode = "operator-code";
 const execFileAsync = promisify(execFile);
+const executorAdapter = process.env.CODENCER_E2E_EXECUTOR_ADAPTER ?? "fake";
+const executorProfile =
+  process.env.CODENCER_E2E_EXECUTOR_PROFILE ??
+  (executorAdapter === "fake" ? "fake-success" : executorAdapter);
+const executorGoal =
+  executorAdapter === "fake"
+    ? "Run fake-safe task from live Gateway Console."
+    : `Run a safe deterministic task with ${executorProfile}.`;
 
 const tmpRoot = await fs.mkdtemp(
   path.join(os.tmpdir(), "codencer-console-live-"),
@@ -140,6 +150,8 @@ try {
       "Console proxy live metadata",
       { expectLiveMetadata: true },
     );
+    const mcpProof = await runGatewayMCPProof(gatewayBase, gatewayToken);
+    console.log(`gateway-console-live: mcp_run=${mcpProof.runId}`);
 
     await page.goto(`${consoleBase}/console`);
     await expect(
@@ -199,13 +211,17 @@ try {
         name: /Codencer default live-host repo · [a-f0-9]{16} online none/i,
       }),
     ).toBeVisible();
-    await page
-      .getByLabel(/goal/i)
-      .fill("Run fake-safe task from live Gateway Console.");
+    await page.getByLabel(/goal/i).fill(executorGoal);
     await page.getByRole("button", { name: /^submit$/i }).click();
     await expect(page.getByText(/run completed/i)).toBeVisible();
     await expect(page.getByText(/run_id=run-/i)).toBeVisible();
     await expect(page.getByText(/status=completed run_id=run-/i)).toBeVisible();
+    await expect(
+      page.getByText(
+        new RegExp(`executor=${escapeRegExp(executorProfile)}`, "i"),
+      ),
+    ).toBeVisible();
+    await expect(page.getByText(/report=completed/i)).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/activation`);
@@ -218,9 +234,17 @@ try {
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/audit`);
-    await expect(page.getByText(/connector\.login/i)).toBeVisible();
-    await expect(page.getByText("relay.add")).toBeVisible();
-    await expect(page.getByText("relay.remove")).toBeVisible();
+    await expect(page.getByText(/connector\.login/i).first()).toBeVisible();
+    await expect(page.getByText(/task_submitted/i).first()).toBeVisible();
+    await expect(page.getByText(/route_resolved/i).first()).toBeVisible();
+    await expect(page.getByText(/relay_selected/i).first()).toBeVisible();
+    await expect(page.getByText(/connector_selected/i).first()).toBeVisible();
+    await expect(page.getByText(/executor_selected/i).first()).toBeVisible();
+    await expect(page.getByText(/run_started/i).first()).toBeVisible();
+    await expect(page.getByText(/run_completed/i).first()).toBeVisible();
+    await expect(page.getByText(/report_read/i).first()).toBeVisible();
+    await expect(page.getByText("relay.add").first()).toBeVisible();
+    await expect(page.getByText("relay.remove").first()).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/settings`);
@@ -293,6 +317,144 @@ try {
   for (const server of servers.reverse())
     await new Promise((resolve) => server.close(resolve));
   await fs.rm(tmpRoot, { force: true, recursive: true });
+}
+
+async function runGatewayMCPProof(gatewayBase, token) {
+  let sessionId = "";
+  async function mcpPost(payload) {
+    const response = await fetch(`${gatewayBase}/mcp`, {
+      body: JSON.stringify(payload),
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2025-11-25",
+        ...(sessionId ? { "MCP-Session-Id": sessionId } : {}),
+      },
+      method: "POST",
+    });
+    const returnedSession = response.headers.get("MCP-Session-Id");
+    if (returnedSession) sessionId = returnedSession;
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Gateway MCP returned ${response.status}: ${text}`);
+    }
+    assertNoSensitiveEndpointLeak(text, "Gateway MCP");
+    return JSON.parse(text);
+  }
+  async function tool(name, args) {
+    const payload = await mcpPost({
+      jsonrpc: "2.0",
+      id: name,
+      method: "tools/call",
+      params: { name, arguments: args },
+    });
+    const result = payload.result ?? {};
+    if (result.isError) {
+      throw new Error(
+        `${name} returned MCP tool error: ${JSON.stringify(payload)}`,
+      );
+    }
+    return result.structuredContent ?? {};
+  }
+
+  const initialized = await mcpPost({
+    jsonrpc: "2.0",
+    id: "init",
+    method: "initialize",
+    params: {
+      clientInfo: { name: "gateway-console-live", version: "v0" },
+      protocolVersion: "2025-11-25",
+    },
+  });
+  if (!sessionId || !initialized.result?.serverInfo) {
+    throw new Error(`MCP initialize failed: ${JSON.stringify(initialized)}`);
+  }
+  const tools = await mcpPost({
+    jsonrpc: "2.0",
+    id: "tools",
+    method: "tools/list",
+    params: {},
+  });
+  const toolNames = JSON.stringify(tools.result?.tools ?? []);
+  for (const expected of [
+    "codencer.list_projects",
+    "codencer.submit_project_task_and_wait",
+    "codencer.get_run_report",
+  ]) {
+    if (!toolNames.includes(expected)) {
+      throw new Error(`MCP tools/list missing ${expected}: ${toolNames}`);
+    }
+  }
+
+  const projects = await tool("codencer.list_projects", {});
+  const project = (projects.projects ?? []).find(
+    (item) => item.project_id === "codencer",
+  );
+  const relay = project?.relay_profiles?.[0];
+  const location = relay?.locations?.find((item) => item.online) ?? {};
+  if (!project || !relay || !location.machine_id) {
+    throw new Error(
+      `MCP list_projects missing live location: ${JSON.stringify(projects)}`,
+    );
+  }
+
+  const submit = await tool("codencer.submit_project_task_and_wait", {
+    goal:
+      executorAdapter === "fake"
+        ? "Run fake-safe task through Gateway MCP."
+        : `Run a safe deterministic task through Gateway MCP with ${executorProfile}.`,
+    machine_id: location.machine_id,
+    profile: executorProfile,
+    project_id: "codencer",
+    relay_profile_id: relay.relay_profile_id,
+    title: "Gateway MCP fake-safe task",
+  });
+  const runId =
+    submit.run_id ??
+    submit.run?.id ??
+    submit.task?.run_id ??
+    submit.task?.runId;
+  if (!runId || submit.status !== "completed") {
+    throw new Error(
+      `MCP submit did not complete with run_id: ${JSON.stringify(submit)}`,
+    );
+  }
+
+  const report = await tool("codencer.get_run_report", {
+    machine_id: location.machine_id,
+    project_id: "codencer",
+    relay_profile_id: relay.relay_profile_id,
+    run_id: runId,
+  });
+  const reportRunId = report.run_id ?? report.run?.id;
+  if (reportRunId !== runId || report.status !== "completed") {
+    throw new Error(`MCP get_run_report failed: ${JSON.stringify(report)}`);
+  }
+
+  const audit = await getJSON(
+    `${gatewayBase}/api/gateway/v1/audit-events`,
+    token,
+  );
+  const eventTypes = (audit.events ?? []).map((event) => event.type);
+  for (const expected of [
+    "task_submitted",
+    "route_resolved",
+    "relay_selected",
+    "connector_selected",
+    "executor_selected",
+    "run_started",
+    "run_completed",
+    "report_read",
+  ]) {
+    if (!eventTypes.includes(expected)) {
+      throw new Error(
+        `Gateway audit missing ${expected} after MCP proof: ${JSON.stringify(audit)}`,
+      );
+    }
+  }
+  assertNoSensitiveEndpointLeak(JSON.stringify(audit), "Gateway audit");
+  return { runId };
 }
 
 async function startLocalSelfHostStack(root) {
@@ -398,9 +560,9 @@ async function startLocalSelfHostStack(root) {
       "--repo",
       repo,
       "--adapter",
-      "fake",
+      executorAdapter,
       "--profile",
-      "fake-success",
+      executorProfile,
       "--daemon-url",
       daemonUrl,
       "--share-to-relay",
@@ -749,4 +911,8 @@ function sha256Hex(value) {
 
 function codeChallengeS256(verifier) {
   return crypto.createHash("sha256").update(verifier).digest("base64url");
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

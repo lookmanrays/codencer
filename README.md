@@ -46,6 +46,7 @@ The v0.3 local/self-host RC includes:
 
 - local `codencer` CLI mode;
 - local daemon-first execution;
+- executor profiles for fake, Codex, Claude, and task-level overrides;
 - project registry in `$CODENCER_HOME/projects.json`;
 - project-local committed `.codencer/project.json`;
 - Grove-compatible workspace provisioning with native `.codencer/workspace.json`
@@ -124,6 +125,8 @@ Create or adopt a project config:
   --json
 
 ./bin/codencer project status codencer --json
+./bin/codencer executor list --json
+./bin/codencer executor default fake-success --repo . --json
 ```
 
 Run deterministic local proof:
@@ -336,6 +339,23 @@ Local-only state lives under `$CODENCER_HOME`, including:
 
 See [Project Config](docs/project-config.md).
 
+## Executor Profiles
+
+Project defaults live in `.codencer/project.json`; task-level overrides use the
+same profile names through CLI, Gateway API, MCP tools, and Gateway Console.
+Codencer routes to the selected executor profile and records reports/audit
+events. It does not become the agent.
+
+```bash
+codencer executor list --json
+codencer executor scan --json
+codencer executor test codex-workspace --json
+codencer executor default codex-workspace --repo . --json
+codencer submit --project codencer --profile codex-workspace --goal "Run the approved task" --wait --json
+```
+
+See [Executor Profiles](docs/executor-profiles.md).
+
 ## Gateway And Self-Host Relay
 
 The public self-host connector path is Gateway-first:
@@ -371,6 +391,7 @@ official Codencer service.
 - [VPS Relay activation](docs/activation-vps-relay.md)
 - [Local connector activation](docs/activation-local-connector.md)
 - [Project config](docs/project-config.md)
+- [Executor profiles](docs/executor-profiles.md)
 - [Codex MCP activation](docs/mcp/codex-mcp-live.md)
 - [Claude Code MCP activation](docs/mcp/claude-code-mcp-live.md)
 - [ChatGPT custom MCP app setup](docs/mcp/chatgpt-app-setup.md)
@@ -413,8 +434,15 @@ make verify-local-prod
 make activation-preflight
 make verify-public-release
 make verify-gateway-console
+make verify-public-selfhost-rc
 git diff --check
 ```
+
+`make verify-public-selfhost-rc` builds a fresh release artifact, unpacks it,
+uses the unpacked binaries for self-host Gateway/Relay/Connector/daemon smoke,
+runs Gateway Console live verification, writes
+`reports/public-selfhost-rc/<timestamp>/summary.json` and `.md`, and reports
+`PARTIAL` instead of `GO` when no real executor gate is configured.
 
 If a live/external check is skipped, report it as skipped, not passed.
 

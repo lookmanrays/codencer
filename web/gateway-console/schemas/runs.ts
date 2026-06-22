@@ -11,6 +11,7 @@ export const TaskRunInputSchema = z
     mode: z.enum(["task", "manifest"]).default("task"),
     projectId: z.string().min(1),
     relayProfileId: z.string().min(1),
+    executorProfile: z.string().trim().optional(),
     hostLabel: z.string().optional(),
     machineId: z.string().optional(),
     timeoutSeconds: z.coerce.number().int().min(5).max(900).default(120),
@@ -47,6 +48,10 @@ export const RunSubmitResponseSchema = z
       projectId: project_id ?? stringValue(payload.project_id),
       raw: payload,
       relayProfileId: stringValue(payload.relay_profile_id),
+      executorProfile:
+        stringValue(payload.executor_profile) ||
+        stringValue(payload.profile) ||
+        stringValue(payload.adapter_profile),
       runId:
         stringValue(payload.run_id) ||
         stringValue(run.id) ||
@@ -60,6 +65,7 @@ export const RunSubmitResponseSchema = z
 export const RunSubmitResultSchema = z.object({
   blockerType: z.string().optional(),
   ok: z.boolean(),
+  executorProfile: z.string().optional(),
   projectId: z.string().optional(),
   raw: z.record(z.string(), z.unknown()),
   relayProfileId: z.string().optional(),
@@ -68,6 +74,8 @@ export const RunSubmitResultSchema = z.object({
   stepId: z.string().optional(),
   summary: z.string().optional(),
 });
+
+export const RunReportResponseSchema = RunSubmitResponseSchema;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)

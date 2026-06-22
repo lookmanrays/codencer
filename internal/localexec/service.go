@@ -223,16 +223,23 @@ func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionRepo
 		return resolved.daemonReport(err), nil
 	}
 	if !opts.Wait {
-		report := taskReportFromStep(taskID, resolved.project.ID, run.ID, step, resolution, nil, Evidence{}, ExitSuccess)
+		taskReport := taskReportFromStep(taskID, resolved.project.ID, run.ID, step, resolution, nil, Evidence{}, ExitSuccess)
+		_, err := writeSubmitRunReport(resolved, run, taskReport)
+		if err != nil {
+			return ExecutionReport{}, reportError(ExitInternal, BlockerBridgeError, err.Error())
+		}
 		return resolved.report(ExecutionReport{
 			OK:       true,
 			Status:   "submitted",
 			Run:      run,
-			Task:     &report,
+			Task:     &taskReport,
 			ExitCode: ExitSuccess,
 		}), nil
 	}
 	taskReport := s.waitForTask(ctx, resolved.client, resolved.project.ID, run.ID, taskID, step.ID, resolution)
+	if _, err := writeSubmitRunReport(resolved, run, taskReport); err != nil {
+		return ExecutionReport{}, reportError(ExitInternal, BlockerBridgeError, err.Error())
+	}
 	report := resolved.report(ExecutionReport{
 		OK:       taskReport.OK,
 		Status:   taskReport.Status,
@@ -242,6 +249,30 @@ func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionRepo
 		ExitCode: taskReport.ExitCode,
 	})
 	return report, nil
+}
+
+func writeSubmitRunReport(resolved *resolvedContext, run *domain.Run, taskReport TaskReport) (string, error) {
+	if resolved == nil {
+		return "", fmt.Errorf("resolved context is required")
+	}
+	if run == nil {
+		run = &domain.Run{ID: taskReport.RunID, ProjectID: taskReport.ProjectID}
+	}
+	report := RunPlanReport{
+		OK:       taskReport.OK,
+		Status:   taskReport.Status,
+		Project:  resolved.projectSummary(taskReport.Profile),
+		Run:      run,
+		Tasks:    []TaskReport{taskReport},
+		Blocker:  taskReport.Blocker,
+		Evidence: taskReport.Evidence,
+		ExitCode: taskReport.ExitCode,
+	}
+	path, err := writeRunPlanReport(resolved.paths.ArtifactsDir, run.ID, report)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func (s *Service) RunPlan(ctx context.Context, opts RunPlanOptions) (RunPlanReport, error) {

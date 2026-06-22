@@ -34,6 +34,21 @@ For direct project config flow:
 
 `project init` creates only `repo/.codencer/project.json` by default. Machine identity and absolute repo paths remain local in `$CODENCER_HOME`. See [Project Config](project-config.md).
 
+## Executor Profiles
+
+Inspect available executor profiles and change the project default without
+reinitializing the project:
+
+```bash
+./bin/codencer executor list --json
+./bin/codencer executor scan --json
+./bin/codencer executor default codex-workspace --repo . --json
+./bin/codencer executor test codex-workspace --json
+```
+
+For a single run, pass `--profile <executor-profile>` to override the project
+default. See [Executor Profiles](executor-profiles.md).
+
 ## Deterministic Demo
 
 ```bash

@@ -16,6 +16,35 @@ tokens, source-tree binaries where appropriate, and an unpacked release archive
 for the binary artifact proof. Binary release readiness is not satisfied by
 source-tree `./bin` proof alone.
 
+## Release Candidate Exit Gate
+
+```bash
+make verify-public-selfhost-rc
+```
+
+This stricter gate builds a fresh release artifact, unpacks it into a clean
+install directory, uses only unpacked artifact binaries for Gateway, Relay,
+Connector, and daemon execution, starts Gateway Console in live mode, verifies
+Gateway MCP simple task submission, fetches the returned run report, checks
+audit lifecycle events, runs UI live submit/report/audit checks, and writes:
+
+```text
+reports/public-selfhost-rc/<timestamp>/summary.json
+reports/public-selfhost-rc/<timestamp>/summary.md
+```
+
+`GO` requires a configured real executor gate. Without a real executor, the gate
+reports `PARTIAL`, not `GO`, even when deterministic fake executor plumbing
+passes.
+
+Codex example:
+
+```bash
+CODENCER_E2E_REAL_EXECUTOR=codex \
+CODENCER_E2E_REAL_EXECUTOR_COMMAND=codex \
+make verify-public-selfhost-rc
+```
+
 ## Acceptance Evidence
 
 The gate proves:

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"agent-bridge/internal/live"
 	"agent-bridge/internal/local"
 	"agent-bridge/internal/localexec"
+	profilepkg "agent-bridge/internal/profile"
 	projectpkg "agent-bridge/internal/project"
 	"agent-bridge/internal/projectconfig"
 	"agent-bridge/internal/proof"
@@ -105,6 +107,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runRunPlan(args[1:], stdout)
 	case "profile":
 		return runProfile(args[1:], stdout)
+	case "executor":
+		return runExecutor(args[1:], stdout)
 	case "service":
 		return runService(args[1:], stdout)
 	case "watchdog":
@@ -1986,6 +1990,245 @@ func runProfile(args []string, stdout io.Writer) error {
 	}
 }
 
+func runExecutor(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer executor <list|scan|test|default> [flags]")
+	}
+	switch args[0] {
+	case "list":
+		parsed, err := parseArgs(args[1:], []string{"json"}, nil)
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "executor list does not accept positional arguments")
+		}
+		executors := executorProfiles()
+		if parsed.bool("json") {
+			return writeJSON(stdout, map[string]any{"ok": true, "executors": executors})
+		}
+		for _, executor := range executors {
+			fmt.Fprintf(stdout, "executor: %-20s adapter=%s daemon_adapter=%s\n", executor.ID, executor.Adapter, executor.DaemonAdapter)
+		}
+		return nil
+	case "scan":
+		parsed, err := parseArgs(args[1:], []string{"json"}, nil)
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 0 {
+			return usageError(parsed.bool("json"), stdout, "executor scan does not accept positional arguments")
+		}
+		scan := executorScan()
+		if parsed.bool("json") {
+			return writeJSON(stdout, map[string]any{"ok": true, "executors": scan})
+		}
+		for _, item := range scan {
+			status := "missing"
+			if item.Installed {
+				status = "installed"
+			}
+			fmt.Fprintf(stdout, "executor: %-20s adapter=%s %s\n", item.Profile.ID, item.Profile.Adapter, status)
+		}
+		return nil
+	case "test":
+		parsed, err := parseArgs(args[1:], []string{"json"}, nil)
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer executor test <executor> [--json]")
+		}
+		result, err := executorTest(parsed.positionals[0])
+		if parsed.bool("json") {
+			_ = writeJSON(stdout, result)
+			if err != nil {
+				return exitError{code: exitFailed, message: result.Message, printed: true}
+			}
+			return nil
+		}
+		if err != nil {
+			return exitError{code: exitFailed, message: result.Message}
+		}
+		fmt.Fprintf(stdout, "executor %s is available via %s\n", result.Profile.ID, result.Command)
+		return nil
+	case "default":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"repo", "config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer executor default <executor> [--repo <path>] [--json]")
+		}
+		result, err := setDefaultExecutor(parsed.positionals[0], parsed.value("repo"), parsed.value("config"))
+		if err != nil {
+			return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+		}
+		if parsed.bool("json") {
+			return writeJSON(stdout, result)
+		}
+		fmt.Fprintf(stdout, "Default executor profile: %s\n", result.Executor.Profile.ID)
+		if result.RegistryUpdated {
+			fmt.Fprintln(stdout, "Updated local project registry.")
+		}
+		return nil
+	default:
+		return usageError(hasBoolFlag(args, "json"), stdout, fmt.Sprintf("unknown executor command %q", args[0]))
+	}
+}
+
+type executorScanItem struct {
+	Profile      profilepkg.Profile `json:"profile"`
+	Command      string             `json:"command,omitempty"`
+	Installed    bool               `json:"installed"`
+	Path         string             `json:"path,omitempty"`
+	SetupHint    string             `json:"setup_hint,omitempty"`
+	TestRequired bool               `json:"test_required,omitempty"`
+}
+
+type executorTestResult struct {
+	OK        bool               `json:"ok"`
+	Profile   profilepkg.Profile `json:"profile"`
+	Command   string             `json:"command,omitempty"`
+	Path      string             `json:"path,omitempty"`
+	Installed bool               `json:"installed"`
+	Message   string             `json:"message,omitempty"`
+}
+
+type defaultExecutorResult struct {
+	OK              bool               `json:"ok"`
+	Executor        executorTestResult `json:"executor"`
+	ProjectConfig   string             `json:"project_config"`
+	RegistryUpdated bool               `json:"registry_updated"`
+}
+
+func executorProfiles() []profilepkg.Profile {
+	return profilepkg.List()
+}
+
+func executorScan() []executorScanItem {
+	profiles := executorProfiles()
+	out := make([]executorScanItem, 0, len(profiles))
+	for _, profile := range profiles {
+		command := executorCommand(profile)
+		item := executorScanItem{Profile: profile, Command: command}
+		if profile.Adapter == "fake" {
+			item.Installed = true
+			item.SetupHint = "deterministic fake executor is built in for automated smoke tests"
+		} else if path, err := exec.LookPath(command); err == nil {
+			item.Installed = true
+			item.Path = path
+		} else {
+			item.SetupHint = "install and authenticate the " + profile.Adapter + " CLI, or use a fake profile for plumbing smoke tests"
+			item.TestRequired = true
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func executorTest(id string) (executorTestResult, error) {
+	resolution, err := profilepkg.Resolve(profilepkg.ResolveOptions{
+		ProfileID:            strings.TrimSpace(id),
+		AllowDangerousBypass: os.Getenv(profilepkg.DangerousBypassEnv) == "1",
+	})
+	if err != nil {
+		return executorTestResult{OK: false, Message: err.Error()}, err
+	}
+	command := executorCommand(resolution.Profile)
+	result := executorTestResult{Profile: resolution.Profile, Command: command}
+	if resolution.Profile.Adapter == "fake" {
+		result.OK = true
+		result.Installed = true
+		result.Message = "deterministic fake executor is built in"
+		return result, nil
+	}
+	path, err := exec.LookPath(command)
+	if err != nil {
+		result.Message = "executor command " + command + " was not found on PATH; install/authenticate it before selecting this executor for live runs"
+		return result, err
+	}
+	result.OK = true
+	result.Installed = true
+	result.Path = path
+	result.Message = "executor command found"
+	return result, nil
+}
+
+func setDefaultExecutor(id, repo, configPath string) (defaultExecutorResult, error) {
+	resolution, err := profilepkg.Resolve(profilepkg.ResolveOptions{
+		ProfileID:            strings.TrimSpace(id),
+		AllowDangerousBypass: os.Getenv(profilepkg.DangerousBypassEnv) == "1",
+	})
+	if err != nil {
+		return defaultExecutorResult{}, err
+	}
+	command := executorCommand(resolution.Profile)
+	test := executorTestResult{OK: true, Profile: resolution.Profile, Command: command}
+	if resolution.Profile.Adapter == "fake" {
+		test.Installed = true
+		test.Message = "deterministic fake executor is built in"
+	} else if path, err := exec.LookPath(command); err == nil {
+		test.Installed = true
+		test.Path = path
+		test.Message = "executor command found"
+	} else {
+		test.Message = "executor profile selected; run codencer executor test " + resolution.Profile.ID + " before live execution"
+	}
+	repoRoot, err := repoRootForCommand(repo)
+	if err != nil {
+		return defaultExecutorResult{}, err
+	}
+	cfg, warnings, err := projectconfig.Load(repoRoot)
+	if err != nil {
+		return defaultExecutorResult{}, err
+	}
+	_ = warnings
+	cfg.Execution.DefaultAdapter = resolution.Profile.Adapter
+	cfg.Execution.DefaultProfile = resolution.Profile.ID
+	if err := projectconfig.Save(repoRoot, cfg); err != nil {
+		return defaultExecutorResult{}, err
+	}
+	paths, err := local.ResolvePaths(repoRoot, configPath)
+	if err != nil {
+		return defaultExecutorResult{}, err
+	}
+	registry, _, err := loadRegistryWithMachine(paths, time.Now().UTC())
+	if err != nil {
+		return defaultExecutorResult{}, err
+	}
+	registryUpdated := false
+	for i := range registry.Projects {
+		if registry.Projects[i].ID != cfg.Project.ID && filepath.Clean(registry.Projects[i].RepoRoot) != filepath.Clean(repoRoot) {
+			continue
+		}
+		registry.Projects[i].DefaultAdapter = resolution.Profile.Adapter
+		registry.Projects[i].AdapterProfile = resolution.Profile.ID
+		registry.Projects[i].UpdatedAt = time.Now().UTC()
+		registryUpdated = true
+	}
+	if registryUpdated {
+		if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
+			return defaultExecutorResult{}, err
+		}
+	}
+	return defaultExecutorResult{
+		OK:              true,
+		Executor:        test,
+		ProjectConfig:   projectconfig.Path(repoRoot),
+		RegistryUpdated: registryUpdated,
+	}, nil
+}
+
+func executorCommand(profile profilepkg.Profile) string {
+	switch profile.Adapter {
+	case "fake":
+		return "codencer"
+	default:
+		return profile.DaemonAdapter
+	}
+}
+
 func runService(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer service <install|uninstall|start|stop|restart|status|logs|render> [service|--all]")
@@ -2711,7 +2954,7 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|login|whoami|logout|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|login|whoami|logout|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|executor|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func wantsHelp(args []string) bool {
@@ -2738,7 +2981,7 @@ func printCommandHelp(w io.Writer, path []string) {
 	key := strings.Join(path, " ")
 	switch key {
 	case "":
-		printHelpBlock(w, "codencer [command] [flags]", "version, init, login, paths, config, doctor, status, project, machine, connector, gateway, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
+		printHelpBlock(w, "codencer [command] [flags]", "version, init, login, paths, config, doctor, status, project, machine, connector, gateway, executor, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
 	case "project":
 		printHelpBlock(w, "codencer project <init|adopt|scan|list|get|use|status|share|unshare|remove> [flags]", "init, adopt, scan, list, get, use, status, share, unshare, remove", "--json, --config <path>, --repo <path>", "codencer project init --repo . --adapter fake --profile fake-success --share-to-relay --json")
 	case "project init":
@@ -2761,6 +3004,8 @@ func printCommandHelp(w io.Writer, path []string) {
 		printHelpBlock(w, "codencer gateway <relay|status|config> [flags]", "relay, status, config show", "--json, --config <path>, --gateway <url>", "codencer gateway status --json")
 	case "gateway relay":
 		printHelpBlock(w, "codencer gateway relay <add|list|status|remove> [flags]", "add, list, status, remove", "--json, --config <path>, --gateway <url>, --id <id>, --url <relay-url>, --token-env <env>", "codencer gateway relay add --id personal --url http://127.0.0.1:8090 --token-env CODENCER_RELAY_TOKEN --json")
+	case "executor":
+		printHelpBlock(w, "codencer executor <list|scan|test|default> [flags]", "list, scan, test, default", "--json, --repo <path>, --config <path>", "codencer executor default codex-workspace --repo . --json")
 	case "login":
 		printHelpBlock(w, "codencer login [flags]", "none", "--json, --gateway <url>, --device-code <code>", "codencer login --gateway http://127.0.0.1:19090 --json")
 	case "setup":

@@ -225,6 +225,10 @@ verify-public-selfhost-release: build build-mcp-sdk-smoke
 	@$(MAKE) verify-gateway-console-live
 	@$(MAKE) verify-public-release
 
+.PHONY: verify-public-selfhost-rc
+verify-public-selfhost-rc:
+	@./scripts/verify_public_selfhost_rc.sh
+
 .PHONY: verify-gateway-console
 verify-gateway-console:
 	@echo "==> Installing Gateway Console dependencies..."
