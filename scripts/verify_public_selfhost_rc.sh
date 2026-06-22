@@ -53,11 +53,12 @@ run_gate() {
   shift
   local log="$REPORT_DIR/$name.log"
   echo "==> $name"
-  if "$@" >"$log" 2>&1; then
+  "$@" >"$log" 2>&1
+  local code="$?"
+  if [ "$code" -eq 0 ]; then
     write_gate "$name" "passed" "ok" "$log"
     return 0
   fi
-  local code="$?"
   write_gate "$name" "failed" "exit_code=$code" "$log"
   FAILURES=1
   echo "Gate failed: $name (log: $log)" >&2

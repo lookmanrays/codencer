@@ -74,9 +74,21 @@ func NewServer(cfg *Config, store *Store) *Server {
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: relayWriteTimeout(cfg),
 	}
 	return s
+}
+
+func relayWriteTimeout(cfg *Config) time.Duration {
+	const transportGrace = 30 * time.Second
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	timeout := time.Duration(cfg.ProxyTimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = time.Duration(DefaultConfig().ProxyTimeoutSeconds) * time.Second
+	}
+	return timeout + transportGrace
 }
 
 func (s *Server) Start(ctx context.Context) error {

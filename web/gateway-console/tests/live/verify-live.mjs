@@ -23,6 +23,14 @@ const executorAdapter = process.env.CODENCER_E2E_EXECUTOR_ADAPTER ?? "fake";
 const executorProfile =
   process.env.CODENCER_E2E_EXECUTOR_PROFILE ??
   (executorAdapter === "fake" ? "fake-success" : executorAdapter);
+const taskTimeoutSeconds = parsePositiveInt(
+  process.env.CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS,
+  executorAdapter === "fake" ? 120 : 300,
+  "CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS",
+);
+const relayProxyTimeoutSeconds = taskTimeoutSeconds + 30;
+const gatewayRelayRequestTimeoutSeconds = relayProxyTimeoutSeconds + 30;
+const uiSubmitTimeoutMs = (gatewayRelayRequestTimeoutSeconds + 30) * 1000;
 const executorGoal =
   executorAdapter === "fake"
     ? "Run fake-safe task from live Gateway Console."
@@ -50,6 +58,7 @@ try {
         public_base_url: gatewayBase,
         mcp_url: `${gatewayBase}/mcp`,
         listen_addr: `127.0.0.1:${gatewayPort}`,
+        relay_request_timeout_seconds: gatewayRelayRequestTimeoutSeconds,
         store: { path: path.join(tmpRoot, "gateway.db") },
         default_relay: {
           url: stack.relayUrl,
@@ -212,16 +221,25 @@ try {
       }),
     ).toBeVisible();
     await page.getByLabel(/goal/i).fill(executorGoal);
+    await page.getByLabel(/timeout seconds/i).fill(String(taskTimeoutSeconds));
     await page.getByRole("button", { name: /^submit$/i }).click();
-    await expect(page.getByText(/run completed/i)).toBeVisible();
-    await expect(page.getByText(/run_id=run-/i)).toBeVisible();
-    await expect(page.getByText(/status=completed run_id=run-/i)).toBeVisible();
+    await expect(page.getByText(/run completed/i)).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
+    await expect(page.getByText(/run_id=run-/i)).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
+    await expect(page.getByText(/status=completed run_id=run-/i)).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
     await expect(
       page.getByText(
         new RegExp(`executor=${escapeRegExp(executorProfile)}`, "i"),
       ),
-    ).toBeVisible();
-    await expect(page.getByText(/report=completed/i)).toBeVisible();
+    ).toBeVisible({ timeout: uiSubmitTimeoutMs });
+    await expect(page.getByText(/report=completed/i)).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/activation`);
@@ -408,7 +426,8 @@ async function runGatewayMCPProof(gatewayBase, token) {
     profile: executorProfile,
     project_id: "codencer",
     relay_profile_id: relay.relay_profile_id,
-    title: "Gateway MCP fake-safe task",
+    timeout_seconds: taskTimeoutSeconds,
+    title: "Gateway MCP live task",
   });
   const runId =
     submit.run_id ??
@@ -525,7 +544,7 @@ async function startLocalSelfHostStack(root) {
         planner_tokens: [
           { name: "operator", token: relayToken, scopes: ["*"] },
         ],
-        proxy_timeout_seconds: 90,
+        proxy_timeout_seconds: relayProxyTimeoutSeconds,
         public_base_url: relayUrl,
       },
       null,
@@ -915,4 +934,13 @@ function codeChallengeS256(verifier) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parsePositiveInt(value, fallback, name) {
+  if (value == null || value === "") return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || String(parsed) !== value) {
+    throw new Error(`${name} must be a positive integer, got ${value}`);
+  }
+  return parsed;
 }

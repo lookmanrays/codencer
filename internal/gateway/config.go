@@ -14,24 +14,26 @@ import (
 )
 
 const (
-	ConfigVersion       = 1
-	DefaultListenAddr   = "127.0.0.1:19090"
-	DefaultGatewayToken = "CODENCER_GATEWAY_MCP_TOKEN"
-	DefaultRelayToken   = "CODENCER_DEFAULT_RELAY_TOKEN"
+	ConfigVersion                     = 1
+	DefaultListenAddr                 = "127.0.0.1:19090"
+	DefaultGatewayToken               = "CODENCER_GATEWAY_MCP_TOKEN"
+	DefaultRelayToken                 = "CODENCER_DEFAULT_RELAY_TOKEN"
+	DefaultRelayRequestTimeoutSeconds = 30
 )
 
 var DefaultRelayURL = defaults.DefaultRelayURL()
 
 type Config struct {
-	Version       int            `json:"version"`
-	PublicBaseURL string         `json:"public_base_url"`
-	MCPURL        string         `json:"mcp_url"`
-	ListenAddr    string         `json:"listen_addr"`
-	Store         StoreConfig    `json:"store,omitempty"`
-	DefaultRelay  DefaultRelay   `json:"default_relay,omitempty"`
-	Auth          AuthConfig     `json:"auth"`
-	OAuthDev      OAuthDevConfig `json:"oauth_dev,omitempty"`
-	RelayProfiles []RelayProfile `json:"relay_profiles,omitempty"`
+	Version                    int            `json:"version"`
+	PublicBaseURL              string         `json:"public_base_url"`
+	MCPURL                     string         `json:"mcp_url"`
+	ListenAddr                 string         `json:"listen_addr"`
+	RelayRequestTimeoutSeconds int            `json:"relay_request_timeout_seconds,omitempty"`
+	Store                      StoreConfig    `json:"store,omitempty"`
+	DefaultRelay               DefaultRelay   `json:"default_relay,omitempty"`
+	Auth                       AuthConfig     `json:"auth"`
+	OAuthDev                   OAuthDevConfig `json:"oauth_dev,omitempty"`
+	RelayProfiles              []RelayProfile `json:"relay_profiles,omitempty"`
 }
 
 type StoreConfig struct {
@@ -80,10 +82,11 @@ type RelayProfileStatus struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Version:       ConfigVersion,
-		PublicBaseURL: defaults.DefaultGatewayBaseURL(),
-		MCPURL:        defaults.DefaultGatewayMCPURL(),
-		ListenAddr:    DefaultListenAddr,
+		Version:                    ConfigVersion,
+		PublicBaseURL:              defaults.DefaultGatewayBaseURL(),
+		MCPURL:                     defaults.DefaultGatewayMCPURL(),
+		ListenAddr:                 DefaultListenAddr,
+		RelayRequestTimeoutSeconds: DefaultRelayRequestTimeoutSeconds,
 		DefaultRelay: DefaultRelay{
 			URL:      DefaultRelayURL,
 			TokenEnv: DefaultRelayToken,
@@ -158,6 +161,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ListenAddr == "" {
 		c.ListenAddr = DefaultListenAddr
+	}
+	if c.RelayRequestTimeoutSeconds <= 0 {
+		c.RelayRequestTimeoutSeconds = DefaultRelayRequestTimeoutSeconds
 	}
 	if err := validateListenAddr(c.ListenAddr); err != nil {
 		return err

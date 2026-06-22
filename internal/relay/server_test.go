@@ -12,6 +12,26 @@ import (
 	"agent-bridge/internal/relayproto"
 )
 
+func TestRelayHTTPWriteTimeoutFollowsProxyTimeout(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	server := NewServer(&Config{
+		Host:                "127.0.0.1",
+		Port:                0,
+		DBPath:              filepath.Join(t.TempDir(), "unused.db"),
+		PlannerToken:        "planner-token",
+		ProxyTimeoutSeconds: 240,
+	}, store)
+
+	if server.server.WriteTimeout != 270*time.Second {
+		t.Fatalf("expected write timeout to include proxy grace, got %s", server.server.WriteTimeout)
+	}
+}
+
 func TestHandleAdvertiseReplacesSharedInstancesAndPrunesRoutes(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "relay.db"))
 	if err != nil {

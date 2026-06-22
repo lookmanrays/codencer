@@ -114,7 +114,14 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 		_ = conn.Close()
 	}()
 
-	if err := conn.WriteJSON(relayproto.HelloMessage{
+	var writeMu sync.Mutex
+	writeJSON := func(value any) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteJSON(value)
+	}
+
+	if err := writeJSON(relayproto.HelloMessage{
 		Type:        "hello",
 		ConnectorID: cfg.ConnectorID,
 		MachineID:   cfg.MachineID,
@@ -127,7 +134,7 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 		return err
 	}
 
-	lastAdvertisedSignature, err := c.advertise(ctx, conn)
+	lastAdvertisedSignature, err := c.advertise(ctx, writeJSON)
 	if err != nil {
 		if c.status != nil {
 			_ = c.status.MarkFailure(c.currentConfig(), err.Error(), time.Now().UTC())
@@ -137,7 +144,7 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 
 	heartbeatCtx, heartbeatCancel := context.WithCancel(ctx)
 	defer heartbeatCancel()
-	go c.heartbeatLoop(heartbeatCtx, conn, lastAdvertisedSignature)
+	go c.heartbeatLoop(heartbeatCtx, writeJSON, lastAdvertisedSignature)
 
 	for {
 		_, message, err := conn.ReadMessage()
@@ -160,7 +167,7 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 				return err
 			}
 			response := c.handleRequest(ctx, request)
-			if err := conn.WriteJSON(response); err != nil {
+			if err := writeJSON(response); err != nil {
 				return err
 			}
 		case "error":
@@ -171,7 +178,7 @@ func (c *Client) runOnce(ctx context.Context) (err error) {
 			_ = json.Unmarshal(data, &request)
 			if request.Type == "request" {
 				response := c.handleRequest(ctx, request)
-				if err := conn.WriteJSON(response); err != nil {
+				if err := writeJSON(response); err != nil {
 					return err
 				}
 			}
@@ -213,20 +220,20 @@ func (c *Client) fetchChallenge(ctx context.Context) (*relayproto.ChallengeRespo
 	return &challenge, nil
 }
 
-func (c *Client) advertise(ctx context.Context, conn *websocket.Conn) (string, error) {
+func (c *Client) advertise(ctx context.Context, writeJSON func(any) error) (string, error) {
 	cfg := c.currentConfig()
 	advertisements, err := c.registryForConfig(cfg).Advertisements(ctx)
 	if err != nil {
 		return "", err
 	}
-	if err := c.writeAdvertise(cfg, conn, advertisements); err != nil {
+	if err := c.writeAdvertise(cfg, writeJSON, advertisements); err != nil {
 		return "", err
 	}
 	return advertisedSetSignature(advertisements.InstanceIDs, advertisements.ProjectIDs), nil
 }
 
-func (c *Client) writeAdvertise(cfg *Config, conn *websocket.Conn, advertisements AdvertisementSet) error {
-	if err := conn.WriteJSON(relayproto.AdvertiseMessage{
+func (c *Client) writeAdvertise(cfg *Config, writeJSON func(any) error, advertisements AdvertisementSet) error {
+	if err := writeJSON(relayproto.AdvertiseMessage{
 		Type:      "advertise",
 		Instances: advertisements.Instances,
 		Projects:  advertisements.Projects,
@@ -240,7 +247,7 @@ func (c *Client) writeAdvertise(cfg *Config, conn *websocket.Conn, advertisement
 	return nil
 }
 
-func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAdvertisedSignature string) {
+func (c *Client) heartbeatLoop(ctx context.Context, writeJSON func(any) error, lastAdvertisedSignature string) {
 	currentInterval := c.heartbeatInterval(c.currentConfig())
 	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
@@ -270,16 +277,15 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAd
 			}
 			currentAdvertisedSignature := advertisedSetSignature(advertisements.InstanceIDs, advertisements.ProjectIDs)
 			if currentAdvertisedSignature != lastAdvertisedSignature {
-				if err := c.writeAdvertise(cfg, conn, advertisements); err != nil {
+				if err := c.writeAdvertise(cfg, writeJSON, advertisements); err != nil {
 					if c.status != nil {
 						_ = c.status.MarkFailure(cfg, err.Error(), time.Now().UTC())
 					}
-					_ = conn.Close()
 					return
 				}
 				lastAdvertisedSignature = currentAdvertisedSignature
 			}
-			if err := conn.WriteJSON(relayproto.HeartbeatMessage{
+			if err := writeJSON(relayproto.HeartbeatMessage{
 				Type:        "heartbeat",
 				ConnectorID: cfg.ConnectorID,
 				MachineID:   cfg.MachineID,
@@ -290,7 +296,6 @@ func (c *Client) heartbeatLoop(ctx context.Context, conn *websocket.Conn, lastAd
 				if c.status != nil {
 					_ = c.status.MarkFailure(cfg, err.Error(), time.Now().UTC())
 				}
-				_ = conn.Close()
 				return
 			}
 			if c.status != nil {

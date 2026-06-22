@@ -121,7 +121,7 @@ func NewServer(cfg *Config, opts ServerOptions) (*Server, error) {
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{Timeout: time.Duration(cfg.RelayRequestTimeoutSeconds) * time.Second}
 	}
 	var store *Store
 	if strings.TrimSpace(cfg.Store.Path) != "" {

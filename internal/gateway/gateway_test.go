@@ -26,6 +26,7 @@ func TestConfigValidationAndRedaction(t *testing.T) {
 	cfg = DefaultConfig()
 	cfg.PublicBaseURL = "http://127.0.0.1:19090"
 	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.RelayRequestTimeoutSeconds = 0
 	cfg.Auth.TokenFile = "/tmp/gateway-token"
 	cfg.RelayProfiles = []RelayProfile{{
 		ID:        "personal",
@@ -36,12 +37,37 @@ func TestConfigValidationAndRedaction(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected localhost config to validate: %v", err)
 	}
+	if cfg.RelayRequestTimeoutSeconds != DefaultRelayRequestTimeoutSeconds {
+		t.Fatalf("expected default relay request timeout %d, got %d", DefaultRelayRequestTimeoutSeconds, cfg.RelayRequestTimeoutSeconds)
+	}
 	redacted := RedactedConfig(cfg)
 	if redacted.Auth.TokenFile != "<redacted-token-file>" {
 		t.Fatalf("gateway token file not redacted: %#v", redacted.Auth.TokenFile)
 	}
 	if redacted.RelayProfiles[0].TokenFile != "<redacted-token-file>" {
 		t.Fatalf("relay token file not redacted: %#v", redacted.RelayProfiles[0].TokenFile)
+	}
+
+	cfg.RelayRequestTimeoutSeconds = 240
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected custom relay request timeout to validate: %v", err)
+	}
+	if cfg.RelayRequestTimeoutSeconds != 240 {
+		t.Fatalf("custom relay request timeout was not preserved: %d", cfg.RelayRequestTimeoutSeconds)
+	}
+}
+
+func TestNewServerUsesConfiguredRelayRequestTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "http://127.0.0.1:19090"
+	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.RelayRequestTimeoutSeconds = 240
+	server, err := NewServer(cfg, ServerOptions{})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	if server.client.Timeout != 240*time.Second {
+		t.Fatalf("expected configured client timeout, got %s", server.client.Timeout)
 	}
 }
 
