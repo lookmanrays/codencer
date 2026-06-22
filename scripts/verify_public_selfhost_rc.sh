@@ -35,6 +35,64 @@ print(value)
 PY
 }
 
+free_port() {
+  python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+}
+
+required_timeout_seconds() {
+  python3 - <<'PY'
+import os
+raw=os.environ.get("CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS", "").strip()
+minimum=300
+if raw:
+  try:
+    value=int(raw)
+  except ValueError:
+    raise SystemExit(f"CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS must be an integer, got {raw!r}")
+  if value > minimum:
+    minimum=value
+print(minimum)
+PY
+}
+
+assert_json_number_at_least() {
+  local file="$1"
+  local path="$2"
+  local minimum="$3"
+  local label="$4"
+  python3 - "$file" "$path" "$minimum" "$label" <<'PY'
+import json, sys
+file,path,minimum,label=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4]
+value=json.load(open(file))
+for part in path.split("."):
+  if part:
+    value=value[part] if not part.isdigit() else value[int(part)]
+if not isinstance(value, int):
+  raise SystemExit(f"{label}: expected integer at {path}, got {value!r}")
+if value < minimum:
+  raise SystemExit(f"{label}: expected {path} >= {minimum}, got {value}")
+PY
+}
+
+require_help_flags() {
+  local help_file="$1"
+  shift
+  local flag
+  for flag in "$@"; do
+    if ! grep -q -- "$flag" "$help_file"; then
+      echo "help output missing $flag in $help_file" >&2
+      cat "$help_file" >&2
+      return 1
+    fi
+  done
+}
+
 write_gate() {
   local name="$1"
   local status="$2"
@@ -46,6 +104,63 @@ path,name,status,detail,log=sys.argv[1:]
 with open(path, "a", encoding="utf-8") as fh:
   fh.write(json.dumps({"name": name, "status": status, "detail": detail, "log": log}, sort_keys=True) + "\n")
 PY
+}
+
+standard_setup_contract() {
+  if [ -z "$BIN_DIR" ]; then
+    echo "BIN_DIR is not set" >&2
+    return 1
+  fi
+  local home gateway_port relay_port console_port gateway_url relay_url console_url required
+  home="$TMPDIR_ROOT/standard-setup-home"
+  gateway_port="$(free_port)" || return 1
+  relay_port="$(free_port)" || return 1
+  console_port="$(free_port)" || return 1
+  gateway_url="http://127.0.0.1:$gateway_port"
+  relay_url="http://127.0.0.1:$relay_port"
+  console_url="http://127.0.0.1:$console_port"
+  required="$(required_timeout_seconds)" || return 1
+  echo "Standard setup contract ports: gateway=$gateway_port relay=$relay_port console=$console_port"
+  echo "Standard setup timeout requirement: >=${required}s"
+
+  CODENCER_HOME="$home" "$BIN_DIR/codencer" init --json > "$TMPDIR_ROOT/standard-init.json" || return 1
+  CODENCER_HOME="$home" "$BIN_DIR/codencer" setup self-host \
+    --gateway-url "$gateway_url" \
+    --mcp-url "$gateway_url/mcp" \
+    --relay-url "$relay_url" \
+    --console-url "$console_url" \
+    --listen "127.0.0.1:$gateway_port" \
+    --token-env CODENCER_GATEWAY_MCP_TOKEN \
+    --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
+    --json > "$TMPDIR_ROOT/standard-setup-selfhost.json" || return 1
+  CODENCER_HOME="$home" "$BIN_DIR/codencer" setup relay \
+    --base-url "$relay_url" \
+    --mcp-url "$relay_url/mcp" \
+    --generate-planner-token \
+    --json > "$TMPDIR_ROOT/standard-setup-relay.json" || return 1
+
+  CODENCER_HOME="$home" "$BIN_DIR/codencer" setup self-host --help > "$TMPDIR_ROOT/standard-help-selfhost.txt" || return 1
+  CODENCER_HOME="$home" "$BIN_DIR/codencer" setup relay --help > "$TMPDIR_ROOT/standard-help-relay.txt" || return 1
+
+  assert_json_number_at_least "$home/runtime/gateway/config.json" "relay_request_timeout_seconds" "$required" "gateway config" || return 1
+  assert_json_number_at_least "$home/runtime/relay/config.json" "proxy_timeout_seconds" "$required" "relay config" || return 1
+  assert_json_number_at_least "$TMPDIR_ROOT/standard-setup-selfhost.json" "output.relay_request_timeout_seconds" "$required" "setup self-host output" || return 1
+  assert_json_number_at_least "$TMPDIR_ROOT/standard-setup-relay.json" "output.proxy_timeout_seconds" "$required" "setup relay output" || return 1
+
+  require_help_flags "$TMPDIR_ROOT/standard-help-selfhost.txt" \
+    "--gateway-url" "--relay-url" "--console-url" "--listen" "--token-env" "--token-file" \
+    "--default-relay-token-env" "--default-relay-token-file" "--enable-oauth-dev" \
+    "--oauth-client-secret" "--relay-request-timeout-seconds" "--json" || return 1
+  require_help_flags "$TMPDIR_ROOT/standard-help-relay.txt" \
+    "--base-url" "--mcp-url" "--relay-config" "--connector-config" "--planner-token" \
+    "--planner-token-env" "--generate-planner-token" "--proxy-timeout-seconds" \
+    "--enable-chatgpt-oauth-dev" "--install-services" "--start-services" "--manager" \
+    "--bin-dir" "--strict" "--json" || return 1
+
+  cp "$home/runtime/gateway/config.json" "$REPORT_DIR/standard-gateway-config.json" || return 1
+  cp "$home/runtime/relay/config.json" "$REPORT_DIR/standard-relay-config.json" || return 1
+  cp "$TMPDIR_ROOT/standard-help-selfhost.txt" "$REPORT_DIR/standard-setup-selfhost-help.txt" || return 1
+  cp "$TMPDIR_ROOT/standard-help-relay.txt" "$REPORT_DIR/standard-setup-relay-help.txt" || return 1
 }
 
 run_gate() {
@@ -198,6 +313,9 @@ if [ "$FAILURES" -eq 0 ]; then
 fi
 if [ "$FAILURES" -eq 0 ]; then
   run_gate docs_public_release bash -c "cd '$ROOT' && python3 scripts/check_docs_links.py && python3 scripts/check_public_boundary.py" || true
+fi
+if [ "$FAILURES" -eq 0 ]; then
+  run_gate standard_setup_contract standard_setup_contract || true
 fi
 if [ "$FAILURES" -eq 0 ]; then
   manifest_file="$TMPDIR_ROOT/fake-success.yaml"

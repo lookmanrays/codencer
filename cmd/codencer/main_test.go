@@ -66,6 +66,9 @@ func TestHelpCommandsExitZeroAndDescribeSelfHost(t *testing.T) {
 		{"gateway", "relay", "--help"},
 		{"login", "--help"},
 		{"setup", "--help"},
+		{"setup", "self-host", "--help"},
+		{"setup", "relay", "--help"},
+		{"setup", "gateway", "--help"},
 		{"activation", "--help"},
 		{"config", "--help"},
 	}
@@ -93,6 +96,9 @@ func TestHelpCommandsExitZeroAndDescribeSelfHost(t *testing.T) {
 		{"connector", "login", "--help"},
 		{"gateway", "relay", "--help"},
 		{"setup", "--help"},
+		{"setup", "self-host", "--help"},
+		{"setup", "relay", "--help"},
+		{"setup", "gateway", "--help"},
 		{"activation", "--help"},
 		{"login", "--help"},
 	} {
@@ -102,6 +108,23 @@ func TestHelpCommandsExitZeroAndDescribeSelfHost(t *testing.T) {
 		}
 		if !strings.Contains(stdout, "127.0.0.1") {
 			t.Fatalf("%v help missing self-host example: %s", command, stdout)
+		}
+	}
+
+	helpRequirements := map[string][]string{
+		"setup self-host": {"--gateway-url", "--relay-url", "--console-url", "--listen", "--token-env", "--token-file", "--default-relay-token-env", "--default-relay-token-file", "--enable-oauth-dev", "--oauth-client-secret", "--relay-request-timeout-seconds"},
+		"setup relay":     {"--base-url", "--mcp-url", "--relay-config", "--connector-config", "--planner-token", "--planner-token-env", "--generate-planner-token", "--proxy-timeout-seconds", "--enable-chatgpt-oauth-dev", "--install-services", "--start-services", "--manager", "--bin-dir", "--strict"},
+	}
+	for command, wants := range helpRequirements {
+		parts := append(strings.Fields(command), "--help")
+		stdout, _, err := runCLI(parts...)
+		if err != nil {
+			t.Fatalf("%s help failed: %v", command, err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("%s help missing %q: %s", command, want, stdout)
+			}
 		}
 	}
 }
@@ -163,6 +186,99 @@ func TestConfigProfilesAndSelfHostDefaultsJSON(t *testing.T) {
 	}
 	if !strings.Contains(stdout, `"mode": "self-host"`) || !strings.Contains(stdout, `"profile": "self-host"`) || strings.Contains(stdout, "self-host-client-secret") || strings.Contains(stdout, "mcp.codencer.dev") {
 		t.Fatalf("setup self-host output wrong: %s", stdout)
+	}
+}
+
+func TestSetupTimeoutFlagsWriteConfigs(t *testing.T) {
+	t.Run("self-host default gateway timeout", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		stdout, stderr, err := runCLI("setup", "self-host", "--gateway-url", "http://127.0.0.1:19090", "--relay-url", "http://127.0.0.1:8090", "--json")
+		if err != nil {
+			t.Fatalf("setup self-host failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+		}
+		if !strings.Contains(stdout, `"relay_request_timeout_seconds": 300`) {
+			t.Fatalf("self-host output missing default gateway timeout: %s", stdout)
+		}
+		if got := readGatewayRelayRequestTimeout(t, home); got != 300 {
+			t.Fatalf("default gateway relay request timeout = %d, want 300", got)
+		}
+	})
+
+	t.Run("self-host custom gateway timeout", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		stdout, stderr, err := runCLI("setup", "self-host", "--gateway-url", "http://127.0.0.1:19090", "--relay-url", "http://127.0.0.1:8090", "--relay-request-timeout-seconds", "600", "--json")
+		if err != nil {
+			t.Fatalf("setup self-host custom failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+		}
+		if !strings.Contains(stdout, `"relay_request_timeout_seconds": 600`) {
+			t.Fatalf("self-host output missing custom gateway timeout: %s", stdout)
+		}
+		if got := readGatewayRelayRequestTimeout(t, home); got != 600 {
+			t.Fatalf("custom gateway relay request timeout = %d, want 600", got)
+		}
+	})
+
+	t.Run("gateway custom timeout", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		stdout, stderr, err := runCLI("setup", "gateway", "--base-url", "http://127.0.0.1:19090", "--relay-request-timeout-seconds", "650", "--json")
+		if err != nil {
+			t.Fatalf("setup gateway custom failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+		}
+		if !strings.Contains(stdout, `"relay_request_timeout_seconds": 650`) {
+			t.Fatalf("gateway output missing custom timeout: %s", stdout)
+		}
+		if got := readGatewayRelayRequestTimeout(t, home); got != 650 {
+			t.Fatalf("custom gateway timeout = %d, want 650", got)
+		}
+	})
+
+	t.Run("relay default proxy timeout", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		stdout, stderr, err := runCLI("setup", "relay", "--base-url", "http://127.0.0.1:8090", "--generate-planner-token", "--json")
+		if err != nil {
+			t.Fatalf("setup relay failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+		}
+		if !strings.Contains(stdout, `"proxy_timeout_seconds": 300`) {
+			t.Fatalf("relay output missing default proxy timeout: %s", stdout)
+		}
+		if got := readRelayProxyTimeout(t, home); got != 300 {
+			t.Fatalf("default relay proxy timeout = %d, want 300", got)
+		}
+	})
+
+	t.Run("relay custom proxy timeout", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		stdout, stderr, err := runCLI("setup", "relay", "--base-url", "http://127.0.0.1:8090", "--generate-planner-token", "--proxy-timeout-seconds", "600", "--json")
+		if err != nil {
+			t.Fatalf("setup relay custom failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+		}
+		if !strings.Contains(stdout, `"proxy_timeout_seconds": 600`) {
+			t.Fatalf("relay output missing custom proxy timeout: %s", stdout)
+		}
+		if got := readRelayProxyTimeout(t, home); got != 600 {
+			t.Fatalf("custom relay proxy timeout = %d, want 600", got)
+		}
+	})
+
+	for _, command := range [][]string{
+		{"setup", "self-host", "--relay-request-timeout-seconds", "0", "--json"},
+		{"setup", "gateway", "--relay-request-timeout-seconds", "-1", "--json"},
+		{"setup", "relay", "--proxy-timeout-seconds", "abc", "--json"},
+	} {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		stdout, _, err := runCLI(command...)
+		if err == nil {
+			t.Fatalf("%v unexpectedly succeeded: %s", command, stdout)
+		}
+		if !strings.Contains(stdout, "positive integer") {
+			t.Fatalf("%v error did not explain positive integer requirement: %s", command, stdout)
+		}
 	}
 }
 
@@ -1063,6 +1179,36 @@ func decodeJSON(t *testing.T, raw string, target any) {
 	if err := json.Unmarshal([]byte(raw), target); err != nil {
 		t.Fatalf("invalid JSON %q: %v", raw, err)
 	}
+}
+
+func readGatewayRelayRequestTimeout(t *testing.T, home string) int {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(home, "runtime", "gateway", "config.json"))
+	if err != nil {
+		t.Fatalf("read gateway config: %v", err)
+	}
+	var cfg struct {
+		RelayRequestTimeoutSeconds int `json:"relay_request_timeout_seconds"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode gateway config: %v", err)
+	}
+	return cfg.RelayRequestTimeoutSeconds
+}
+
+func readRelayProxyTimeout(t *testing.T, home string) int {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(home, "runtime", "relay", "config.json"))
+	if err != nil {
+		t.Fatalf("read relay config: %v", err)
+	}
+	var cfg struct {
+		ProxyTimeoutSeconds int `json:"proxy_timeout_seconds"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode relay config: %v", err)
+	}
+	return cfg.ProxyTimeoutSeconds
 }
 
 func writeHTTPJSON(t *testing.T, w http.ResponseWriter, status int, value any) {

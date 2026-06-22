@@ -39,6 +39,54 @@ assert_no_commercial_endpoint() {
   fi
 }
 
+required_timeout_seconds() {
+  python3 - <<'PY'
+import os
+raw=os.environ.get("CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS", "").strip()
+minimum=300
+if raw:
+  try:
+    value=int(raw)
+  except ValueError:
+    raise SystemExit(f"CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS must be an integer, got {raw!r}")
+  if value > minimum:
+    minimum=value
+print(minimum)
+PY
+}
+
+assert_json_number_at_least() {
+  local file="$1"
+  local path="$2"
+  local minimum="$3"
+  local label="$4"
+  python3 - "$file" "$path" "$minimum" "$label" <<'PY'
+import json, sys
+file,path,minimum,label=sys.argv[1],sys.argv[2],int(sys.argv[3]),sys.argv[4]
+value=json.load(open(file))
+for part in path.split("."):
+  if part:
+    value=value[part] if not part.isdigit() else value[int(part)]
+if not isinstance(value, int):
+  raise SystemExit(f"{label}: expected integer at {path}, got {value!r}")
+if value < minimum:
+  raise SystemExit(f"{label}: expected {path} >= {minimum}, got {value}")
+PY
+}
+
+require_help_flags() {
+  local help_file="$1"
+  shift
+  local flag
+  for flag in "$@"; do
+    if ! grep -q -- "$flag" "$help_file"; then
+      echo "help output missing $flag in $help_file" >&2
+      cat "$help_file" >&2
+      exit 1
+    fi
+  done
+}
+
 home="$TMPDIR_ROOT/home"
 gateway_port="$(free_port)"
 relay_port="$(free_port)"
@@ -46,8 +94,10 @@ console_port="$(free_port)"
 gateway_url="http://127.0.0.1:$gateway_port"
 relay_url="http://127.0.0.1:$relay_port"
 console_url="http://127.0.0.1:$console_port"
+required_timeout="$(required_timeout_seconds)"
 
 echo "Public self-host release verification ports: gateway=$gateway_port relay=$relay_port console=$console_port"
+echo "Public self-host release timeout requirement: >=${required_timeout}s"
 
 export CODENCER_HOME="$home"
 "$ROOT/bin/codencer" init --json > "$TMPDIR_ROOT/init.json"
@@ -85,13 +135,32 @@ test "$(json_get "$TMPDIR_ROOT/config-profile.json" "resolved_connection.console
   --enable-oauth-dev \
   --oauth-client-secret public-selfhost-client-secret \
   --json > "$TMPDIR_ROOT/setup-selfhost.json"
+"$ROOT/bin/codencer" setup relay \
+  --base-url "$relay_url" \
+  --mcp-url "$relay_url/mcp" \
+  --generate-planner-token \
+  --json > "$TMPDIR_ROOT/setup-relay.json"
+"$ROOT/bin/codencer" setup self-host --help > "$TMPDIR_ROOT/setup-selfhost-help.txt"
+"$ROOT/bin/codencer" setup relay --help > "$TMPDIR_ROOT/setup-relay-help.txt"
 assert_no_commercial_endpoint "$TMPDIR_ROOT/setup-selfhost.json"
+assert_no_commercial_endpoint "$TMPDIR_ROOT/setup-relay.json"
 grep -q '"mode": "self-host"' "$TMPDIR_ROOT/setup-selfhost.json" || { cat "$TMPDIR_ROOT/setup-selfhost.json" >&2; exit 1; }
 if grep -q 'public-selfhost-client-secret' "$TMPDIR_ROOT/setup-selfhost.json"; then
   echo "setup self-host leaked OAuth client secret" >&2
   cat "$TMPDIR_ROOT/setup-selfhost.json" >&2
   exit 1
 fi
+assert_json_number_at_least "$TMPDIR_ROOT/setup-selfhost.json" "output.relay_request_timeout_seconds" "$required_timeout" "setup self-host output"
+assert_json_number_at_least "$TMPDIR_ROOT/setup-relay.json" "output.proxy_timeout_seconds" "$required_timeout" "setup relay output"
+require_help_flags "$TMPDIR_ROOT/setup-selfhost-help.txt" \
+  "--gateway-url" "--relay-url" "--console-url" "--listen" "--token-env" "--token-file" \
+  "--default-relay-token-env" "--default-relay-token-file" "--enable-oauth-dev" \
+  "--oauth-client-secret" "--relay-request-timeout-seconds" "--json"
+require_help_flags "$TMPDIR_ROOT/setup-relay-help.txt" \
+  "--base-url" "--mcp-url" "--relay-config" "--connector-config" "--planner-token" \
+  "--planner-token-env" "--generate-planner-token" "--proxy-timeout-seconds" \
+  "--enable-chatgpt-oauth-dev" "--install-services" "--start-services" "--manager" \
+  "--bin-dir" "--strict" "--json"
 
 "$ROOT/bin/codencer" setup mcp --client codex --json > "$TMPDIR_ROOT/codex-mcp.json"
 "$ROOT/bin/codencer" setup mcp --client claude-code --json > "$TMPDIR_ROOT/claude-mcp.json"
@@ -113,19 +182,26 @@ grep -q 'claude mcp add --transport http' "$TMPDIR_ROOT/claude-mcp.json" || { ca
 grep -q 'ChatGPT' "$chatgpt_sheet" || { cat "$chatgpt_sheet" >&2; exit 1; }
 
 gateway_config="$home/runtime/gateway/config.json"
+relay_config="$home/runtime/relay/config.json"
 test -f "$gateway_config"
+test -f "$relay_config"
 assert_no_commercial_endpoint "$gateway_config"
+assert_no_commercial_endpoint "$relay_config"
 if grep -q 'public-selfhost-client-secret\|gateway-token\|relay-token' "$gateway_config"; then
   echo "gateway config leaked token-like material" >&2
   cat "$gateway_config" >&2
   exit 1
 fi
+assert_json_number_at_least "$gateway_config" "relay_request_timeout_seconds" "$required_timeout" "gateway config"
+assert_json_number_at_least "$relay_config" "proxy_timeout_seconds" "$required_timeout" "relay config"
 
 echo "--- Public Self-Host Release Config Proof ---"
 echo "Gateway default: http://127.0.0.1:19090"
 echo "Gateway override: $gateway_url"
 echo "Relay override:   $relay_url"
 echo "Console override: $console_url"
+echo "Gateway timeout:  $(json_get "$gateway_config" "relay_request_timeout_seconds")"
+echo "Relay timeout:    $(json_get "$relay_config" "proxy_timeout_seconds")"
 echo "Codex config:     $TMPDIR_ROOT/codex-mcp.json"
 echo "Claude command:   $TMPDIR_ROOT/claude-mcp.json"
 echo "ChatGPT sheet:    $chatgpt_sheet"

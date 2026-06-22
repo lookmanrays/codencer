@@ -9,6 +9,7 @@ ChatGPT product proof is manual and workspace-gated. This repository can prepare
   --gateway-url http://127.0.0.1:19090 \
   --mcp-url http://127.0.0.1:19090/mcp \
   --relay-url http://127.0.0.1:8090 \
+  --relay-request-timeout-seconds 300 \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \

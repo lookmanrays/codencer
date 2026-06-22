@@ -427,6 +427,7 @@ make build
   --mcp-url http://127.0.0.1:19090/mcp \
   --relay-url https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --relay-request-timeout-seconds 300 \
   --enable-oauth-dev \
   --json
 ./bin/codencer gateway relay add --id personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
@@ -443,11 +444,13 @@ make build
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
   --mcp-url https://relay.example.com/mcp \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --json
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
   --mcp-url https://relay.example.com/mcp \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --enable-chatgpt-oauth-dev \
   --json

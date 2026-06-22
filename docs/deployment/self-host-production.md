@@ -71,9 +71,22 @@ codencer setup self-host \
   --gateway-url http://127.0.0.1:19090 \
   --relay-url http://127.0.0.1:8090 \
   --listen 127.0.0.1:19090 \
+  --relay-request-timeout-seconds 300 \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --enable-oauth-dev \
+  --json
+```
+
+Configure Relay with a proxy timeout at least as large as real executor task
+timeouts:
+
+```bash
+codencer setup relay \
+  --base-url http://127.0.0.1:8090 \
+  --mcp-url http://127.0.0.1:8090/mcp \
+  --proxy-timeout-seconds 300 \
+  --generate-planner-token \
   --json
 ```
 

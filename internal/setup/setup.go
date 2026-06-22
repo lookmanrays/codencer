@@ -71,6 +71,7 @@ type RelayOptions struct {
 	MCPURL                       string
 	RelayConfigPath              string
 	ConnectorConfigPath          string
+	ProxyTimeoutSeconds          int
 	PlannerToken                 string
 	GeneratePlannerToken         bool
 	PlannerTokenEnv              string
@@ -89,44 +90,46 @@ type RelayOptions struct {
 }
 
 type GatewayOptions struct {
-	BaseURL               string
-	MCPURL                string
-	ListenAddr            string
-	GatewayConfigPath     string
-	StorePath             string
-	AuthMode              string
-	TokenEnv              string
-	TokenFile             string
-	DefaultRelayURL       string
-	DefaultRelayTokenEnv  string
-	DefaultRelayTokenFile string
-	EnableOAuthDev        bool
-	OAuthIssuer           string
-	OAuthClientID         string
-	OAuthClientSecret     string
-	InstallServices       bool
-	StartServices         bool
-	Manager               string
-	BinDir                string
-	Strict                bool
-	Now                   func() time.Time
+	BaseURL                    string
+	MCPURL                     string
+	ListenAddr                 string
+	GatewayConfigPath          string
+	StorePath                  string
+	RelayRequestTimeoutSeconds int
+	AuthMode                   string
+	TokenEnv                   string
+	TokenFile                  string
+	DefaultRelayURL            string
+	DefaultRelayTokenEnv       string
+	DefaultRelayTokenFile      string
+	EnableOAuthDev             bool
+	OAuthIssuer                string
+	OAuthClientID              string
+	OAuthClientSecret          string
+	InstallServices            bool
+	StartServices              bool
+	Manager                    string
+	BinDir                     string
+	Strict                     bool
+	Now                        func() time.Time
 }
 
 type SelfHostOptions struct {
-	GatewayURL            string
-	MCPURL                string
-	RelayURL              string
-	ConsoleURL            string
-	ListenAddr            string
-	GatewayConfigPath     string
-	StorePath             string
-	TokenEnv              string
-	TokenFile             string
-	DefaultRelayTokenEnv  string
-	DefaultRelayTokenFile string
-	EnableOAuthDev        bool
-	OAuthClientSecret     string
-	Now                   func() time.Time
+	GatewayURL                 string
+	MCPURL                     string
+	RelayURL                   string
+	ConsoleURL                 string
+	ListenAddr                 string
+	GatewayConfigPath          string
+	StorePath                  string
+	RelayRequestTimeoutSeconds int
+	TokenEnv                   string
+	TokenFile                  string
+	DefaultRelayTokenEnv       string
+	DefaultRelayTokenFile      string
+	EnableOAuthDev             bool
+	OAuthClientSecret          string
+	Now                        func() time.Time
 }
 
 type MCPOptions struct {
@@ -305,6 +308,9 @@ func Relay(ctx context.Context, opts RelayOptions) (Report, error) {
 	}
 
 	cfg := relay.DefaultConfig()
+	if opts.ProxyTimeoutSeconds > 0 {
+		cfg.ProxyTimeoutSeconds = opts.ProxyTimeoutSeconds
+	}
 	cfg.DBPath = filepath.Join(paths.RuntimeDir, "relay", "relay.db")
 	cfg.PublicBaseURL = strings.TrimSuffix(baseURL, "/")
 	cfg.OAuthResourceDocumentation = mcpURL
@@ -422,14 +428,15 @@ func Relay(ctx context.Context, opts RelayOptions) (Report, error) {
 		"codencer readiness --relay --json",
 	}
 	report.Output = map[string]any{
-		"base_url":            baseURL,
-		"mcp_url":             mcpURL,
-		"planner_token":       "<redacted>",
-		"planner_token_env":   firstNonEmpty(opts.PlannerTokenEnv, "CODENCER_PLANNER_TOKEN"),
-		"relay_config":        relayConfigPath,
-		"connector_config":    connectorConfigPath,
-		"token_was_generated": opts.GeneratePlannerToken,
-		"chatgpt_oauth_dev":   oauthOutput,
+		"base_url":              baseURL,
+		"mcp_url":               mcpURL,
+		"proxy_timeout_seconds": cfg.ProxyTimeoutSeconds,
+		"planner_token":         "<redacted>",
+		"planner_token_env":     firstNonEmpty(opts.PlannerTokenEnv, "CODENCER_PLANNER_TOKEN"),
+		"relay_config":          relayConfigPath,
+		"connector_config":      connectorConfigPath,
+		"token_was_generated":   opts.GeneratePlannerToken,
+		"chatgpt_oauth_dev":     oauthOutput,
 		"chatgpt_dev_noauth": map[string]any{
 			"enabled":             opts.ChatGPTDevNoAuth,
 			"allow_real_projects": opts.AllowRealProjectsInDevNoAuth,
@@ -459,6 +466,9 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 		mcpURL += "/mcp"
 	}
 	cfg := gateway.DefaultConfig()
+	if opts.RelayRequestTimeoutSeconds > 0 {
+		cfg.RelayRequestTimeoutSeconds = opts.RelayRequestTimeoutSeconds
+	}
 	cfg.PublicBaseURL = baseURL
 	cfg.MCPURL = mcpURL
 	cfg.ListenAddr = firstNonEmpty(opts.ListenAddr, gateway.DefaultListenAddr)
@@ -545,13 +555,14 @@ func Gateway(ctx context.Context, opts GatewayOptions) (Report, error) {
 		"codencer activation self-host --gateway " + baseURL + " --project codencer --token-env " + cfg.Auth.TokenEnv + " --json",
 	}
 	report.Output = map[string]any{
-		"base_url":       baseURL,
-		"mcp_url":        mcpURL,
-		"listen_addr":    cfg.ListenAddr,
-		"auth_mode":      cfg.Auth.Mode,
-		"token_env":      cfg.Auth.TokenEnv,
-		"gateway_config": gatewayConfigPath,
-		"store_path":     storePath,
+		"base_url":                      baseURL,
+		"mcp_url":                       mcpURL,
+		"listen_addr":                   cfg.ListenAddr,
+		"relay_request_timeout_seconds": cfg.RelayRequestTimeoutSeconds,
+		"auth_mode":                     cfg.Auth.Mode,
+		"token_env":                     cfg.Auth.TokenEnv,
+		"gateway_config":                gatewayConfigPath,
+		"store_path":                    storePath,
 		"default_relay": map[string]any{
 			"url":              cfg.DefaultRelay.URL,
 			"token_env":        cfg.DefaultRelay.TokenEnv,
@@ -573,20 +584,21 @@ func SelfHost(ctx context.Context, opts SelfHostOptions) (Report, error) {
 	consoleURL := strings.TrimRight(firstNonEmpty(opts.ConsoleURL, defaults.DefaultConsoleURL()), "/")
 
 	report, err := Gateway(ctx, GatewayOptions{
-		BaseURL:               gatewayURL,
-		MCPURL:                mcpURL,
-		ListenAddr:            firstNonEmpty(opts.ListenAddr, gateway.DefaultListenAddr),
-		GatewayConfigPath:     opts.GatewayConfigPath,
-		StorePath:             opts.StorePath,
-		TokenEnv:              firstNonEmpty(opts.TokenEnv, gateway.DefaultGatewayToken),
-		TokenFile:             opts.TokenFile,
-		DefaultRelayURL:       relayURL,
-		DefaultRelayTokenEnv:  firstNonEmpty(opts.DefaultRelayTokenEnv, gateway.DefaultRelayToken),
-		DefaultRelayTokenFile: opts.DefaultRelayTokenFile,
-		EnableOAuthDev:        opts.EnableOAuthDev,
-		OAuthIssuer:           gatewayURL,
-		OAuthClientSecret:     opts.OAuthClientSecret,
-		Now:                   opts.Now,
+		BaseURL:                    gatewayURL,
+		MCPURL:                     mcpURL,
+		ListenAddr:                 firstNonEmpty(opts.ListenAddr, gateway.DefaultListenAddr),
+		GatewayConfigPath:          opts.GatewayConfigPath,
+		StorePath:                  opts.StorePath,
+		RelayRequestTimeoutSeconds: opts.RelayRequestTimeoutSeconds,
+		TokenEnv:                   firstNonEmpty(opts.TokenEnv, gateway.DefaultGatewayToken),
+		TokenFile:                  opts.TokenFile,
+		DefaultRelayURL:            relayURL,
+		DefaultRelayTokenEnv:       firstNonEmpty(opts.DefaultRelayTokenEnv, gateway.DefaultRelayToken),
+		DefaultRelayTokenFile:      opts.DefaultRelayTokenFile,
+		EnableOAuthDev:             opts.EnableOAuthDev,
+		OAuthIssuer:                gatewayURL,
+		OAuthClientSecret:          opts.OAuthClientSecret,
+		Now:                        opts.Now,
 	})
 	if err != nil {
 		return report, err

@@ -308,7 +308,7 @@ profiles:
       - id: relay_oauth_dev_endpoints
         status: sprint_7_implemented
         commands:
-          - ./bin/codencer setup relay --base-url https://relay.example.com --generate-planner-token --enable-chatgpt-oauth-dev --json
+          - ./bin/codencer setup relay --base-url https://relay.example.com --proxy-timeout-seconds 300 --generate-planner-token --enable-chatgpt-oauth-dev --json
         notes: OAuth dev mode is single-user self-host testing with hashed client/operator secrets and opaque in-memory access tokens; it is not enterprise IAM.
       - id: security_hardening_checks
         status: sprint_6_implemented

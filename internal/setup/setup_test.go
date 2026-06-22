@@ -41,6 +41,34 @@ func TestRelayGenerateTokenWrites0600Files(t *testing.T) {
 	if info.Mode().Perm() != 0600 {
 		t.Fatalf("token file mode = %o", info.Mode().Perm())
 	}
+	cfg := readRelaySetupConfig(t, home)
+	if cfg.ProxyTimeoutSeconds != 300 {
+		t.Fatalf("default proxy timeout = %d, want 300", cfg.ProxyTimeoutSeconds)
+	}
+	output, ok := report.Output.(map[string]any)
+	if !ok || output["proxy_timeout_seconds"] != 300 {
+		t.Fatalf("relay output missing proxy timeout: %#v", report.Output)
+	}
+}
+
+func TestRelayCustomProxyTimeoutWritesConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+	report, err := Relay(nilContext(), RelayOptions{
+		BaseURL:              "https://relay.example.com",
+		GeneratePlannerToken: true,
+		ProxyTimeoutSeconds:  600,
+	})
+	if err != nil {
+		t.Fatalf("relay setup: %v", err)
+	}
+	if !report.OK || !report.Configured {
+		t.Fatalf("expected configured relay, got %+v", report)
+	}
+	cfg := readRelaySetupConfig(t, home)
+	if cfg.ProxyTimeoutSeconds != 600 {
+		t.Fatalf("custom proxy timeout = %d, want 600", cfg.ProxyTimeoutSeconds)
+	}
 }
 
 func TestRelayOAuthDevSetupWritesHashesAndRedactsSecrets(t *testing.T) {
@@ -118,6 +146,14 @@ func TestGatewaySetupWritesConfigHashesAndRedactsSecrets(t *testing.T) {
 			t.Fatalf("gateway config missing %q: %s", want, data)
 		}
 	}
+	cfg := readGatewaySetupConfig(t, home)
+	if cfg.RelayRequestTimeoutSeconds != 300 {
+		t.Fatalf("default relay request timeout = %d, want 300", cfg.RelayRequestTimeoutSeconds)
+	}
+	output, ok := report.Output.(map[string]any)
+	if !ok || output["relay_request_timeout_seconds"] != 300 {
+		t.Fatalf("gateway output missing relay request timeout: %#v", report.Output)
+	}
 	if _, err := os.Stat(filepath.Join(home, "tokens", "gateway-oauth-operator-code")); err != nil {
 		t.Fatalf("gateway operator code file missing: %v", err)
 	}
@@ -128,6 +164,47 @@ func TestGatewaySetupWritesConfigHashesAndRedactsSecrets(t *testing.T) {
 	if !strings.Contains(string(localConfig), `"gateway_config_path"`) {
 		t.Fatalf("local config did not record gateway config path: %s", localConfig)
 	}
+}
+
+func TestGatewayAndSelfHostCustomRelayRequestTimeoutWriteConfig(t *testing.T) {
+	t.Run("gateway", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		report, err := Gateway(nilContext(), GatewayOptions{
+			BaseURL:                    "http://127.0.0.1:19090",
+			RelayRequestTimeoutSeconds: 600,
+		})
+		if err != nil {
+			t.Fatalf("gateway setup: %v", err)
+		}
+		if !report.OK || !report.Configured {
+			t.Fatalf("expected configured gateway, got %+v", report)
+		}
+		cfg := readGatewaySetupConfig(t, home)
+		if cfg.RelayRequestTimeoutSeconds != 600 {
+			t.Fatalf("custom gateway relay request timeout = %d, want 600", cfg.RelayRequestTimeoutSeconds)
+		}
+	})
+
+	t.Run("self-host", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("CODENCER_HOME", home)
+		report, err := SelfHost(nilContext(), SelfHostOptions{
+			GatewayURL:                 "http://127.0.0.1:19090",
+			RelayURL:                   "http://127.0.0.1:8090",
+			RelayRequestTimeoutSeconds: 700,
+		})
+		if err != nil {
+			t.Fatalf("self-host setup: %v", err)
+		}
+		if !report.OK || !report.Configured {
+			t.Fatalf("expected configured self-host gateway, got %+v", report)
+		}
+		cfg := readGatewaySetupConfig(t, home)
+		if cfg.RelayRequestTimeoutSeconds != 700 {
+			t.Fatalf("custom self-host relay request timeout = %d, want 700", cfg.RelayRequestTimeoutSeconds)
+		}
+	})
 }
 
 func TestRelayDevNoAuthDefaultsToFakeReadOnlyProjects(t *testing.T) {
@@ -197,4 +274,38 @@ func mustJSON(t *testing.T, value any) string {
 
 func contains(value, needle string) bool {
 	return strings.Contains(value, needle)
+}
+
+func readRelaySetupConfig(t *testing.T, home string) struct {
+	ProxyTimeoutSeconds int `json:"proxy_timeout_seconds"`
+} {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(home, "runtime", "relay", "config.json"))
+	if err != nil {
+		t.Fatalf("read relay config: %v", err)
+	}
+	var cfg struct {
+		ProxyTimeoutSeconds int `json:"proxy_timeout_seconds"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode relay config: %v", err)
+	}
+	return cfg
+}
+
+func readGatewaySetupConfig(t *testing.T, home string) struct {
+	RelayRequestTimeoutSeconds int `json:"relay_request_timeout_seconds"`
+} {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(home, "runtime", "gateway", "config.json"))
+	if err != nil {
+		t.Fatalf("read gateway config: %v", err)
+	}
+	var cfg struct {
+		RelayRequestTimeoutSeconds int `json:"relay_request_timeout_seconds"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode gateway config: %v", err)
+	}
+	return cfg
 }

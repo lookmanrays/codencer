@@ -13,6 +13,7 @@ enterprise IAM and does not implement refresh tokens.
   --mcp-url https://gateway.example.com/mcp \
   --relay-url https://relay.example.com \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --relay-request-timeout-seconds 300 \
   --enable-oauth-dev \
   --json
 ```
@@ -35,15 +36,17 @@ OAuth dev accepts syntactically valid redirect URIs so an operator can test Chat
 
 The flow uses authorization code plus PKCE S256. Access tokens are opaque, hashed in memory, scoped, TTL-bound, and audience/resource-bound to `/mcp`. Refresh tokens are not implemented.
 
-For direct Relay OAuth dev mode, use `codencer setup relay
---enable-chatgpt-oauth-dev`. That path is for advanced/direct/debug testing, not
-the public Gateway-first connector endpoint.
+For direct Relay OAuth dev mode, use
+`codencer setup relay --proxy-timeout-seconds 300 --enable-chatgpt-oauth-dev`.
+That path is for advanced/direct/debug testing, not the public Gateway-first
+connector endpoint.
 
 ## Dev No-Auth
 
 ```bash
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --chatgpt-dev-noauth \
   --json

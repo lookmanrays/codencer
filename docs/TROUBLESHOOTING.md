@@ -58,6 +58,27 @@ an eligible workspace. For Gateway-first testing, generate the server-side
 activation artifacts with `codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --auth oauth --json`.
 Keep product proof pending until the actual product flow is exercised.
 
+## Real Executor Run Times Out Around 30 Seconds
+
+If a live Codex/Claude run starts but Gateway returns before the executor task
+timeout, inspect the generated configs:
+
+```bash
+jq '.relay_request_timeout_seconds' "$CODENCER_HOME/runtime/gateway/config.json"
+jq '.proxy_timeout_seconds' "$CODENCER_HOME/runtime/relay/config.json"
+```
+
+Both values must be at least as large as the task timeout used for real executor
+E2E. Standard setup now writes `300` seconds by default:
+
+```bash
+codencer setup self-host --relay-request-timeout-seconds 300 --json
+codencer setup relay --proxy-timeout-seconds 300 --generate-planner-token --json
+```
+
+If you set `CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS` above `300`, use the same
+larger value for both setup flags before running the verifier.
+
 ## Connector Enrollment Fails
 
 Use the facade first so `$CODENCER_HOME/config.json` records the connector config path:

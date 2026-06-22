@@ -2602,18 +2602,23 @@ func runSetup(args []string, stdout io.Writer) error {
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "relay":
-		parsed, err := parseArgs(args[1:], []string{"json", "generate-planner-token", "enable-chatgpt-oauth-dev", "chatgpt-dev-noauth", "allow-real-projects-in-dev-noauth", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "relay-config", "connector-config", "planner-token", "planner-token-env", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
+		parsed, err := parseArgs(args[1:], []string{"json", "generate-planner-token", "enable-chatgpt-oauth-dev", "chatgpt-dev-noauth", "allow-real-projects-in-dev-noauth", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "relay-config", "connector-config", "proxy-timeout-seconds", "planner-token", "planner-token-env", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
 		if err != nil {
 			return err
 		}
 		if len(parsed.positionals) != 0 {
 			return usageError(parsed.bool("json"), stdout, "setup relay does not accept positional arguments")
 		}
+		proxyTimeoutSeconds, err := parsePositiveIntFlag(parsed.value("proxy-timeout-seconds"), "proxy-timeout-seconds")
+		if err != nil {
+			return usageError(parsed.bool("json"), stdout, err.Error())
+		}
 		report, err := setuppkg.Relay(contextBackground(), setuppkg.RelayOptions{
 			BaseURL:                      parsed.value("base-url"),
 			MCPURL:                       parsed.value("mcp-url"),
 			RelayConfigPath:              parsed.value("relay-config"),
 			ConnectorConfigPath:          parsed.value("connector-config"),
+			ProxyTimeoutSeconds:          proxyTimeoutSeconds,
 			PlannerToken:                 parsed.value("planner-token"),
 			GeneratePlannerToken:         parsed.bool("generate-planner-token"),
 			PlannerTokenEnv:              parsed.value("planner-token-env"),
@@ -2631,59 +2636,69 @@ func runSetup(args []string, stdout io.Writer) error {
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "gateway":
-		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "store", "default-relay-url", "default-relay-token-env", "default-relay-token-file", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
+		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "store", "relay-request-timeout-seconds", "default-relay-url", "default-relay-token-env", "default-relay-token-file", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
 		if err != nil {
 			return err
 		}
 		if len(parsed.positionals) != 0 {
 			return usageError(parsed.bool("json"), stdout, "setup gateway does not accept positional arguments")
 		}
+		relayRequestTimeoutSeconds, err := parsePositiveIntFlag(parsed.value("relay-request-timeout-seconds"), "relay-request-timeout-seconds")
+		if err != nil {
+			return usageError(parsed.bool("json"), stdout, err.Error())
+		}
 		report, err := setuppkg.Gateway(contextBackground(), setuppkg.GatewayOptions{
-			BaseURL:               parsed.value("base-url"),
-			MCPURL:                parsed.value("mcp-url"),
-			ListenAddr:            parsed.value("listen"),
-			GatewayConfigPath:     parsed.value("gateway-config"),
-			StorePath:             parsed.value("store"),
-			AuthMode:              parsed.value("auth"),
-			TokenEnv:              parsed.value("token-env"),
-			TokenFile:             parsed.value("token-file"),
-			DefaultRelayURL:       parsed.value("default-relay-url"),
-			DefaultRelayTokenEnv:  parsed.value("default-relay-token-env"),
-			DefaultRelayTokenFile: parsed.value("default-relay-token-file"),
-			EnableOAuthDev:        parsed.bool("enable-oauth-dev"),
-			OAuthIssuer:           parsed.value("oauth-issuer"),
-			OAuthClientID:         parsed.value("oauth-client-id"),
-			OAuthClientSecret:     parsed.value("oauth-client-secret"),
-			InstallServices:       parsed.bool("install-services"),
-			StartServices:         parsed.bool("start-services"),
-			Manager:               parsed.value("manager"),
-			BinDir:                parsed.value("bin-dir"),
-			Strict:                parsed.bool("strict"),
+			BaseURL:                    parsed.value("base-url"),
+			MCPURL:                     parsed.value("mcp-url"),
+			ListenAddr:                 parsed.value("listen"),
+			GatewayConfigPath:          parsed.value("gateway-config"),
+			StorePath:                  parsed.value("store"),
+			RelayRequestTimeoutSeconds: relayRequestTimeoutSeconds,
+			AuthMode:                   parsed.value("auth"),
+			TokenEnv:                   parsed.value("token-env"),
+			TokenFile:                  parsed.value("token-file"),
+			DefaultRelayURL:            parsed.value("default-relay-url"),
+			DefaultRelayTokenEnv:       parsed.value("default-relay-token-env"),
+			DefaultRelayTokenFile:      parsed.value("default-relay-token-file"),
+			EnableOAuthDev:             parsed.bool("enable-oauth-dev"),
+			OAuthIssuer:                parsed.value("oauth-issuer"),
+			OAuthClientID:              parsed.value("oauth-client-id"),
+			OAuthClientSecret:          parsed.value("oauth-client-secret"),
+			InstallServices:            parsed.bool("install-services"),
+			StartServices:              parsed.bool("start-services"),
+			Manager:                    parsed.value("manager"),
+			BinDir:                     parsed.value("bin-dir"),
+			Strict:                     parsed.bool("strict"),
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "self-host":
-		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev"}, []string{"gateway-url", "base-url", "mcp-url", "relay-url", "console-url", "listen", "token-env", "token-file", "gateway-config", "store", "default-relay-token-env", "default-relay-token-file", "oauth-client-secret"})
+		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev"}, []string{"gateway-url", "base-url", "mcp-url", "relay-url", "console-url", "listen", "token-env", "token-file", "gateway-config", "store", "relay-request-timeout-seconds", "default-relay-token-env", "default-relay-token-file", "oauth-client-secret"})
 		if err != nil {
 			return err
 		}
 		if len(parsed.positionals) != 0 {
 			return usageError(parsed.bool("json"), stdout, "setup self-host does not accept positional arguments")
 		}
+		relayRequestTimeoutSeconds, err := parsePositiveIntFlag(parsed.value("relay-request-timeout-seconds"), "relay-request-timeout-seconds")
+		if err != nil {
+			return usageError(parsed.bool("json"), stdout, err.Error())
+		}
 		gatewayURL := firstNonEmpty(parsed.value("gateway-url"), parsed.value("base-url"))
 		report, err := setuppkg.SelfHost(contextBackground(), setuppkg.SelfHostOptions{
-			GatewayURL:            gatewayURL,
-			MCPURL:                parsed.value("mcp-url"),
-			RelayURL:              parsed.value("relay-url"),
-			ConsoleURL:            parsed.value("console-url"),
-			ListenAddr:            parsed.value("listen"),
-			GatewayConfigPath:     parsed.value("gateway-config"),
-			StorePath:             parsed.value("store"),
-			TokenEnv:              parsed.value("token-env"),
-			TokenFile:             parsed.value("token-file"),
-			DefaultRelayTokenEnv:  parsed.value("default-relay-token-env"),
-			DefaultRelayTokenFile: parsed.value("default-relay-token-file"),
-			EnableOAuthDev:        parsed.bool("enable-oauth-dev"),
-			OAuthClientSecret:     parsed.value("oauth-client-secret"),
+			GatewayURL:                 gatewayURL,
+			MCPURL:                     parsed.value("mcp-url"),
+			RelayURL:                   parsed.value("relay-url"),
+			ConsoleURL:                 parsed.value("console-url"),
+			ListenAddr:                 parsed.value("listen"),
+			GatewayConfigPath:          parsed.value("gateway-config"),
+			StorePath:                  parsed.value("store"),
+			RelayRequestTimeoutSeconds: relayRequestTimeoutSeconds,
+			TokenEnv:                   parsed.value("token-env"),
+			TokenFile:                  parsed.value("token-file"),
+			DefaultRelayTokenEnv:       parsed.value("default-relay-token-env"),
+			DefaultRelayTokenFile:      parsed.value("default-relay-token-file"),
+			EnableOAuthDev:             parsed.bool("enable-oauth-dev"),
+			OAuthClientSecret:          parsed.value("oauth-client-secret"),
 		})
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
@@ -3009,7 +3024,13 @@ func printCommandHelp(w io.Writer, path []string) {
 	case "login":
 		printHelpBlock(w, "codencer login [flags]", "none", "--json, --gateway <url>, --device-code <code>", "codencer login --gateway http://127.0.0.1:19090 --json")
 	case "setup":
-		printHelpBlock(w, "codencer setup <local|self-host|mcp> [flags]", "local, self-host, mcp", "--json, --gateway-url <url>, --relay-url <url>, --token-env <env>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --token-env CODENCER_GATEWAY_MCP_TOKEN --json")
+		printHelpBlock(w, "codencer setup <local|relay|gateway|self-host|mcp> [flags]", "local, relay, gateway, self-host, mcp", "--json, --gateway-url <url>, --relay-url <url>, --relay-request-timeout-seconds <seconds>, --proxy-timeout-seconds <seconds>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --relay-request-timeout-seconds 300 --token-env CODENCER_GATEWAY_MCP_TOKEN --json")
+	case "setup self-host":
+		printHelpBlock(w, "codencer setup self-host [flags]", "none", "--json, --gateway-url <url>, --base-url <url>, --mcp-url <url>, --relay-url <url>, --console-url <url>, --listen <addr>, --token-env <env>, --token-file <path>, --gateway-config <path>, --store <path>, --default-relay-token-env <env>, --default-relay-token-file <path>, --enable-oauth-dev, --oauth-client-secret <secret>, --relay-request-timeout-seconds <seconds>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --relay-request-timeout-seconds 300 --token-env CODENCER_GATEWAY_MCP_TOKEN --json")
+	case "setup relay":
+		printHelpBlock(w, "codencer setup relay [flags]", "none", "--json, --base-url <url>, --mcp-url <url>, --relay-config <path>, --connector-config <path>, --planner-token <token>, --planner-token-env <env>, --generate-planner-token, --proxy-timeout-seconds <seconds>, --enable-chatgpt-oauth-dev, --oauth-issuer <url>, --oauth-client-id <id>, --oauth-client-secret <secret>, --chatgpt-dev-noauth, --allow-real-projects-in-dev-noauth, --install-services, --start-services, --manager <name>, --bin-dir <path>, --strict", "codencer setup relay --base-url http://127.0.0.1:8090 --generate-planner-token --proxy-timeout-seconds 300 --json")
+	case "setup gateway":
+		printHelpBlock(w, "codencer setup gateway [flags]", "none", "--json, --base-url <url>, --mcp-url <url>, --listen <addr>, --auth <mode>, --token-env <env>, --token-file <path>, --gateway-config <path>, --store <path>, --default-relay-url <url>, --default-relay-token-env <env>, --default-relay-token-file <path>, --relay-request-timeout-seconds <seconds>, --enable-oauth-dev, --oauth-issuer <url>, --oauth-client-id <id>, --oauth-client-secret <secret>, --install-services, --start-services, --manager <name>, --bin-dir <path>, --strict", "codencer setup gateway --base-url http://127.0.0.1:19090 --default-relay-url http://127.0.0.1:8090 --relay-request-timeout-seconds 300 --json")
 	case "activation":
 		printHelpBlock(w, "codencer activation <package|check|chatgpt|codex|claude-code|self-host> [flags]", "package, check, chatgpt, codex, claude-code, self-host", "--json, --gateway <url>, --relay <url>, --project <id>, --token-env <env>", "codencer activation self-host --gateway http://127.0.0.1:19090 --relay http://127.0.0.1:8090 --project codencer --json")
 	case "config":
@@ -3353,6 +3374,18 @@ func parseDurationOrDefault(value string, fallback time.Duration) (time.Duration
 		return 0, fmt.Errorf("duration must be positive")
 	}
 	return duration, nil
+}
+
+func parsePositiveIntFlag(value, name string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("--%s must be a positive integer", name)
+	}
+	return parsed, nil
 }
 
 func firstNonEmpty(values ...string) string {

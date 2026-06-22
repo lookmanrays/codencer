@@ -68,5 +68,11 @@ CODENCER_E2E_REAL_EXECUTOR_COMMAND=codex \
 make verify-public-selfhost-rc
 ```
 
+The RC verifier exercises artifact-backed `codencer setup self-host` and
+`codencer setup relay` before the live run. For real Codex E2E, Gateway
+`relay_request_timeout_seconds` and Relay `proxy_timeout_seconds` must be at
+least `300` seconds and at least as large as
+`CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS` when that environment variable is set.
+
 If no real executor is configured, the verifier reports `PARTIAL`, not `GO`.
 That is expected for CI smoke and is not live product proof.

@@ -129,7 +129,7 @@ The setup command can render/install/start services, but only with explicit flag
 
 ```bash
 codencer setup local --install-services --start-services --json
-codencer setup relay --generate-planner-token --install-services --json
+codencer setup relay --generate-planner-token --proxy-timeout-seconds 300 --install-services --json
 ```
 
 Default verification stays non-mutating:

@@ -85,7 +85,7 @@ Self-host Gateway activation writes Gateway-first client artifacts with `codence
   - `GET /.well-known/openid-configuration`
   - `GET|POST /oauth/authorize`
   - `POST /oauth/token`
-- Explicit `setup relay --enable-chatgpt-oauth-dev` and `--chatgpt-dev-noauth` modes.
+- Explicit `setup relay --proxy-timeout-seconds 300 --enable-chatgpt-oauth-dev` and `--chatgpt-dev-noauth` modes.
 - MCP read-only alias `codencer.get_blocker`.
 
 OAuth dev mode is for self-host testing, not enterprise IAM. Dev no-auth is private-test only and is read-only/fake-project restricted unless `--allow-real-projects-in-dev-noauth` is explicit.
@@ -94,7 +94,7 @@ OAuth dev mode is for self-host testing, not enterprise IAM. Dev no-auth is priv
 
 - `codencer-gatewayd` deployable Gateway binary.
 - Gateway config at `$CODENCER_HOME/runtime/gateway/config.json`.
-- `codencer setup self-host --json`.
+- `codencer setup self-host --relay-request-timeout-seconds 300 --json`.
 - `codencer gateway relay add|list|status --json`.
 - `codencer activation self-host --json`.
 - Gateway MCP tools for `codencer.list_relays`, project listing, project location listing, manifest/task forwarding, run reports, and blockers.

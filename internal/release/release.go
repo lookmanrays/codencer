@@ -381,7 +381,7 @@ func writeBundleFiles(repo, stage string) error {
 	quickstart := "Codencer local production release snapshot\n\n" +
 		"Run ./scripts/install.sh --bin-dir ./bin --dry-run first.\n\n" +
 		"Local setup: codencer setup local --json\n" +
-		"Self-host setup: codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json\n" +
+		"Self-host setup: codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --relay-request-timeout-seconds 300 --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json\n" +
 		"Gateway activation: codencer activation self-host --gateway http://127.0.0.1:19090 --relay http://127.0.0.1:8090 --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json\n"
 	if err := os.WriteFile(filepath.Join(stage, "QUICKSTART.txt"), []byte(quickstart), 0644); err != nil {
 		return err

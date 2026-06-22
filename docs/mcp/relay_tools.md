@@ -121,7 +121,7 @@ Generate direct Relay debug snippets:
 ./bin/codencer-relayd mcp-config --client chatgpt --endpoint https://relay.example.com/mcp
 ```
 
-ChatGPT custom MCP connector setup requires public HTTPS, OAuth protected-resource metadata, and an eligible workspace with developer mode. For self-host testing, `codencer setup relay --enable-chatgpt-oauth-dev` enables a minimal OAuth dev issuer. For production IAM, use an operator-owned OAuth front door.
+ChatGPT custom MCP connector setup requires public HTTPS, OAuth protected-resource metadata, and an eligible workspace with developer mode. For self-host testing, `codencer setup relay --proxy-timeout-seconds 300 --enable-chatgpt-oauth-dev` enables a minimal OAuth dev issuer. For production IAM, use an operator-owned OAuth front door.
 
 Activation artifacts:
 

@@ -8,6 +8,7 @@ codencer setup self-host \
   --gateway-url http://127.0.0.1:19090 \
   --relay-url http://127.0.0.1:8090 \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
+  --relay-request-timeout-seconds 300 \
   --json
 ```
 

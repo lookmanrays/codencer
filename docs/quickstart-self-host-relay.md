@@ -26,11 +26,12 @@ make build
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
   --mcp-url https://relay.example.com/mcp \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --json
 ```
 
-The generated planner token is written under `$CODENCER_HOME/tokens` with `0600` permissions and redacted from command output. Use your own reverse proxy or native TLS config for public HTTPS.
+The generated planner token is written under `$CODENCER_HOME/tokens` with `0600` permissions and redacted from command output. `--proxy-timeout-seconds 300` keeps Relay waits safe for real executor tasks; increase it if your task timeout is longer. Use your own reverse proxy or native TLS config for public HTTPS.
 
 For ChatGPT self-host testing, enable the single-user OAuth dev front-door:
 
@@ -38,6 +39,7 @@ For ChatGPT self-host testing, enable the single-user OAuth dev front-door:
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
   --mcp-url https://relay.example.com/mcp \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --enable-chatgpt-oauth-dev \
   --json

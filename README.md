@@ -156,6 +156,7 @@ relay config and planner token:
 ```bash
 codencer setup relay \
   --base-url https://relay.example.com \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --json
 ```
@@ -165,6 +166,7 @@ For ChatGPT self-host testing, enable OAuth dev mode:
 ```bash
 codencer setup relay \
   --base-url https://relay.example.com \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --enable-chatgpt-oauth-dev \
   --json
@@ -241,6 +243,7 @@ codencer setup self-host \
   --gateway-url http://127.0.0.1:19090 \
   --relay-url http://127.0.0.1:8090 \
   --listen 127.0.0.1:19090 \
+  --relay-request-timeout-seconds 300 \
   --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --enable-oauth-dev \
@@ -250,6 +253,11 @@ export CODENCER_DEFAULT_RELAY_TOKEN=<self-host-relay-planner-token>
 export CODENCER_GATEWAY_MCP_TOKEN=<gateway-client-token>
 codencer-gatewayd serve --config "$CODENCER_HOME/runtime/gateway/config.json"
 ```
+
+For real executor runs, keep Gateway `relay_request_timeout_seconds` and Relay
+`proxy_timeout_seconds` at least as large as the task timeout. The default setup
+value is `300` seconds; use the flags above when the operator sets a longer
+executor timeout.
 
 Local connector setup through self-host Gateway:
 

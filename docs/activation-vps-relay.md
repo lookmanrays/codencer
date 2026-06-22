@@ -31,6 +31,7 @@ Bearer-token setup:
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
   --mcp-url https://relay.example.com/mcp \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --json
 ```
@@ -41,6 +42,7 @@ ChatGPT OAuth dev setup:
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
   --mcp-url https://relay.example.com/mcp \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --enable-chatgpt-oauth-dev \
   --json
@@ -53,6 +55,7 @@ Dev no-auth is only for private testing:
 ```bash
 ./bin/codencer setup relay \
   --base-url https://relay.example.com \
+  --proxy-timeout-seconds 300 \
   --generate-planner-token \
   --chatgpt-dev-noauth \
   --json

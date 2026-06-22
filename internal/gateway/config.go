@@ -18,7 +18,7 @@ const (
 	DefaultListenAddr                 = "127.0.0.1:19090"
 	DefaultGatewayToken               = "CODENCER_GATEWAY_MCP_TOKEN"
 	DefaultRelayToken                 = "CODENCER_DEFAULT_RELAY_TOKEN"
-	DefaultRelayRequestTimeoutSeconds = 30
+	DefaultRelayRequestTimeoutSeconds = 300
 )
 
 var DefaultRelayURL = defaults.DefaultRelayURL()
