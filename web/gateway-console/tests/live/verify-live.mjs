@@ -23,6 +23,15 @@ const executorAdapter = process.env.CODENCER_E2E_EXECUTOR_ADAPTER ?? "fake";
 const executorProfile =
   process.env.CODENCER_E2E_EXECUTOR_PROFILE ??
   (executorAdapter === "fake" ? "fake-success" : executorAdapter);
+const realExecutorGate = executorAdapter !== "fake";
+if (realExecutorGate) {
+  assertNoRealGateSimulationEnv();
+}
+if (executorAdapter === "codex" && executorProfile !== "codex-workspace") {
+  throw new Error(
+    `real Codex gate requires profile=codex-workspace, got ${executorProfile}`,
+  );
+}
 const taskTimeoutSeconds = parsePositiveInt(
   process.env.CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS,
   executorAdapter === "fake" ? 120 : 300,
@@ -161,6 +170,9 @@ try {
     );
     const mcpProof = await runGatewayMCPProof(gatewayBase, gatewayToken);
     console.log(`gateway-console-live: mcp_run=${mcpProof.runId}`);
+    if (realExecutorGate) {
+      assertNoSimulationText(stack.daemonProcess.__codencerLog, "daemon log");
+    }
 
     await page.goto(`${consoleBase}/console`);
     await expect(
@@ -241,6 +253,11 @@ try {
     await expect(page.getByText(/^Result$/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
+    if (realExecutorGate) {
+      await expect(page.getByText("Real executor").first()).toBeVisible({
+        timeout: uiSubmitTimeoutMs,
+      });
+    }
     await expect(page.getByText(/Run ID/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
@@ -270,6 +287,27 @@ try {
     await expect(page.getByText(executorProfile).first()).toBeVisible();
     await expect(page.getByText(/Run ID/i).first()).toBeVisible();
     await expect(page.getByText(/Result/i).first()).toBeVisible();
+    if (realExecutorGate) {
+      await expect(page.getByText("Real executor").first()).toBeVisible();
+      const runsPayload = await getJSON(
+        `${gatewayBase}/api/gateway/v1/runs`,
+        gatewayToken,
+      );
+      const uiRun = (runsPayload.runs ?? []).find(
+        (run) =>
+          run.executor_profile === executorProfile &&
+          run.title === "Codex workspace smoke task",
+      );
+      if (!uiRun) {
+        throw new Error(
+          `real executor UI run was not recorded in run history: ${JSON.stringify(
+            runsPayload,
+          )}`,
+        );
+      }
+      assertRealRunHistoryRecord("Gateway Console UI run history", uiRun);
+      assertNoSimulationText(stack.daemonProcess.__codencerLog, "daemon log");
+    }
     await expect(page.getByText(/event timeline/i)).toBeVisible();
     await expect(page.getByText(/task_submitted/i).first()).toBeVisible();
     await expect(page.getByText(/run_completed/i).first()).toBeVisible();
@@ -289,6 +327,9 @@ try {
     await expect(page.getByText(executorProfile).first()).toBeVisible();
     await expect(page.getByText(/Run ID/i).first()).toBeVisible();
     await expect(page.getByText(/Result/i).first()).toBeVisible();
+    if (realExecutorGate) {
+      await expect(page.getByText("Real executor").first()).toBeVisible();
+    }
     await expect(
       page.getByRole("link", { name: /view details/i }).first(),
     ).toBeVisible();
@@ -511,6 +552,9 @@ async function runGatewayMCPProof(gatewayBase, token) {
     relay_profile_id: relay.relay_profile_id,
     run_id: runId,
   });
+  if (realExecutorGate) {
+    assertRealExecutorReport("Gateway MCP run report", report);
+  }
   const reportRunId = report.run_id ?? report.run?.id;
   if (reportRunId !== runId || report.status !== "completed") {
     throw new Error(`MCP get_run_report failed: ${JSON.stringify(report)}`);
@@ -587,15 +631,35 @@ async function startLocalSelfHostStack(root) {
       2,
     ),
   );
-  spawnProcess(daemonBinary, ["--config", daemonConfig, "--repo-root", repo], {
+  const daemonEnv = {
+    ALL_ADAPTERS_SIMULATION_MODE: "0",
     ARTIFACT_ROOT: path.join(state, "artifacts"),
+    CLAUDE_SIMULATION_MODE: "0",
+    CODEX_SIMULATION_MODE: "0",
     DB_PATH: path.join(state, "codencer.db"),
     HOST: "127.0.0.1",
-    LOG_LEVEL: "error",
+    LOG_LEVEL: realExecutorGate ? "info" : "error",
     PORT: String(daemonPort),
     REPO_ROOT: repo,
     WORKSPACE_ROOT: path.join(state, "workspace"),
-  });
+  };
+  if (executorAdapter === "codex") {
+    daemonEnv.CODEX_BINARY =
+      process.env.CODEX_BINARY ??
+      process.env.CODENCER_E2E_REAL_EXECUTOR_COMMAND ??
+      "codex";
+  }
+  if (executorAdapter === "claude") {
+    daemonEnv.CLAUDE_BINARY =
+      process.env.CLAUDE_BINARY ??
+      process.env.CODENCER_E2E_REAL_EXECUTOR_COMMAND ??
+      "claude";
+  }
+  const daemonProcess = spawnProcess(
+    daemonBinary,
+    ["--config", daemonConfig, "--repo-root", repo],
+    daemonEnv,
+  );
   await waitForJSON(`${daemonUrl}/health`);
 
   const relayConfig = path.join(root, "relay.json");
@@ -655,7 +719,14 @@ async function startLocalSelfHostStack(root) {
     { CODENCER_HOME: connectorHome },
   );
 
-  return { connectorConfig, connectorHome, daemonUrl, relayUrl, repo };
+  return {
+    connectorConfig,
+    connectorHome,
+    daemonProcess,
+    daemonUrl,
+    relayUrl,
+    repo,
+  };
 }
 
 async function startConnectorThroughGateway(gatewayBase, stack) {
@@ -717,8 +788,17 @@ function spawnProcess(command, args, env) {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  child.stdout.on("data", (data) => process.stdout.write(`[live] ${data}`));
-  child.stderr.on("data", (data) => process.stderr.write(`[live] ${data}`));
+  child.__codencerLog = "";
+  const capture = (stream, data) => {
+    const text = data.toString();
+    child.__codencerLog += text;
+    if (child.__codencerLog.length > 1024 * 1024) {
+      child.__codencerLog = child.__codencerLog.slice(-512 * 1024);
+    }
+    stream.write(`[live] ${data}`);
+  };
+  child.stdout.on("data", (data) => capture(process.stdout, data));
+  child.stderr.on("data", (data) => capture(process.stderr, data));
   processes.push(child);
   return child;
 }
@@ -769,6 +849,163 @@ async function runCommand(command, args, env = {}) {
 
 async function gatewayFetch(base, path, body) {
   return postJSON(`${base}/api/gateway/v1${path}`, body, gatewayToken);
+}
+
+function assertNoRealGateSimulationEnv() {
+  const names = Array.from(
+    new Set(
+      [
+        "ALL_ADAPTERS_SIMULATION_MODE",
+        `${executorAdapter.toUpperCase().replaceAll("-", "_")}_SIMULATION_MODE`,
+        executorAdapter === "codex" ? "CODEX_SIMULATION_MODE" : "",
+        executorAdapter === "claude" ? "CLAUDE_SIMULATION_MODE" : "",
+      ].filter(Boolean),
+    ),
+  );
+  const diagnostics = names.map((name) => {
+    const value = process.env[name];
+    return `${name}=${value == null ? "<unset>" : value}`;
+  });
+  console.log(
+    `gateway-console-live: real executor simulation env preflight ${diagnostics.join(" ")}`,
+  );
+  const bad = names.filter((name) =>
+    ["1", "true"].includes(String(process.env[name] ?? "").toLowerCase()),
+  );
+  if (bad.length > 0) {
+    throw new Error(
+      `real executor gate refuses simulation environment values: ${diagnostics.join(" ")}`,
+    );
+  }
+}
+
+function assertRealRunHistoryRecord(label, record) {
+  assertNoSimulationText(JSON.stringify(record), label);
+  if (record.executor_profile !== executorProfile) {
+    throw new Error(
+      `${label} expected executor_profile=${executorProfile}, got ${record.executor_profile}`,
+    );
+  }
+  if (!record.report || Object.keys(record.report).length === 0) {
+    throw new Error(`${label} missing sanitized report payload`);
+  }
+  assertRealExecutorReport(`${label} report`, record.report);
+  if (!hasRealOutputOrArtifact(record)) {
+    throw new Error(
+      `${label} did not include real executor output or artifact evidence: ${JSON.stringify(
+        record,
+      )}`,
+    );
+  }
+}
+
+function assertRealExecutorReport(label, payload) {
+  const serialized = JSON.stringify(payload);
+  assertNoSimulationText(serialized, label);
+  const simulationValues = findValuesByKey(payload, "is_simulation");
+  if (simulationValues.some((value) => value === true)) {
+    throw new Error(`${label} reported is_simulation=true: ${serialized}`);
+  }
+  if (!simulationValues.some((value) => value === false)) {
+    throw new Error(
+      `${label} did not report is_simulation=false: ${serialized}`,
+    );
+  }
+  const adapterValues = findStringValuesByKey(payload, "adapter");
+  if (!adapterValues.includes(executorAdapter)) {
+    throw new Error(
+      `${label} expected adapter=${executorAdapter}, got ${JSON.stringify(
+        adapterValues,
+      )}: ${serialized}`,
+    );
+  }
+  const profileValues = [
+    ...findStringValuesByKey(payload, "profile"),
+    ...findStringValuesByKey(payload, "executor_profile"),
+  ];
+  if (!profileValues.includes(executorProfile)) {
+    throw new Error(
+      `${label} expected profile=${executorProfile}, got ${JSON.stringify(
+        profileValues,
+      )}: ${serialized}`,
+    );
+  }
+  if (!hasRealOutputOrArtifact(payload)) {
+    throw new Error(
+      `${label} did not include real executor output or artifact evidence: ${serialized}`,
+    );
+  }
+}
+
+function assertNoSimulationText(text, label) {
+  if (!text) return;
+  for (const pattern of [
+    /Simulation Mode/i,
+    /Executing Simulated codex/i,
+    /Simulated successful codex task/i,
+  ]) {
+    if (pattern.test(text)) {
+      throw new Error(`${label} contained simulated executor text: ${pattern}`);
+    }
+  }
+}
+
+function hasRealOutputOrArtifact(payload) {
+  const outputKeys = new Set([
+    "details",
+    "message",
+    "raw_output",
+    "result_details",
+    "result_summary",
+    "stderr",
+    "stdout",
+    "summary",
+    "text",
+  ]);
+  const outputs = findStringEntries(payload)
+    .filter(({ key, value }) => outputKeys.has(key) && value.trim().length > 0)
+    .map(({ value }) => value.trim())
+    .filter((value) => !/^(completed|ok|success)$/i.test(value));
+  const artifactNames = findStringValuesByKey(payload, "name").filter((value) =>
+    /codex|stdout|stderr|last[-_ ]?message|result|report/i.test(value),
+  );
+  return outputs.length > 0 || artifactNames.length > 0;
+}
+
+function findStringValuesByKey(value, key) {
+  return findValuesByKey(value, key).filter((item) => typeof item === "string");
+}
+
+function findValuesByKey(value, key, seen = new WeakSet()) {
+  if (!value || typeof value !== "object") return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+  const out = [];
+  if (Array.isArray(value)) {
+    for (const item of value) out.push(...findValuesByKey(item, key, seen));
+    return out;
+  }
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    if (entryKey === key) out.push(entryValue);
+    out.push(...findValuesByKey(entryValue, key, seen));
+  }
+  return out;
+}
+
+function findStringEntries(value, seen = new WeakSet()) {
+  if (!value || typeof value !== "object") return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+  const out = [];
+  if (Array.isArray(value)) {
+    for (const item of value) out.push(...findStringEntries(item, seen));
+    return out;
+  }
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (typeof entryValue === "string") out.push({ key, value: entryValue });
+    out.push(...findStringEntries(entryValue, seen));
+  }
+  return out;
 }
 
 async function assertGatewayCollectionEndpoints(

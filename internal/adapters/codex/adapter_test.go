@@ -118,6 +118,91 @@ fi
 	}
 }
 
+func TestAdapterExecModeIgnoresCwdDotEnvSimulation(t *testing.T) {
+	tmp := t.TempDir()
+	workspaceRoot := filepath.Join(tmp, "workspace")
+	artifactRoot := filepath.Join(tmp, "artifacts")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(artifactRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".env"), []byte("ALL_ADAPTERS_SIMULATION_MODE=1\nCODEX_SIMULATION_MODE=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fakeCodex := filepath.Join(tmp, "fake-codex")
+	script := `#!/bin/sh
+last_message=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-last-message)
+      shift
+      last_message="$1"
+      ;;
+  esac
+  shift
+done
+echo "real codex cli stdout from cwd dotenv regression"
+if [ -n "$last_message" ]; then
+  printf 'real codex cli final message from cwd dotenv regression\n' > "$last_message"
+fi
+`
+	if err := os.WriteFile(fakeCodex, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv(codexBinaryEnv, fakeCodex)
+	t.Setenv("ALL_ADAPTERS_SIMULATION_MODE", "")
+	t.Setenv("CODEX_SIMULATION_MODE", "")
+	t.Setenv(codexAdapterModeEnv, "")
+	previousCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previousCWD); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+
+	adapter := NewAdapter()
+	attempt := &domain.Attempt{ID: "attempt-dotenv", Adapter: "codex"}
+	step := &domain.Step{
+		ID:      "step-dotenv",
+		Title:   "CWD dotenv regression",
+		Goal:    "Return a short summary.",
+		Adapter: "codex",
+		TaskSpecSnapshot: &domain.TaskSpec{
+			Version:        "v1",
+			Goal:           "Return a short summary.",
+			AdapterProfile: "codex",
+		},
+	}
+
+	if err := adapter.Start(context.Background(), step, attempt, workspaceRoot, artifactRoot); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	waitForCodexAdapterStop(t, adapter, attempt.ID)
+	artifacts, err := adapter.CollectArtifacts(context.Background(), attempt.ID, artifactRoot)
+	if err != nil {
+		t.Fatalf("CollectArtifacts failed: %v", err)
+	}
+	result, err := adapter.NormalizeResult(context.Background(), attempt.ID, artifacts)
+	if err != nil {
+		t.Fatalf("NormalizeResult failed: %v", err)
+	}
+	if result.IsSimulation || strings.Contains(result.Summary, "Simulated") {
+		t.Fatalf("expected cwd .env to be ignored for real Codex execution, got simulation=%v summary=%q", result.IsSimulation, result.Summary)
+	}
+	if !strings.Contains(result.Summary, "real codex cli final message") {
+		t.Fatalf("expected fake Codex CLI output, got %q", result.Summary)
+	}
+}
+
 func TestCodexFallbackWithoutResultOrLastMessageIsFailure(t *testing.T) {
 	artifactRoot := t.TempDir()
 	attempt := &domain.Attempt{ID: "attempt-empty", Adapter: "codex"}

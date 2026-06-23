@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileText } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KeyValueList } from "@/components/ui/key-value-list";
 import type { RunSubmitResult } from "@/schemas/runs";
@@ -23,16 +24,28 @@ export function RunResultPanel({
   const runHistoryId = run?.id || result?.runHistoryId;
   const runId = run?.runId || result?.runId || "n/a";
   const executor = run?.executorProfile || result?.executorProfile || "n/a";
+  const executionMode =
+    run?.executionMode || result?.executionMode || "unknown";
   const status = run?.status || result?.status || "completed";
   const reportStatus = run?.reportStatus || "completed";
+  const execution = executionModeDisplay(executionMode);
   return (
-    <Alert title="Result" tone="brand">
+    <Alert
+      title="Result"
+      tone={executionMode === "simulation" ? "warning" : "brand"}
+    >
       <div className="grid min-w-0 gap-md">
         <KeyValueList
           items={[
             { label: "Status", value: status },
             { label: "Run ID", value: runId },
             { label: "Executor", value: executor },
+            {
+              label: "Execution",
+              value: (
+                <Badge variant={execution.variant}>{execution.label}</Badge>
+              ),
+            },
             { label: "Report", value: reportStatus },
           ]}
         />
@@ -67,4 +80,17 @@ export function RunResultPanel({
       </div>
     </Alert>
   );
+}
+
+function executionModeDisplay(mode: "real" | "simulation" | "unknown"): {
+  label: string;
+  variant: "success" | "warning" | "neutral";
+} {
+  if (mode === "real") {
+    return { label: "Real executor", variant: "success" };
+  }
+  if (mode === "simulation") {
+    return { label: "Simulation", variant: "warning" };
+  }
+  return { label: "Unknown", variant: "neutral" };
 }

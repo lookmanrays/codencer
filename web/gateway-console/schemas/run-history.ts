@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { collectionField } from "@/schemas/collections";
 import { AuditEventListResponseSchema } from "@/schemas/audit";
+import { executionModeFromPayload } from "@/schemas/runs";
 
 const UnknownRecord = z.record(z.string(), z.unknown());
 
@@ -34,6 +35,7 @@ export const RunRecordSchema = z
     connectorId: run.connector_id,
     createdAt: run.created_at,
     executorProfile: run.executor_profile,
+    executionMode: executionModeFromPayload(run.report ?? {}),
     goal: run.goal,
     hostLabel: run.host_label,
     id: run.id,

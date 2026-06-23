@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { KeyValueList } from "@/components/ui/key-value-list";
 import { LoadingPanel } from "@/components/ui/skeleton";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
 import { isDemoMode } from "@/api/config";
 import { useRuns } from "@/api/run-history";
@@ -53,6 +53,7 @@ export function RunsScreen() {
 }
 
 function RunHistoryCard({ run }: { run: RunRecord }) {
+  const execution = executionModeDisplay(run.executionMode);
   return (
     <Card>
       <CardHeader className="flex min-w-0 flex-wrap items-start justify-between gap-md">
@@ -71,6 +72,12 @@ function RunHistoryCard({ run }: { run: RunRecord }) {
           items={[
             { label: "Project", value: run.projectName || run.projectId },
             { label: "Executor", value: run.executorProfile || "n/a" },
+            {
+              label: "Execution",
+              value: (
+                <Badge variant={execution.variant}>{execution.label}</Badge>
+              ),
+            },
             { label: "Run ID", value: run.runId || "n/a" },
             {
               label: "Machine",
@@ -106,4 +113,17 @@ function RunHistoryCard({ run }: { run: RunRecord }) {
       </CardContent>
     </Card>
   );
+}
+
+function executionModeDisplay(mode: "real" | "simulation" | "unknown"): {
+  label: string;
+  variant: "success" | "warning" | "neutral";
+} {
+  if (mode === "real") {
+    return { label: "Real executor", variant: "success" };
+  }
+  if (mode === "simulation") {
+    return { label: "Simulation", variant: "warning" };
+  }
+  return { label: "Unknown", variant: "neutral" };
 }

@@ -160,6 +160,74 @@ describe("domain schemas", () => {
     expect(parsed.summary).toContain("Executor returned README summary");
   });
 
+  it("extracts execution mode from run report simulation metadata", () => {
+    expect(
+      RunSubmitResponseSchema.parse({
+        ok: true,
+        project_id: "codencer",
+        result: {
+          ok: true,
+          run_id: "run-real",
+          tasks: [
+            {
+              adapter: "codex",
+              profile: "codex-workspace",
+              evidence: {
+                result: {
+                  is_simulation: false,
+                  raw_output: "Real Codex output.",
+                },
+              },
+            },
+          ],
+        },
+      }).executionMode,
+    ).toBe("real");
+    expect(
+      RunSubmitResponseSchema.parse({
+        ok: true,
+        project_id: "codencer",
+        result: {
+          ok: true,
+          run_id: "run-sim",
+          evidence: {
+            result: {
+              is_simulation: true,
+              raw_output: "Simulated successful codex task.",
+            },
+          },
+        },
+      }).executionMode,
+    ).toBe("simulation");
+    expect(
+      RunSubmitResponseSchema.parse({
+        ok: true,
+        project_id: "codencer",
+        result: { ok: true, run_id: "run-unknown" },
+      }).executionMode,
+    ).toBe("unknown");
+    expect(
+      RunListResponseSchema.parse({
+        runs: [
+          {
+            created_at: "2026-06-20T12:00:00Z",
+            id: "runhist-real",
+            project_id: "codencer",
+            report: {
+              evidence: {
+                result: {
+                  is_simulation: false,
+                  raw_output: "Real Codex output.",
+                },
+              },
+            },
+            updated_at: "2026-06-20T12:00:01Z",
+          },
+        ],
+      }).runs[0]?.executionMode,
+    ).toBe("real");
+  });
+
   it("maps relay-derived machine statuses to dashboard states", () => {
     expect(
       MachineListResponseSchema.parse({

@@ -54,6 +54,7 @@ test("project task form submits demo run without unsafe output", async ({
   await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();
   await page.getByRole("button", { name: /^submit$/i }).click();
   await expect(page.getByText(/^Result$/i)).toBeVisible();
+  await expect(page.getByText("Real executor")).toBeVisible();
   await expect(page.getByText(/run_demo_console/i)).toBeVisible();
   await expect(page.getByText(/README summary/i)).toBeVisible();
   await expect(page.getByText(/local\/self-host bridge/i)).toBeVisible();
@@ -62,11 +63,13 @@ test("project task form submits demo run without unsafe output", async ({
   ).toBeVisible();
   await page.getByRole("link", { name: /view full run/i }).click();
   await expect(page.getByRole("heading", { name: /full run/i })).toBeVisible();
+  await expect(page.getByText("Real executor").first()).toBeVisible();
   await expect(page.getByText(/run_demo_console/i).first()).toBeVisible();
   await expect(page.getByText(/event timeline/i)).toBeVisible();
   await expect(page.getByText(/task_submitted/i)).toBeVisible();
   await page.goto("/console/runs");
   await expect(page.getByText(/Codex workspace smoke task/i)).toBeVisible();
+  await expect(page.getByText("Real executor").first()).toBeVisible();
   await expect(page.getByText(/Codencer bridges planners/i)).toBeVisible();
   const visibleText = await page.locator("body").innerText();
   expect(visibleText).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);

@@ -163,6 +163,34 @@ standard_setup_contract() {
   cp "$TMPDIR_ROOT/standard-help-relay.txt" "$REPORT_DIR/standard-setup-relay-help.txt" || return 1
 }
 
+reject_real_executor_simulation_env() {
+  local adapter="$1"
+  local log="$2"
+  local bad=0
+  local adapter_env
+  adapter_env="$(printf '%s_SIMULATION_MODE' "$adapter" | tr '[:lower:]-' '[:upper:]_')"
+  {
+    echo "Real executor simulation environment preflight:"
+    for name in ALL_ADAPTERS_SIMULATION_MODE CODEX_SIMULATION_MODE "$adapter_env"; do
+      local value=""
+      if value="$(printenv "$name")"; then
+        echo "$name=$value"
+      else
+        echo "$name=<unset>"
+      fi
+      case "$value" in
+        1|true|TRUE|True)
+          bad=1
+          ;;
+      esac
+    done
+  } > "$log"
+  if [ "$bad" -ne 0 ]; then
+    cat "$log" >&2
+    return 1
+  fi
+}
+
 run_gate() {
   local name="$1"
   shift
@@ -355,12 +383,18 @@ if [ "$FAILURES" -eq 0 ] && [ -n "${CODENCER_E2E_REAL_EXECUTOR:-}" ]; then
   esac
   if command -v "$real_command" >/dev/null 2>&1; then
     real_status="configured"
-    if [ "$real_adapter" = "codex" ]; then
-      run_gate real_executor_e2e env CODEX_BINARY="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
+    real_env_log="$REPORT_DIR/real_executor_env.log"
+    if ! reject_real_executor_simulation_env "$real_adapter" "$real_env_log"; then
+      real_status="failed"
+      real_reason="real executor gate refused simulation environment values"
+      write_gate real_executor_e2e "failed" "$real_reason" "$real_env_log"
+      FAILURES=1
+    elif [ "$real_adapter" = "codex" ]; then
+      run_gate real_executor_e2e env ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CODEX_BINARY="$real_command" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
     elif [ "$real_adapter" = "claude" ]; then
-      run_gate real_executor_e2e env CLAUDE_BINARY="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
+      run_gate real_executor_e2e env ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 CLAUDE_BINARY="$real_command" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
     else
-      run_gate real_executor_e2e env CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
+      run_gate real_executor_e2e env ALL_ADAPTERS_SIMULATION_MODE=0 CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
     fi
     if [ "$FAILURES" -eq 0 ]; then
       real_status="passed"

@@ -76,7 +76,7 @@ export function RunDetailScreen({ id }: { id: string }) {
                     value:
                       run.data.run.hostLabel || run.data.run.machineId || "n/a",
                   },
-                  { label: "Execution", value: run.data.run.mode || "task" },
+                  { label: "Run mode", value: run.data.run.mode || "task" },
                   {
                     label: "Report",
                     value: run.data.run.reportStatus || "n/a",

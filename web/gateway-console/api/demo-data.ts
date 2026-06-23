@@ -390,6 +390,7 @@ export const demoSnapshot: DemoSnapshot = {
       connectorId: "conn_01",
       createdAt: "2026-06-20T12:18:00Z",
       executorProfile: "codex-workspace",
+      executionMode: "real",
       goal: "Inspect the project README and return a short summary. Do not modify files.",
       hostLabel: "macbook",
       id: "runhist_demo_console",
@@ -402,6 +403,8 @@ export const demoSnapshot: DemoSnapshot = {
         status: "completed",
         evidence: {
           result: {
+            adapter: "codex",
+            is_simulation: false,
             raw_output:
               "Codencer is a local/self-host bridge between AI planners and coding executors. It records structured runs, results, blockers, and audit evidence.",
           },

@@ -30,6 +30,8 @@ export async function submitProjectRun(input: ParsedTaskRunInput) {
           "Demo task completed through mock Gateway data. README summary: Codencer bridges planners to coding executors through local and self-host services.",
         evidence: {
           result: {
+            adapter: "codex",
+            is_simulation: false,
             raw_output:
               "Codencer is a local/self-host bridge between AI planners and coding executors. It records structured runs, results, blockers, and audit evidence.",
           },
@@ -125,6 +127,8 @@ async function getProjectRunReport(input: {
           "Demo report fetched through mock Gateway data. The executor returned a short README summary.",
         evidence: {
           result: {
+            adapter: "codex",
+            is_simulation: false,
             raw_output:
               "The README describes Codencer as an open-source local/self-host bridge. The task did not modify files.",
           },

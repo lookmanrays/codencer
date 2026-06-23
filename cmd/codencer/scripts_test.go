@@ -93,3 +93,41 @@ func TestReleaseArtifactSelfHostVerifierContract(t *testing.T) {
 		t.Fatal("Makefile does not expose verify-release-artifact-selfhost in the public self-host gate")
 	}
 }
+
+func TestPublicSelfHostRCVerifierRejectsRealExecutorSimulation(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	scriptPath := filepath.Join(repo, "scripts", "verify_public_selfhost_rc.sh")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(script)
+	for _, want := range []string{
+		"reject_real_executor_simulation_env",
+		"ALL_ADAPTERS_SIMULATION_MODE=0",
+		"CODEX_SIMULATION_MODE=0",
+		"CODEX_BINARY=\"$real_command\"",
+		"real_executor_env.log",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("public self-host RC verifier missing real executor simulation guard marker %q", want)
+		}
+	}
+	verifier, err := os.ReadFile(filepath.Join(repo, "web", "gateway-console", "tests", "live", "verify-live.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifierBody := string(verifier)
+	for _, want := range []string{
+		"assertRealExecutorReport",
+		"assertNoSimulationText",
+		"Simulation Mode",
+		"Executing Simulated codex",
+		"Simulated successful codex task",
+		"is_simulation",
+	} {
+		if !strings.Contains(verifierBody, want) {
+			t.Fatalf("Gateway Console live verifier missing real executor simulation assertion marker %q", want)
+		}
+	}
+}

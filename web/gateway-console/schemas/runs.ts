@@ -56,6 +56,7 @@ export const RunSubmitResponseSchema = z
         stringValue(payload.executor_profile) ||
         stringValue(payload.profile) ||
         stringValue(payload.adapter_profile),
+      executionMode: executionModeFromPayload(payload),
       runId:
         stringValue(payload.run_id) ||
         stringValue(run.id) ||
@@ -71,6 +72,7 @@ export const RunSubmitResultSchema = z.object({
   blockerType: z.string().optional(),
   details: z.string().optional(),
   ok: z.boolean(),
+  executionMode: z.enum(["real", "simulation", "unknown"]),
   executorProfile: z.string().optional(),
   projectId: z.string().optional(),
   raw: z.record(z.string(), z.unknown()),
@@ -83,6 +85,15 @@ export const RunSubmitResultSchema = z.object({
 });
 
 export const RunReportResponseSchema = RunSubmitResponseSchema;
+
+export function executionModeFromPayload(
+  payload: unknown,
+): "real" | "simulation" | "unknown" {
+  const values = findValuesByKey(payload, "is_simulation");
+  if (values.some((value) => value === true)) return "simulation";
+  if (values.some((value) => value === false)) return "real";
+  return "unknown";
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -152,6 +163,26 @@ function artifactSummary(payload: Record<string, unknown>) {
   visit(asRecord(asRecord(payload.task).evidence).artifacts);
   visit(payload.tasks);
   return names.size > 0 ? `Artifacts: ${Array.from(names).join(", ")}` : "";
+}
+
+function findValuesByKey(value: unknown, key: string, seen = new WeakSet()) {
+  if (!value || typeof value !== "object") return [] as unknown[];
+  if (seen.has(value)) return [] as unknown[];
+  seen.add(value);
+  const out: unknown[] = [];
+  if (Array.isArray(value)) {
+    value.forEach((item) => {
+      out.push(...findValuesByKey(item, key, seen));
+    });
+    return out;
+  }
+  Object.entries(value as Record<string, unknown>).forEach(
+    ([entryKey, entryValue]) => {
+      if (entryKey === key) out.push(entryValue);
+      out.push(...findValuesByKey(entryValue, key, seen));
+    },
+  );
+  return out;
 }
 
 export type TaskRunInput = z.input<typeof TaskRunInputSchema>;
