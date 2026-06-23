@@ -306,6 +306,7 @@ func TestGatewayConsoleCollectionResponsesUseEmptyArrays(t *testing.T) {
 		{path: "/api/gateway/v1/relays", keys: []string{"relays"}},
 		{path: "/api/gateway/v1/machines", keys: []string{"machines"}},
 		{path: "/api/gateway/v1/connectors", keys: []string{"connectors"}},
+		{path: "/api/gateway/v1/executors", keys: []string{"executors"}},
 		{path: "/api/gateway/v1/projects", keys: []string{"projects", "relay_errors"}},
 		{path: "/api/gateway/v1/audit-events", keys: []string{"audit_events", "events"}},
 		{path: "/api/gateway/v1/activation/commands", keys: []string{"activation_commands", "commands"}},
@@ -318,11 +319,22 @@ func TestGatewayConsoleCollectionResponsesUseEmptyArrays(t *testing.T) {
 			}
 			for _, key := range tc.keys {
 				values := requireJSONArray(t, payload, key)
-				if tc.path != "/api/gateway/v1/activation/commands" && tc.path != "/api/gateway/v1/relays" && len(values) != 0 {
+				if tc.path != "/api/gateway/v1/activation/commands" && tc.path != "/api/gateway/v1/relays" && tc.path != "/api/gateway/v1/executors" && len(values) != 0 {
 					t.Fatalf("%s expected empty array for %q, got %s", tc.path, key, body)
 				}
 				if tc.path == "/api/gateway/v1/activation/commands" && len(values) == 0 {
 					t.Fatalf("%s expected activation commands for %q, got %s", tc.path, key, body)
+				}
+				if tc.path == "/api/gateway/v1/executors" {
+					if len(values) == 0 {
+						t.Fatalf("%s expected executor profiles for %q, got %s", tc.path, key, body)
+					}
+					for _, want := range []string{"codex-workspace", "codex-full", "claude-default", "fake-success"} {
+						if !strings.Contains(body, `"`+want+`"`) {
+							t.Fatalf("%s missing executor %s: %s", tc.path, want, body)
+						}
+					}
+					assertNoGatewayConsoleSensitiveLeak(t, body)
 				}
 			}
 		})

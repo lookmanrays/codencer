@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-bridge/internal/profile"
 	"agent-bridge/internal/security"
 )
 
@@ -276,6 +277,24 @@ func (s *Server) handleRelays(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
+}
+
+func (s *Server) handleExecutors(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, apiErr := s.authenticate(r)
+	if apiErr != nil {
+		s.addAuthChallenge(w, r, "")
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if !principalAllows(principal, []string{"projects:read"}) {
+		writeAPIError(w, http.StatusForbidden, "insufficient_scope", "Gateway token is missing required scope")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"executors": profile.List()})
 }
 
 func (s *Server) handleRelayByID(w http.ResponseWriter, r *http.Request) {

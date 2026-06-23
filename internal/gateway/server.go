@@ -190,6 +190,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/gateway/v1/connectors", s.handleConnectors)
 	mux.HandleFunc("/api/gateway/v1/connectors/login", s.handleConnectorLogin)
 	mux.HandleFunc("/api/gateway/v1/connectors/complete", s.handleConnectorComplete)
+	mux.HandleFunc("/api/gateway/v1/executors", s.handleExecutors)
 	mux.HandleFunc("/api/gateway/v1/projects", s.handleProjects)
 	mux.HandleFunc("/api/gateway/v1/projects/", s.handleProjectByID)
 	mux.HandleFunc("/api/gateway/v1/audit-events", s.handleAuditEvents)

@@ -11,10 +11,12 @@ export const TaskRunInputSchema = z
     mode: z.enum(["task", "manifest"]).default("task"),
     projectId: z.string().min(1),
     relayProfileId: z.string().min(1),
-    executorProfile: z.string().trim().optional(),
+    dangerousExecutorConfirmed: z.boolean().optional(),
+    executorProfile: z.string().trim().min(1),
     hostLabel: z.string().optional(),
     machineId: z.string().optional(),
-    timeoutSeconds: z.coerce.number().int().min(5).max(900).default(120),
+    manualExecutorProfile: z.string().trim().optional(),
+    timeoutSeconds: z.coerce.number().int().min(5).max(900).default(300),
     title: z.string().min(3),
   })
   .refine((value) => value.mode !== "manifest" || value.manifestText, {

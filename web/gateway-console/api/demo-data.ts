@@ -1,6 +1,7 @@
 import type { ActivationCommand } from "@/schemas/activation";
 import type { AuditEvent } from "@/schemas/audit";
 import type { Connector } from "@/schemas/connectors";
+import type { ExecutorProfile } from "@/schemas/executors";
 import type { Machine } from "@/schemas/machines";
 import type { Project } from "@/schemas/projects";
 import type { RelayHealth } from "@/schemas/relay-health";
@@ -11,6 +12,7 @@ type DemoSnapshot = {
   activationCommands: ActivationCommand[];
   auditEvents: AuditEvent[];
   connectors: Connector[];
+  executors: ExecutorProfile[];
   machines: Machine[];
   mcpEndpoint: string;
   projects: Project[];
@@ -122,12 +124,72 @@ export const demoSnapshot: DemoSnapshot = {
       lastSeen: "2026-06-19T18:03:20Z",
     },
   ],
+  executors: [
+    {
+      id: "claude-default",
+      adapter: "claude",
+      daemon_adapter: "claude",
+      output_format: "json",
+      description: "Non-interactive Claude CLI execution.",
+    },
+    {
+      id: "codex-danger-bypass",
+      adapter: "codex",
+      daemon_adapter: "codex",
+      dangerous_bypass_approvals_and_sandbox: true,
+      requires_explicit_allow_dangerous_bypass: true,
+      description:
+        "Maximum bypass mode. Only for isolated machines, VMs, or containers.",
+    },
+    {
+      id: "codex-full",
+      adapter: "codex",
+      daemon_adapter: "codex",
+      approval: "never",
+      sandbox: "danger-full-access",
+      description:
+        "Non-interactive Codex execution with full local access. Requires explicit profile selection.",
+    },
+    {
+      id: "codex-workspace",
+      adapter: "codex",
+      daemon_adapter: "codex",
+      approval: "never",
+      sandbox: "workspace-write",
+      description:
+        "Non-interactive Codex execution with workspace write access.",
+    },
+    {
+      id: "fake-blocker",
+      adapter: "fake",
+      daemon_adapter: "fake-blocker",
+      description: "Deterministic test blocker profile.",
+    },
+    {
+      id: "fake-failure",
+      adapter: "fake",
+      daemon_adapter: "fake-failure",
+      description: "Deterministic test terminal failure profile.",
+    },
+    {
+      id: "fake-success",
+      adapter: "fake",
+      daemon_adapter: "fake-success",
+      description: "Deterministic test success profile.",
+    },
+    {
+      id: "fake-timeout",
+      adapter: "fake",
+      daemon_adapter: "fake-timeout",
+      description: "Deterministic test timeout profile.",
+    },
+  ],
   projects: [
     {
       id: "codencer",
       name: "Codencer",
-      adapter: "fake",
-      profile: "fake-success",
+      adapter: "codex",
+      profile: "codex-workspace",
       locations: [
         {
           id: "loc_01",
@@ -230,7 +292,7 @@ export const demoSnapshot: DemoSnapshot = {
         "Commits only .codencer/project.json; local state stays in CODENCER_HOME.",
       target: "local",
       command:
-        "codencer project init --id codencer --repo . --adapter fake --profile fake-success --json",
+        "codencer project init --id codencer --repo . --adapter codex --profile codex-workspace --json",
     },
     {
       id: "project-share",

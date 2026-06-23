@@ -2012,7 +2012,7 @@ func runExecutor(args []string, stdout io.Writer) error {
 		}
 		return nil
 	case "scan":
-		parsed, err := parseArgs(args[1:], []string{"json"}, nil)
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"repo", "config"})
 		if err != nil {
 			return err
 		}

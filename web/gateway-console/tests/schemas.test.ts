@@ -12,6 +12,10 @@ import {
   ConnectorListResponseSchema,
   ConnectorSchema,
 } from "@/schemas/connectors";
+import {
+  ExecutorListResponseSchema,
+  ExecutorProfileSchema,
+} from "@/schemas/executors";
 import { MachineListResponseSchema, MachineSchema } from "@/schemas/machines";
 import { ProjectListResponseSchema, ProjectSchema } from "@/schemas/projects";
 import { RelayListResponseSchema, RelayProfileSchema } from "@/schemas/relays";
@@ -27,6 +31,9 @@ describe("domain schemas", () => {
     expect(MachineSchema.parse(demoSnapshot.machines[0]).status).toBe("online");
     expect(ConnectorSchema.parse(demoSnapshot.connectors[0]).status).toBe(
       "online",
+    );
+    expect(ExecutorProfileSchema.parse(demoSnapshot.executors[0]).id).toBe(
+      "claude-default",
     );
     expect(ProjectSchema.parse(demoSnapshot.projects[0]).id).toBe("codencer");
     expect(AuditEventSchema.parse(demoSnapshot.auditEvents[0]).severity).toBe(
@@ -98,6 +105,9 @@ describe("domain schemas", () => {
     expect(MachineListResponseSchema.parse({}).machines).toEqual([]);
     expect(
       ConnectorListResponseSchema.parse({ connectors: null }).connectors,
+    ).toEqual([]);
+    expect(
+      ExecutorListResponseSchema.parse({ executors: null }).executors,
     ).toEqual([]);
     expect(
       ProjectListResponseSchema.parse({

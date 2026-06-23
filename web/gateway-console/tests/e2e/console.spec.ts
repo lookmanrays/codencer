@@ -35,14 +35,70 @@ test("project task form submits demo run without unsafe output", async ({
   page,
 }) => {
   await page.goto("/console/projects");
-  await page.getByLabel(/goal/i).fill("Run fake-safe task from browser smoke.");
+  const executor = page.getByRole("combobox", { name: "Executor" });
+  await expect(executor).toContainText("codex-workspace");
+  await expect(page.getByLabel(/title/i)).toHaveValue(
+    "Codex workspace smoke task",
+  );
+  await expect(page.getByLabel(/goal/i)).toHaveValue(
+    "Inspect the project README and return a short summary. Do not modify files.",
+  );
+  await expect(page.getByLabel(/title/i)).not.toHaveValue(
+    "Gateway Console fake-safe task",
+  );
+  await expect(page.getByText("Route preview")).toBeVisible();
+  await expect(page.locator("dt", { hasText: "Executor" })).toBeVisible();
+  await expect(page.getByText("codex-workspace").first()).toBeVisible();
+  await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
+  await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();
   await page.getByRole("button", { name: /^submit$/i }).click();
   await expect(page.getByText(/run completed/i)).toBeVisible();
   await expect(page.getByText(/run_demo_console/i)).toBeVisible();
+  await expect(page.getByText(/report summary=/i)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /view audit events/i }),
+  ).toBeVisible();
   const html = await page.content();
   expect(html).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);
   expect(html).not.toContain("report_path");
   expect(html).not.toContain("logs_ref");
+});
+
+test("project task form validates executor selection", async ({ page }) => {
+  await page.goto("/console/projects");
+  await page.getByRole("button", { name: /^advanced$/i }).click();
+  await page
+    .getByLabel(/manual executor profile override/i)
+    .fill("not-a-real-executor");
+  await expect(page.getByText(/unknown executor profile/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^submit$/i })).toBeDisabled();
+});
+
+test("elevated Codex executor requires confirmation", async ({ page }) => {
+  await page.goto("/console/projects");
+  await page.getByRole("combobox", { name: "Executor" }).click();
+  await page.getByRole("option", { name: /codex-full/i }).click();
+  await expect(
+    page.getByText(/codex-full requires explicit confirmation/i),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^submit$/i })).toBeDisabled();
+  await page.getByLabel(/confirm elevated executor/i).click();
+  await expect(page.getByRole("button", { name: /^submit$/i })).toBeEnabled();
+});
+
+test("manifest run plan is advanced and guided", async ({ page }) => {
+  await page.goto("/console/projects");
+  await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();
+  await page.getByRole("button", { name: /^advanced$/i }).click();
+  await page.getByRole("combobox", { name: /execution mode/i }).click();
+  await page.getByRole("option", { name: /manifest \/ run plan/i }).click();
+  await expect(page.getByText(/manifest schema help/i)).toBeVisible();
+  await expect(page.getByLabel(/manifest \/ run plan/i)).toHaveValue(
+    /execution:/,
+  );
+  await expect(page.getByLabel(/manifest \/ run plan/i)).toHaveValue(
+    /profile: codex-workspace/,
+  );
 });
 
 test("device form validation works", async ({ page }) => {

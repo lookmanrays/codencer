@@ -385,6 +385,13 @@ func TestProfileAndDaemonNotRunningJSON(t *testing.T) {
 	if !strings.Contains(stdout, `"executors"`) || !strings.Contains(stdout, `"fake-success"`) {
 		t.Fatalf("executor list missing fake profile: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("executor", "scan", "--repo", repo, "--json")
+	if err != nil {
+		t.Fatalf("executor scan with repo failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"executors"`) || !strings.Contains(stdout, `"fake-success"`) {
+		t.Fatalf("executor scan missing fake profile: %s", stdout)
+	}
 	stdout, stderr, err = runCLI("executor", "test", "fake-success", "--json")
 	if err != nil {
 		t.Fatalf("executor test fake failed: %v stderr=%s stdout=%s", err, stderr, stdout)

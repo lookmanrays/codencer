@@ -11,6 +11,8 @@ import {
 } from "@/schemas/runs";
 
 export async function submitProjectRun(input: ParsedTaskRunInput) {
+  const effectiveExecutorProfile =
+    input.manualExecutorProfile?.trim() || input.executorProfile;
   if (isDemoMode()) {
     return RunSubmitResponseSchema.parse({
       ok: true,
@@ -22,15 +24,15 @@ export async function submitProjectRun(input: ParsedTaskRunInput) {
         run_id: "run_demo_console",
         status: "completed",
         step_id: "step_demo_console",
-        executor_profile: input.executorProfile,
+        executor_profile: effectiveExecutorProfile,
         summary: "Demo task completed through mock Gateway data.",
       },
     });
   }
-  const executorFields = input.executorProfile
+  const executorFields = effectiveExecutorProfile
     ? {
-        adapter_profile: input.executorProfile,
-        profile: input.executorProfile,
+        adapter_profile: effectiveExecutorProfile,
+        profile: effectiveExecutorProfile,
       }
     : {};
   const body =

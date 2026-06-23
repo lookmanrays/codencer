@@ -34,7 +34,7 @@ const uiSubmitTimeoutMs = (gatewayRelayRequestTimeoutSeconds + 30) * 1000;
 const executorGoal =
   executorAdapter === "fake"
     ? "Run fake-safe task from live Gateway Console."
-    : `Run a safe deterministic task with ${executorProfile}.`;
+    : "Inspect the project README and return a short summary. Do not modify files.";
 
 const tmpRoot = await fs.mkdtemp(
   path.join(os.tmpdir(), "codencer-console-live-"),
@@ -220,6 +220,21 @@ try {
         name: /Codencer default live-host repo · [a-f0-9]{16} online none/i,
       }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Executor" }),
+    ).toContainText(executorProfile);
+    if (executorProfile === "codex-workspace") {
+      await expect(page.getByLabel(/title/i)).toHaveValue(
+        "Codex workspace smoke task",
+      );
+      await expect(page.getByLabel(/goal/i)).toHaveValue(executorGoal);
+      await expect(page.getByLabel(/title/i)).not.toHaveValue(
+        "Gateway Console fake-safe task",
+      );
+      await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
+    }
+    await expect(page.getByText("Route preview")).toBeVisible();
+    await expect(page.getByText(executorProfile).first()).toBeVisible();
     await page.getByLabel(/goal/i).fill(executorGoal);
     await page.getByLabel(/timeout seconds/i).fill(String(taskTimeoutSeconds));
     await page.getByRole("button", { name: /^submit$/i }).click();
@@ -240,6 +255,12 @@ try {
     await expect(page.getByText(/report=completed/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
+    await expect(page.getByText(/report summary=/i)).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
+    await expect(
+      page.getByRole("link", { name: /view audit events/i }),
+    ).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/activation`);
@@ -714,6 +735,7 @@ async function assertGatewayCollectionEndpoints(
 ) {
   const machines = await getJSON(`${base}/api/gateway/v1/machines`, token);
   const connectors = await getJSON(`${base}/api/gateway/v1/connectors`, token);
+  const executors = await getJSON(`${base}/api/gateway/v1/executors`, token);
   const projects = await getJSON(`${base}/api/gateway/v1/projects`, token);
   const audit = await getJSON(`${base}/api/gateway/v1/audit-events`, token);
   const activation = await getJSON(
@@ -723,6 +745,7 @@ async function assertGatewayCollectionEndpoints(
 
   const machineList = assertArrayField(machines, "machines", label);
   const connectorList = assertArrayField(connectors, "connectors", label);
+  const executorList = assertArrayField(executors, "executors", label);
   const projectList = assertArrayField(projects, "projects", label);
   assertArrayField(projects, "relay_errors", label);
   assertArrayField(audit, "audit_events", label);
@@ -734,6 +757,7 @@ async function assertGatewayCollectionEndpoints(
     activation,
     audit,
     connectors,
+    executors,
     machines,
     projects,
   });
@@ -741,6 +765,20 @@ async function assertGatewayCollectionEndpoints(
     throw new Error(`${label} returned a null collection: ${serialized}`);
   }
   assertNoSensitiveEndpointLeak(serialized, label);
+  for (const expected of [
+    "codex-workspace",
+    "codex-full",
+    "claude-default",
+    "fake-success",
+  ]) {
+    if (!executorList.some((executor) => executor.id === expected)) {
+      throw new Error(
+        `${label} executor metadata missing ${expected}: ${JSON.stringify(
+          executors,
+        )}`,
+      );
+    }
+  }
 
   if (expectLiveMetadata) {
     if (

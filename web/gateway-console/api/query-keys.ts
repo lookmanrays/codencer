@@ -2,6 +2,7 @@ export const queryKeys = {
   activationCommands: ["activation-commands"] as const,
   auditEvents: ["audit-events"] as const,
   connectors: ["connectors"] as const,
+  executors: ["executors"] as const,
   machines: ["machines"] as const,
   project: (projectId: string) => ["projects", projectId] as const,
   projectRunReport: (projectId: string, runId: string) =>
