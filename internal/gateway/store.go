@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,12 +114,46 @@ type DeviceCodeRecord struct {
 }
 
 type AuditEvent struct {
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspace_id,omitempty"`
-	ActorUserID string    `json:"actor_user_id,omitempty"`
-	Type        string    `json:"type"`
-	Summary     string    `json:"summary"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          string         `json:"id"`
+	WorkspaceID string         `json:"workspace_id,omitempty"`
+	ActorUserID string         `json:"actor_user_id,omitempty"`
+	Type        string         `json:"type"`
+	Summary     string         `json:"summary"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+}
+
+type RunRecord struct {
+	ID              string         `json:"id"`
+	WorkspaceID     string         `json:"workspace_id,omitempty"`
+	ActorUserID     string         `json:"actor_user_id,omitempty"`
+	ProjectID       string         `json:"project_id"`
+	ProjectName     string         `json:"project_name,omitempty"`
+	RunID           string         `json:"run_id,omitempty"`
+	StepID          string         `json:"step_id,omitempty"`
+	Title           string         `json:"title,omitempty"`
+	Goal            string         `json:"goal,omitempty"`
+	Mode            string         `json:"mode,omitempty"`
+	ExecutorProfile string         `json:"executor_profile,omitempty"`
+	Status          string         `json:"status,omitempty"`
+	ReportStatus    string         `json:"report_status,omitempty"`
+	ResultSummary   string         `json:"result_summary,omitempty"`
+	ResultDetails   string         `json:"result_details,omitempty"`
+	RelayProfileID  string         `json:"relay_profile_id,omitempty"`
+	ConnectorID     string         `json:"connector_id,omitempty"`
+	MachineID       string         `json:"machine_id,omitempty"`
+	HostLabel       string         `json:"host_label,omitempty"`
+	StartedAt       time.Time      `json:"started_at,omitempty"`
+	CompletedAt     time.Time      `json:"completed_at,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	Report          map[string]any `json:"report,omitempty"`
+}
+
+type RunRecordFilters struct {
+	ProjectID string
+	Status    string
+	Limit     int
 }
 
 type DeviceAuthorization struct {
@@ -260,13 +295,45 @@ func (s *Store) migrate(ctx context.Context) error {
 			actor_user_id TEXT NOT NULL DEFAULT '',
 			type TEXT NOT NULL,
 			summary TEXT NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}',
 			created_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS gateway_run_records (
+			id TEXT PRIMARY KEY,
+			workspace_id TEXT NOT NULL DEFAULT '',
+			actor_user_id TEXT NOT NULL DEFAULT '',
+			project_id TEXT NOT NULL DEFAULT '',
+			project_name TEXT NOT NULL DEFAULT '',
+			run_id TEXT NOT NULL DEFAULT '',
+			step_id TEXT NOT NULL DEFAULT '',
+			title TEXT NOT NULL DEFAULT '',
+			goal TEXT NOT NULL DEFAULT '',
+			mode TEXT NOT NULL DEFAULT '',
+			executor_profile TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			report_status TEXT NOT NULL DEFAULT '',
+			result_summary TEXT NOT NULL DEFAULT '',
+			result_details TEXT NOT NULL DEFAULT '',
+			relay_profile_id TEXT NOT NULL DEFAULT '',
+			connector_id TEXT NOT NULL DEFAULT '',
+			machine_id TEXT NOT NULL DEFAULT '',
+			host_label TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL DEFAULT '',
+			completed_at TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			report_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_gateway_run_records_workspace_updated ON gateway_run_records (workspace_id, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_gateway_run_records_run_id ON gateway_run_records (workspace_id, run_id)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migrate gateway store: %w", err)
 		}
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE audit_events ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrate gateway audit metadata: %w", err)
 	}
 	return nil
 }
@@ -687,8 +754,14 @@ func (s *Store) RecordAudit(ctx context.Context, event AuditEvent) error {
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO audit_events (id, workspace_id, actor_user_id, type, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		event.ID, event.WorkspaceID, event.ActorUserID, event.Type, event.Summary, formatStoreTime(event.CreatedAt))
+	metadataJSON := "{}"
+	if len(event.Metadata) > 0 {
+		if data, err := json.Marshal(event.Metadata); err == nil {
+			metadataJSON = string(data)
+		}
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO audit_events (id, workspace_id, actor_user_id, type, summary, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		event.ID, event.WorkspaceID, event.ActorUserID, event.Type, event.Summary, metadataJSON, formatStoreTime(event.CreatedAt))
 	return err
 }
 
@@ -696,7 +769,7 @@ func (s *Store) ListAuditEvents(ctx context.Context, workspaceID string, limit i
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, actor_user_id, type, summary, created_at FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?`, workspaceID, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, actor_user_id, type, summary, metadata_json, created_at FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?`, workspaceID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -704,12 +777,168 @@ func (s *Store) ListAuditEvents(ctx context.Context, workspaceID string, limit i
 	out := []AuditEvent{}
 	for rows.Next() {
 		var event AuditEvent
-		var created string
-		if err := rows.Scan(&event.ID, &event.WorkspaceID, &event.ActorUserID, &event.Type, &event.Summary, &created); err != nil {
+		var created, metadataJSON string
+		if err := rows.Scan(&event.ID, &event.WorkspaceID, &event.ActorUserID, &event.Type, &event.Summary, &metadataJSON, &created); err != nil {
 			return nil, err
 		}
+		event.Metadata = decodeStoreMap(metadataJSON)
 		event.CreatedAt = parseStoreTime(created)
 		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListAuditEventsByRunHistoryID(ctx context.Context, workspaceID, runHistoryID string, limit int) ([]AuditEvent, error) {
+	runHistoryID = strings.TrimSpace(runHistoryID)
+	if runHistoryID == "" {
+		return []AuditEvent{}, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, actor_user_id, type, summary, metadata_json, created_at FROM audit_events WHERE workspace_id = ? AND metadata_json LIKE ? ORDER BY created_at ASC LIMIT ?`, workspaceID, "%\"run_history_id\":\""+runHistoryID+"\"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AuditEvent{}
+	for rows.Next() {
+		var event AuditEvent
+		var created, metadataJSON string
+		if err := rows.Scan(&event.ID, &event.WorkspaceID, &event.ActorUserID, &event.Type, &event.Summary, &metadataJSON, &created); err != nil {
+			return nil, err
+		}
+		event.Metadata = decodeStoreMap(metadataJSON)
+		event.CreatedAt = parseStoreTime(created)
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) UpsertRunRecord(ctx context.Context, record RunRecord) (RunRecord, error) {
+	now := time.Now().UTC()
+	record.ID = strings.TrimSpace(record.ID)
+	if record.ID == "" && strings.TrimSpace(record.RunID) != "" {
+		if existing, err := s.FindRunRecord(ctx, record.WorkspaceID, record.ProjectID, record.RunID, record.RelayProfileID, record.MachineID, record.HostLabel); err == nil {
+			record.ID = existing.ID
+			if record.CreatedAt.IsZero() {
+				record.CreatedAt = existing.CreatedAt
+			}
+		}
+	}
+	if record.ID == "" {
+		id, err := randomStoreID("runhist")
+		if err != nil {
+			return RunRecord{}, err
+		}
+		record.ID = id
+	}
+	if record.WorkspaceID == "" {
+		return RunRecord{}, fmt.Errorf("workspace_id is required")
+	}
+	if record.CreatedAt.IsZero() {
+		var created string
+		_ = s.db.QueryRowContext(ctx, `SELECT created_at FROM gateway_run_records WHERE id = ? AND workspace_id = ?`, record.ID, record.WorkspaceID).Scan(&created)
+		record.CreatedAt = parseStoreTime(created)
+	}
+	if record.CreatedAt.IsZero() {
+		record.CreatedAt = now
+	}
+	record.UpdatedAt = now
+	reportJSON := "{}"
+	if len(record.Report) > 0 {
+		if data, err := json.Marshal(record.Report); err == nil {
+			reportJSON = string(data)
+		}
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO gateway_run_records (
+			id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode,
+			executor_profile, status, report_status, result_summary, result_details, relay_profile_id,
+			connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			actor_user_id = excluded.actor_user_id,
+			project_id = excluded.project_id,
+			project_name = excluded.project_name,
+			run_id = excluded.run_id,
+			step_id = excluded.step_id,
+			title = excluded.title,
+			goal = excluded.goal,
+			mode = excluded.mode,
+			executor_profile = excluded.executor_profile,
+			status = excluded.status,
+			report_status = excluded.report_status,
+			result_summary = excluded.result_summary,
+			result_details = excluded.result_details,
+			relay_profile_id = excluded.relay_profile_id,
+			connector_id = excluded.connector_id,
+			machine_id = excluded.machine_id,
+			host_label = excluded.host_label,
+			started_at = excluded.started_at,
+			completed_at = excluded.completed_at,
+			updated_at = excluded.updated_at,
+			report_json = excluded.report_json`,
+		record.ID, record.WorkspaceID, record.ActorUserID, record.ProjectID, record.ProjectName, record.RunID, record.StepID, record.Title, record.Goal, record.Mode,
+		record.ExecutorProfile, record.Status, record.ReportStatus, record.ResultSummary, record.ResultDetails, record.RelayProfileID,
+		record.ConnectorID, record.MachineID, record.HostLabel, formatStoreTime(record.StartedAt), formatStoreTime(record.CompletedAt), formatStoreTime(record.CreatedAt), formatStoreTime(record.UpdatedAt), reportJSON)
+	if err != nil {
+		return RunRecord{}, fmt.Errorf("upsert gateway run record: %w", err)
+	}
+	return s.GetRunRecord(ctx, record.WorkspaceID, record.ID)
+}
+
+func (s *Store) FindRunRecord(ctx context.Context, workspaceID, projectID, runID, relayProfileID, machineID, hostLabel string) (RunRecord, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+		FROM gateway_run_records
+		WHERE workspace_id = ? AND project_id = ? AND run_id = ? AND relay_profile_id = ? AND machine_id = ? AND host_label = ?
+		ORDER BY updated_at DESC LIMIT 1`,
+		workspaceID, projectID, runID, relayProfileID, machineID, hostLabel)
+	return scanRunRecord(row)
+}
+
+func (s *Store) FindRunRecordByRunID(ctx context.Context, workspaceID, projectID, runID string) (RunRecord, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+		FROM gateway_run_records
+		WHERE workspace_id = ? AND project_id = ? AND run_id = ?
+		ORDER BY updated_at DESC LIMIT 1`, workspaceID, projectID, runID)
+	return scanRunRecord(row)
+}
+
+func (s *Store) GetRunRecord(ctx context.Context, workspaceID, id string) (RunRecord, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+		FROM gateway_run_records WHERE workspace_id = ? AND id = ?`, workspaceID, id)
+	return scanRunRecord(row)
+}
+
+func (s *Store) ListRunRecords(ctx context.Context, workspaceID string, filters RunRecordFilters) ([]RunRecord, error) {
+	limit := filters.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	query := `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json FROM gateway_run_records WHERE workspace_id = ?`
+	args := []any{workspaceID}
+	if strings.TrimSpace(filters.ProjectID) != "" {
+		query += ` AND project_id = ?`
+		args = append(args, strings.TrimSpace(filters.ProjectID))
+	}
+	if strings.TrimSpace(filters.Status) != "" {
+		query += ` AND status = ?`
+		args = append(args, strings.TrimSpace(filters.Status))
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RunRecord{}
+	for rows.Next() {
+		record, err := scanRunRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
 	}
 	return out, rows.Err()
 }
@@ -813,6 +1042,57 @@ func scanRelayProfile(row interface{ Scan(dest ...any) error }) (RelayProfileRec
 	profile.CreatedAt = parseStoreTime(created)
 	profile.UpdatedAt = parseStoreTime(updated)
 	return profile, nil
+}
+
+func scanRunRecord(row interface{ Scan(dest ...any) error }) (RunRecord, error) {
+	var record RunRecord
+	var started, completed, created, updated, reportJSON string
+	if err := row.Scan(
+		&record.ID,
+		&record.WorkspaceID,
+		&record.ActorUserID,
+		&record.ProjectID,
+		&record.ProjectName,
+		&record.RunID,
+		&record.StepID,
+		&record.Title,
+		&record.Goal,
+		&record.Mode,
+		&record.ExecutorProfile,
+		&record.Status,
+		&record.ReportStatus,
+		&record.ResultSummary,
+		&record.ResultDetails,
+		&record.RelayProfileID,
+		&record.ConnectorID,
+		&record.MachineID,
+		&record.HostLabel,
+		&started,
+		&completed,
+		&created,
+		&updated,
+		&reportJSON,
+	); err != nil {
+		return RunRecord{}, err
+	}
+	record.StartedAt = parseStoreTime(started)
+	record.CompletedAt = parseStoreTime(completed)
+	record.CreatedAt = parseStoreTime(created)
+	record.UpdatedAt = parseStoreTime(updated)
+	record.Report = decodeStoreMap(reportJSON)
+	return record, nil
+}
+
+func decodeStoreMap(value string) map[string]any {
+	out := map[string]any{}
+	if strings.TrimSpace(value) == "" {
+		return out
+	}
+	_ = json.Unmarshal([]byte(value), &out)
+	if out == nil {
+		return map[string]any{}
+	}
+	return out
 }
 
 func (s *Store) deviceByUserCode(ctx context.Context, userCode string) (DeviceCodeRecord, error) {

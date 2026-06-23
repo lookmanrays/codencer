@@ -191,6 +191,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/gateway/v1/connectors/login", s.handleConnectorLogin)
 	mux.HandleFunc("/api/gateway/v1/connectors/complete", s.handleConnectorComplete)
 	mux.HandleFunc("/api/gateway/v1/executors", s.handleExecutors)
+	mux.HandleFunc("/api/gateway/v1/runs", s.handleRuns)
+	mux.HandleFunc("/api/gateway/v1/runs/", s.handleRunByID)
 	mux.HandleFunc("/api/gateway/v1/projects", s.handleProjects)
 	mux.HandleFunc("/api/gateway/v1/projects/", s.handleProjectByID)
 	mux.HandleFunc("/api/gateway/v1/audit-events", s.handleAuditEvents)
@@ -771,7 +773,7 @@ func normalizeGatewayCollections(value any) any {
 
 func isGatewayCollectionKey(key string) bool {
 	switch key {
-	case "activation_commands", "audit_events", "commands", "connectors", "events", "locations", "machines", "projects", "relay_errors", "relay_profiles", "relays":
+	case "activation_commands", "audit_events", "commands", "connectors", "events", "locations", "machines", "projects", "relay_errors", "relay_profiles", "relays", "runs":
 		return true
 	default:
 		return false

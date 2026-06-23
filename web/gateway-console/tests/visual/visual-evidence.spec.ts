@@ -29,6 +29,8 @@ const routes = [
   { path: "/console/relays", heading: "Gateway routing backends" },
   { path: "/console/connectors", heading: "Local execution endpoints" },
   { path: "/console/projects", heading: "Project locations" },
+  { path: "/console/runs", heading: "Run history" },
+  { path: "/console/runs/runhist_demo_console", heading: "Full run" },
   { path: "/console/activation", heading: "Gateway-first setup" },
   { path: "/console/audit", heading: "Workspace event stream" },
   { path: "/console/settings", heading: "Console settings" },
@@ -367,17 +369,22 @@ function readPngDimensions(filePath: string) {
 
 async function assertSafeHTML(page: Page, label: string) {
   const html = await page.content();
-  const checks: [RegExp, string][] = [
-    [/official-relay-token/i, "official relay token fixture leaked"],
-    [/selfhost-relay-token/i, "self-host relay token fixture leaked"],
-    [/Authorization:\s*Bearer\s+[A-Za-z0-9._~+/=-]+/i, "bearer token leaked"],
-    [/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i, "private key leaked"],
-    [/\/Users\/[^<"'\s)]+/i, "macOS absolute path leaked"],
-    [/\/home\/[^<"'\s)]+/i, "Linux absolute path leaked"],
+  const visibleText = await page.locator("body").innerText();
+  const checks: [string, RegExp, string][] = [
+    [html, /official-relay-token/i, "official relay token fixture leaked"],
+    [html, /selfhost-relay-token/i, "self-host relay token fixture leaked"],
+    [
+      html,
+      /Authorization:\s*Bearer\s+[A-Za-z0-9._~+/=-]+/i,
+      "bearer token leaked",
+    ],
+    [html, /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i, "private key leaked"],
+    [visibleText, /\/Users\/[^<"'\s)]+/i, "macOS absolute path leaked"],
+    [visibleText, /\/home\/[^<"'\s)]+/i, "Linux absolute path leaked"],
   ];
 
-  for (const [pattern, message] of checks) {
-    if (pattern.test(html)) {
+  for (const [source, pattern, message] of checks) {
+    if (pattern.test(source)) {
       securityFindings.push(`${label}: ${message}`);
     }
   }

@@ -3,12 +3,14 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -457,6 +459,80 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"projects": projects, "relay_errors": relayErrors})
 }
 
+func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:read"})
+	if !ok {
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			limit = parsed
+		}
+	}
+	runs, err := s.store.ListRunRecords(r.Context(), principal.WorkspaceID, RunRecordFilters{
+		ProjectID: r.URL.Query().Get("project_id"),
+		Status:    r.URL.Query().Get("status"),
+		Limit:     limit,
+	})
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+}
+
+func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:read"})
+	if !ok {
+		return
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/runs/"), "/"), "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		writeAPIError(w, http.StatusBadRequest, "run_id_required", "run history id is required")
+		return
+	}
+	record, err := s.store.GetRunRecord(r.Context(), principal.WorkspaceID, parts[0])
+	if err == sql.ErrNoRows {
+		writeAPIError(w, http.StatusNotFound, "run_not_found", "run not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	if len(parts) == 2 && parts[1] == "events" {
+		events, err := s.store.ListAuditEventsByRunHistoryID(r.Context(), principal.WorkspaceID, record.ID, 100)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"events": events})
+		return
+	}
+	if len(parts) > 1 {
+		writeAPIError(w, http.StatusNotFound, "route_not_found", "run route not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": record})
+}
+
 func (s *Server) handleProjectByID(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/projects/"), "/"), "/")
 	projectID := ""
@@ -516,35 +592,47 @@ func (s *Server) handleProjectRunCreate(w http.ResponseWriter, r *http.Request, 
 	}
 	req["project_id"] = projectID
 	mode := strings.TrimSpace(stringArg(req, "mode"))
-	s.recordGatewayAudit(r.Context(), principal, "task_submitted", "Submitted "+executionKindLabel(mode)+" for project "+projectID)
+	runRecord, auditMetadata := s.beginRunRecord(r.Context(), principal, projectID, mode, req)
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, "task_submitted", "Submitted "+executionKindLabel(mode)+" for project "+projectID, auditMetadata)
 	route := submitProjectTaskRoute
 	if mode == "manifest" {
 		route = runProjectManifestRoute
 	}
 	match, apiErr := s.resolveProject(r.Context(), principal, projectID, req, true)
 	if apiErr != nil {
-		s.recordGatewayAudit(r.Context(), principal, "run_failed", "Route resolution failed for project "+projectID+": "+apiErr.Code)
+		runRecord.Status = "failed"
+		runRecord.ResultSummary = "Route resolution failed: " + apiErr.Code
+		runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "run_failed", "Route resolution failed for project "+projectID+": "+apiErr.Code, auditMetadata)
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	s.recordProjectRouteAudit(r.Context(), principal, match, req)
+	runRecord, auditMetadata = s.applyRouteToRunRecord(r.Context(), runRecord, principal, match, req)
+	s.recordProjectRouteAudit(r.Context(), principal, match, req, auditMetadata)
 	path, body, apiErr := route(req)
 	if apiErr != nil {
-		s.recordGatewayAudit(r.Context(), principal, "run_failed", "Run request validation failed for project "+projectID+": "+apiErr.Code)
+		runRecord.Status = "failed"
+		runRecord.ResultSummary = "Run request validation failed: " + apiErr.Code
+		runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "run_failed", "Run request validation failed for project "+projectID+": "+apiErr.Code, auditMetadata)
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
 	path = appendSelector(path, req)
-	s.recordGatewayAudit(r.Context(), principal, "run_started", "Started "+executionKindLabel(mode)+" for project "+projectID)
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, "run_started", "Started "+executionKindLabel(mode)+" for project "+projectID, auditMetadata)
 	_, response, apiErr := s.callRelay(r.Context(), match.Profile, http.MethodPost, path, body)
 	payload, apiErr := responsePayload(match.Profile, response, apiErr)
 	if apiErr != nil {
-		s.recordGatewayAudit(r.Context(), principal, "run_failed", "Run failed for project "+projectID+": "+apiErr.Code)
+		runRecord.Status = "failed"
+		runRecord.ResultSummary = "Run failed: " + apiErr.Code
+		runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "run_failed", "Run failed for project "+projectID+": "+apiErr.Code, auditMetadata)
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	s.recordGatewayAudit(r.Context(), principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "result": payload})
+	runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, payload, "available")
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload), auditMetadata)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_history_id": runRecord.ID, "result": payload})
 }
 
 func (s *Server) handleProjectRunReportGet(w http.ResponseWriter, r *http.Request, projectID, runID string) {
@@ -564,7 +652,7 @@ func (s *Server) handleProjectRunReportGet(w http.ResponseWriter, r *http.Reques
 	}
 	match, apiErr := s.resolveProject(r.Context(), principal, projectID, args, true)
 	if apiErr != nil {
-		s.recordGatewayAudit(r.Context(), principal, "report_read", "Run report route resolution failed for project "+projectID+": "+apiErr.Code)
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "report_read", "Run report route resolution failed for project "+projectID+": "+apiErr.Code, map[string]any{"project_id": projectID, "run_id": runID})
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
@@ -572,12 +660,13 @@ func (s *Server) handleProjectRunReportGet(w http.ResponseWriter, r *http.Reques
 	_, response, apiErr := s.callRelay(r.Context(), match.Profile, http.MethodGet, path, nil)
 	payload, apiErr := responsePayload(match.Profile, response, apiErr)
 	if apiErr != nil {
-		s.recordGatewayAudit(r.Context(), principal, "report_read", "Run report read failed for project "+projectID+": "+apiErr.Code)
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "report_read", "Run report read failed for project "+projectID+": "+apiErr.Code, map[string]any{"project_id": projectID, "run_id": runID, "relay_profile_id": match.Profile.ID})
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	s.recordGatewayAudit(r.Context(), principal, "report_read", "Read run report "+runID+" for project "+projectID)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "result": payload})
+	runRecord, auditMetadata := s.refreshRunRecordFromReport(r.Context(), principal, match, args, payload)
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, "report_read", "Read run report "+runID+" for project "+projectID, auditMetadata)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload})
 }
 
 func (s *Server) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
@@ -727,6 +816,10 @@ func locationStatus(location projectLocation) string {
 }
 
 func (s *Server) recordGatewayAudit(ctx context.Context, principal *authPrincipal, eventType, summary string) {
+	s.recordGatewayAuditWithMetadata(ctx, principal, eventType, summary, nil)
+}
+
+func (s *Server) recordGatewayAuditWithMetadata(ctx context.Context, principal *authPrincipal, eventType, summary string, metadata map[string]any) {
 	if s.store == nil || principal == nil || strings.TrimSpace(principal.WorkspaceID) == "" {
 		return
 	}
@@ -735,21 +828,22 @@ func (s *Server) recordGatewayAudit(ctx context.Context, principal *authPrincipa
 		ActorUserID: principal.UserID,
 		Type:        strings.TrimSpace(eventType),
 		Summary:     security.Redact(strings.TrimSpace(summary)),
+		Metadata:    sanitizeMap(metadata),
 	})
 }
 
-func (s *Server) recordProjectRouteAudit(ctx context.Context, principal *authPrincipal, match relayProjectMatch, args map[string]any) {
+func (s *Server) recordProjectRouteAudit(ctx context.Context, principal *authPrincipal, match relayProjectMatch, args map[string]any, metadata map[string]any) {
 	projectID := match.Project.ProjectID
-	s.recordGatewayAudit(ctx, principal, "route_resolved", "Resolved project route for "+projectID)
-	s.recordGatewayAudit(ctx, principal, "relay_selected", "Selected Relay profile "+match.Profile.ID+" for project "+projectID)
+	s.recordGatewayAuditWithMetadata(ctx, principal, "route_resolved", "Resolved project route for "+projectID, metadata)
+	s.recordGatewayAuditWithMetadata(ctx, principal, "relay_selected", "Selected Relay profile "+match.Profile.ID+" for project "+projectID, metadata)
 	location := selectedProjectLocation(match.Project, args)
 	if location.ConnectorID != "" || location.MachineID != "" || location.HostLabel != "" {
 		summary := "Selected connector " + firstNonEmpty(location.ConnectorID, "unknown") + " on machine " + firstNonEmpty(location.MachineID, location.HostLabel, "unknown") + " for project " + projectID
-		s.recordGatewayAudit(ctx, principal, "connector_selected", summary)
+		s.recordGatewayAuditWithMetadata(ctx, principal, "connector_selected", summary, metadata)
 	}
 	executor := resolvedExecutorLabel(match.Project, args)
 	if executor != "" {
-		s.recordGatewayAudit(ctx, principal, "executor_selected", "Selected executor profile "+executor+" for project "+projectID)
+		s.recordGatewayAuditWithMetadata(ctx, principal, "executor_selected", "Selected executor profile "+executor+" for project "+projectID, metadata)
 	}
 }
 

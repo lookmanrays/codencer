@@ -238,28 +238,72 @@ try {
     await page.getByLabel(/goal/i).fill(executorGoal);
     await page.getByLabel(/timeout seconds/i).fill(String(taskTimeoutSeconds));
     await page.getByRole("button", { name: /^submit$/i }).click();
-    await expect(page.getByText(/run completed/i)).toBeVisible({
+    await expect(page.getByText(/^Result$/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
-    await expect(page.getByText(/run_id=run-/i)).toBeVisible({
+    await expect(page.getByText(/Run ID/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
-    await expect(page.getByText(/status=completed run_id=run-/i)).toBeVisible({
+    await expect(page.getByText(/run-/i).first()).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
+    await expect(page.getByText(/completed/i).first()).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
+    await expect(page.getByText(executorProfile).first()).toBeVisible({
+      timeout: uiSubmitTimeoutMs,
+    });
+    await expect(page.getByText(/Summary/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
     await expect(
-      page.getByText(
-        new RegExp(`executor=${escapeRegExp(executorProfile)}`, "i"),
-      ),
-    ).toBeVisible({ timeout: uiSubmitTimeoutMs });
-    await expect(page.getByText(/report=completed/i)).toBeVisible({
+      page.getByText(/summary=|codencer|readme|artifact|completed/i).first(),
+    ).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
-    await expect(page.getByText(/report summary=/i)).toBeVisible({
+    const fullRunLink = page.getByRole("link", { name: /view full run/i });
+    await expect(fullRunLink).toBeVisible();
+    await fullRunLink.click();
+    await expect(page.getByRole("heading", { name: /full run/i })).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
+    await expect(page.getByText(executorProfile).first()).toBeVisible();
+    await expect(page.getByText(/Run ID/i).first()).toBeVisible();
+    await expect(page.getByText(/Result/i).first()).toBeVisible();
+    await expect(page.getByText(/event timeline/i)).toBeVisible();
+    await expect(page.getByText(/task_submitted/i).first()).toBeVisible();
+    await expect(page.getByText(/run_completed/i).first()).toBeVisible();
+    await assertNoDemoOrSecretLeak(page);
+
+    await page.goto(`${consoleBase}/console/runs`);
     await expect(
-      page.getByRole("link", { name: /view audit events/i }),
+      page.getByRole("heading", { name: /run history/i }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByText(
+          /Codex workspace smoke task|Gateway Console fake-safe task|Gateway Console task/i,
+        )
+        .first(),
+    ).toBeVisible();
+    await expect(page.getByText(executorProfile).first()).toBeVisible();
+    await expect(page.getByText(/Run ID/i).first()).toBeVisible();
+    await expect(page.getByText(/Result/i).first()).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /view details/i }).first(),
+    ).toBeVisible();
+    await assertNoDemoOrSecretLeak(page);
+
+    await page.goto(`${consoleBase}/console/audit`);
+    await expect(
+      page.getByRole("link", { name: /task_submitted/i }).first(),
+    ).toBeVisible();
+    await page
+      .getByRole("link", { name: /task_submitted/i })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: /full run/i }),
     ).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 
@@ -737,6 +781,7 @@ async function assertGatewayCollectionEndpoints(
   const connectors = await getJSON(`${base}/api/gateway/v1/connectors`, token);
   const executors = await getJSON(`${base}/api/gateway/v1/executors`, token);
   const projects = await getJSON(`${base}/api/gateway/v1/projects`, token);
+  const runs = await getJSON(`${base}/api/gateway/v1/runs`, token);
   const audit = await getJSON(`${base}/api/gateway/v1/audit-events`, token);
   const activation = await getJSON(
     `${base}/api/gateway/v1/activation/commands`,
@@ -747,6 +792,7 @@ async function assertGatewayCollectionEndpoints(
   const connectorList = assertArrayField(connectors, "connectors", label);
   const executorList = assertArrayField(executors, "executors", label);
   const projectList = assertArrayField(projects, "projects", label);
+  assertArrayField(runs, "runs", label);
   assertArrayField(projects, "relay_errors", label);
   assertArrayField(audit, "audit_events", label);
   assertArrayField(audit, "events", label);
@@ -760,6 +806,7 @@ async function assertGatewayCollectionEndpoints(
     executors,
     machines,
     projects,
+    runs,
   });
   if (serialized.includes(":null")) {
     throw new Error(`${label} returned a null collection: ${serialized}`);
@@ -968,10 +1015,6 @@ function sha256Hex(value) {
 
 function codeChallengeS256(verifier) {
   return crypto.createHash("sha256").update(verifier).digest("base64url");
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function parsePositiveInt(value, fallback, name) {

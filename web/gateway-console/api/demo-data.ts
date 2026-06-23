@@ -6,6 +6,7 @@ import type { Machine } from "@/schemas/machines";
 import type { Project } from "@/schemas/projects";
 import type { RelayHealth } from "@/schemas/relay-health";
 import type { RelayProfile } from "@/schemas/relays";
+import type { RunRecord } from "@/schemas/run-history";
 import type { User, Workspace } from "@/schemas/workspace";
 
 type DemoSnapshot = {
@@ -18,6 +19,7 @@ type DemoSnapshot = {
   projects: Project[];
   relayHealth: RelayHealth[];
   relays: RelayProfile[];
+  runs: RunRecord[];
   user: User;
   workspace: Workspace;
 };
@@ -243,6 +245,121 @@ export const demoSnapshot: DemoSnapshot = {
   ],
   auditEvents: [
     {
+      id: "evt_run_08",
+      type: "report_read",
+      summary: "Read run report run_demo_console for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:40Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        run_id: "run_demo_console",
+        project_id: "codencer",
+        executor_profile: "codex-workspace",
+      },
+    },
+    {
+      id: "evt_run_07",
+      type: "run_completed",
+      summary: "Run run_demo_console completed for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:35Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        run_id: "run_demo_console",
+        project_id: "codencer",
+        executor_profile: "codex-workspace",
+      },
+    },
+    {
+      id: "evt_run_06",
+      type: "run_started",
+      summary: "Started simple task for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:02Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        run_id: "run_demo_console",
+        project_id: "codencer",
+        executor_profile: "codex-workspace",
+      },
+    },
+    {
+      id: "evt_run_05",
+      type: "executor_selected",
+      summary: "Selected executor profile codex-workspace for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:01Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        project_id: "codencer",
+        executor_profile: "codex-workspace",
+      },
+    },
+    {
+      id: "evt_run_04",
+      type: "connector_selected",
+      summary:
+        "Selected connector conn_01 on machine mach_mac for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:01Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        project_id: "codencer",
+        connector_id: "conn_01",
+        machine_id: "mach_mac",
+      },
+    },
+    {
+      id: "evt_run_03",
+      type: "relay_selected",
+      summary: "Selected Relay profile default for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:01Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        project_id: "codencer",
+        relay_profile_id: "default",
+      },
+    },
+    {
+      id: "evt_run_02",
+      type: "route_resolved",
+      summary: "Resolved project route for codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:01Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        project_id: "codencer",
+      },
+    },
+    {
+      id: "evt_run_01",
+      type: "task_submitted",
+      summary: "Submitted simple task for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:00Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        run_history_id: "runhist_demo_console",
+        project_id: "codencer",
+      },
+    },
+    {
       id: "evt_01",
       type: "relay.add",
       summary: "Added Personal self-host Relay profile.",
@@ -265,6 +382,42 @@ export const demoSnapshot: DemoSnapshot = {
       actor: "gateway",
       createdAt: "2026-06-20T12:07:00Z",
       severity: "warning",
+    },
+  ],
+  runs: [
+    {
+      completedAt: "2026-06-20T12:18:35Z",
+      connectorId: "conn_01",
+      createdAt: "2026-06-20T12:18:00Z",
+      executorProfile: "codex-workspace",
+      goal: "Inspect the project README and return a short summary. Do not modify files.",
+      hostLabel: "macbook",
+      id: "runhist_demo_console",
+      machineId: "mach_mac",
+      mode: "task",
+      projectId: "codencer",
+      projectName: "Codencer",
+      relayProfileId: "default",
+      report: {
+        status: "completed",
+        evidence: {
+          result: {
+            raw_output:
+              "Codencer is a local/self-host bridge between AI planners and coding executors. It records structured runs, results, blockers, and audit evidence.",
+          },
+        },
+      },
+      reportStatus: "completed",
+      resultDetails:
+        "Codencer is a local/self-host bridge between AI planners and coding executors. It records structured runs, results, blockers, and audit evidence.",
+      resultSummary:
+        "Codencer bridges planners to coding executors through local and self-host services.",
+      runId: "run_demo_console",
+      startedAt: "2026-06-20T12:18:00Z",
+      status: "completed",
+      stepId: "step_demo_console",
+      title: "Codex workspace smoke task",
+      updatedAt: "2026-06-20T12:18:40Z",
     },
   ],
   activationCommands: [

@@ -308,6 +308,7 @@ func TestGatewayConsoleCollectionResponsesUseEmptyArrays(t *testing.T) {
 		{path: "/api/gateway/v1/connectors", keys: []string{"connectors"}},
 		{path: "/api/gateway/v1/executors", keys: []string{"executors"}},
 		{path: "/api/gateway/v1/projects", keys: []string{"projects", "relay_errors"}},
+		{path: "/api/gateway/v1/runs", keys: []string{"runs"}},
 		{path: "/api/gateway/v1/audit-events", keys: []string{"audit_events", "events"}},
 		{path: "/api/gateway/v1/activation/commands", keys: []string{"activation_commands", "commands"}},
 	} {
@@ -481,13 +482,53 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if !strings.Contains(runResultBody, `"step_id":"step-gateway-test"`) {
 		t.Fatalf("project run endpoint did not submit through relay: %s", runResultBody)
 	}
+	runHistoryID, _ := runResult["run_history_id"].(string)
+	if runHistoryID == "" {
+		t.Fatalf("project run endpoint did not return run_history_id: %s", runResultBody)
+	}
 	assertNoGatewayMCPLeak(t, runResultBody)
 	report := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-gateway-test/report?relay_profile_id=default&machine_id=mach-1", token.AccessToken)
 	reportBody := mustJSON(t, report)
 	if !strings.Contains(reportBody, `"status":"completed"`) || !strings.Contains(reportBody, `"run_id":"run-gateway-test"`) {
 		t.Fatalf("project run report endpoint did not fetch report: %s", reportBody)
 	}
+	if report["run_history_id"] != runHistoryID {
+		t.Fatalf("report endpoint returned run_history_id=%v want %s: %s", report["run_history_id"], runHistoryID, reportBody)
+	}
 	assertNoGatewayMCPLeak(t, reportBody)
+	runs := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs", token.AccessToken)
+	runsBody := mustJSON(t, runs)
+	if !strings.Contains(runsBody, `"id":"`+runHistoryID+`"`) ||
+		!strings.Contains(runsBody, `"run_id":"run-gateway-test"`) ||
+		!strings.Contains(runsBody, `"title":"Gateway Console task"`) ||
+		!strings.Contains(runsBody, `"goal":"Return deterministic evidence."`) ||
+		!strings.Contains(runsBody, `"executor_profile":"fake-success"`) ||
+		!strings.Contains(runsBody, `"relay_profile_id":"default"`) ||
+		!strings.Contains(runsBody, `"connector_id":"connector-1"`) ||
+		!strings.Contains(runsBody, `"machine_id":"mach-1"`) ||
+		!strings.Contains(runsBody, `"result_summary":"Artifacts: stdout.log"`) {
+		t.Fatalf("run history list missing expected safe metadata: %s", runsBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, runsBody)
+	runDetail := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+runHistoryID, token.AccessToken)
+	runDetailBody := mustJSON(t, runDetail)
+	if !strings.Contains(runDetailBody, `"run_id":"run-gateway-test"`) ||
+		!strings.Contains(runDetailBody, `"report_status":"completed"`) ||
+		!strings.Contains(runDetailBody, `"result_details":"Artifacts: stdout.log"`) {
+		t.Fatalf("run history detail missing expected result metadata: %s", runDetailBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, runDetailBody)
+	runEvents := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+runHistoryID+"/events", token.AccessToken)
+	runEventsBody := mustJSON(t, runEvents)
+	for _, eventType := range []string{"task_submitted", "route_resolved", "relay_selected", "connector_selected", "executor_selected", "run_started", "run_completed", "report_read"} {
+		if !strings.Contains(runEventsBody, `"`+eventType+`"`) {
+			t.Fatalf("run event history missing %s event: %s", eventType, runEventsBody)
+		}
+	}
+	if !strings.Contains(runEventsBody, `"run_history_id":"`+runHistoryID+`"`) {
+		t.Fatalf("run event history missing run metadata: %s", runEventsBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, runEventsBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	auditBody := mustJSON(t, audit)
 	for _, eventType := range []string{
@@ -506,6 +547,9 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		}
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, auditBody)
+	if !strings.Contains(auditBody, `"run_history_id":"`+runHistoryID+`"`) {
+		t.Fatalf("audit endpoint missing run history metadata: %s", auditBody)
+	}
 	if strings.Contains(auditBody, "relay-secret") || strings.Contains(auditBody, relay.URL) {
 		t.Fatalf("audit endpoint leaked relay secret or daemon URL: %s", auditBody)
 	}

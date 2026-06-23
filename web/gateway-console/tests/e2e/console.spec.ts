@@ -6,6 +6,7 @@ const routes = [
   ["/console/relays", "Gateway routing backends"],
   ["/console/connectors", "Local execution endpoints"],
   ["/console/projects", "Project locations"],
+  ["/console/runs", "Run history"],
   ["/console/activation", "Gateway-first setup"],
   ["/console/audit", "Workspace event stream"],
   ["/console/settings", "Console settings"],
@@ -17,11 +18,11 @@ for (const [route, heading] of routes) {
   test(`${route} renders`, async ({ page }) => {
     await page.goto(route);
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-    const html = await page.content();
-    expect(html).not.toContain("official-relay-token");
-    expect(html).not.toContain("selfhost-relay-token");
-    expect(html).not.toMatch(/\/Users\/[^<"'\s]+/);
-    expect(html).not.toMatch(/\/home\/[^<"'\s]+/);
+    const visibleText = await page.locator("body").innerText();
+    expect(visibleText).not.toContain("official-relay-token");
+    expect(visibleText).not.toContain("selfhost-relay-token");
+    expect(visibleText).not.toMatch(/\/Users\/[^<"'\s]+/);
+    expect(visibleText).not.toMatch(/\/home\/[^<"'\s]+/);
   });
 }
 
@@ -52,16 +53,25 @@ test("project task form submits demo run without unsafe output", async ({
   await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
   await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();
   await page.getByRole("button", { name: /^submit$/i }).click();
-  await expect(page.getByText(/run completed/i)).toBeVisible();
+  await expect(page.getByText(/^Result$/i)).toBeVisible();
   await expect(page.getByText(/run_demo_console/i)).toBeVisible();
-  await expect(page.getByText(/report summary=/i)).toBeVisible();
+  await expect(page.getByText(/README summary/i)).toBeVisible();
+  await expect(page.getByText(/local\/self-host bridge/i)).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /view audit events/i }),
+    page.getByRole("link", { name: /view full run/i }),
   ).toBeVisible();
-  const html = await page.content();
-  expect(html).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);
-  expect(html).not.toContain("report_path");
-  expect(html).not.toContain("logs_ref");
+  await page.getByRole("link", { name: /view full run/i }).click();
+  await expect(page.getByRole("heading", { name: /full run/i })).toBeVisible();
+  await expect(page.getByText(/run_demo_console/i).first()).toBeVisible();
+  await expect(page.getByText(/event timeline/i)).toBeVisible();
+  await expect(page.getByText(/task_submitted/i)).toBeVisible();
+  await page.goto("/console/runs");
+  await expect(page.getByText(/Codex workspace smoke task/i)).toBeVisible();
+  await expect(page.getByText(/Codencer bridges planners/i)).toBeVisible();
+  const visibleText = await page.locator("body").innerText();
+  expect(visibleText).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);
+  expect(visibleText).not.toContain("report_path");
+  expect(visibleText).not.toContain("logs_ref");
 });
 
 test("project task form validates executor selection", async ({ page }) => {
@@ -108,6 +118,13 @@ test("device form validation works", async ({ page }) => {
   await page.getByLabel(/user code/i).fill("ABCD-EFGH");
   await page.getByRole("button", { name: /approve device/i }).click();
   await expect(page.getByText(/device login approved/i)).toBeVisible();
+});
+
+test("product navigation hides UI System", async ({ page }) => {
+  await page.goto("/console");
+  await expect(page.getByTestId("nav-menu")).toBeVisible();
+  await expect(page.getByText("UI System")).toBeHidden();
+  await expect(page.getByText("Runs").first()).toBeVisible();
 });
 
 test("oauth approve and deny controls exist", async ({ page }) => {

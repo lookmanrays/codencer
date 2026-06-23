@@ -2,13 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Play, RotateCcw } from "lucide-react";
-import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { useCallback, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useExecutors } from "@/api/executors";
 import { queryKeys } from "@/api/query-keys";
 import { useProjectRunReport, useSubmitProjectRun } from "@/api/runs";
+import { RunResultPanel } from "@/components/console/run-result-panel";
 import type { ExecutorProfile } from "@/schemas/executors";
 import type { Project } from "@/schemas/projects";
 import {
@@ -200,12 +200,22 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
   useEffect(() => {
     if (!submitRun.isSuccess) return;
     void queryClient.invalidateQueries({ queryKey: queryKeys.auditEvents });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
   }, [queryClient, submitRun.isSuccess]);
 
   useEffect(() => {
     if (!report.dataUpdatedAt) return;
     void queryClient.invalidateQueries({ queryKey: queryKeys.auditEvents });
-  }, [queryClient, report.dataUpdatedAt]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.runs });
+    if (submitRun.data?.runHistoryId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.run(submitRun.data.runHistoryId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runEvents(submitRun.data.runHistoryId),
+      });
+    }
+  }, [queryClient, report.dataUpdatedAt, submitRun.data?.runHistoryId]);
 
   const submitDisabled =
     submitRun.isPending || locations.length === 0 || Boolean(executorError);
@@ -224,6 +234,7 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
             await queryClient.invalidateQueries({
               queryKey: queryKeys.auditEvents,
             });
+            await queryClient.invalidateQueries({ queryKey: queryKeys.runs });
           })}
         >
           {executors.error ? (
@@ -237,43 +248,7 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
             </Alert>
           ) : null}
           {submitRun.data ? (
-            <Alert title="Run completed" tone="brand">
-              <span className="block min-w-0 break-words">
-                status={submitRun.data.status ?? "completed"} run_id=
-                {submitRun.data.runId ?? "n/a"} step_id=
-                {submitRun.data.stepId ?? "n/a"}
-              </span>
-              <span className="mt-xs block min-w-0 break-words">
-                executor={submitRun.data.executorProfile || effectiveExecutorID}
-              </span>
-              <span className="mt-xs block min-w-0 break-words">
-                report=
-                {report.isPending
-                  ? "loading"
-                  : report.data?.status
-                    ? report.data.status
-                    : report.error
-                      ? "unavailable"
-                      : "pending"}
-              </span>
-              {report.data?.summary || submitRun.data.summary ? (
-                <span className="mt-xs block min-w-0 break-words">
-                  report summary=
-                  {report.data?.summary ?? submitRun.data.summary}
-                </span>
-              ) : null}
-              {submitRun.data.blockerType ? (
-                <span className="mt-xs block min-w-0 break-words">
-                  blocker={submitRun.data.blockerType}
-                </span>
-              ) : null}
-              <Link
-                className="mt-sm inline-block underline"
-                href="/console/audit"
-              >
-                View audit events
-              </Link>
-            </Alert>
+            <RunResultPanel result={report.data ?? submitRun.data} />
           ) : null}
           <div className="grid min-w-0 gap-md md:grid-cols-2">
             <Field

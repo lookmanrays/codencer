@@ -221,16 +221,34 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 			if apiErr != nil {
 				return ToolResult{}, apiErr
 			}
-			s.recordGatewayAudit(ctx, principal, "task_submitted", "Submitted "+executionKindLabel(name)+" for project "+projectID)
+			runRecord := RunRecord{}
+			auditMetadata := map[string]any{"project_id": projectID}
+			if name != "codencer.get_run_report" {
+				runRecord, auditMetadata = s.beginRunRecord(ctx, principal, projectID, name, args)
+				s.recordGatewayAuditWithMetadata(ctx, principal, "task_submitted", "Submitted "+executionKindLabel(name)+" for project "+projectID, auditMetadata)
+			}
 			match, apiErr := s.resolveProject(ctx, principal, projectID, args, true)
 			if apiErr != nil {
-				s.recordGatewayAudit(ctx, principal, "run_failed", "Route resolution failed for project "+projectID+": "+apiErr.Code)
+				if name != "codencer.get_run_report" {
+					runRecord.Status = "failed"
+					runRecord.ResultSummary = "Route resolution failed: " + apiErr.Code
+					runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+				}
+				s.recordGatewayAuditWithMetadata(ctx, principal, "run_failed", "Route resolution failed for project "+projectID+": "+apiErr.Code, auditMetadata)
 				return ToolResult{}, apiErr
 			}
-			s.recordProjectRouteAudit(ctx, principal, match, args)
+			if name != "codencer.get_run_report" {
+				runRecord, auditMetadata = s.applyRouteToRunRecord(ctx, runRecord, principal, match, args)
+				s.recordProjectRouteAudit(ctx, principal, match, args, auditMetadata)
+			}
 			path, body, apiErr := route(args)
 			if apiErr != nil {
-				s.recordGatewayAudit(ctx, principal, "run_failed", "Run request validation failed for project "+projectID+": "+apiErr.Code)
+				if name != "codencer.get_run_report" {
+					runRecord.Status = "failed"
+					runRecord.ResultSummary = "Run request validation failed: " + apiErr.Code
+					runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+				}
+				s.recordGatewayAuditWithMetadata(ctx, principal, "run_failed", "Run request validation failed for project "+projectID+": "+apiErr.Code, auditMetadata)
 				return ToolResult{}, apiErr
 			}
 			path = appendSelector(path, args)
@@ -239,7 +257,7 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				method = http.MethodPost
 			}
 			if name != "codencer.get_run_report" {
-				s.recordGatewayAudit(ctx, principal, "run_started", "Started "+executionKindLabel(name)+" for project "+projectID)
+				s.recordGatewayAuditWithMetadata(ctx, principal, "run_started", "Started "+executionKindLabel(name)+" for project "+projectID, auditMetadata)
 			}
 			_, response, apiErr := s.callRelay(ctx, match.Profile, method, path, body)
 			payload, apiErr := responsePayload(match.Profile, response, apiErr)
@@ -247,14 +265,21 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				eventType := "run_failed"
 				if name == "codencer.get_run_report" {
 					eventType = "report_read"
+				} else {
+					runRecord.Status = "failed"
+					runRecord.ResultSummary = "Gateway relay call failed: " + apiErr.Code
+					runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
 				}
-				s.recordGatewayAudit(ctx, principal, eventType, "Gateway relay call failed for project "+projectID+": "+apiErr.Code)
+				s.recordGatewayAuditWithMetadata(ctx, principal, eventType, "Gateway relay call failed for project "+projectID+": "+apiErr.Code, auditMetadata)
 				return ToolResult{}, apiErr
 			}
 			if name == "codencer.get_run_report" {
-				s.recordGatewayAudit(ctx, principal, "report_read", "Read run report "+requiredStringValue(args, "run_id")+" for project "+projectID)
+				record, metadata := s.refreshRunRecordFromReport(ctx, principal, match, args, payload)
+				_ = record
+				s.recordGatewayAuditWithMetadata(ctx, principal, "report_read", "Read run report "+requiredStringValue(args, "run_id")+" for project "+projectID, metadata)
 			} else {
-				s.recordGatewayAudit(ctx, principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload))
+				runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, payload, "available")
+				s.recordGatewayAuditWithMetadata(ctx, principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload), auditMetadata)
 			}
 			return successToolResult(description, payload), nil
 		},

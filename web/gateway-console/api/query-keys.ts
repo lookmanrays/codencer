@@ -11,5 +11,8 @@ export const queryKeys = {
   relay: (relayId: string) => ["relays", relayId] as const,
   relayHealth: (relayId: string) => ["relays", relayId, "health"] as const,
   relays: ["relays"] as const,
+  run: (id: string) => ["runs", id] as const,
+  runEvents: (id: string) => ["runs", id, "events"] as const,
+  runs: ["runs"] as const,
   workspace: ["workspace"] as const,
 };

@@ -19,6 +19,7 @@ import {
 import { MachineListResponseSchema, MachineSchema } from "@/schemas/machines";
 import { ProjectListResponseSchema, ProjectSchema } from "@/schemas/projects";
 import { RelayListResponseSchema, RelayProfileSchema } from "@/schemas/relays";
+import { RunListResponseSchema } from "@/schemas/run-history";
 import { RunSubmitResponseSchema } from "@/schemas/runs";
 import { WorkspaceResponseSchema, WorkspaceSchema } from "@/schemas/workspace";
 
@@ -36,6 +37,7 @@ describe("domain schemas", () => {
       "claude-default",
     );
     expect(ProjectSchema.parse(demoSnapshot.projects[0]).id).toBe("codencer");
+    expect(demoSnapshot.runs[0]?.runId).toBe("run_demo_console");
     expect(AuditEventSchema.parse(demoSnapshot.auditEvents[0]).severity).toBe(
       "info",
     );
@@ -131,6 +133,31 @@ describe("domain schemas", () => {
         .activationCommands,
     ).toEqual([]);
     expect(RelayListResponseSchema.parse({ relays: null }).relays).toEqual([]);
+    expect(RunListResponseSchema.parse({ runs: null }).runs).toEqual([]);
+  });
+
+  it("extracts fallback result text from Gateway run reports", () => {
+    const parsed = RunSubmitResponseSchema.parse({
+      ok: true,
+      project_id: "codencer",
+      run_history_id: "runhist_1",
+      result: {
+        ok: true,
+        run_id: "run-1",
+        status: "completed",
+        tasks: [
+          {
+            evidence: {
+              result: {
+                raw_output: "Executor returned README summary.",
+              },
+            },
+          },
+        ],
+      },
+    });
+    expect(parsed.runHistoryId).toBe("runhist_1");
+    expect(parsed.summary).toContain("Executor returned README summary");
   });
 
   it("maps relay-derived machine statuses to dashboard states", () => {

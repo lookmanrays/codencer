@@ -6,6 +6,9 @@ export function AuditEventTimeline({ events }: { events: AuditEvent[] }) {
   return (
     <Timeline
       items={events.map((event) => ({
+        href: event.runHistoryId
+          ? `/console/runs/${event.runHistoryId}`
+          : undefined,
         id: event.id,
         title: event.type,
         description: event.summary,

@@ -1,6 +1,7 @@
 import { StatusBadge } from "@/components/ui/badge";
 
 export type TimelineItem = {
+  href?: string;
   id: string;
   title: string;
   description: string;
@@ -23,7 +24,15 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
           <div className="min-w-0 border-b border-border pb-md">
             <div className="flex min-w-0 flex-wrap items-start justify-between gap-sm">
               <div className="min-w-0">
-                <p className="m-0 font-semibold">{item.title}</p>
+                <p className="m-0 font-semibold">
+                  {item.href ? (
+                    <a className="text-ink-primary underline" href={item.href}>
+                      {item.title}
+                    </a>
+                  ) : (
+                    item.title
+                  )}
+                </p>
                 <p className="m-0 mt-xs text-body-sm text-ink-secondary">
                   {item.description}
                 </p>

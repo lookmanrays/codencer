@@ -1,6 +1,7 @@
 "use client";
 
 import { MoreHorizontal } from "lucide-react";
+import { notFound } from "next/navigation";
 import { RelayProfileCard } from "@/components/console/relay-profile-card";
 import { RelayProfileForm } from "@/components/console/relay-profile-form";
 import { MachineConnectorTable } from "@/components/console/machine-connector-table";
@@ -69,6 +70,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { demoSnapshot } from "@/api/demo-data";
+import { isDemoMode } from "@/api/config";
 
 const colors = [
   "ink-primary",
@@ -106,6 +108,10 @@ const typeRows = [
 ] as const;
 
 export default function UISystemPage() {
+  if (!isDemoMode() && process.env.NODE_ENV === "production") {
+    notFound();
+  }
+
   return (
     <PageShell
       breadcrumbs={[{ label: "UI System" }]}

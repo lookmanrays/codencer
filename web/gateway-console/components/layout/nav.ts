@@ -3,8 +3,8 @@ import {
   Boxes,
   Cable,
   LayoutDashboard,
-  ListChecks,
   MonitorCog,
+  History,
   Rocket,
   Settings,
   ShieldCheck,
@@ -15,10 +15,10 @@ export const consoleNav = [
   { href: "/console/relays", label: "Relays", icon: Cable },
   { href: "/console/connectors", label: "Machines", icon: MonitorCog },
   { href: "/console/projects", label: "Projects", icon: Boxes },
+  { href: "/console/runs", label: "Runs", icon: History },
   { href: "/console/activation", label: "Activation", icon: Rocket },
   { href: "/console/audit", label: "Audit", icon: Activity },
   { href: "/console/settings", label: "Settings", icon: Settings },
-  { href: "/ui-system", label: "UI System", icon: ListChecks },
 ] as const;
 
 export const authNav = [
