@@ -1041,6 +1041,116 @@ func (s *Server) cancelProjectRunFromRecord(ctx context.Context, principal *auth
 	return map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload}, nil
 }
 
+func (s *Server) startNewProjectTaskFromRecord(ctx context.Context, principal *authPrincipal, record RunRecord, args map[string]any) (map[string]any, *apiError) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	projectID := firstNonEmpty(stringValueFromAny(args["project_id"]), record.ProjectID)
+	if strings.TrimSpace(projectID) == "" {
+		return nil, &apiError{Status: http.StatusBadRequest, Code: "project_id_required", Message: "project_id is required"}
+	}
+	goal := firstNonEmpty(
+		stringValueFromAny(args["new_task_goal"]),
+		stringValueFromAny(args["goal"]),
+	)
+	if strings.TrimSpace(goal) == "" {
+		return nil, &apiError{Status: http.StatusBadRequest, Code: "new_task_goal_required", Message: "new_task_goal is required when follow_up=start_new_task"}
+	}
+	submitArgs := map[string]any{
+		"project_id": projectID,
+		"wait":       false,
+		"goal":       goal,
+		"title": firstNonEmpty(
+			stringValueFromAny(args["new_task_title"]),
+			stringValueFromAny(args["title"]),
+			"Follow-up task for "+firstNonEmpty(record.RunID, record.ID),
+		),
+	}
+	for _, key := range []string{"relay_profile_id", "machine_id", "host_label", "reason"} {
+		if value := strings.TrimSpace(stringValueFromAny(args[key])); value != "" {
+			submitArgs[key] = value
+		}
+	}
+	for key, value := range map[string]string{
+		"relay_profile_id": record.RelayProfileID,
+		"machine_id":       record.MachineID,
+		"host_label":       record.HostLabel,
+	} {
+		if _, exists := submitArgs[key]; !exists && strings.TrimSpace(value) != "" {
+			submitArgs[key] = strings.TrimSpace(value)
+		}
+	}
+	for source, target := range map[string]string{
+		"new_task_prompt":          "prompt",
+		"new_task_profile":         "profile",
+		"new_task_adapter_profile": "adapter_profile",
+		"new_task_timeout_seconds": "timeout_seconds",
+	} {
+		if value, exists := args[source]; exists {
+			submitArgs[target] = value
+		}
+	}
+	for _, key := range []string{"prompt", "profile", "adapter_profile", "timeout_seconds"} {
+		if _, exists := submitArgs[key]; !exists {
+			if value, ok := args[key]; ok {
+				submitArgs[key] = value
+			}
+		}
+	}
+	if _, exists := submitArgs["adapter_profile"]; !exists && strings.TrimSpace(record.ExecutorProfile) != "" {
+		submitArgs["adapter_profile"] = strings.TrimSpace(record.ExecutorProfile)
+	}
+	if record.ID != "" {
+		submitArgs["parent_run_history_id"] = record.ID
+	}
+	if record.RunID != "" {
+		submitArgs["parent_run_id"] = record.RunID
+	}
+	runRecord, auditMetadata := s.beginRunRecord(ctx, principal, projectID, "start_new_task", submitArgs)
+	parentMetadata := runAuditMetadata(record)
+	parentMetadata["operation"] = "start_new_task"
+	parentMetadata["new_task_title"] = safeExcerpt(stringValueFromAny(submitArgs["title"]), 240)
+	parentMetadata["new_task_goal"] = safeExcerpt(goal, 600)
+	s.recordGatewayAuditWithMetadata(ctx, principal, "start_new_task_requested", "Requested start_new_task from run "+firstNonEmpty(record.RunID, record.ID)+" in project "+projectID, parentMetadata)
+	s.recordGatewayAuditWithMetadata(ctx, principal, "task_submitted", "Submitted follow-up task for project "+projectID, auditMetadata)
+	match, apiErr := s.resolveProject(ctx, principal, projectID, submitArgs, true)
+	if apiErr != nil {
+		runRecord.Status = "failed"
+		runRecord.ResultSummary = "Route resolution failed: " + apiErr.Code
+		runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+		s.recordGatewayAuditWithMetadata(ctx, principal, "run_failed", "Follow-up task route resolution failed for project "+projectID+": "+apiErr.Code, auditMetadata)
+		return nil, apiErr
+	}
+	runRecord, auditMetadata = s.applyRouteToRunRecord(ctx, runRecord, principal, match, submitArgs)
+	s.recordProjectRouteAudit(ctx, principal, match, submitArgs, auditMetadata)
+	path, body, apiErr := submitProjectTaskRoute(false)(submitArgs)
+	if apiErr != nil {
+		runRecord.Status = "failed"
+		runRecord.ResultSummary = "Follow-up task validation failed: " + apiErr.Code
+		runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+		s.recordGatewayAuditWithMetadata(ctx, principal, "run_failed", "Follow-up task validation failed for project "+projectID+": "+apiErr.Code, auditMetadata)
+		return nil, apiErr
+	}
+	path = appendSelector(path, submitArgs)
+	s.recordGatewayAuditWithMetadata(ctx, principal, "run_started", "Started follow-up task for project "+projectID, auditMetadata)
+	_, response, apiErr := s.callRelay(ctx, match.Profile, http.MethodPost, path, body)
+	payload, apiErr := responsePayload(match.Profile, response, apiErr)
+	if apiErr != nil {
+		runRecord.Status = "failed"
+		runRecord.ResultSummary = "Follow-up task failed: " + apiErr.Code
+		runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, map[string]any{"status": "failed", "summary": runRecord.ResultSummary}, "unavailable")
+		s.recordGatewayAuditWithMetadata(ctx, principal, "run_failed", "Follow-up task failed for project "+projectID+": "+apiErr.Code, auditMetadata)
+		return nil, apiErr
+	}
+	runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, payload, reportStatusForPayload(payload, "available"))
+	eventType := terminalAuditType(payload)
+	s.recordGatewayAuditWithMetadata(ctx, principal, eventType, terminalAuditSummary(projectID, payload), auditMetadata)
+	if eventType == "blocker" {
+		s.recordHumanInterruptAudit(ctx, principal, projectID, payload, auditMetadata)
+	}
+	return map[string]any{"ok": true, "project_id": projectID, "run_history_id": runRecord.ID, "run_id": runRecord.RunID, "result": payload}, nil
+}
+
 func (s *Server) handleProjectRunResume(w http.ResponseWriter, r *http.Request, projectID, runID string) {
 	if r.Method != http.MethodPost {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")

@@ -218,11 +218,14 @@ function HumanInterruptResponsePanel({
                   {respond.data.response?.operatorResponse ||
                     "The response was recorded and linked to this run."}
                   {respond.data.followUp === "resume" ||
-                  respond.data.followUp === "cancel" ? (
+                  respond.data.followUp === "cancel" ||
+                  respond.data.followUp === "start_new_task" ? (
                     <span className="mt-xs block text-xs text-muted">
                       {respond.data.followUp === "cancel"
                         ? "Cancel follow-up requested; check the audit timeline for the cancelled or blocked outcome."
-                        : "Resume follow-up requested; check the audit timeline for the resumed or blocked outcome."}
+                        : respond.data.followUp === "start_new_task"
+                          ? "Start-new-task follow-up requested; check the audit timeline and Runs page for the submitted or blocked outcome."
+                          : "Resume follow-up requested; check the audit timeline for the resumed or blocked outcome."}
                     </span>
                   ) : null}
                 </Alert>

@@ -387,6 +387,54 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 	}
 	assertNoGatewayMCPLeak(t, blockedCancelEventsBody)
 
+	blockedStart := mcpToolCall(t, server.URL, session, "codencer.submit_project_task", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"machine_id":       "mach-1",
+		"title":            "Blocked Gateway start task",
+		"goal":             "Ask for a safe replacement task.",
+	})
+	blockedStartBody := mustJSON(t, blockedStart)
+	blockedStartPayload, _ := mcpStructuredContent(t, blockedStart).(map[string]any)
+	blockedStartRunHistoryID := stringValueFromAny(blockedStartPayload["run_history_id"])
+	if blockedStartRunHistoryID == "" || !strings.Contains(blockedStartBody, `"status":"blocked"`) || !strings.Contains(blockedStartBody, `"type":"question"`) {
+		t.Fatalf("expected blocked start-new-task run response with history id, got %s", blockedStartBody)
+	}
+	assertNoGatewayMCPLeak(t, blockedStartBody)
+
+	startResponse := mcpToolCall(t, server.URL, session, "codencer.respond_to_human_interrupt", map[string]any{
+		"run_history_id": blockedStartRunHistoryID,
+		"response_type":  "decision",
+		"response":       "Start a new safe task without using /Users/example/private token=relay-secret.",
+		"follow_up":      "start_new_task",
+		"new_task_title": "Gateway follow-up task",
+		"new_task_goal":  "Run a safe follow-up task that does not expose local paths.",
+	})
+	startResponseBody := mustJSON(t, startResponse)
+	if !strings.Contains(startResponseBody, `"status":"human_interrupt_response_recorded"`) ||
+		!strings.Contains(startResponseBody, `"start_new_task_supported":true`) ||
+		!strings.Contains(startResponseBody, `"start_new_task_attempted":true`) ||
+		!strings.Contains(startResponseBody, `"follow_up":"start_new_task"`) ||
+		!strings.Contains(startResponseBody, `"follow_up_result"`) ||
+		!strings.Contains(startResponseBody, `"run-followup"`) ||
+		!strings.Contains(startResponseBody, `"operator_response"`) {
+		t.Fatalf("expected recorded start_new_task human interrupt response, got %s", startResponseBody)
+	}
+	assertNoGatewayMCPLeak(t, startResponseBody)
+
+	blockedStartEvents := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
+		"run_history_id": blockedStartRunHistoryID,
+		"limit":          20,
+	})
+	blockedStartEventsBody := mustJSON(t, blockedStartEvents)
+	if !strings.Contains(blockedStartEventsBody, `"human_interrupt_created"`) ||
+		!strings.Contains(blockedStartEventsBody, `"human_interrupt_responded"`) ||
+		!strings.Contains(blockedStartEventsBody, `"start_new_task_requested"`) ||
+		!strings.Contains(blockedStartEventsBody, `"operator_response"`) {
+		t.Fatalf("expected human interrupt start_new_task audit event, got %s", blockedStartEventsBody)
+	}
+	assertNoGatewayMCPLeak(t, blockedStartEventsBody)
+
 	cancel := mcpToolCall(t, server.URL, session, "codencer.cancel_project_run", map[string]any{
 		"relay_profile_id": "default",
 		"project_id":       "codencer",
@@ -1008,6 +1056,44 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("blocked cancel run events missing human interrupt cancel audit: %s", blockedCancelEventsAfterResponseBody)
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, blockedCancelEventsAfterResponseBody)
+	blockedStartRun := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"title":            "Blocked Gateway start task",
+		"goal":             "Ask for a safe replacement task.",
+		"timeout_seconds":  30,
+	})
+	blockedStartBody := mustJSON(t, blockedStartRun)
+	blockedStartRunHistoryID, _ := blockedStartRun["run_history_id"].(string)
+	if blockedStartRunHistoryID == "" || !strings.Contains(blockedStartBody, `"status":"blocked"`) || !strings.Contains(blockedStartBody, `"type":"question"`) {
+		t.Fatalf("blocked start-new-task run did not return blocker and history id: %s", blockedStartBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, blockedStartBody)
+	startMissingGoalResponse := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedStartRunHistoryID+"/human-interrupts/respond", token.AccessToken, map[string]any{
+		"response_type": "decision",
+		"response":      "Start a different task, but no task goal was provided.",
+		"follow_up":     "start_new_task",
+		"reason":        "Operator requested a replacement task.",
+	})
+	startMissingGoalResponseBody := mustJSON(t, startMissingGoalResponse)
+	if !strings.Contains(startMissingGoalResponseBody, `"status":"human_interrupt_response_recorded"`) ||
+		!strings.Contains(startMissingGoalResponseBody, `"start_new_task_supported":true`) ||
+		!strings.Contains(startMissingGoalResponseBody, `"start_new_task_attempted":true`) ||
+		!strings.Contains(startMissingGoalResponseBody, `"follow_up":"start_new_task"`) ||
+		!strings.Contains(startMissingGoalResponseBody, `"new_task_goal_required"`) ||
+		!strings.Contains(startMissingGoalResponseBody, `"operator_response"`) {
+		t.Fatalf("human interrupt start_new_task missing-goal response missing expected blocker: %s", startMissingGoalResponseBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, startMissingGoalResponseBody)
+	blockedStartEventsAfterResponse := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedStartRunHistoryID+"/events", token.AccessToken)
+	blockedStartEventsAfterResponseBody := mustJSON(t, blockedStartEventsAfterResponse)
+	if !strings.Contains(blockedStartEventsAfterResponseBody, `"human_interrupt_responded"`) ||
+		!strings.Contains(blockedStartEventsAfterResponseBody, `"start_new_task_blocked"`) ||
+		!strings.Contains(blockedStartEventsAfterResponseBody, `"new_task_goal_required"`) ||
+		!strings.Contains(blockedStartEventsAfterResponseBody, `"operator_response"`) {
+		t.Fatalf("blocked start-new-task events missing structured blocker audit: %s", blockedStartEventsAfterResponseBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, blockedStartEventsAfterResponseBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	auditBody := mustJSON(t, audit)
 	for _, eventType := range []string{
@@ -1336,12 +1422,15 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 		relay.lastHostLabel = r.URL.Query().Get("host_label")
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		if req["title"] == "Blocked Gateway task" || req["title"] == "Blocked Gateway cancel task" {
+		if req["title"] == "Blocked Gateway task" || req["title"] == "Blocked Gateway cancel task" || req["title"] == "Blocked Gateway start task" {
 			runID := "run-blocked"
 			stepID := "step-blocked"
 			if req["title"] == "Blocked Gateway cancel task" {
 				runID = "run-blocked-cancel"
 				stepID = "step-blocked-cancel"
+			} else if req["title"] == "Blocked Gateway start task" {
+				runID = "run-blocked-start"
+				stepID = "step-blocked-start"
 			}
 			writeTestJSON(t, w, map[string]any{
 				"ok":      false,
@@ -1357,6 +1446,24 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 					"run_id": runID,
 					"status": "blocked",
 				},
+			})
+			return
+		}
+		if req["title"] == "Gateway follow-up task" {
+			if wait, _ := req["wait"].(bool); wait {
+				t.Fatalf("expected follow-up task to forward wait=false")
+			}
+			writeTestJSON(t, w, map[string]any{
+				"ok":      true,
+				"status":  "submitted",
+				"run_id":  "run-followup",
+				"step_id": "step-followup",
+				"task": map[string]any{
+					"run_id":  "run-followup",
+					"status":  "submitted",
+					"step_id": "step-followup",
+				},
+				"report_path": "/tmp/codencer/run-plans/run-followup.json",
 			})
 			return
 		}

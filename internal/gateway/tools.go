@@ -396,6 +396,8 @@ func (s *Server) humanInterruptResponseTool() Tool {
 			"response_type":  stringSchema("Optional response type, such as answer, approve, deny, or decision."),
 			"follow_up":      stringSchema("Optional requested follow-up, such as resume, cancel, or start_new_task."),
 			"reason":         stringSchema("Optional operator/planner reason."),
+			"new_task_title": stringSchema("Optional title for an explicit start_new_task follow-up."),
+			"new_task_goal":  stringSchema("Required task goal when follow_up=start_new_task."),
 		}),
 		ReadOnly:       false,
 		RequiredScopes: []string{"projects:read", "runs:write"},
@@ -463,6 +465,9 @@ func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *au
 		"cancel_supported":          true,
 		"cancel_operation":          "codencer.cancel_project_run",
 		"cancel_attempted":          false,
+		"start_new_task_supported":  true,
+		"start_new_task_operation":  "codencer.submit_project_task",
+		"start_new_task_attempted":  false,
 		"status_read_tool":          "codencer.get_project_run_status",
 		"report_read_tool":          "codencer.get_run_report",
 		"events_read_tool":          "codencer.get_gateway_run_events",
@@ -522,6 +527,35 @@ func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *au
 					"type":      cancelErr.Code,
 					"message":   cancelErr.Message,
 					"operation": "cancel_project_run",
+				},
+			}
+		} else {
+			nextActions["planner_decision_required"] = false
+			followUpResult = result
+		}
+	} else if strings.EqualFold(followUp, "start_new_task") {
+		nextActions["start_new_task_attempted"] = true
+		startArgs := map[string]any{}
+		for key, value := range args {
+			startArgs[key] = value
+		}
+		if reason != "" {
+			startArgs["reason"] = reason
+		}
+		result, startErr := s.startNewProjectTaskFromRecord(ctx, principal, record, startArgs)
+		if startErr != nil {
+			blockedMetadata := runAuditMetadata(record)
+			blockedMetadata["operation"] = "start_new_task"
+			blockedMetadata["status"] = "blocked"
+			blockedMetadata["blocker_type"] = startErr.Code
+			s.recordGatewayAuditWithMetadata(ctx, principal, "start_new_task_blocked", "Blocked follow-up start_new_task for run "+firstNonEmpty(record.RunID, record.ID)+" in project "+record.ProjectID, blockedMetadata)
+			followUpResult = map[string]any{
+				"ok":     false,
+				"status": "blocked",
+				"blocker": map[string]any{
+					"type":      startErr.Code,
+					"message":   startErr.Message,
+					"operation": "start_new_task",
 				},
 			}
 		} else {

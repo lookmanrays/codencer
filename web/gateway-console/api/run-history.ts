@@ -102,7 +102,17 @@ export async function respondToHumanInterrupt(
                 result: { events: [{ type: "run_cancelled" }] },
                 status: "cancelled",
               }
-            : undefined,
+            : input.followUp === "start_new_task"
+              ? {
+                  ok: true,
+                  result: {
+                    run_id: "run_demo_followup",
+                    status: "submitted",
+                  },
+                  run_history_id: "run_demo_followup_history",
+                  status: "submitted",
+                }
+              : undefined,
       next_actions: {
         cancel_attempted: input.followUp === "cancel",
         cancel_operation: "codencer.cancel_project_run",
@@ -110,6 +120,9 @@ export async function respondToHumanInterrupt(
         resume_attempted: input.followUp === "resume",
         resume_operation: "codencer.resume_project_run",
         resume_supported: true,
+        start_new_task_attempted: input.followUp === "start_new_task",
+        start_new_task_operation: "codencer.submit_project_task",
+        start_new_task_supported: true,
       },
       ok: true,
       project_id: "codencer",
