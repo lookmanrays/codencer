@@ -9,6 +9,78 @@ import (
 	"agent-bridge/internal/domain"
 )
 
+func TestIsSimulationEnabledAcceptsVerifierTruthValuesAndAdapterEnvForms(t *testing.T) {
+	tests := []struct {
+		name        string
+		adapterName string
+		envName     string
+		envValue    string
+		want        bool
+	}{
+		{
+			name:        "all adapters one",
+			adapterName: "codex",
+			envName:     "ALL_ADAPTERS_SIMULATION_MODE",
+			envValue:    "1",
+			want:        true,
+		},
+		{
+			name:        "all adapters true",
+			adapterName: "codex",
+			envName:     "ALL_ADAPTERS_SIMULATION_MODE",
+			envValue:    "true",
+			want:        true,
+		},
+		{
+			name:        "adapter one",
+			adapterName: "codex",
+			envName:     "CODEX_SIMULATION_MODE",
+			envValue:    "1",
+			want:        true,
+		},
+		{
+			name:        "hyphenated adapter normalized",
+			adapterName: "openclaw-acpx",
+			envName:     "OPENCLAW_ACPX_SIMULATION_MODE",
+			envValue:    "true",
+			want:        true,
+		},
+		{
+			name:        "legacy raw hyphenated adapter",
+			adapterName: "test-adapter-sim",
+			envName:     "TEST-ADAPTER-SIM_SIMULATION_MODE",
+			envValue:    "1",
+			want:        true,
+		},
+		{
+			name:        "explicit zero",
+			adapterName: "codex",
+			envName:     "CODEX_SIMULATION_MODE",
+			envValue:    "0",
+			want:        false,
+		},
+		{
+			name:        "explicit false",
+			adapterName: "codex",
+			envName:     "CODEX_SIMULATION_MODE",
+			envValue:    "false",
+			want:        false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ALL_ADAPTERS_SIMULATION_MODE", "")
+			t.Setenv("CODEX_SIMULATION_MODE", "")
+			t.Setenv("OPENCLAW_ACPX_SIMULATION_MODE", "")
+			t.Setenv("TEST-ADAPTER-SIM_SIMULATION_MODE", "")
+			t.Setenv(tt.envName, tt.envValue)
+			if got := IsSimulationEnabled(tt.adapterName); got != tt.want {
+				t.Fatalf("IsSimulationEnabled(%q) = %v, want %v", tt.adapterName, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestInvokeLocal_BinaryNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	attempt := &domain.Attempt{ID: "test-id", Adapter: "test-adapter"}

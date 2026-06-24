@@ -169,9 +169,18 @@ reject_real_executor_simulation_env() {
   local bad=0
   local adapter_env
   adapter_env="$(printf '%s_SIMULATION_MODE' "$adapter" | tr '[:lower:]-' '[:upper:]_')"
+  local names=("ALL_ADAPTERS_SIMULATION_MODE" "CODEX_SIMULATION_MODE" "$adapter_env")
+  if [ "$adapter" = "claude" ]; then
+    names+=("CLAUDE_SIMULATION_MODE")
+  fi
+  local seen=" "
   {
     echo "Real executor simulation environment preflight:"
-    for name in ALL_ADAPTERS_SIMULATION_MODE CODEX_SIMULATION_MODE "$adapter_env"; do
+    for name in "${names[@]}"; do
+      case "$seen" in
+        *" $name "*) continue ;;
+      esac
+      seen="$seen$name "
       local value=""
       if value="$(printenv "$name")"; then
         echo "$name=$value"

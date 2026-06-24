@@ -15,7 +15,19 @@ import (
 // IsSimulationEnabled checks if an adapter should run in simulation mode.
 func IsSimulationEnabled(adapterName string) bool {
 	envVar := strings.ToUpper(adapterName) + "_SIMULATION_MODE"
-	return os.Getenv(envVar) == "1" || os.Getenv("ALL_ADAPTERS_SIMULATION_MODE") == "1"
+	normalizedEnvVar := strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(adapterName)) + "_SIMULATION_MODE"
+	return truthySimulationEnv(os.Getenv(envVar)) ||
+		truthySimulationEnv(os.Getenv(normalizedEnvVar)) ||
+		truthySimulationEnv(os.Getenv("ALL_ADAPTERS_SIMULATION_MODE"))
+}
+
+func truthySimulationEnv(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true":
+		return true
+	default:
+		return false
+	}
 }
 
 // RunSimulation writes stub files to the artifact root to simulate the orchestrator's
