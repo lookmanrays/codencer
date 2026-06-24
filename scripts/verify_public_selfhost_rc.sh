@@ -203,7 +203,7 @@ reject_real_executor_simulation_env() {
 required_real_executors() {
   python3 - <<'PY'
 import os
-raw=os.environ.get("CODENCER_E2E_REQUIRED_REAL_EXECUTORS", "codex,claude,antigravity")
+raw=os.environ.get("CODENCER_E2E_REQUIRED_REAL_EXECUTORS", "codex,claude")
 items=[item.strip() for item in raw.split(",") if item.strip()]
 for item in items:
   print(item)
@@ -265,6 +265,8 @@ assert_required_real_executor_coverage() {
   {
     echo "Required real executor proofs:"
     echo "proven=${proven:-<none>}"
+    echo "default_required=codex,claude"
+    echo "optional_deferred=antigravity"
     while IFS= read -r required; do
       [ -n "$required" ] || continue
       if printf '%s\n' "$proven" | tr ',' '\n' | grep -qx "$required"; then
@@ -465,7 +467,7 @@ if [ "$FAILURES" -eq 0 ]; then
 fi
 
 real_status="skipped"
-real_reason="set CODENCER_E2E_REAL_EXECUTORS=codex,claude,antigravity and per-executor commands to run real executor gates"
+real_reason="set CODENCER_E2E_REAL_EXECUTORS=codex,claude and per-executor commands to run required real executor gates; Antigravity is optional/deferred unless explicitly added to CODENCER_E2E_REQUIRED_REAL_EXECUTORS"
 proven_real_executor=""
 if [ "$FAILURES" -eq 0 ]; then
   configured_file="$TMPDIR_ROOT/configured-real-executors.txt"

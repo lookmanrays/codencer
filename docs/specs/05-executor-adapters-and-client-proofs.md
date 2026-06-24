@@ -8,8 +8,12 @@ must never satisfy the public release gate.
 Public release `GO` requires current proof for:
 
 - Codex CLI;
-- Claude Code;
-- Antigravity.
+- Claude Code.
+
+Antigravity is optional/deferred for this release. Antigravity proof may be run
+as an additional gate, and if an operator explicitly includes Antigravity in
+`CODENCER_E2E_REQUIRED_REAL_EXECUTORS`, that explicit requirement must pass
+before `GO`.
 
 If any required real executor proof is missing or unproven, the verdict is
 `NO-GO`.

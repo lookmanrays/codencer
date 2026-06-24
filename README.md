@@ -450,7 +450,10 @@ git diff --check
 uses the unpacked binaries for self-host Gateway/Relay/Connector/daemon smoke,
 runs Gateway Console live verification, writes
 `reports/public-selfhost-rc/<timestamp>/summary.json` and `.md`, and reports
-`NO-GO` when no required real executor gate is configured or proven.
+`NO-GO` when any required real executor gate is missing or unproven. The
+current public self-host release scope requires Codex and Claude Code;
+Antigravity is optional/deferred unless explicitly added to the required
+executor set.
 
 If a live/external check is skipped, report it as skipped, not passed.
 

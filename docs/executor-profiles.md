@@ -58,7 +58,10 @@ default executor, and optional task-level override before submitting a run.
 ## Real Executor RC Gate
 
 The public self-host RC verifier always runs deterministic fake executor
-plumbing. A `GO` verdict additionally requires a configured real executor gate.
+plumbing. A `GO` verdict additionally requires configured real executor gates
+for the current release scope: Codex and Claude Code. Antigravity is
+optional/deferred unless an operator explicitly adds it to
+`CODENCER_E2E_REQUIRED_REAL_EXECUTORS`.
 
 Codex example:
 
@@ -74,6 +77,6 @@ The RC verifier exercises artifact-backed `codencer setup self-host` and
 least `300` seconds and at least as large as
 `CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS` when that environment variable is set.
 
-If no required real executor is configured and proven, the verifier reports
+If any required real executor is missing or unproven, the verifier reports
 `NO-GO`. Deterministic fake executor plumbing is useful CI smoke, but it is not
 live product proof and cannot satisfy the public self-host RC gate.

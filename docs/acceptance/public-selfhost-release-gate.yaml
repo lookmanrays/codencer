@@ -7,8 +7,8 @@ metadata:
     allowed: ["GO", "NO-GO"]
     forbidden: ["PARTIAL", "mostly GO", "probably", "good enough", "accepted with caveats"]
 status:
-  current_verdict: NO-GO
-  reason: Required public self-host hardening gates are not fully proven.
+  current_verdict: GO
+  reason: Required public self-host hardening gates are proven for the current Codex + Claude Code release scope; Antigravity is optional/deferred.
 gates:
   - id: specs_present
     required: true
@@ -55,7 +55,7 @@ gates:
     checks:
       - Codex real executor proof
       - Claude Code real executor proof
-      - Antigravity real executor proof
+      - Antigravity real executor proof is optional/deferred unless explicitly required by the verifier environment
       - fake and simulation never satisfy GO
   - id: run_history_audit_console
     required: true

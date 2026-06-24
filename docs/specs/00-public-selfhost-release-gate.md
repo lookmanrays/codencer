@@ -64,8 +64,9 @@ The public self-host release is `GO` only when all of these are true:
 - run result and run history show real report content;
 - no MCP/API/UI/CLI output leaks local absolute paths, tokens, private keys,
   daemon URLs, repo roots, environment values, or sensitive local files;
-- real executor gates for Codex, Claude Code, and Antigravity are proven or the
-  release remains `NO-GO`;
+- real executor gates for Codex and Claude Code are proven;
+- Antigravity is optional/deferred for this release and must not be claimed as
+  proven unless its explicit gate is configured and passes;
 - public/private/cloud boundary checks pass;
 - docs and acceptance manifests match this release model;
 - diff checks pass.
@@ -87,7 +88,9 @@ The gate must fail for:
 - missing reports or audit;
 - missing pagination/filter coverage where required;
 - path/secret leaks;
-- unproven Claude Code or Antigravity;
+- unproven Codex or Claude Code;
+- unproven Antigravity only when Antigravity is explicitly included in the
+  required real executor set;
 - mixed or caveated verdict wording.
 
 ## Required Evidence

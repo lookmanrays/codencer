@@ -33,9 +33,12 @@ reports/public-selfhost-rc/<timestamp>/summary.json
 reports/public-selfhost-rc/<timestamp>/summary.md
 ```
 
-`GO` requires every required real executor gate to be configured and proven. If
-any required real executor proof is missing, skipped, simulated, or failed, the
-gate reports `NO-GO`, even when deterministic fake executor plumbing passes.
+`GO` requires every required real executor gate to be configured and proven.
+For the current public self-host release scope, Codex and Claude Code are
+required. Antigravity is optional/deferred unless an operator explicitly adds it
+to `CODENCER_E2E_REQUIRED_REAL_EXECUTORS`. If any required real executor proof
+is missing, skipped, simulated, or failed, the gate reports `NO-GO`, even when
+deterministic fake executor plumbing passes.
 
 Codex example:
 
