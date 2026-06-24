@@ -613,6 +613,7 @@ async function startLocalSelfHostStack(root) {
   const relayPort = await freePort();
   const daemonUrl = `http://127.0.0.1:${daemonPort}`;
   const relayUrl = `http://127.0.0.1:${relayPort}`;
+  const antigravityInstance = await prepareAntigravityInstance(root, repo);
   const daemonConfig = path.join(root, "daemon.json");
   await fs.writeFile(
     daemonConfig,
@@ -655,12 +656,18 @@ async function startLocalSelfHostStack(root) {
       process.env.CODENCER_E2E_REAL_EXECUTOR_COMMAND ??
       "claude";
   }
+  if (antigravityInstance) {
+    daemonEnv.CODENCER_ANTIGRAVITY_DAEMON_DIR = antigravityInstance.daemonDir;
+  }
   const daemonProcess = spawnProcess(
     daemonBinary,
     ["--config", daemonConfig, "--repo-root", repo],
     daemonEnv,
   );
   await waitForJSON(`${daemonUrl}/health`);
+  if (antigravityInstance) {
+    await bindAntigravityInstance(daemonUrl, antigravityInstance.pid);
+  }
 
   const relayConfig = path.join(root, "relay.json");
   await fs.writeFile(
@@ -845,6 +852,93 @@ async function runCommand(command, args, env = {}) {
       `${command} ${args.join(" ")} failed: ${error.message}${stdout}${stderr}`,
     );
   }
+}
+
+async function prepareAntigravityInstance(root, repo) {
+  if (!executorProfile.startsWith("antigravity")) return null;
+  const instance = await readAntigravityInstance();
+  if (!instance) {
+    throw new Error(
+      "real Antigravity gate requires CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON, CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE, or CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR",
+    );
+  }
+  const pid = Number(instance.pid);
+  const port = Number(instance.https_port);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error("real Antigravity gate instance metadata missing pid");
+  }
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(
+      "real Antigravity gate instance metadata missing https_port",
+    );
+  }
+  if (typeof instance.csrf_token !== "string" || !instance.csrf_token.trim()) {
+    throw new Error(
+      "real Antigravity gate instance metadata missing csrf_token",
+    );
+  }
+  const daemonDir = path.join(root, "antigravity-daemon");
+  await fs.mkdir(daemonDir, { recursive: true, mode: 0o700 });
+  await fs.writeFile(
+    path.join(daemonDir, `ls_${pid}.json`),
+    JSON.stringify(
+      {
+        ...instance,
+        is_reachable: false,
+        pid,
+        https_port: port,
+        workspace_root: repo,
+      },
+      null,
+      2,
+    ),
+    { mode: 0o600 },
+  );
+  return { daemonDir, pid };
+}
+
+async function readAntigravityInstance() {
+  if (process.env.CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON) {
+    return JSON.parse(process.env.CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON);
+  }
+  if (process.env.CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE) {
+    return JSON.parse(
+      await fs.readFile(
+        process.env.CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE,
+        "utf8",
+      ),
+    );
+  }
+  if (process.env.CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR) {
+    const dir = process.env.CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR;
+    const files = (await fs.readdir(dir))
+      .filter((name) => /^ls_.*\.json$/.test(name))
+      .sort();
+    if (!files.length) {
+      throw new Error(
+        `real Antigravity gate daemon dir had no ls_*.json files: ${dir}`,
+      );
+    }
+    return JSON.parse(await fs.readFile(path.join(dir, files[0]), "utf8"));
+  }
+  return null;
+}
+
+async function bindAntigravityInstance(daemonUrl, pid) {
+  const response = await fetch(`${daemonUrl}/api/v1/antigravity/bind`, {
+    body: JSON.stringify({ pid }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `failed to bind Antigravity instance pid=${pid}: ${response.status} ${text}`,
+    );
+  }
+  console.log(`gateway-console-live: bound_antigravity_pid=${pid}`);
 }
 
 async function gatewayFetch(base, path, body) {

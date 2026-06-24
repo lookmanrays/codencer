@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	daemonDirRel = ".gemini/antigravity/daemon"
+	daemonDirRel       = ".gemini/antigravity/daemon"
+	daemonDirOverride  = "CODENCER_ANTIGRAVITY_DAEMON_DIR"
+	windowsDirOverride = "CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR"
 )
 
 // Discovery handles finding active Antigravity instances.
@@ -82,10 +84,15 @@ func (d *Discovery) scanDirs(ctx context.Context, dirs []string) ([]domain.AGIns
 				continue
 			}
 
-			// Simple health probe + workspace enrichment
+			// Simple health probe + workspace enrichment. Preserve an explicit
+			// workspace_root from the instance file so isolated verifiers can bind
+			// a real Antigravity LS to their temp repo instead of the IDE's
+			// currently open workspace.
 			workspace, reachable := d.probeInstance(ctx, inst)
 			inst.IsReachable = reachable
-			inst.WorkspaceRoot = workspace
+			if inst.WorkspaceRoot == "" {
+				inst.WorkspaceRoot = workspace
+			}
 
 			instanceMap[inst.PID] = inst
 		}
@@ -105,13 +112,19 @@ func (d *Discovery) getDaemonDirs() ([]string, error) {
 		return nil, fmt.Errorf("failed to get home dir: %w", err)
 	}
 
+	if override := os.Getenv(daemonDirOverride); override != "" {
+		if info, err := os.Stat(override); err == nil && info.IsDir() {
+			return []string{override}, nil
+		}
+	}
+
 	dirs := []string{filepath.Join(home, daemonDirRel)}
 
 	// WSL Detection & Cross-Side Discovery
 	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
 		if strings.Contains(strings.ToLower(string(content)), "microsoft") {
 			// Check for explicit override first
-			if override := os.Getenv("CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR"); override != "" {
+			if override := os.Getenv(windowsDirOverride); override != "" {
 				if info, err := os.Stat(override); err == nil && info.IsDir() {
 					dirs = append(dirs, override)
 					return dirs, nil

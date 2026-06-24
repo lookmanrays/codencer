@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Commit hash at verification start: `2e464248bf13b09868263318fc7f40ccbedd6670`
+Latest verified implementation commit before this report update: `17ccc30158f6b357120504b1517454247ff21b65`
 
 Branch: `next-phase`
 
@@ -19,20 +19,22 @@ Branch: `next-phase`
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
+- Added isolated Antigravity proof plumbing: `CODENCER_ANTIGRAVITY_DAEMON_DIR` discovery override, preservation of explicit verifier workspace roots, and live-verifier support for `CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON`, `CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE`, and `CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR`.
 - Fixed connector shared-instance discovery so an allowlisted manifest identity is not overwritten by an unrelated daemon that happens to be listening on the manifest URL during tests.
 - Tightened the live Console verifier so the real executor result check targets the Summary heading deterministically.
 
 ## Proofs
 
-- Real Codex artifact-backed RC subgate passed:
-  - Report: `reports/public-selfhost-rc/20260624T090832Z/summary.md`
-  - Gate: `real_executor_e2e_codex`
-  - Log: `reports/public-selfhost-rc/20260624T090832Z/real_executor_e2e_codex.log`
-  - Evidence: daemon log shows `Adapter Execution: Starting process`, `adapter=codex`, and a configured Codex binary.
-  - Simulation preflight printed `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0`.
-- Overall public self-host RC verdict is correctly `NO-GO`:
-  - `required_real_executor_proofs` failed because `claude` and `antigravity` remain missing.
-  - Required proof log: `reports/public-selfhost-rc/20260624T090832Z/required_real_executor_proofs.log`.
+- Codex + Claude Code artifact-backed RC subgates passed:
+  - Report: `reports/public-selfhost-rc/20260624T105654Z/summary.md`
+  - Gates: `real_executor_e2e_codex`, `real_executor_e2e_claude`
+  - Required proof log: `reports/public-selfhost-rc/20260624T105654Z/required_real_executor_proofs.log`
+  - Evidence: Codex daemon log shows `Adapter Execution: Starting process`, `adapter=codex`, and the configured Codex binary; Claude verifier log shows `primary=claude` with simulation preflight disabled.
+  - Overall verdict remains `NO-GO` because Antigravity is missing.
+- Antigravity source-tree live proof was attempted with isolated temp instance metadata generated from the local running Antigravity language server.
+  - The verifier bound the candidate instance by PID without writing user Codencer state.
+  - Both reachable local Antigravity LS candidates failed to complete through the Antigravity adapter and fell through to `ide-chat`; the verifier failed instead of accepting fallback behavior.
+  - No Antigravity real proof is available.
 - Gateway Console visual evidence regenerated:
   - `reports/gateway-console-screenshots/2026-06-24-1202`
   - `reports/gateway-console-screenshots/2026-06-24-1213`
@@ -41,6 +43,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1247`
   - `reports/gateway-console-screenshots/2026-06-24-1259`
   - `reports/gateway-console-screenshots/2026-06-24-1323`
+  - `reports/gateway-console-screenshots/2026-06-24-1403`
 
 ## Commands Run
 
@@ -63,15 +66,17 @@ Branch: `next-phase`
 - `make verify-gateway` - passed
 - `make verify-gateway-console` - passed
 - `make verify-gateway-console-live` - passed
-- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and Claude/Antigravity proofs were missing
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing
 - `make verify-public-release` - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
+- `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; Antigravity did not produce a valid run and fallback was not accepted
 - `git diff --check` - passed
 
 ## Remaining Blockers
 
-- Claude Code real executor proof is not configured or proven in the public self-host RC gate.
-- Antigravity real executor proof is not configured or proven in the public self-host RC gate.
+- Antigravity real executor proof is not proven in the public self-host RC gate.
+- Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not complete Codencer's isolated real-run proof.
 - `codencer run resume` is exposed as a structured blocker because the daemon does not yet expose a resume HTTP route.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
