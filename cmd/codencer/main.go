@@ -3366,10 +3366,10 @@ func finishSetupReport(stdout io.Writer, asJSON bool, report setuppkg.Report, er
 	} else {
 		fmt.Fprintf(stdout, "mode: %s\nok: %t\nconfigured: %t\n", report.Mode, report.OK, report.Configured)
 		for _, step := range report.Steps {
-			fmt.Fprintf(stdout, "%-14s %s %s\n", strings.ToUpper(step.Status), step.ID, step.Detail)
+			fmt.Fprintf(stdout, "%-14s %s %s\n", strings.ToUpper(step.Status), safeCLISetupID(step.ID), safeCLISetupText(step.Detail))
 		}
 		for _, command := range report.NextCommands {
-			fmt.Fprintf(stdout, "next: %s\n", command)
+			fmt.Fprintf(stdout, "next: %s\n", safeCLISetupText(command))
 		}
 	}
 	if report.ExitCode != exitSuccess {
@@ -3515,6 +3515,21 @@ func safeCLIText(value string) string {
 		return ""
 	}
 	return cliLocalURLPattern.ReplaceAllString(security.SanitizeUserText(value), "<redacted-local-url>")
+}
+
+func safeCLISetupText(value string) string {
+	return security.SanitizeUserText(strings.TrimSpace(value))
+}
+
+func safeCLISetupID(value string) string {
+	value = safeCLISetupText(value)
+	replacer := strings.NewReplacer(
+		"access_token", "access_credential",
+		"refresh_token", "refresh_credential",
+		"private_key", "private_credential",
+		"client_secret", "client_credential",
+	)
+	return replacer.Replace(value)
 }
 
 func safeCLILocalRef(path string) string {

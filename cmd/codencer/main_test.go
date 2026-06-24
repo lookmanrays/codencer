@@ -226,6 +226,38 @@ func TestInitHumanOutputDoesNotLeakLocalPaths(t *testing.T) {
 	}
 }
 
+func TestSetupHumanOutputDoesNotLeakLocalPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+
+	stdout, stderr, err := runCLI("setup", "self-host",
+		"--gateway-url", "http://127.0.0.1:19090",
+		"--relay-url", "http://127.0.0.1:8090",
+		"--token-env", "CODENCER_GATEWAY_MCP_TOKEN",
+		"--enable-oauth-dev",
+		"--oauth-client-secret", "self-host-client-secret",
+	)
+	if err != nil {
+		t.Fatalf("setup self-host failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, home, "self-host-client-secret")
+	if !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "gateway_config") {
+		t.Fatalf("setup self-host human output missing sanitized setup details: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("setup", "relay",
+		"--base-url", "http://127.0.0.1:8090",
+		"--generate-planner-token",
+	)
+	if err != nil {
+		t.Fatalf("setup relay failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, home)
+	if !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "relay_config") {
+		t.Fatalf("setup relay human output missing sanitized setup details: %s", stdout)
+	}
+}
+
 func TestSetupTimeoutFlagsWriteConfigs(t *testing.T) {
 	t.Run("self-host default gateway timeout", func(t *testing.T) {
 		home := t.TempDir()

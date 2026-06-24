@@ -246,6 +246,12 @@ test "$(json_get "$TMPDIR_ROOT/config-default.json" "config.active_profile")" = 
 
 "$ROOT/bin/codencer" config show > "$TMPDIR_ROOT/config-default-human.txt"
 assert_no_default_output_leak "$TMPDIR_ROOT/config-default-human.txt" "codencer config show human output"
+"$ROOT/bin/codencer" config profiles list > "$TMPDIR_ROOT/config-profiles-list-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/config-profiles-list-human.txt" "codencer config profiles list human output"
+"$ROOT/bin/codencer" config profiles use self-host > "$TMPDIR_ROOT/config-profiles-use-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/config-profiles-use-human.txt" "codencer config profiles use human output"
+"$ROOT/bin/codencer" config set gateway.url "$gateway_url" > "$TMPDIR_ROOT/config-set-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/config-set-human.txt" "codencer config set human output"
 (cd "$repo" && "$ROOT/bin/codencer" project init --id codencer > "$TMPDIR_ROOT/project-init-human.txt")
 assert_no_default_output_leak "$TMPDIR_ROOT/project-init-human.txt" "codencer project init human output"
 (cd "$repo" && "$ROOT/bin/codencer" project status > "$TMPDIR_ROOT/project-status-human.txt")
@@ -254,6 +260,12 @@ assert_no_default_output_leak "$TMPDIR_ROOT/project-status-human.txt" "codencer 
 assert_no_default_output_leak "$TMPDIR_ROOT/project-scan-human.txt" "codencer project scan human output"
 "$ROOT/bin/codencer" executor list > "$TMPDIR_ROOT/executor-list-human.txt"
 assert_no_default_output_leak "$TMPDIR_ROOT/executor-list-human.txt" "codencer executor list human output"
+"$ROOT/bin/codencer" executor scan --repo "$repo" > "$TMPDIR_ROOT/executor-scan-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/executor-scan-human.txt" "codencer executor scan human output"
+"$ROOT/bin/codencer" executor test fake-success > "$TMPDIR_ROOT/executor-test-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/executor-test-human.txt" "codencer executor test human output"
+"$ROOT/bin/codencer" executor default fake-success --repo "$repo" > "$TMPDIR_ROOT/executor-default-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/executor-default-human.txt" "codencer executor default human output"
 "$ROOT/bin/codencer" sync preview > "$TMPDIR_ROOT/sync-preview-human.txt"
 assert_no_default_output_leak "$TMPDIR_ROOT/sync-preview-human.txt" "codencer sync preview human output"
 verify_default_run_output_redaction
@@ -290,6 +302,29 @@ test "$(json_get "$TMPDIR_ROOT/config-profile.json" "resolved_connection.console
   --mcp-url "$relay_url/mcp" \
   --generate-planner-token \
   --json > "$TMPDIR_ROOT/setup-relay.json"
+"$ROOT/bin/codencer" setup self-host \
+  --gateway-url "$gateway_url" \
+  --mcp-url "$gateway_url/mcp" \
+  --relay-url "$relay_url" \
+  --console-url "$console_url" \
+  --listen "127.0.0.1:$gateway_port" \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN \
+  --default-relay-token-env CODENCER_DEFAULT_RELAY_TOKEN \
+  --enable-oauth-dev \
+  --oauth-client-secret public-selfhost-client-secret-human > "$TMPDIR_ROOT/setup-selfhost-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/setup-selfhost-human.txt" "codencer setup self-host human output"
+grep -q '<redacted-local-path>' "$TMPDIR_ROOT/setup-selfhost-human.txt" || { cat "$TMPDIR_ROOT/setup-selfhost-human.txt" >&2; exit 1; }
+if grep -q 'public-selfhost-client-secret-human' "$TMPDIR_ROOT/setup-selfhost-human.txt"; then
+  echo "setup self-host human output leaked OAuth client secret" >&2
+  cat "$TMPDIR_ROOT/setup-selfhost-human.txt" >&2
+  exit 1
+fi
+"$ROOT/bin/codencer" setup relay \
+  --base-url "$relay_url" \
+  --mcp-url "$relay_url/mcp" \
+  --generate-planner-token > "$TMPDIR_ROOT/setup-relay-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/setup-relay-human.txt" "codencer setup relay human output"
+grep -q '<redacted-local-path>' "$TMPDIR_ROOT/setup-relay-human.txt" || { cat "$TMPDIR_ROOT/setup-relay-human.txt" >&2; exit 1; }
 "$ROOT/bin/codencer" setup self-host --help > "$TMPDIR_ROOT/setup-selfhost-help.txt"
 "$ROOT/bin/codencer" setup relay --help > "$TMPDIR_ROOT/setup-relay-help.txt"
 assert_no_commercial_endpoint "$TMPDIR_ROOT/setup-selfhost.json"
@@ -320,6 +355,12 @@ require_help_flags "$TMPDIR_ROOT/setup-relay-help.txt" \
   --project codencer \
   --token-env CODENCER_GATEWAY_MCP_TOKEN \
   --json > "$TMPDIR_ROOT/chatgpt-sheet.json"
+"$ROOT/bin/codencer" activation self-host \
+  --gateway "$gateway_url" \
+  --relay "$relay_url" \
+  --project codencer \
+  --token-env CODENCER_GATEWAY_MCP_TOKEN > "$TMPDIR_ROOT/activation-selfhost-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/activation-selfhost-human.txt" "codencer activation self-host human output"
 chatgpt_package="$(json_get "$TMPDIR_ROOT/chatgpt-sheet.json" "package_path")"
 chatgpt_sheet="$chatgpt_package/chatgpt-app-setup.md"
 test -f "$chatgpt_sheet"
