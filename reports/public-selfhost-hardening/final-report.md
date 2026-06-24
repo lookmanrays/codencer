@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `7a815a57e559fdaf7221794a25c0c02f18553b47`
+Implementation commit hash: `5792a13cb5af2129917d876cd28a16d119f1b3f6`
 
 Branch: `next-phase`
 
@@ -23,6 +23,7 @@ Branch: `next-phase`
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
 - Added Gateway test coverage proving metadata-only `codencer sync publish` emits sanitized aggregate `sync.publish` and per-run `sync.run_published` audit events.
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
+- Improved default human `codencer submit` output with local lifecycle progress lines for the run id, submitted step/profile, task status, terminal result, follow-up `codencer run report <run_id>` guidance for non-terminal tasks, and a safe local report-store hint.
 - Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
 - Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run events`, `run report`, and the structured `run resume` capability blocker.
 - Sanitized setup human output step details, next commands, and secret-key step labels so local config/token paths are hidden in default output while operator Gateway/Relay URLs remain visible.
@@ -103,6 +104,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1858`
   - `reports/gateway-console-screenshots/2026-06-24-1909`
   - `reports/gateway-console-screenshots/2026-06-24-1912`
+  - `reports/gateway-console-screenshots/2026-06-24-1923`
 
 ## Commands Run
 
@@ -258,6 +260,13 @@ Branch: `next-phase`
 - `python3 scripts/check_public_boundary.py` after adding active deploy release-label scans - passed
 - `rg -n "v0\\.2\\.0-beta|v0\\.2|verify-beta|verify_beta|beta-track" deploy scripts/check_public_boundary.py -S` after updating deploy defaults - passed with only the checker regex itself matching
 - `make verify-public-release` after adding active deploy release-label scans - passed
+- `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go` after adding local submit progress output - passed
+- `go test ./cmd/codencer` after adding local submit progress output - passed
+- `make build-codencer` after adding local submit progress output - passed
+- `./scripts/verify_public_selfhost_release.sh` after adding local submit progress output - passed
+- `go test ./...` after adding local submit progress output - passed
+- `make verify-public-release` after adding local submit progress output - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local submit progress output - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1923`
 - `git diff --check` - passed
 
 ## Remaining Blockers
