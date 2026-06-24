@@ -87,7 +87,28 @@ require_help_flags() {
   done
 }
 
+assert_no_default_output_leak() {
+  local file="$1"
+  local label="$2"
+  if grep -Fq "$TMPDIR_ROOT" "$file"; then
+    echo "$label leaked verifier temp path" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  if grep -Eq '(/Users/[^[:space:]<>"'\'']+|/home/[^[:space:]<>"'\'']+|/var/folders/[^[:space:]<>"'\'']+|/tmp/[^[:space:]<>"'\'']+)' "$file"; then
+    echo "$label leaked an absolute local path" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  if grep -Eiq '(access_token|refresh_token|private_key|client_secret|bearer [A-Za-z0-9._~+/=-]{8,})' "$file"; then
+    echo "$label leaked token-like material" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
 home="$TMPDIR_ROOT/home"
+repo="$TMPDIR_ROOT/repo"
 gateway_port="$(free_port)"
 relay_port="$(free_port)"
 console_port="$(free_port)"
@@ -100,6 +121,11 @@ echo "Public self-host release verification ports: gateway=$gateway_port relay=$
 echo "Public self-host release timeout requirement: >=${required_timeout}s"
 
 export CODENCER_HOME="$home"
+mkdir -p "$repo/.git"
+printf '# Public self-host redaction probe\n' > "$repo/README.md"
+
+"$ROOT/bin/codencer" init > "$TMPDIR_ROOT/init-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/init-human.txt" "codencer init human output"
 "$ROOT/bin/codencer" init --json > "$TMPDIR_ROOT/init.json"
 "$ROOT/bin/codencer" config show --json > "$TMPDIR_ROOT/config-default.json"
 assert_no_commercial_endpoint "$TMPDIR_ROOT/config-default.json"
@@ -107,6 +133,19 @@ test "$(json_get "$TMPDIR_ROOT/config-default.json" "resolved_connection.gateway
 test "$(json_get "$TMPDIR_ROOT/config-default.json" "resolved_connection.mcp_url")" = "http://127.0.0.1:19090/mcp"
 test "$(json_get "$TMPDIR_ROOT/config-default.json" "resolved_connection.relay_url")" = "http://127.0.0.1:8090"
 test "$(json_get "$TMPDIR_ROOT/config-default.json" "config.active_profile")" = "self-host"
+
+"$ROOT/bin/codencer" config show > "$TMPDIR_ROOT/config-default-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/config-default-human.txt" "codencer config show human output"
+(cd "$repo" && "$ROOT/bin/codencer" project init --id codencer > "$TMPDIR_ROOT/project-init-human.txt")
+assert_no_default_output_leak "$TMPDIR_ROOT/project-init-human.txt" "codencer project init human output"
+(cd "$repo" && "$ROOT/bin/codencer" project status > "$TMPDIR_ROOT/project-status-human.txt")
+assert_no_default_output_leak "$TMPDIR_ROOT/project-status-human.txt" "codencer project status human output"
+(cd "$repo" && "$ROOT/bin/codencer" project scan > "$TMPDIR_ROOT/project-scan-human.txt")
+assert_no_default_output_leak "$TMPDIR_ROOT/project-scan-human.txt" "codencer project scan human output"
+"$ROOT/bin/codencer" executor list > "$TMPDIR_ROOT/executor-list-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/executor-list-human.txt" "codencer executor list human output"
+"$ROOT/bin/codencer" sync preview > "$TMPDIR_ROOT/sync-preview-human.txt"
+assert_no_default_output_leak "$TMPDIR_ROOT/sync-preview-human.txt" "codencer sync preview human output"
 
 "$ROOT/bin/codencer" config profiles list --json > "$TMPDIR_ROOT/profiles.json"
 grep -q '"name": "self-host"' "$TMPDIR_ROOT/profiles.json" || { cat "$TMPDIR_ROOT/profiles.json" >&2; exit 1; }

@@ -183,15 +183,12 @@ func runInit(args []string, stdout io.Writer) error {
 	if parsed.bool("json") {
 		return writeJSON(stdout, result)
 	}
-	fmt.Fprintf(stdout, "Codencer home: %s\n", result.Paths.Home)
-	fmt.Fprintf(stdout, "Config:        %s\n", result.Paths.ConfigFile)
-	fmt.Fprintf(stdout, "Projects:      %s\n", result.Paths.ProjectsFile)
-	fmt.Fprintf(stdout, "Machine:       %s\n", result.Paths.MachineFile)
 	if result.ConfigCreated || result.RegistryCreated {
 		fmt.Fprintln(stdout, "Initialized local production files.")
 	} else {
 		fmt.Fprintln(stdout, "Local production files already exist.")
 	}
+	fmt.Fprintln(stdout, "Use `codencer paths --json` to inspect local file locations.")
 	return nil
 }
 
@@ -375,21 +372,21 @@ func runConfig(args []string, stdout io.Writer) error {
 		if parsed.bool("json") {
 			return writeJSON(stdout, payload)
 		}
-		fmt.Fprintf(stdout, "Config file:        %s\n", paths.ConfigFile)
-		fmt.Fprintf(stdout, "Default daemon URL: %s\n", cfg.DefaultDaemonURL)
+		fmt.Fprintln(stdout, "Config:            local profile loaded")
+		fmt.Fprintln(stdout, "Default daemon:    configured")
 		fmt.Fprintf(stdout, "Active profile:     %s\n", cfg.ActiveProfile)
 		fmt.Fprintf(stdout, "Gateway URL:        %s (%s)\n", connection.GatewayURL, connection.Source)
 		fmt.Fprintf(stdout, "MCP URL:            %s\n", connection.MCPURL)
 		fmt.Fprintf(stdout, "Relay URL:          %s\n", connection.RelayURL)
 		fmt.Fprintf(stdout, "Console URL:        %s\n", connection.ConsoleURL)
 		if cfg.RelayConfigPath != "" {
-			fmt.Fprintf(stdout, "Relay config:       %s\n", cfg.RelayConfigPath)
+			fmt.Fprintln(stdout, "Relay config:       configured")
 		}
 		if cfg.ConnectorConfigPath != "" {
-			fmt.Fprintf(stdout, "Connector config:   %s\n", cfg.ConnectorConfigPath)
+			fmt.Fprintln(stdout, "Connector config:   configured")
 		}
 		if cfg.GatewayConfigPath != "" {
-			fmt.Fprintf(stdout, "Gateway config:     %s\n", cfg.GatewayConfigPath)
+			fmt.Fprintln(stdout, "Gateway config:     configured")
 		}
 		return nil
 	case "set":

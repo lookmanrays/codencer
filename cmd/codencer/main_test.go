@@ -191,6 +191,41 @@ func TestConfigProfilesAndSelfHostDefaultsJSON(t *testing.T) {
 	}
 }
 
+func TestInitHumanOutputDoesNotLeakLocalPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODENCER_HOME", home)
+
+	stdout, stderr, err := runCLI("init")
+	if err != nil {
+		t.Fatalf("init failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if strings.Contains(stdout, home) || strings.Contains(stdout, filepath.Join(home, "config.json")) || strings.Contains(stdout, filepath.Join(home, "projects.json")) {
+		t.Fatalf("init human output leaked local path: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Initialized local production files.") || !strings.Contains(stdout, "codencer paths --json") {
+		t.Fatalf("init human output missing safe guidance: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("config", "show")
+	if err != nil {
+		t.Fatalf("config show failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if strings.Contains(stdout, home) || strings.Contains(stdout, "config.json") || strings.Contains(stdout, "projects.json") {
+		t.Fatalf("config show human output leaked local file path: %s", stdout)
+	}
+	if strings.Contains(stdout, "Default daemon URL") || strings.Contains(stdout, "127.0.0.1:8085") {
+		t.Fatalf("config show human output leaked daemon URL: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("init", "--json")
+	if err != nil {
+		t.Fatalf("init --json failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"home": "`+home+`"`) {
+		t.Fatalf("init --json should preserve explicit operator paths: %s", stdout)
+	}
+}
+
 func TestSetupTimeoutFlagsWriteConfigs(t *testing.T) {
 	t.Run("self-host default gateway timeout", func(t *testing.T) {
 		home := t.TempDir()
