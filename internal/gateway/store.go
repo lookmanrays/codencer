@@ -156,6 +156,16 @@ type RunRecordFilters struct {
 	Status    string
 	Scope     string
 	Limit     int
+	Offset    int
+}
+
+type AuditEventFilters struct {
+	Type         string
+	ProjectID    string
+	RunID        string
+	RunHistoryID string
+	Limit        int
+	Offset       int
 }
 
 type DeviceAuthorization struct {
@@ -771,11 +781,36 @@ func (s *Store) RecordAudit(ctx context.Context, event AuditEvent) error {
 	return err
 }
 
-func (s *Store) ListAuditEvents(ctx context.Context, workspaceID string, limit int) ([]AuditEvent, error) {
-	if limit <= 0 || limit > 200 {
+func (s *Store) ListAuditEvents(ctx context.Context, workspaceID string, filters AuditEventFilters) ([]AuditEvent, error) {
+	limit := filters.Limit
+	if limit <= 0 || limit > 201 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, actor_user_id, type, summary, metadata_json, created_at FROM audit_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?`, workspaceID, limit)
+	offset := filters.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	query := `SELECT id, workspace_id, actor_user_id, type, summary, metadata_json, created_at FROM audit_events WHERE workspace_id = ?`
+	args := []any{workspaceID}
+	if strings.TrimSpace(filters.Type) != "" {
+		query += ` AND type = ?`
+		args = append(args, strings.TrimSpace(filters.Type))
+	}
+	if strings.TrimSpace(filters.ProjectID) != "" {
+		query += ` AND metadata_json LIKE ?`
+		args = append(args, "%\"project_id\":\""+strings.TrimSpace(filters.ProjectID)+"\"%")
+	}
+	if strings.TrimSpace(filters.RunID) != "" {
+		query += ` AND metadata_json LIKE ?`
+		args = append(args, "%\"run_id\":\""+strings.TrimSpace(filters.RunID)+"\"%")
+	}
+	if strings.TrimSpace(filters.RunHistoryID) != "" {
+		query += ` AND metadata_json LIKE ?`
+		args = append(args, "%\"run_history_id\":\""+strings.TrimSpace(filters.RunHistoryID)+"\"%")
+	}
+	query += ` ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -799,26 +834,17 @@ func (s *Store) ListAuditEventsByRunHistoryID(ctx context.Context, workspaceID, 
 	if runHistoryID == "" {
 		return []AuditEvent{}, nil
 	}
-	if limit <= 0 || limit > 200 {
-		limit = 100
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace_id, actor_user_id, type, summary, metadata_json, created_at FROM audit_events WHERE workspace_id = ? AND metadata_json LIKE ? ORDER BY created_at ASC LIMIT ?`, workspaceID, "%\"run_history_id\":\""+runHistoryID+"\"%", limit)
+	out, err := s.ListAuditEvents(ctx, workspaceID, AuditEventFilters{
+		RunHistoryID: runHistoryID,
+		Limit:        limit,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []AuditEvent{}
-	for rows.Next() {
-		var event AuditEvent
-		var created, metadataJSON string
-		if err := rows.Scan(&event.ID, &event.WorkspaceID, &event.ActorUserID, &event.Type, &event.Summary, &metadataJSON, &created); err != nil {
-			return nil, err
-		}
-		event.Metadata = decodeStoreMap(metadataJSON)
-		event.CreatedAt = parseStoreTime(created)
-		out = append(out, event)
-	}
-	return out, rows.Err()
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
 }
 
 func (s *Store) UpsertRunRecord(ctx context.Context, record RunRecord) (RunRecord, error) {
@@ -922,8 +948,12 @@ func (s *Store) GetRunRecord(ctx context.Context, workspaceID, id string) (RunRe
 
 func (s *Store) ListRunRecords(ctx context.Context, workspaceID string, filters RunRecordFilters) ([]RunRecord, error) {
 	limit := filters.Limit
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 || limit > 201 {
 		limit = 100
+	}
+	offset := filters.Offset
+	if offset < 0 {
+		offset = 0
 	}
 	query := `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json FROM gateway_run_records WHERE workspace_id = ?`
 	args := []any{workspaceID}
@@ -939,8 +969,8 @@ func (s *Store) ListRunRecords(ctx context.Context, workspaceID string, filters 
 		query += ` AND scope = ?`
 		args = append(args, strings.TrimSpace(filters.Scope))
 	}
-	query += ` ORDER BY updated_at DESC LIMIT ?`
-	args = append(args, limit)
+	query += ` ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

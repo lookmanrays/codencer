@@ -1,6 +1,8 @@
 export const queryKeys = {
   activationCommands: ["activation-commands"] as const,
   auditEvents: ["audit-events"] as const,
+  auditEventsPage: (params?: unknown) =>
+    ["audit-events", params ?? {}] as const,
   connectors: ["connectors"] as const,
   executors: ["executors"] as const,
   machines: ["machines"] as const,
@@ -14,5 +16,6 @@ export const queryKeys = {
   run: (id: string) => ["runs", id] as const,
   runEvents: (id: string) => ["runs", id, "events"] as const,
   runs: ["runs"] as const,
+  runsPage: (params?: unknown) => ["runs", params ?? {}] as const,
   workspace: ["workspace"] as const,
 };

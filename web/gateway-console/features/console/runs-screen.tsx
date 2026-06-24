@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FileText } from "lucide-react";
+import { useState } from "react";
 import { DemoModeNotice } from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
 import { Alert } from "@/components/ui/alert";
@@ -16,8 +17,11 @@ import { isDemoMode } from "@/api/config";
 import { useRuns } from "@/api/run-history";
 import type { RunRecord } from "@/schemas/run-history";
 
+const PAGE_SIZE = 25;
+
 export function RunsScreen() {
-  const runs = useRuns();
+  const [offset, setOffset] = useState(0);
+  const runs = useRuns({ limit: PAGE_SIZE, offset });
   return (
     <PageShell
       breadcrumbs={[{ label: "Console", href: "/console" }, { label: "Runs" }]}
@@ -46,6 +50,34 @@ export function RunsScreen() {
               ))}
             </div>
           )}
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-sm text-body-sm text-ink-secondary">
+            <span>
+              Showing {runs.data.runs.length} runs from offset{" "}
+              {runs.data.pagination.offset}
+            </span>
+            <div className="flex gap-sm">
+              <Button
+                disabled={offset === 0 || runs.isFetching}
+                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                size="sm"
+                type="button"
+                variant="quiet"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={!runs.data.pagination.has_more || runs.isFetching}
+                onClick={() =>
+                  setOffset(runs.data?.pagination.next_offset ?? offset)
+                }
+                size="sm"
+                type="button"
+                variant="quiet"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
     </PageShell>

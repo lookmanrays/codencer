@@ -496,6 +496,26 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("report endpoint returned run_history_id=%v want %s: %s", report["run_history_id"], runHistoryID, reportBody)
 	}
 	assertNoGatewayMCPLeak(t, reportBody)
+	_, err = server.store.UpsertRunRecord(context.Background(), RunRecord{
+		ID:              "hist-synced-extra",
+		WorkspaceID:     token.WorkspaceID,
+		ActorUserID:     token.UserID,
+		ProjectID:       "codencer",
+		ProjectName:     "Codencer",
+		RunID:           "run-synced-extra",
+		Title:           "Synced metadata-only run",
+		Goal:            "Metadata-only sync preview.",
+		Scope:           "synced",
+		ExecutorProfile: "codex-workspace",
+		Status:          "completed",
+		ReportStatus:    "completed",
+		ResultSummary:   "Synced safe summary",
+		CreatedAt:       time.Now().Add(-time.Minute).UTC(),
+		UpdatedAt:       time.Now().Add(-time.Minute).UTC(),
+	})
+	if err != nil {
+		t.Fatalf("seed synced run record: %v", err)
+	}
 	runs := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs", token.AccessToken)
 	runsBody := mustJSON(t, runs)
 	if !strings.Contains(runsBody, `"id":"`+runHistoryID+`"`) ||
@@ -510,7 +530,19 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		!strings.Contains(runsBody, `"result_summary":"Artifacts: stdout.log"`) {
 		t.Fatalf("run history list missing expected safe metadata: %s", runsBody)
 	}
+	if !strings.Contains(runsBody, `"pagination":`) || !strings.Contains(runsBody, `"has_more":false`) {
+		t.Fatalf("run history list missing pagination metadata: %s", runsBody)
+	}
 	assertNoGatewayConsoleSensitiveLeak(t, runsBody)
+	pagedRuns := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs?limit=1", token.AccessToken)
+	pagedRunsBody := mustJSON(t, pagedRuns)
+	if !strings.Contains(pagedRunsBody, `"has_more":true`) || !strings.Contains(pagedRunsBody, `"next_offset":1`) {
+		t.Fatalf("run history pagination did not expose next page: %s", pagedRunsBody)
+	}
+	syncedRuns := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs?scope=synced", token.AccessToken)
+	if syncedRunsBody := mustJSON(t, syncedRuns); !strings.Contains(syncedRunsBody, `"id":"hist-synced-extra"`) || strings.Contains(syncedRunsBody, `"id":"`+runHistoryID+`"`) {
+		t.Fatalf("run history scope filter returned wrong runs: %s", syncedRunsBody)
+	}
 	scopedRuns := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs?scope=gateway_submitted", token.AccessToken)
 	if scopedRunsBody := mustJSON(t, scopedRuns); !strings.Contains(scopedRunsBody, `"id":"`+runHistoryID+`"`) {
 		t.Fatalf("run history scope filter missing expected run: %s", scopedRunsBody)
@@ -534,6 +566,9 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if !strings.Contains(runEventsBody, `"run_history_id":"`+runHistoryID+`"`) {
 		t.Fatalf("run event history missing run metadata: %s", runEventsBody)
 	}
+	if !strings.Contains(runEventsBody, `"groups":`) || !strings.Contains(runEventsBody, `"event_count":8`) || !strings.Contains(runEventsBody, `"pagination":`) {
+		t.Fatalf("run event history missing grouped audit or pagination metadata: %s", runEventsBody)
+	}
 	assertNoGatewayConsoleSensitiveLeak(t, runEventsBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	auditBody := mustJSON(t, audit)
@@ -555,6 +590,20 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	assertNoGatewayConsoleSensitiveLeak(t, auditBody)
 	if !strings.Contains(auditBody, `"run_history_id":"`+runHistoryID+`"`) {
 		t.Fatalf("audit endpoint missing run history metadata: %s", auditBody)
+	}
+	if !strings.Contains(auditBody, `"groups":`) || !strings.Contains(auditBody, `"event_count":8`) || !strings.Contains(auditBody, `"pagination":`) {
+		t.Fatalf("audit endpoint missing grouped audit or pagination metadata: %s", auditBody)
+	}
+	pagedAudit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events?limit=2", token.AccessToken)
+	if pagedAuditBody := mustJSON(t, pagedAudit); !strings.Contains(pagedAuditBody, `"has_more":true`) || !strings.Contains(pagedAuditBody, `"next_offset":2`) {
+		t.Fatalf("audit pagination did not expose next page: %s", pagedAuditBody)
+	}
+	filteredAudit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events?type=run_completed&project_id=codencer&run_id=run-gateway-test&run_history_id="+runHistoryID, token.AccessToken)
+	filteredAuditBody := mustJSON(t, filteredAudit)
+	if !strings.Contains(filteredAuditBody, `"type":"run_completed"`) ||
+		strings.Contains(filteredAuditBody, `"type":"run_started"`) ||
+		!strings.Contains(filteredAuditBody, `"event_count":1`) {
+		t.Fatalf("audit filters did not isolate the requested lifecycle event: %s", filteredAuditBody)
 	}
 	if strings.Contains(auditBody, "relay-secret") || strings.Contains(auditBody, relay.URL) {
 		t.Fatalf("audit endpoint leaked relay secret or daemon URL: %s", auditBody)

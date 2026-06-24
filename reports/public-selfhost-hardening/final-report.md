@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Commit hash at verification start: `72f98945aa1e69e84863919a40c94bee587b8bee`
+Commit hash at verification start: `80919e6b944cca9f442a948ac09266fd6da854bf`
 
 Branch: `next-phase`
 
@@ -16,6 +16,7 @@ Branch: `next-phase`
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and publish returns structured confirmation/unsupported blockers until Gateway ingest exists.
 - Redacted local absolute repo/report paths from default human CLI report output.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
+- Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
 - Fixed connector shared-instance discovery so an allowlisted manifest identity is not overwritten by an unrelated daemon that happens to be listening on the manifest URL during tests.
 - Tightened the live Console verifier so the real executor result check targets the Summary heading deterministically.
@@ -34,6 +35,9 @@ Branch: `next-phase`
 - Gateway Console visual evidence regenerated:
   - `reports/gateway-console-screenshots/2026-06-24-1202`
   - `reports/gateway-console-screenshots/2026-06-24-1213`
+  - `reports/gateway-console-screenshots/2026-06-24-1238`
+  - `reports/gateway-console-screenshots/2026-06-24-1243`
+  - `reports/gateway-console-screenshots/2026-06-24-1247`
 
 ## Commands Run
 
@@ -65,7 +69,7 @@ Branch: `next-phase`
 - Antigravity real executor proof is not configured or proven in the public self-host RC gate.
 - `codencer run resume` is exposed as a structured blocker because the daemon does not yet expose a resume HTTP route.
 - Gateway metadata ingest for explicit sync/publish remains unimplemented. The CLI now provides safe metadata-only preview/status and structured publish blockers; no local reports, logs, artifacts, or paths are uploaded.
-- Run history/audit pagination, broader filters, grouping, and synced-scope transport remain incomplete against the full public self-host hardening spec.
+- Run history/audit synced-scope transport remains incomplete against the full public self-host hardening spec. Gateway-observed pagination, filters, and grouped lifecycle summaries are implemented.
 - Human interrupt lifecycle is still partial outside the existing gate/blocker primitives.
 
 Verdict: NO-GO

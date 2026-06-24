@@ -1033,8 +1033,11 @@ async function assertGatewayCollectionEndpoints(
   assertArrayField(projects, "relay_errors", label);
   assertArrayField(audit, "audit_events", label);
   assertArrayField(audit, "events", label);
+  assertArrayField(audit, "groups", label);
   assertArrayField(activation, "activation_commands", label);
   assertArrayField(activation, "commands", label);
+  assertPagination(runs.pagination, `${label} runs`);
+  assertPagination(audit.pagination, `${label} audit`);
 
   const serialized = JSON.stringify({
     activation,
@@ -1113,6 +1116,24 @@ function assertArrayField(payload, key, label) {
     );
   }
   return payload[key];
+}
+
+function assertPagination(pagination, label) {
+  if (
+    !pagination ||
+    typeof pagination.limit !== "number" ||
+    typeof pagination.offset !== "number" ||
+    typeof pagination.has_more !== "boolean"
+  ) {
+    throw new Error(
+      `${label} missing pagination metadata: ${JSON.stringify(pagination)}`,
+    );
+  }
+  if (pagination.has_more && typeof pagination.next_offset !== "number") {
+    throw new Error(
+      `${label} has_more without next_offset: ${JSON.stringify(pagination)}`,
+    );
+  }
 }
 
 function assertNoSensitiveEndpointLeak(body, label) {

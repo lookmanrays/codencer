@@ -130,6 +130,27 @@ test("product navigation hides UI System", async ({ page }) => {
   await expect(page.getByText("Runs").first()).toBeVisible();
 });
 
+test("run history and audit expose pagination and grouped lifecycle", async ({
+  page,
+}) => {
+  await page.goto("/console/runs");
+  await expect(page.getByText(/showing \d+ runs from offset 0/i)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^previous$/i }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^next$/i })).toBeDisabled();
+
+  await page.goto("/console/audit");
+  await expect(page.getByText(/grouped lifecycle/i)).toBeVisible();
+  await expect(page.getByText(/lifecycle events for run/i)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /view run/i }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/showing \d+ events from offset 0/i),
+  ).toBeVisible();
+});
+
 test("oauth approve and deny controls exist", async ({ page }) => {
   await page.goto("/oauth/authorize");
   await expect(page.getByRole("button", { name: /^approve$/i })).toBeVisible();

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { collectionField } from "@/schemas/collections";
-import { AuditEventListResponseSchema } from "@/schemas/audit";
+import {
+  AuditEventListResponseSchema,
+  PaginationSchema,
+} from "@/schemas/audit";
 import { executionModeFromPayload } from "@/schemas/runs";
 
 const UnknownRecord = z.record(z.string(), z.unknown());
@@ -58,16 +61,26 @@ export const RunRecordSchema = z
     updatedAt: run.updated_at,
   }));
 
-export const RunListResponseSchema = z.object({
-  runs: collectionField(RunRecordSchema),
-});
+export const RunListResponseSchema = z
+  .object({
+    pagination: PaginationSchema.optional(),
+    runs: collectionField(RunRecordSchema),
+  })
+  .transform(({ pagination, runs }) => ({
+    pagination: pagination ?? PaginationSchema.parse({}),
+    runs,
+  }));
 
 export const RunDetailResponseSchema = z.object({
   run: RunRecordSchema,
 });
 
 export const RunEventsResponseSchema = AuditEventListResponseSchema.transform(
-  ({ auditEvents }) => ({ events: auditEvents }),
+  ({ auditEvents, groups, pagination }) => ({
+    events: auditEvents,
+    groups,
+    pagination,
+  }),
 );
 
 export type RunRecord = z.infer<typeof RunRecordSchema>;

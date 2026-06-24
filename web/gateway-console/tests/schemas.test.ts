@@ -123,6 +123,12 @@ describe("domain schemas", () => {
     expect(
       AuditEventListResponseSchema.parse({ events: null }).auditEvents,
     ).toEqual([]);
+    expect(AuditEventListResponseSchema.parse({ events: null }).groups).toEqual(
+      [],
+    );
+    expect(
+      AuditEventListResponseSchema.parse({ events: null }).pagination.has_more,
+    ).toBe(false);
     expect(
       ActivationCommandListResponseSchema.parse({
         activation_commands: null,
@@ -134,6 +140,60 @@ describe("domain schemas", () => {
     ).toEqual([]);
     expect(RelayListResponseSchema.parse({ relays: null }).relays).toEqual([]);
     expect(RunListResponseSchema.parse({ runs: null }).runs).toEqual([]);
+    expect(
+      RunListResponseSchema.parse({ runs: null }).pagination.has_more,
+    ).toBe(false);
+  });
+
+  it("parses audit pagination and grouped lifecycle summaries", () => {
+    const parsed = AuditEventListResponseSchema.parse({
+      audit_events: [
+        {
+          actor_user_id: "user_1",
+          created_at: "2026-06-24T12:00:00Z",
+          id: "evt_1",
+          metadata: {
+            project_id: "codencer",
+            run_history_id: "hist_1",
+            run_id: "run_1",
+          },
+          summary: "Run completed",
+          type: "run_completed",
+        },
+      ],
+      groups: [
+        {
+          event_count: 8,
+          first_event_at: "2026-06-24T11:59:00Z",
+          id: "run:hist_1",
+          last_event_at: "2026-06-24T12:00:00Z",
+          project_id: "codencer",
+          run_history_id: "hist_1",
+          run_id: "run_1",
+          summary: "8 lifecycle events for run run_1",
+          types: ["task_submitted", "run_completed"],
+        },
+      ],
+      pagination: {
+        has_more: true,
+        limit: 1,
+        next_offset: 1,
+        offset: 0,
+      },
+    });
+    expect(parsed.auditEvents[0].runHistoryId).toBe("hist_1");
+    expect(parsed.groups[0]).toMatchObject({
+      eventCount: 8,
+      projectId: "codencer",
+      runHistoryId: "hist_1",
+      runId: "run_1",
+    });
+    expect(parsed.pagination).toMatchObject({
+      has_more: true,
+      limit: 1,
+      next_offset: 1,
+      offset: 0,
+    });
   });
 
   it("extracts fallback result text from Gateway run reports", () => {

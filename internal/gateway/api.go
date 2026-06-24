@@ -18,6 +18,25 @@ import (
 	"agent-bridge/internal/security"
 )
 
+type paginationResponse struct {
+	Limit      int  `json:"limit"`
+	Offset     int  `json:"offset"`
+	HasMore    bool `json:"has_more"`
+	NextOffset *int `json:"next_offset,omitempty"`
+}
+
+type auditEventGroup struct {
+	ID           string    `json:"id"`
+	RunHistoryID string    `json:"run_history_id"`
+	RunID        string    `json:"run_id,omitempty"`
+	ProjectID    string    `json:"project_id,omitempty"`
+	EventCount   int       `json:"event_count"`
+	Types        []string  `json:"types"`
+	FirstEventAt time.Time `json:"first_event_at"`
+	LastEventAt  time.Time `json:"last_event_at"`
+	Summary      string    `json:"summary"`
+}
+
 func (s *Server) requireStore() *apiError {
 	if s.store == nil {
 		return &apiError{Status: http.StatusServiceUnavailable, Code: "gateway_store_not_configured", Message: "Gateway persistent store is not configured"}
@@ -472,23 +491,23 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := 100
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil {
-			limit = parsed
-		}
-	}
+	limit, offset := parseListPage(r, 100, 200)
 	runs, err := s.store.ListRunRecords(r.Context(), principal.WorkspaceID, RunRecordFilters{
 		ProjectID: r.URL.Query().Get("project_id"),
 		Status:    r.URL.Query().Get("status"),
 		Scope:     r.URL.Query().Get("scope"),
-		Limit:     limit,
+		Limit:     limit + 1,
+		Offset:    offset,
 	})
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+	hasMore := len(runs) > limit
+	if hasMore {
+		runs = runs[:limit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs, "pagination": buildPagination(limit, offset, hasMore)})
 }
 
 func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
@@ -519,12 +538,28 @@ func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "events" {
-		events, err := s.store.ListAuditEventsByRunHistoryID(r.Context(), principal.WorkspaceID, record.ID, 100)
+		limit, offset := parseListPage(r, 100, 200)
+		events, err := s.store.ListAuditEvents(r.Context(), principal.WorkspaceID, AuditEventFilters{
+			RunHistoryID: record.ID,
+			Limit:        limit + 1,
+			Offset:       offset,
+		})
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"events": events})
+		hasMore := len(events) > limit
+		if hasMore {
+			events = events[:limit]
+		}
+		sort.SliceStable(events, func(i, j int) bool {
+			return events[i].CreatedAt.Before(events[j].CreatedAt)
+		})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"events":     events,
+			"groups":     groupAuditEvents(events),
+			"pagination": buildPagination(limit, offset, hasMore),
+		})
 		return
 	}
 	if len(parts) > 1 {
@@ -683,12 +718,137 @@ func (s *Server) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	events, err := s.store.ListAuditEvents(r.Context(), principal.WorkspaceID, 100)
+	limit, offset := parseListPage(r, 100, 200)
+	eventType := firstNonEmpty(r.URL.Query().Get("type"), r.URL.Query().Get("event_type"))
+	events, err := s.store.ListAuditEvents(r.Context(), principal.WorkspaceID, AuditEventFilters{
+		Type:         eventType,
+		ProjectID:    r.URL.Query().Get("project_id"),
+		RunID:        r.URL.Query().Get("run_id"),
+		RunHistoryID: r.URL.Query().Get("run_history_id"),
+		Limit:        limit + 1,
+		Offset:       offset,
+	})
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"audit_events": events, "events": events})
+	hasMore := len(events) > limit
+	if hasMore {
+		events = events[:limit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"audit_events": events,
+		"events":       events,
+		"groups":       groupAuditEvents(events),
+		"pagination":   buildPagination(limit, offset, hasMore),
+	})
+}
+
+func parseListPage(r *http.Request, defaultLimit, maxLimit int) (int, int) {
+	limit := defaultLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+	offset := 0
+	if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			offset = parsed
+		}
+	}
+	return limit, offset
+}
+
+func buildPagination(limit, offset int, hasMore bool) paginationResponse {
+	page := paginationResponse{Limit: limit, Offset: offset, HasMore: hasMore}
+	if hasMore {
+		next := offset + limit
+		page.NextOffset = &next
+	}
+	return page
+}
+
+func groupAuditEvents(events []AuditEvent) []auditEventGroup {
+	byRun := map[string]*auditEventGroup{}
+	order := []string{}
+	for _, event := range events {
+		runHistoryID := metadataString(event.Metadata, "run_history_id")
+		if runHistoryID == "" {
+			continue
+		}
+		group := byRun[runHistoryID]
+		if group == nil {
+			group = &auditEventGroup{
+				ID:           "run:" + runHistoryID,
+				RunHistoryID: runHistoryID,
+				RunID:        metadataString(event.Metadata, "run_id"),
+				ProjectID:    metadataString(event.Metadata, "project_id"),
+				FirstEventAt: event.CreatedAt,
+				LastEventAt:  event.CreatedAt,
+			}
+			byRun[runHistoryID] = group
+			order = append(order, runHistoryID)
+		}
+		group.EventCount++
+		if event.CreatedAt.Before(group.FirstEventAt) {
+			group.FirstEventAt = event.CreatedAt
+		}
+		if event.CreatedAt.After(group.LastEventAt) {
+			group.LastEventAt = event.CreatedAt
+		}
+		if !containsString(group.Types, event.Type) {
+			group.Types = append(group.Types, event.Type)
+		}
+		if group.RunID == "" {
+			group.RunID = metadataString(event.Metadata, "run_id")
+		}
+		if group.ProjectID == "" {
+			group.ProjectID = metadataString(event.Metadata, "project_id")
+		}
+	}
+	groups := make([]auditEventGroup, 0, len(order))
+	for _, id := range order {
+		group := byRun[id]
+		sort.Strings(group.Types)
+		runLabel := firstNonEmpty(group.RunID, group.RunHistoryID)
+		group.Summary = fmt.Sprintf("%d lifecycle events for run %s", group.EventCount, runLabel)
+		groups = append(groups, *group)
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		return groups[i].LastEventAt.After(groups[j].LastEventAt)
+	})
+	return groups
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	default:
+		return ""
+	}
+}
+
+func containsString(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleActivationCommands(w http.ResponseWriter, r *http.Request) {

@@ -40,10 +40,10 @@ the exact package was not available in the current attachment cache.
 | Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; `resume` is a structured unsupported blocker until daemon HTTP resume exists. |
 | Human interrupt lifecycle | Partially implemented | Low-level gates/blockers exist; no complete planning/question/permission/OS-action resume/cancel lifecycle. |
 | Real executor proofs | Partially implemented | Codex real gate exists; Claude Code and Antigravity release-gate proofs are not proven. |
-| Run history/audit/console | Partially implemented | Gateway-observed run history/audit and `scope` exist; pagination, filtering breadth, and grouping remain incomplete. |
+| Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, and grouped lifecycle summaries; synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway sanitization exists; local CLI and some reports can still expose local paths/daemon URLs. |
 | Public/private boundary | Partially implemented | Docs/checks exist; public repo still contains cloud-control-plane packages that need boundary review against the new specs. |
-| Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` exists; it still supports `PARTIAL` and does not require Claude/Antigravity proof. |
+| Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` emits only `GO`/`NO-GO` and requires configured real-proof coverage; Claude/Antigravity proofs remain unproven. |
 
 ## Requirement Audit
 
@@ -51,11 +51,11 @@ the exact package was not available in the current attachment cache.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Final verdicts only `GO` or `NO-GO` | Missing | `scripts/verify_public_selfhost_rc.sh` still emits `PARTIAL` when real executor is not configured. |
-| Fake/simulation cannot satisfy GO | Partially implemented | Codex real gate rejects simulation in `web/gateway-console/tests/live/verify-live.mjs`; fake-only overall gate still can be reported as `PARTIAL`, which is now forbidden. |
+| Final verdicts only `GO` or `NO-GO` | Implemented | `scripts/verify_public_selfhost_rc.sh` emits `GO` or `NO-GO`; no `PARTIAL` branch remains. |
+| Fake/simulation cannot satisfy GO | Partially implemented | Real executor gates reject simulation text/metadata and missing required real proofs force `NO-GO`; Claude/Antigravity proof execution remains unproven. |
 | Artifact-backed verifier | Implemented | `make verify-public-selfhost-rc` builds/unpacks artifacts through `scripts/verify_public_selfhost_rc.sh`. |
 | Codex, Claude Code, and Antigravity real proofs | Missing | Codex path exists; no equivalent required release proof for Claude Code or Antigravity found. |
-| Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks; local sync preview redaction is tested; pagination/grouping checks remain incomplete. |
+| Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks and now asserts run/audit pagination plus grouped audit arrays; broader human-interrupt and multi-executor proof coverage remains incomplete. |
 | Machine-readable and human report | Implemented | `reports/public-selfhost-rc/<timestamp>/summary.json` and `.md` are produced by the RC script. |
 
 ### 01 - Local-first Source of Truth
@@ -93,10 +93,10 @@ the exact package was not available in the current attachment cache.
 | --- | --- | --- |
 | `codencer submit` local-first command | Partially implemented | Exists in `cmd/codencer/main.go`; needs better default progress/result/redaction behavior. |
 | `codencer run status` | Implemented | `run status` exists. |
-| `codencer run events` | Missing | No `run events` subcommand found. |
-| `codencer run report` | Missing | `run get` exists; no explicit report command found. |
-| `codencer run cancel` | Missing | No local CLI cancel subcommand found. |
-| `codencer run resume` | Missing | No local CLI resume subcommand found. |
+| `codencer run events` | Implemented | `run events` returns local run timeline/events for known run plan records. |
+| `codencer run report` | Implemented | `run report` returns the local run report without relying on a Gateway call. |
+| `codencer run cancel` | Partially implemented | `run cancel` is exposed and returns structured local capability behavior where true cancellation is unsupported. |
+| `codencer run resume` | Partially implemented | `run resume` is exposed as a structured unsupported blocker until daemon HTTP resume exists. |
 | `codencer executor list/scan/test/default` | Implemented | Implemented in `cmd/codencer/main.go`. |
 | `codencer sync` or publish equivalent | Partially implemented | `codencer sync status/preview/publish` exists with metadata-only preview and no raw upload. |
 | Public defaults are local/self-host | Partially implemented | Config/default docs and scripts exist; needs re-check against new specs. |
@@ -109,7 +109,7 @@ the exact package was not available in the current attachment cache.
 | Claude Code real executor proof | Missing | Claude adapter tests exist, but no required artifact-backed public release proof. |
 | Antigravity real executor proof | Missing | Adapter/broker code exists, but no required artifact-backed public release proof. |
 | Simulation guard | Partially implemented | Codex/Gateway live verifier has strong simulation checks; not generalized to all required executors. |
-| Fake never satisfies GO | Missing under new verdict rules | Existing RC verifier can still produce `PARTIAL`, not `NO-GO`; fake-only path is not fully disallowed as a release result. |
+| Fake never satisfies GO | Partially implemented | Fake-only plumbing cannot produce `GO` when required real executor proofs are missing; Claude/Antigravity real proof paths are still not proven. |
 
 ### 06 - Run History, Audit, and Console
 
@@ -118,9 +118,9 @@ the exact package was not available in the current attachment cache.
 | Compact run history | Implemented | `/api/gateway/v1/runs` and `/console/runs` exist. |
 | Run detail | Implemented | `/api/gateway/v1/runs/{id}` and `/console/runs/[id]` exist. |
 | Audit lifecycle events | Implemented for Gateway-observed runs | Gateway records task/route/relay/connector/executor/start/terminal/report events. |
-| Pagination | Partially implemented | `limit` exists; no offset/cursor/next token. |
-| Filters | Partially implemented | Runs support project/status; audit has no visible filter API beyond limit. |
-| Grouped audit | Partially implemented | Events link to run detail; no grouped audit API/view found. |
+| Pagination | Implemented for Gateway-observed history | Runs and audit support `limit`/`offset` and return `pagination.has_more`/`next_offset`; Console exposes previous/next controls. |
+| Filters | Implemented for Gateway-observed history | Runs support project/status/scope; audit supports event type, project, run ID, and run history filters. |
+| Grouped audit | Implemented for Gateway-observed history | Audit responses include grouped lifecycle summaries, and Console renders a grouped lifecycle section linking to run detail. |
 | Local/synced/Gateway-submitted scopes | Partially implemented | Gateway run records expose `scope=gateway_submitted`; sync preview reports local run metadata as `scope=local`. No Gateway synced ingest yet. |
 | Execution mode visible | Implemented for current UI | Gateway Console shows `Real executor`, `Simulation`, or `Unknown`. |
 
@@ -136,12 +136,11 @@ the exact package was not available in the current attachment cache.
 
 The release remains `NO-GO` until at least these are resolved:
 
-1. `verify-public-selfhost-rc` must emit only `GO` or `NO-GO`; `PARTIAL` is forbidden.
-2. Claude Code real executor proof must be implemented or the final verdict must remain `NO-GO`.
-3. Antigravity real executor proof must be implemented or the final verdict must remain `NO-GO`.
-4. Async lifecycle must include submit/status/events/report/cancel/resume behavior or explicit structured capability blockers where unsupported.
-5. Human interrupt lifecycle must be first-class across CLI/MCP/UI/Gateway or explicitly proven with structured blockers and audit.
-6. Local CLI output must be redacted by default, especially `repo_root`, `daemon_url`, `report_path`, `logs_ref`, and artifact paths.
-7. Run history/audit must add required pagination, broader filters, and grouping.
-8. Gateway metadata ingest for explicit sync/publish remains unimplemented; current CLI preview/publish behavior is safe but not a completed sync transport.
-9. The final hardening report must end with exactly `Verdict: GO` or `Verdict: NO-GO`.
+1. Claude Code real executor proof must be implemented or the final verdict must remain `NO-GO`.
+2. Antigravity real executor proof must be implemented or the final verdict must remain `NO-GO`.
+3. Async lifecycle must include submit/status/events/report/cancel/resume behavior or explicit structured capability blockers where unsupported.
+4. Human interrupt lifecycle must be first-class across CLI/MCP/UI/Gateway or explicitly proven with structured blockers and audit.
+5. Local CLI output must be redacted by default, especially `repo_root`, `daemon_url`, `report_path`, `logs_ref`, and artifact paths.
+6. Gateway metadata ingest for explicit sync/publish remains unimplemented; current CLI preview/publish behavior is safe but not a completed sync transport.
+7. Run history/audit synced-scope transport remains incomplete even though Gateway-observed pagination/filter/grouping now exists.
+8. The final hardening report must end with exactly `Verdict: GO` or `Verdict: NO-GO`.

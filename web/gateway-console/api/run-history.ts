@@ -11,11 +11,37 @@ import {
   RunListResponseSchema,
 } from "@/schemas/run-history";
 
-export async function listRuns() {
+export type RunListParams = {
+  limit?: number;
+  offset?: number;
+  projectId?: string;
+  scope?: string;
+  status?: string;
+};
+
+function runListQuery(params: RunListParams = {}) {
+  const search = new URLSearchParams();
+  if (params.limit) search.set("limit", String(params.limit));
+  if (params.offset) search.set("offset", String(params.offset));
+  if (params.projectId) search.set("project_id", params.projectId);
+  if (params.scope) search.set("scope", params.scope);
+  if (params.status) search.set("status", params.status);
+  const query = search.toString();
+  return query ? `/runs?${query}` : "/runs";
+}
+
+export async function listRuns(params: RunListParams = {}) {
   if (isDemoMode()) {
-    return { runs: demoSnapshot.runs };
+    return {
+      pagination: {
+        has_more: false,
+        limit: params.limit ?? 100,
+        offset: params.offset ?? 0,
+      },
+      runs: demoSnapshot.runs,
+    };
   }
-  return gatewayJSON("/runs", RunListResponseSchema);
+  return gatewayJSON(runListQuery(params), RunListResponseSchema);
 }
 
 export async function getRun(id: string) {
@@ -38,6 +64,8 @@ export async function getRunEvents(id: string) {
       events: demoSnapshot.auditEvents.filter(
         (event) => event.runHistoryId === id,
       ),
+      groups: [],
+      pagination: { has_more: false, limit: 100, offset: 0 },
     };
   }
   return gatewayJSON(
@@ -46,10 +74,10 @@ export async function getRunEvents(id: string) {
   );
 }
 
-export function useRuns() {
+export function useRuns(params: RunListParams = {}) {
   return useQuery({
-    queryKey: queryKeys.runs,
-    queryFn: listRuns,
+    queryKey: queryKeys.runsPage(params),
+    queryFn: () => listRuns(params),
   });
 }
 
