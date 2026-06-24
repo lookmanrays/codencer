@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `a206a2bde44de87ae50a2886ae5fe0bf111abfeb`
+Implementation commit hash: `31eb72629d266b8b8827d1a998b482e43a84819a`
 
 Branch: `next-phase`
 
@@ -15,6 +15,7 @@ Branch: `next-phase`
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Hardened simulation result handling so the shared simulation runner writes `is_simulation=true`, and Codex/Claude normalizers preserve or infer simulation status from deterministic simulation artifacts instead of relabeling them as real when normalization runs with simulation env disabled.
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
+- Exposed daemon-backed local `codencer run resume` for states already supported by `RecoveryService.ResumeRun` (`created` and `paused_for_gate`), with explicit `run_resumed` CLI events and structured `run_resume_blocked` output when the selected run is not resumable.
 - Added Gateway MCP async lifecycle tools: `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run`, `codencer.get_project_run_status`, `codencer.get_gateway_run_events`, true project-scoped `codencer.cancel_project_run`, and a structured `codencer.resume_project_run` capability blocker.
 - Preserved `codencer.submit_project_task_and_wait` as a compatibility tool while adding non-blocking submit/start paths for planners that should not hold one long HTTP/MCP request open.
 - Updated Gateway Console simple-task submit to send `wait=false`, poll the run report until terminal status, display `pending` while waiting, and emit the terminal audit event once when report refresh observes completion.
@@ -186,6 +187,12 @@ Branch: `next-phase`
 - `make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host` after adding store-backed Gateway API redaction sweep - passed
 - `make verify-public-release` after adding store-backed Gateway API redaction sweep - passed
 - `git diff --check` after adding store-backed Gateway API redaction sweep - passed
+- `go test ./internal/localexec ./internal/app ./internal/service ./cmd/codencer` after exposing local run resume - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after exposing local run resume - passed
+- `go test ./...` after exposing local run resume - passed
+- `make verify-gateway` after exposing local run resume - passed
+- `make verify-public-release` after exposing local run resume - passed
+- `git diff --check` after exposing local run resume - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -195,11 +202,11 @@ Branch: `next-phase`
 - Antigravity real executor proof is not proven in the public self-host RC gate.
 - Latest Codex real executor RC subgate passed with the configured Codex binary and simulation disabled, but the overall default public RC gate remains `NO-GO` because Claude Code and Antigravity proofs were missing from that run.
 - Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
-- `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route. Gateway MCP unsupported resume attempts now record sanitized `resume_project_run_requested` and `resume_project_run_blocked` audit events for run-history correlation.
+- Local `codencer run resume` now routes through the daemon and succeeds for `created` or `paused_for_gate` runs supported by `RecoveryService.ResumeRun`; completed/non-resumable local runs still return a structured `run_resume_blocked` capability blocker. Gateway/Relay project-level `codencer.resume_project_run` remains a structured blocker and records sanitized `resume_project_run_requested` and `resume_project_run_blocked` audit events for run-history correlation.
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
-- Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, unsupported resume-attempt audit, and a Console run-detail response panel now exist, but true resume remains incomplete.
+- Human interrupt lifecycle is still partial: local report/event records, local daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, unsupported Gateway resume-attempt audit, and a Console run-detail response panel now exist, but automatic continuation after human response and Gateway/Relay project resume remain incomplete.
 - Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, run events, run report, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
 
 Verdict: NO-GO
