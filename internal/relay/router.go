@@ -196,6 +196,9 @@ func (s *Server) handleResolvedProjectScoped(w http.ResponseWriter, r *http.Requ
 	case len(parts) == 4 && parts[1] == "runs" && parts[3] == "cancel" && r.Method == http.MethodPost:
 		body, _ := io.ReadAll(r.Body)
 		s.projectProxyAndWrite(w, r, record, http.MethodPost, fmt.Sprintf("/codencer/v1/projects/%s/runs/%s/cancel", projectID, parts[2]), "", body, "cancel_project_run", "runs:write")
+	case len(parts) == 4 && parts[1] == "runs" && parts[3] == "resume" && r.Method == http.MethodPost:
+		body, _ := io.ReadAll(r.Body)
+		s.projectProxyAndWrite(w, r, record, http.MethodPost, fmt.Sprintf("/codencer/v1/projects/%s/runs/%s/resume", projectID, parts[2]), "", body, "resume_project_run", "runs:write")
 	case len(parts) == 2 && parts[1] == "submit" && r.Method == http.MethodPost:
 		body, _ := io.ReadAll(r.Body)
 		s.projectProxyAndWrite(w, r, record, http.MethodPost, fmt.Sprintf("/codencer/v1/projects/%s/submit", projectID), "", body, "submit_project_task", "steps:write")

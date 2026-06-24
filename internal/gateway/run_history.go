@@ -128,7 +128,8 @@ func applyPayloadToRunRecord(record *RunRecord, payload any, reportStatus string
 }
 
 func reportStatusForPayload(payload any, terminalStatus string) string {
-	if terminalAuditType(payload) == "run_started" {
+	eventType := terminalAuditType(payload)
+	if eventType == "run_started" || eventType == "run_resumed" {
 		return "pending"
 	}
 	return terminalStatus

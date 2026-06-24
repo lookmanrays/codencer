@@ -459,6 +459,10 @@ mcp_tool "codencer.get_run_report" "{\"relay_profile_id\":\"personal\",\"project
 grep -q "$run_id" "$TMPDIR_ROOT/run-report.json" || { cat "$TMPDIR_ROOT/run-report.json" >&2; exit 1; }
 assert_no_mcp_leaks "$TMPDIR_ROOT/run-report.json"
 
+mcp_tool "codencer.resume_project_run" "{\"relay_profile_id\":\"personal\",\"project_id\":\"codencer\",\"machine_id\":\"$machine_id\",\"run_id\":\"$run_id\",\"reason\":\"verify structured non-resumable response\"}" "$TMPDIR_ROOT/resume-nonresumable.json"
+grep -q 'run_resume_blocked\|unsupported_operation' "$TMPDIR_ROOT/resume-nonresumable.json" || { cat "$TMPDIR_ROOT/resume-nonresumable.json" >&2; exit 1; }
+assert_no_mcp_leaks "$TMPDIR_ROOT/resume-nonresumable.json"
+
 gateway_api_get "/api/gateway/v1/relays" "$TMPDIR_ROOT/api-relays.json"
 grep -q '"relays"' "$TMPDIR_ROOT/api-relays.json" || { cat "$TMPDIR_ROOT/api-relays.json" >&2; exit 1; }
 gateway_api_get "/api/gateway/v1/projects" "$TMPDIR_ROOT/api-projects.json"

@@ -183,6 +183,7 @@ func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
 
 	var daemon *httptest.Server
 	var cancelled atomic.Bool
+	var resumed atomic.Bool
 	daemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/instance":
@@ -197,8 +198,22 @@ func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
 		case "/api/v1/runs/run-1":
 			switch r.Method {
 			case http.MethodPatch:
-				cancelled.Store(true)
-				_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
+				var req struct {
+					Action string `json:"action"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Fatalf("decode daemon patch action: %v", err)
+				}
+				switch req.Action {
+				case "abort":
+					cancelled.Store(true)
+					_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
+				case "resume":
+					resumed.Store(true)
+					_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning, RecoveryNotes: "Resume requested by operator."})
+				default:
+					t.Fatalf("unexpected daemon patch action %q", req.Action)
+				}
 			case http.MethodGet:
 				_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
 			default:
@@ -255,6 +270,21 @@ func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
 	}
 	if !strings.Contains(string(response.Body), `"run-1"`) || !strings.Contains(string(response.Body), `"cancelled"`) {
 		t.Fatalf("unexpected project cancel response: %s", string(response.Body))
+	}
+
+	response = client.handleRequest(context.Background(), relayproto.CommandRequest{
+		RequestID: "req-project-resume",
+		Method:    http.MethodPost,
+		Path:      "/codencer/v1/projects/proj/runs/run-1/resume",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected ok resume response, got %+v", response)
+	}
+	if !resumed.Load() {
+		t.Fatal("expected project resume request to reach daemon run resume endpoint")
+	}
+	if !strings.Contains(string(response.Body), `"run_resumed"`) || !strings.Contains(string(response.Body), `"running"`) {
+		t.Fatalf("unexpected project resume response: %s", string(response.Body))
 	}
 }
 

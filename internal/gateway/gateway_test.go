@@ -361,8 +361,8 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		"run_history_id":   startedRunHistoryID,
 	})
 	resumeBody := mustJSON(t, resume)
-	if !strings.Contains(resumeBody, `"type":"unsupported_operation"`) || !strings.Contains(resumeBody, `"operation":"resume_project_run"`) {
-		t.Fatalf("expected structured resume capability blocker, got %s", resumeBody)
+	if !strings.Contains(resumeBody, `"run_resumed"`) || !strings.Contains(resumeBody, `"state":"running"`) {
+		t.Fatalf("expected forwarded resume response, got %s", resumeBody)
 	}
 	assertNoGatewayMCPLeak(t, resumeBody)
 	resumeEvents := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
@@ -370,7 +370,7 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		"limit":          20,
 	})
 	resumeEventsBody := mustJSON(t, resumeEvents)
-	for _, want := range []string{`"resume_project_run_requested"`, `"resume_project_run_blocked"`, `"operation":"resume_project_run"`, `"blocker_type":"unsupported_operation"`} {
+	for _, want := range []string{`"resume_project_run_requested"`, `"run_resumed"`} {
 		if !strings.Contains(resumeEventsBody, want) {
 			t.Fatalf("resume run events missing %s: %s", want, resumeEventsBody)
 		}
@@ -1090,6 +1090,29 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 				"id":    "run-async-gateway-test",
 				"state": "cancelled",
 			},
+			"repo_root":   "/Users/example/codencer",
+			"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
+		})
+	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs/run-async-gateway-test/resume", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		writeTestJSON(t, w, map[string]any{
+			"ok":     true,
+			"run_id": "run-async-gateway-test",
+			"status": "running",
+			"run": map[string]any{
+				"id":    "run-async-gateway-test",
+				"state": "running",
+			},
+			"events": []map[string]any{{
+				"type":   "run_resumed",
+				"run_id": "run-async-gateway-test",
+				"state":  "running",
+			}},
 			"repo_root":   "/Users/example/codencer",
 			"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
 		})
