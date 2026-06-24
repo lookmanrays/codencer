@@ -38,7 +38,7 @@ the exact package was not available in the current attachment cache.
 | Explicit sync/publish | Partially implemented | `codencer sync status/preview/publish` now provides metadata-only preview; confirmed publish ingests sanitized metadata into Gateway run history. Raw logs/artifacts remain blocked. |
 | Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first; default human output redacts local paths, but progress UX remains narrow. |
 | Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; Gateway/Relay/Connector now route true project-scoped cancel, Gateway MCP exposes async start/submit/list/status/report/events/cancel, and resume remains a structured capability blocker. Gateway Console now submits simple tasks with `wait=false`, polls run reports, and records terminal audit events on report refresh. |
-| Human interrupt lifecycle | Partially implemented | Local reports/events now expose first-class `human_interrupts`, Gateway blocker outcomes emit `human_interrupt_created` audit events, Gateway HTTP/MCP can record sanitized operator responses as `human_interrupt_responded`, and Antigravity unsafe permission waits now fail fast as manual-attention results; product UI answer flow and true resume remain incomplete. |
+| Human interrupt lifecycle | Partially implemented | Local reports/events now expose first-class `human_interrupts`, Gateway blocker outcomes emit `human_interrupt_created` audit events, Gateway HTTP/MCP and Console run detail can record sanitized operator responses as `human_interrupt_responded`, and Antigravity unsafe permission waits now fail fast as manual-attention results; true resume remains incomplete. |
 | Real executor proofs | Partially implemented | Codex has prior artifact-backed proof and latest rerun invoked the real Codex binary with simulation disabled but failed on an external Codex usage-limit error; earlier Claude Code proof exists; Antigravity remains unproven and now fails early when the provided LS workspace does not match the isolated verifier repo. |
 | Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, and grouped lifecycle summaries; synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway/sync sanitization exists and artifact-backed release verification now covers default human CLI output for init, config show, project init/status/scan, executor list, sync preview, submit, and run output; full explicit JSON/debug/path surface policy proof is still incomplete. |
@@ -82,10 +82,10 @@ the exact package was not available in the current attachment cache.
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Planning approval required | Partially implemented | Local blockers map manual approvals to `planning_approval_required` interrupt records; no complete UI/MCP approval lifecycle. |
-| Clarifying questions | Partially implemented | Question blockers now produce `clarifying_question_required` interrupt records and Gateway `human_interrupt_created` audit; Gateway HTTP/MCP can record a sanitized operator answer, while product UI answer handling and true resume remain incomplete. |
+| Clarifying questions | Partially implemented | Question blockers now produce `clarifying_question_required` interrupt records and Gateway `human_interrupt_created` audit; Gateway HTTP/MCP and Console run detail can record a sanitized operator answer, while true resume remains incomplete. |
 | Permission requests | Partially implemented | Dangerous executor confirmation exists in Gateway Console, unsafe-action blockers map to `permission_request_required`, and Antigravity unsupported/out-of-workspace permission waits now become manual-attention results instead of timeouts; no generalized permission-request lifecycle. |
 | OS/system human action required | Partially implemented | Daemon-not-running blockers map to `os_system_human_action_required` records; no full OS-action resolver flow. |
-| Resume/cancel/audit interrupt lifecycle | Partially implemented | Local events include `human_interrupt_created`; Gateway audit records blocker interrupts and sanitized operator responses; project-scoped cancel is forwarded and audited; resume still returns a structured unsupported/capability blocker. |
+| Resume/cancel/audit interrupt lifecycle | Partially implemented | Local events include `human_interrupt_created`; Gateway audit records blocker interrupts and sanitized operator responses from HTTP/MCP/Console; project-scoped cancel is forwarded and audited; resume still returns a structured unsupported/capability blocker. |
 
 ### 04 - CLI Commands and Control Plane
 
@@ -138,7 +138,7 @@ The release remains `NO-GO` until at least these are resolved:
 
 1. Antigravity real executor proof must pass or the final verdict must remain `NO-GO`.
 2. Async lifecycle now covers local, Relay MCP, Gateway MCP, Gateway Console simple-task submit/report polling, and project-scoped cancel; manifest mode and true resume remain incomplete or structured blockers.
-3. Human interrupt lifecycle still needs a product UI answer flow and true resume support; first-class local interrupt records plus Gateway HTTP/MCP response audit now exist for blocker outcomes.
+3. Human interrupt lifecycle still needs true resume support; first-class local interrupt records plus Gateway HTTP/MCP/Console response audit now exist for blocker outcomes.
 4. Full redaction proof across every CLI/MCP/UI/Gateway surface remains incomplete, although default local human CLI output for init, config show, project init/status/scan, executor list, sync preview, submit, and run output is now covered.
 5. Raw log/artifact sync remains unsupported by design; only sanitized metadata-only `codencer sync publish --confirm` is implemented.
 6. Broader incremental sync policy and external source reconciliation remain incomplete even though Gateway-observed and explicit synced metadata history now exist.

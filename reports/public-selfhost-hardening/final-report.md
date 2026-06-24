@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `d8f59b059382883c36bab71fb3ae95ed85f42b26`
+Implementation commit hash: `bfd998abf5c3bfd2ff9b932e8bc3111f4dab1bb8`
 
 Branch: `next-phase`
 
@@ -25,6 +25,7 @@ Branch: `next-phase`
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Gateway HTTP and MCP operator-response recording for Gateway-observed human interrupts, with sanitized `human_interrupt_responded` audit metadata and explicit next actions that keep true resume marked unsupported.
+- Added a Gateway Console run-detail human interrupt response panel that appears for blocked/waiting runs, records sanitized operator responses through the Gateway API, refreshes run/audit data, and keeps resume framed as a separate capability check rather than automatic restart.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
 - Added isolated Antigravity proof plumbing: `CODENCER_ANTIGRAVITY_DAEMON_DIR` discovery override, preservation of explicit verifier workspace roots, and live-verifier support for `CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON`, `CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE`, and `CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR`.
 - Hardened Antigravity proof handling so the verifier rejects an Antigravity language-server instance unless its actual `GetWorkspaceInfos` output includes the isolated verifier repo.
@@ -74,6 +75,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1631`
   - `reports/gateway-console-screenshots/2026-06-24-1643`
   - `reports/gateway-console-screenshots/2026-06-24-1656`
+  - `reports/gateway-console-screenshots/2026-06-24-1708`
 
 ## Commands Run
 
@@ -127,6 +129,15 @@ Branch: `next-phase`
 - `make verify-gateway` after adding Gateway human interrupt responses - passed
 - `make verify-public-release` after adding Gateway human interrupt responses - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding Gateway human interrupt responses - passed
+- `cd web/gateway-console && npm run format:check` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run lint` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run typecheck` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run test` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run build` after adding Console human interrupt response panel - failed once when run concurrently with `npm run test:e2e` because both wrote `.next`; passed when rerun sequentially
+- `cd web/gateway-console && npm run test:e2e` after adding Console human interrupt response panel - passed
+- `make verify-gateway-console` after adding Console human interrupt response panel - passed
+- `make verify-gateway-console-live` after adding Console human interrupt response panel - passed
+- `make verify-public-release` after adding Console human interrupt response panel - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -140,7 +151,7 @@ Branch: `next-phase`
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
-- Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, and sanitized Gateway HTTP/MCP operator-response audit now exist, but a product UI answer flow and true resume remain incomplete.
+- Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, and a Console run-detail response panel now exist, but true resume remains incomplete.
 - Full cross-surface redaction proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, and run output in deterministic tests/verifiers, but explicit JSON/debug/path commands still require final policy review against the release gate.
 
 Verdict: NO-GO
