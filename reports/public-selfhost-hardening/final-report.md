@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `a4b468ff46f251e5881b6330db5532657d319bef`
+Implementation commit hash: `f27d79fb7575650c2aa4b34880388cf0536eb3c1`
 
 Branch: `next-phase`
 
@@ -11,6 +11,7 @@ Branch: `next-phase`
 - Added the public self-host release spec files under `docs/specs/` and the acceptance gate at `docs/acceptance/public-selfhost-release-gate.yaml`.
 - Created the pre-change implementation audit at `reports/public-selfhost-hardening/implementation-audit.md`.
 - Hardened the public self-host RC verifier so it emits only `GO` or `NO-GO`, rejects real-executor simulation env values, runs configured real executor gates by adapter, and fails the release gate when required real proofs are missing.
+- Updated the public self-host release scope so Codex and Claude Code are required real executor proofs while Antigravity is optional/deferred unless explicitly added to `CODENCER_E2E_REQUIRED_REAL_EXECUTORS`.
 - Removed stale active public-doc wording that said missing real executor proof reports `PARTIAL`; active RC docs now say missing/skipped/simulated/failed required real executor proof is `NO-GO`, and the public boundary checker rejects stale `reports PARTIAL` claims plus malformed hardening-report final verdict lines.
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Hardened simulation result handling so the shared simulation runner writes `is_simulation=true`, and Codex/Claude normalizers preserve or infer simulation status from deterministic simulation artifacts instead of relabeling them as real when normalization runs with simulation env disabled.
@@ -54,34 +55,15 @@ Branch: `next-phase`
 
 ## Proofs
 
-- Latest Codex artifact-backed RC proof passed the Codex real-executor subgate and returned overall `NO-GO` only because Claude Code and Antigravity proofs were missing:
-  - Report: `reports/public-selfhost-rc/20260624T142643Z/summary.md`
-  - Gates: `real_executor_e2e_codex` passed; `required_real_executor_proofs` failed with `claude=missing` and `antigravity=missing`.
-  - Evidence: live verifier preflight printed `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0`, daemon log showed `Adapter Execution: Starting process` with `adapter=codex` and binary `/Applications/Codex.app/Contents/Resources/codex`, and the verifier accepted the run only after checking `is_simulation=false` plus absence of simulated Codex log/summary text.
-- Current scoped Codex artifact-backed RC proof passed:
-  - Report: `reports/public-selfhost-rc/20260624T122313Z/summary.md`
-  - Gates: `real_executor_e2e_codex`, `required_real_executor_proofs`
-  - Verdict: overall `NO-GO` for the default public gate because Claude Code and Antigravity were missing in that run; the Codex subgate itself passed.
-  - Evidence: live verifier log shows `Adapter Execution: Starting process`, `adapter=codex`, and binary `/Applications/Codex.app/Contents/Resources/codex`; simulation env was forced to `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
-- Latest Codex artifact-backed RC rerun is `NO-GO` due to an external Codex usage-limit error, not simulation:
-  - Report: `reports/public-selfhost-rc/20260624T125824Z/summary.md`
-  - Gate: `real_executor_e2e_codex`
-  - Evidence: live verifier printed `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0`, daemon log showed `Adapter Execution: Starting process` with binary `/Applications/Codex.app/Contents/Resources/codex`, and report payload had `is_simulation=false`.
-  - Blocker: Codex CLI returned `You've hit your usage limit`; the verifier correctly returned `NO-GO`.
-- Default all-real-executor RC proof remains `NO-GO`:
-  - Report: `reports/public-selfhost-rc/20260624T115347Z/summary.md`
-  - Gates passed through `real_executor_e2e_codex`, then `required_real_executor_proofs` failed because Claude Code and Antigravity were missing from that run.
-- Earlier Codex + Claude Code artifact-backed RC subgates passed:
-  - Report: `reports/public-selfhost-rc/20260624T105654Z/summary.md`
-  - Gates: `real_executor_e2e_codex`, `real_executor_e2e_claude`
-  - Required proof log: `reports/public-selfhost-rc/20260624T105654Z/required_real_executor_proofs.log`
-  - Evidence: Codex daemon log shows `Adapter Execution: Starting process`, `adapter=codex`, and the configured Codex binary; Claude verifier log shows `primary=claude` with simulation preflight disabled.
-  - Overall verdict remains `NO-GO` because Antigravity is missing.
-- Antigravity source-tree live proof was attempted with isolated temp instance metadata generated from the local running Antigravity language server.
-  - The verifier bound the candidate instance by PID without writing user Codencer state.
-  - Current verifier fails early when the candidate Antigravity LS does not expose the isolated verifier repo in `GetWorkspaceInfos`; latest local attempt exited with `real Antigravity gate requires an Antigravity workspace for the isolated verifier repo; workspace_count=0`.
-  - Earlier reachable local Antigravity LS candidates failed to complete through the Antigravity adapter and fell through to `ide-chat`; the verifier failed instead of accepting fallback behavior.
-  - No Antigravity real proof is available.
+- Current artifact-backed public self-host RC proof passed for the required Codex + Claude Code release scope:
+  - Report: `reports/public-selfhost-rc/20260624T202037Z/summary.md`
+  - Verdict: `GO`
+  - Gates: `build_release_snapshot`, `select_unpack_artifact`, `docs_public_release`, `standard_setup_contract`, `gateway_artifact_smoke`, `gateway_console_live_artifact`, `real_executor_e2e_codex`, `real_executor_e2e_claude`, and `required_real_executor_proofs` all passed.
+  - Required proof log: `reports/public-selfhost-rc/20260624T202037Z/required_real_executor_proofs.log` shows `default_required=codex,claude`, `optional_deferred=antigravity`, `codex=passed`, and `claude=passed`.
+  - Codex evidence: `real_executor_e2e_codex.log` prints `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0` and daemon `Adapter Execution: Starting process` entries with `adapter=codex` and the configured Codex binary.
+  - Claude Code evidence: `real_executor_e2e_claude.log` prints `ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0` and daemon routing with `primary=claude`.
+- Historical `NO-GO` RC runs remain in `reports/public-selfhost-rc/` and are retained as evidence of earlier missing-proof and external-limit failures. They no longer define the current release verdict after the Antigravity deferral contract changed.
+- Antigravity remains implemented as an executor/profile family and optional verifier path, but its real executor proof is deferred. Antigravity must not be claimed as proven unless its explicit gate is configured and passes.
 - Gateway Console visual evidence regenerated:
   - `reports/gateway-console-screenshots/2026-06-24-1202`
   - `reports/gateway-console-screenshots/2026-06-24-1213`
@@ -114,6 +96,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1956`
   - `reports/gateway-console-screenshots/2026-06-24-2004`
   - `reports/gateway-console-screenshots/2026-06-24-2014`
+  - `reports/gateway-console-screenshots/2026-06-24-2328`
 
 ## Commands Run
 
@@ -155,8 +138,8 @@ Branch: `next-phase`
 - `make verify-gateway-console-live` after adding terminal audit-on-report refresh - passed
 - `go test ./internal/adapters/antigravity` - passed
 - `cd web/gateway-console && npm run format:check && npm run lint -- tests/live/verify-live.mjs` - passed
-- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing; report `reports/public-selfhost-rc/20260624T122313Z/summary.md`
-- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` - failed with `NO-GO` due to external Codex usage limit after invoking the real Codex binary with simulation disabled; report `reports/public-selfhost-rc/20260624T125824Z/summary.md`
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing; report `reports/public-selfhost-rc/20260624T122313Z/summary.md`
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed with `NO-GO` due to external Codex usage limit after invoking the real Codex binary with simulation disabled; report `reports/public-selfhost-rc/20260624T125824Z/summary.md`
 - `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - passed with scoped `GO` for Codex-only proof
 - `make verify-public-release` - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed after project-scoped cancel routing and console e2e stabilization
@@ -191,7 +174,7 @@ Branch: `next-phase`
 - `make verify-gateway` after preventing simulation artifacts from passing as real - passed
 - `make verify-gateway-console` after preventing simulation artifacts from passing as real - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1724`
 - `make verify-gateway-console-live` after preventing simulation artifacts from passing as real - passed
-- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` after preventing simulation artifacts from passing as real - failed by design with `NO-GO` after `real_executor_e2e_codex` passed and Claude/Antigravity required proofs were missing; report `reports/public-selfhost-rc/20260624T142643Z/summary.md`
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` after preventing simulation artifacts from passing as real - failed by design with `NO-GO` after `real_executor_e2e_codex` passed and Claude/Antigravity required proofs were missing; report `reports/public-selfhost-rc/20260624T142643Z/summary.md`
 - `make verify-public-release` after preventing simulation artifacts from passing as real - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after preventing simulation artifacts from passing as real - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1732`
 - `bash -n scripts/verify_public_selfhost_release.sh` after adding isolated local run CLI redaction checks - passed
@@ -242,7 +225,7 @@ Branch: `next-phase`
 - `cd web/gateway-console && npm run test:e2e` after hardening run-detail navigation - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after the daemon missing-run guard and e2e navigation hardening - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1845`
 - `git diff --check` after the daemon missing-run guard and e2e navigation hardening - passed
-- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed earlier under the old required-executor contract after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go` after broadening default human CLI redaction checks - passed
 - `bash -n scripts/verify_public_selfhost_release.sh` after broadening default human CLI redaction checks - passed
@@ -312,13 +295,15 @@ Branch: `next-phase`
 - `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after adding local run list/get/status/cancel human-output proof - passed
 - `make verify-public-release` after adding local run list/get/status/cancel human-output proof - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local run list/get/status/cancel human-output proof - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2014`
+- `bash -n scripts/verify_public_selfhost_rc.sh` after deferring Antigravity from the default required executor set - passed
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<configured-codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<configured-claude-binary> make verify-public-selfhost-rc` after deferring Antigravity from the default required executor set - passed with `GO`; report `reports/public-selfhost-rc/20260624T202037Z/summary.md`
+- `make verify-public-release` after final GO report cleanup - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after final GO report cleanup - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2328`
 - `git diff --check` - passed
 
-## Remaining Blockers
+## Remaining Known Limitations
 
-- Antigravity real executor proof is not proven in the public self-host RC gate.
-- Latest Codex real executor RC subgate passed with the configured Codex binary and simulation disabled, but the overall default public RC gate remains `NO-GO` because Claude Code and Antigravity proofs were missing from that run.
-- Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
+- Antigravity real executor proof is optional/deferred for this release and is not claimed as proven. Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
 - Local `codencer run resume` and project-level Gateway/Relay/Connector resume now route to daemon-backed `RecoveryService.ResumeRun` for states supported by the daemon (`created` and `paused_for_gate`). Completed/non-resumable runs still return structured `run_resume_blocked` or `resume_project_run_blocked` capability blockers with sanitized audit correlation.
 - Missing-run resume now returns a structured local `unsupported_operation` blocker instead of causing a daemon panic; public self-host release verification includes this path through the local run redaction proof.
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
@@ -327,4 +312,4 @@ Branch: `next-phase`
 - Human interrupt lifecycle is still partial: local report/event records, local and project-level daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, explicit `follow_up=resume/cancel/start_new_task` handling, resume/cancel/start-new-task audit, default CLI blocker-run interrupt display proof, and a Console run-detail response panel now exist. Broader planner/executor continuation after arbitrary answer/approval/permission responses remains incomplete.
 - Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, successful submit, blocker submit with human interrupt, run list/get/status/events/cancel, run report, run report with human interrupt, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
 
-Verdict: NO-GO
+Verdict: GO

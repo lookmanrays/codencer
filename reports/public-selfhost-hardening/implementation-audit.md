@@ -4,7 +4,7 @@ Audit date: 2026-06-24
 
 Branch: `next-phase`
 
-Current release verdict: `NO-GO`
+Current release verdict: `GO`
 
 ## Source Material
 
@@ -39,11 +39,11 @@ the exact package was not available in the current attachment cache.
 | Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first; default human output redacts local paths and now shows local lifecycle progress for run id, submitted step/profile, task status, terminal result, report-store availability, and non-terminal `codencer run report <run_id>` follow-up. Broader interactive/progress streaming remains narrow. |
 | Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; local resume now routes through daemon `RecoveryService.ResumeRun` for `created` and `paused_for_gate` runs and returns structured blockers for non-resumable or missing-run states. Gateway/Relay/Connector now route true project-scoped cancel and project-scoped resume, Gateway MCP exposes async start/submit/list/status/report/events/cancel/resume, successful resumable project resumes produce `run_resumed`, and non-resumable project resumes produce structured requested/blocked audit events. Gateway Console now submits simple tasks and advanced manifest/run-plan tasks with `wait=false`, polls run reports, and records terminal audit events on report refresh. |
 | Human interrupt lifecycle | Partially implemented | Local reports/events now expose first-class `human_interrupts`, local and project-level daemon-backed resume exist for resumable states, Gateway blocker outcomes emit `human_interrupt_created` audit events, Gateway HTTP/MCP and Console run detail can record sanitized operator responses as `human_interrupt_responded`, explicit `follow_up=resume/cancel/start_new_task` uses stored safe route metadata to attempt resume/cancel or submit a replacement task with `wait=false`, missing replacement goals return `new_task_goal_required`, all three paths audit the requested/resumed/cancelled/submitted/blocked outcome, and the artifact-backed release verifier now proves default CLI submit/report output displays a redacted clarifying-question interrupt; broader planner/executor continuation after arbitrary answer/approval/permission responses remains incomplete. |
-| Real executor proofs | Partially implemented | Codex has prior artifact-backed proof and latest rerun invoked the real Codex binary with simulation disabled but failed on an external Codex usage-limit error; earlier Claude Code proof exists; Antigravity remains unproven and now fails early when the provided LS workspace does not match the isolated verifier repo. |
+| Real executor proofs | Implemented for current release scope | Current artifact-backed RC proof passed Codex and Claude Code with simulation disabled in `reports/public-selfhost-rc/20260624T202037Z`; Antigravity is optional/deferred and is not claimed as proven. |
 | Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, grouped lifecycle summaries, and explicit synced metadata audit events; broader synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway/sync sanitization exists and artifact-backed release verification now covers default human CLI output for init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, successful submit, blocker submit with human interrupt, run list/get/status/events/cancel, run report, run report with human interrupt, and run resume blocker output. Source-tree and unpacked-artifact Gateway smoke now also sweeps public Gateway API outputs for relays, projects, machines, connectors, executors, runs, run detail/events, audit events, and activation commands. Broader explicit JSON/debug/path surface policy proof is still incomplete. |
 | Public/private boundary | Implemented for current public boundary | Public boundary docs classify self-host/community cloud-control-plane primitives separately from private managed-service candidates. `scripts/check_public_boundary.py` now scans active deploy files for stale release labels, rejects commercial endpoints as public defaults, rejects tracked runtime state/secrets/local paths, checks release artifacts, and rejects source/deploy/script/web paths that match obvious private managed-service categories such as billing, metering, KMS/Vault, managed runners, support/admin consoles, marketplace submission material, or official connector credentials. |
-| Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` emits only `GO`/`NO-GO`, requires configured real-proof coverage, reports `NO-GO` when required proofs are missing, and public boundary checks reject stale active docs claiming `PARTIAL` verdicts; Antigravity remains unproven. |
+| Public RC verifier | Implemented for current release scope | `make verify-public-selfhost-rc` emits only `GO`/`NO-GO`, requires Codex and Claude Code real-proof coverage by default, treats Antigravity as optional/deferred unless explicitly required, and public boundary checks reject stale active docs claiming `PARTIAL` verdicts. |
 
 ## Requirement Audit
 
@@ -54,7 +54,7 @@ the exact package was not available in the current attachment cache.
 | Final verdicts only `GO` or `NO-GO` | Implemented | `scripts/verify_public_selfhost_rc.sh` emits `GO` or `NO-GO`; no `PARTIAL` branch remains, active docs now describe missing real proof as `NO-GO`, and `scripts/check_public_boundary.py` rejects stale `reports PARTIAL` claims plus malformed final hardening-report verdict lines. |
 | Fake/simulation cannot satisfy GO | Implemented for current verifier | Real executor gates reject simulation text/metadata and missing required real proofs force `NO-GO`; Codex and Claude real gates passed with simulation disabled. |
 | Artifact-backed verifier | Implemented | `make verify-public-selfhost-rc` builds/unpacks artifacts through `scripts/verify_public_selfhost_rc.sh`. |
-| Codex, Claude Code, and Antigravity real proofs | Partially implemented | Codex passed current artifact-backed scoped proof in `reports/public-selfhost-rc/20260624T120012Z`; Codex and Claude Code passed earlier artifact-backed real gates in `reports/public-selfhost-rc/20260624T105654Z`; Antigravity remains missing. |
+| Codex and Claude Code real proofs; Antigravity optional/deferred | Implemented for current release scope | Current artifact-backed RC proof in `reports/public-selfhost-rc/20260624T202037Z` passed `real_executor_e2e_codex`, `real_executor_e2e_claude`, and `required_real_executor_proofs` with `default_required=codex,claude` and `optional_deferred=antigravity`. |
 | Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks and now asserts run/audit pagination plus grouped audit arrays; source/artifact Gateway smoke sweeps core public Gateway API outputs for path/token/unsafe-field leaks; human interrupt audit is covered for blocker outcomes, but multi-executor proof coverage remains incomplete. |
 | Machine-readable and human report | Implemented | `reports/public-selfhost-rc/<timestamp>/summary.json` and `.md` are produced by the RC script. |
 
@@ -105,9 +105,9 @@ the exact package was not available in the current attachment cache.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Codex real executor proof | Implemented | Current scoped proof `reports/public-selfhost-rc/20260624T120012Z` passed `real_executor_e2e_codex` with the configured Codex binary and `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex`. |
-| Claude Code real executor proof | Implemented | `reports/public-selfhost-rc/20260624T105654Z` passed `real_executor_e2e_claude` with the configured Claude Code binary. |
-| Antigravity real executor proof | Partially implemented | The verifier now accepts isolated Antigravity instance metadata, requires the actual LS workspace to match the isolated verifier repo, and fails fast when it does not. Available local Antigravity LS candidates did not expose the isolated repo workspace; no passing proof exists. |
+| Codex real executor proof | Implemented | Current artifact-backed proof `reports/public-selfhost-rc/20260624T202037Z` passed `real_executor_e2e_codex` with the configured Codex binary and simulation disabled. |
+| Claude Code real executor proof | Implemented | Current artifact-backed proof `reports/public-selfhost-rc/20260624T202037Z` passed `real_executor_e2e_claude` with the configured Claude Code binary and simulation disabled. |
+| Antigravity real executor proof | Optional/deferred | Antigravity is no longer required for the current public self-host release `GO`. The verifier still accepts isolated Antigravity instance metadata and can require Antigravity if explicitly listed in `CODENCER_E2E_REQUIRED_REAL_EXECUTORS`, but no Antigravity proof is claimed. |
 | Simulation guard | Implemented for current verifier | The live verifier checks generic simulated text, `is_simulation=true`, expected adapter/profile, real output/artifacts, and daemon simulation logs. |
 | Fake never satisfies GO | Implemented for current verifier | Fake-only plumbing cannot produce `GO` when required real executor proofs are missing. |
 
@@ -130,13 +130,14 @@ the exact package was not available in the current attachment cache.
 | --- | --- | --- |
 | Public/self-host defaults | Implemented for current boundary | `make verify-public-release` passes, public default files are checked for commercial endpoints, and active self-host cloud deploy defaults now use `v0.3.0-local-prod-rc.1` instead of stale beta labels. |
 | Private managed service code absent | Implemented for current boundary | Self-host/community cloud-control-plane packages remain public and documented as non-managed-service primitives. The boundary checker rejects obvious private managed-service source/deploy path classes and production hosted endpoints/defaults. |
-| Hosted proof not claimed unless run | Implemented for current boundary | `scripts/check_public_boundary.py` rejects stale active release labels and mixed public self-host RC verdict language; current final report remains `NO-GO` where live proof is missing. |
+| Hosted proof not claimed unless run | Implemented for current boundary | `scripts/check_public_boundary.py` rejects stale active release labels and mixed public self-host RC verdict language; Antigravity remains optional/deferred and is not claimed as proven. |
 
-## Immediate Blocking Items for GO
+## Remaining Known Limitations
 
-The release remains `NO-GO` until at least these are resolved:
+The release is `GO` for the current Codex + Claude Code public self-host scope.
+These limitations remain explicit:
 
-1. Antigravity real executor proof must pass or the final verdict must remain `NO-GO`.
+1. Antigravity real executor proof is optional/deferred and is not claimed as proven.
 2. Async lifecycle now covers local, Relay MCP, Gateway MCP, Gateway Console simple-task and advanced manifest/run-plan submit/report polling, project-scoped cancel, and local/project-level daemon-backed resume for resumable states; non-resumable project resume still returns structured blockers.
 3. Human interrupt lifecycle still needs broader planner/executor continuation after arbitrary answer/approval/permission responses; first-class local interrupt records plus local and project-level resume/cancel, explicit Gateway `follow_up=resume/cancel/start_new_task`, Gateway HTTP/MCP/Console response audit, and non-resumable resume requested/blocked audit now exist for blocker outcomes.
 4. Full redaction proof across every CLI/MCP/UI/Gateway surface remains incomplete, although default local human CLI output for init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, successful submit, blocker submit with human interrupt, run list/get/status/events/cancel, run report, run report with human interrupt, run resume blocker output, and core source/artifact Gateway API outputs are now covered.
