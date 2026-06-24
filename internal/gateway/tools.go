@@ -462,6 +462,7 @@ func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *au
 		"resume_attempted":          false,
 		"cancel_supported":          true,
 		"cancel_operation":          "codencer.cancel_project_run",
+		"cancel_attempted":          false,
 		"status_read_tool":          "codencer.get_project_run_status",
 		"report_read_tool":          "codencer.get_run_report",
 		"events_read_tool":          "codencer.get_gateway_run_events",
@@ -495,6 +496,35 @@ func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *au
 			}
 		} else {
 			nextActions["resume_supported"] = true
+			nextActions["planner_decision_required"] = false
+			followUpResult = result
+		}
+	} else if strings.EqualFold(followUp, "cancel") {
+		nextActions["cancel_attempted"] = true
+		cancelArgs := map[string]any{}
+		for key, value := range args {
+			cancelArgs[key] = value
+		}
+		if reason != "" {
+			cancelArgs["reason"] = reason
+		}
+		result, cancelErr := s.cancelProjectRunFromRecord(ctx, principal, record, cancelArgs)
+		if cancelErr != nil {
+			blockedMetadata := runAuditMetadata(record)
+			blockedMetadata["operation"] = "cancel_project_run"
+			blockedMetadata["status"] = "blocked"
+			blockedMetadata["blocker_type"] = cancelErr.Code
+			s.recordGatewayAuditWithMetadata(ctx, principal, "cancel_project_run_blocked", "Blocked follow-up cancel_project_run for run "+firstNonEmpty(record.RunID, record.ID)+" in project "+record.ProjectID, blockedMetadata)
+			followUpResult = map[string]any{
+				"ok":     false,
+				"status": "blocked",
+				"blocker": map[string]any{
+					"type":      cancelErr.Code,
+					"message":   cancelErr.Message,
+					"operation": "cancel_project_run",
+				},
+			}
+		} else {
 			nextActions["planner_decision_required"] = false
 			followUpResult = result
 		}

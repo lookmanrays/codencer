@@ -340,6 +340,53 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 	}
 	assertNoGatewayMCPLeak(t, blockedEventsBody)
 
+	blockedCancel := mcpToolCall(t, server.URL, session, "codencer.submit_project_task", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"machine_id":       "mach-1",
+		"title":            "Blocked Gateway cancel task",
+		"goal":             "Ask for a safe operator cancellation.",
+	})
+	blockedCancelBody := mustJSON(t, blockedCancel)
+	blockedCancelPayload, _ := mcpStructuredContent(t, blockedCancel).(map[string]any)
+	blockedCancelRunHistoryID := stringValueFromAny(blockedCancelPayload["run_history_id"])
+	if blockedCancelRunHistoryID == "" || !strings.Contains(blockedCancelBody, `"status":"blocked"`) || !strings.Contains(blockedCancelBody, `"type":"question"`) {
+		t.Fatalf("expected blocked cancel run response with history id, got %s", blockedCancelBody)
+	}
+	assertNoGatewayMCPLeak(t, blockedCancelBody)
+
+	cancelResponse := mcpToolCall(t, server.URL, session, "codencer.respond_to_human_interrupt", map[string]any{
+		"run_history_id": blockedCancelRunHistoryID,
+		"response_type":  "deny",
+		"response":       "Cancel this run without using /Users/example/private token=relay-secret.",
+		"follow_up":      "cancel",
+	})
+	cancelResponseBody := mustJSON(t, cancelResponse)
+	if !strings.Contains(cancelResponseBody, `"status":"human_interrupt_response_recorded"`) ||
+		!strings.Contains(cancelResponseBody, `"cancel_supported":true`) ||
+		!strings.Contains(cancelResponseBody, `"cancel_attempted":true`) ||
+		!strings.Contains(cancelResponseBody, `"follow_up":"cancel"`) ||
+		!strings.Contains(cancelResponseBody, `"follow_up_result"`) ||
+		!strings.Contains(cancelResponseBody, `"run_cancelled"`) ||
+		!strings.Contains(cancelResponseBody, `"operator_response"`) {
+		t.Fatalf("expected recorded cancel human interrupt response, got %s", cancelResponseBody)
+	}
+	assertNoGatewayMCPLeak(t, cancelResponseBody)
+
+	blockedCancelEvents := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
+		"run_history_id": blockedCancelRunHistoryID,
+		"limit":          20,
+	})
+	blockedCancelEventsBody := mustJSON(t, blockedCancelEvents)
+	if !strings.Contains(blockedCancelEventsBody, `"human_interrupt_created"`) ||
+		!strings.Contains(blockedCancelEventsBody, `"human_interrupt_responded"`) ||
+		!strings.Contains(blockedCancelEventsBody, `"cancel_project_run_requested"`) ||
+		!strings.Contains(blockedCancelEventsBody, `"run_cancelled"`) ||
+		!strings.Contains(blockedCancelEventsBody, `"operator_response"`) {
+		t.Fatalf("expected human interrupt cancel audit event, got %s", blockedCancelEventsBody)
+	}
+	assertNoGatewayMCPLeak(t, blockedCancelEventsBody)
+
 	cancel := mcpToolCall(t, server.URL, session, "codencer.cancel_project_run", map[string]any{
 		"relay_profile_id": "default",
 		"project_id":       "codencer",
@@ -922,6 +969,45 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("blocked run events missing human interrupt response audit: %s", blockedEventsAfterResponseBody)
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, blockedEventsAfterResponseBody)
+	blockedCancelRun := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"title":            "Blocked Gateway cancel task",
+		"goal":             "Ask for a safe operator cancellation.",
+		"timeout_seconds":  30,
+	})
+	blockedCancelBody := mustJSON(t, blockedCancelRun)
+	blockedCancelRunHistoryID, _ := blockedCancelRun["run_history_id"].(string)
+	if blockedCancelRunHistoryID == "" || !strings.Contains(blockedCancelBody, `"status":"blocked"`) || !strings.Contains(blockedCancelBody, `"type":"question"`) {
+		t.Fatalf("blocked cancel run did not return blocker and history id: %s", blockedCancelBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, blockedCancelBody)
+	cancelInterruptResponse := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedCancelRunHistoryID+"/human-interrupts/respond", token.AccessToken, map[string]any{
+		"response_type": "deny",
+		"response":      "Cancel this run without using /Users/example/private token=relay-secret.",
+		"follow_up":     "cancel",
+		"reason":        "Operator rejected the blocked run.",
+	})
+	cancelInterruptResponseBody := mustJSON(t, cancelInterruptResponse)
+	if !strings.Contains(cancelInterruptResponseBody, `"status":"human_interrupt_response_recorded"`) ||
+		!strings.Contains(cancelInterruptResponseBody, `"cancel_supported":true`) ||
+		!strings.Contains(cancelInterruptResponseBody, `"cancel_attempted":true`) ||
+		!strings.Contains(cancelInterruptResponseBody, `"follow_up":"cancel"`) ||
+		!strings.Contains(cancelInterruptResponseBody, `"follow_up_result"`) ||
+		!strings.Contains(cancelInterruptResponseBody, `"run_cancelled"`) ||
+		!strings.Contains(cancelInterruptResponseBody, `"operator_response"`) {
+		t.Fatalf("human interrupt cancel response endpoint missing expected payload: %s", cancelInterruptResponseBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, cancelInterruptResponseBody)
+	blockedCancelEventsAfterResponse := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedCancelRunHistoryID+"/events", token.AccessToken)
+	blockedCancelEventsAfterResponseBody := mustJSON(t, blockedCancelEventsAfterResponse)
+	if !strings.Contains(blockedCancelEventsAfterResponseBody, `"human_interrupt_responded"`) ||
+		!strings.Contains(blockedCancelEventsAfterResponseBody, `"cancel_project_run_requested"`) ||
+		!strings.Contains(blockedCancelEventsAfterResponseBody, `"run_cancelled"`) ||
+		!strings.Contains(blockedCancelEventsAfterResponseBody, `"operator_response"`) {
+		t.Fatalf("blocked cancel run events missing human interrupt cancel audit: %s", blockedCancelEventsAfterResponseBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, blockedCancelEventsAfterResponseBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	auditBody := mustJSON(t, audit)
 	for _, eventType := range []string{
@@ -1179,6 +1265,29 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			"report_path": "/tmp/codencer/run-plans/run-blocked.json",
 		})
 	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs/run-blocked-cancel/cancel", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		writeTestJSON(t, w, map[string]any{
+			"ok":     true,
+			"run_id": "run-blocked-cancel",
+			"status": "cancelled",
+			"run": map[string]any{
+				"id":    "run-blocked-cancel",
+				"state": "cancelled",
+			},
+			"events": []map[string]any{{
+				"type":   "run_cancelled",
+				"run_id": "run-blocked-cancel",
+				"state":  "cancelled",
+			}},
+			"repo_root":   "/Users/example/codencer",
+			"report_path": "/tmp/codencer/run-plans/run-blocked-cancel.json",
+		})
+	})
 	mux.HandleFunc("/api/v2/projects/codencer/run-plan", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		relay.lastMachineID = r.URL.Query().Get("machine_id")
@@ -1227,19 +1336,25 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 		relay.lastHostLabel = r.URL.Query().Get("host_label")
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		if req["title"] == "Blocked Gateway task" {
+		if req["title"] == "Blocked Gateway task" || req["title"] == "Blocked Gateway cancel task" {
+			runID := "run-blocked"
+			stepID := "step-blocked"
+			if req["title"] == "Blocked Gateway cancel task" {
+				runID = "run-blocked-cancel"
+				stepID = "step-blocked-cancel"
+			}
 			writeTestJSON(t, w, map[string]any{
 				"ok":      false,
 				"status":  "blocked",
-				"run_id":  "run-blocked",
-				"step_id": "step-blocked",
+				"run_id":  runID,
+				"step_id": stepID,
 				"blocker": map[string]any{
 					"type":      "question",
 					"message":   "Need operator choice from /Users/example/private token=relay-secret",
 					"questions": []string{"Choose a safe path without exposing /tmp/codencer/secret"},
 				},
 				"task": map[string]any{
-					"run_id": "run-blocked",
+					"run_id": runID,
 					"status": "blocked",
 				},
 			})
