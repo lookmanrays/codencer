@@ -192,6 +192,125 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	assertNoGatewayMCPLeak(t, blockerBody)
 }
 
+func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
+	relay := newFakeRelay(t, fakeRelayOptions{})
+	defer relay.Close()
+	server, _ := newGatewayStoreAPIServer(t, relay.URL)
+	defer server.Close()
+
+	session := initializeMCP(t, server.URL)
+	toolsResp := doMCPRequest(t, server.URL, session, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "tools",
+		"method":  "tools/list",
+		"params":  map[string]any{},
+	})
+	var toolsList map[string]any
+	if err := json.NewDecoder(toolsResp.Body).Decode(&toolsList); err != nil {
+		t.Fatalf("decode tools/list: %v", err)
+	}
+	toolsBody := mustJSON(t, toolsList)
+	for _, want := range []string{
+		"codencer.start_project_run",
+		"codencer.submit_project_task",
+		"codencer.list_project_runs",
+		"codencer.get_project_run",
+		"codencer.get_project_run_status",
+		"codencer.get_gateway_run_events",
+		"codencer.cancel_project_run",
+		"codencer.resume_project_run",
+	} {
+		if !strings.Contains(toolsBody, want) {
+			t.Fatalf("tools/list missing %s: %s", want, toolsBody)
+		}
+	}
+
+	started := mcpToolCall(t, server.URL, session, "codencer.start_project_run", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"machine_id":       "mach-1",
+	})
+	startedBody := mustJSON(t, started)
+	if !strings.Contains(startedBody, `"run_id":"run-async-gateway-test"`) || !strings.Contains(startedBody, `"status":"running"`) {
+		t.Fatalf("expected async start response, got %s", startedBody)
+	}
+	assertNoGatewayMCPLeak(t, startedBody)
+
+	asyncSubmit := mcpToolCall(t, server.URL, session, "codencer.submit_project_task", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"host_label":       "macbook",
+		"title":            "Async Gateway task",
+		"goal":             "Return after submission without waiting.",
+	})
+	asyncSubmitBody := mustJSON(t, asyncSubmit)
+	if !strings.Contains(asyncSubmitBody, `"status":"submitted"`) || strings.Contains(asyncSubmitBody, `"status":"completed"`) {
+		t.Fatalf("expected non-blocking submitted task response, got %s", asyncSubmitBody)
+	}
+	assertNoGatewayMCPLeak(t, asyncSubmitBody)
+	asyncPayload, _ := mcpStructuredContent(t, asyncSubmit).(map[string]any)
+	runHistoryID := stringValueFromAny(asyncPayload["run_history_id"])
+	if runHistoryID == "" {
+		t.Fatalf("async submit did not return run_history_id: %s", asyncSubmitBody)
+	}
+
+	runs := mcpToolCall(t, server.URL, session, "codencer.list_project_runs", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"machine_id":       "mach-1",
+	})
+	runsBody := mustJSON(t, runs)
+	if !strings.Contains(runsBody, `"run_id":"run-async-gateway-test"`) {
+		t.Fatalf("expected async run listing, got %s", runsBody)
+	}
+	assertNoGatewayMCPLeak(t, runsBody)
+
+	status := mcpToolCall(t, server.URL, session, "codencer.get_project_run_status", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"run_id":           "run-async-gateway-test",
+		"machine_id":       "mach-1",
+	})
+	statusBody := mustJSON(t, status)
+	if !strings.Contains(statusBody, `"state":"running"`) {
+		t.Fatalf("expected async run status, got %s", statusBody)
+	}
+	assertNoGatewayMCPLeak(t, statusBody)
+
+	events := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
+		"run_history_id": runHistoryID,
+		"limit":          10,
+	})
+	eventsBody := mustJSON(t, events)
+	if !strings.Contains(eventsBody, `"task_submitted"`) || !strings.Contains(eventsBody, `"run_started"`) || !strings.Contains(eventsBody, `"pagination"`) {
+		t.Fatalf("expected Gateway run events, got %s", eventsBody)
+	}
+	assertNoGatewayMCPLeak(t, eventsBody)
+
+	cancel := mcpToolCall(t, server.URL, session, "codencer.cancel_project_run", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"run_id":           "run-async-gateway-test",
+		"run_history_id":   runHistoryID,
+	})
+	cancelBody := mustJSON(t, cancel)
+	if !strings.Contains(cancelBody, `"type":"unsupported_operation"`) || !strings.Contains(cancelBody, `"operation":"cancel_project_run"`) {
+		t.Fatalf("expected structured cancel capability blocker, got %s", cancelBody)
+	}
+	assertNoGatewayMCPLeak(t, cancelBody)
+
+	resume := mcpToolCall(t, server.URL, session, "codencer.resume_project_run", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"run_id":           "run-async-gateway-test",
+	})
+	resumeBody := mustJSON(t, resume)
+	if !strings.Contains(resumeBody, `"type":"unsupported_operation"`) || !strings.Contains(resumeBody, `"operation":"resume_project_run"`) {
+		t.Fatalf("expected structured resume capability blocker, got %s", resumeBody)
+	}
+	assertNoGatewayMCPLeak(t, resumeBody)
+}
+
 func TestGatewayAuthMetadataAndChallenge(t *testing.T) {
 	server := newGatewayTestServer(t, []RelayProfile{})
 	defer server.Close()
@@ -767,6 +886,51 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 		requireRelayAuth(t, r)
 		writeTestJSON(t, w, project())
 	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		relay.lastMachineID = r.URL.Query().Get("machine_id")
+		switch r.Method {
+		case http.MethodPost:
+			writeTestJSON(t, w, map[string]any{
+				"ok":     true,
+				"status": "running",
+				"run_id": "run-async-gateway-test",
+				"run": map[string]any{
+					"id":    "run-async-gateway-test",
+					"state": "running",
+				},
+				"repo_root":   "/Users/example/codencer",
+				"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
+			})
+		case http.MethodGet:
+			writeTestJSON(t, w, map[string]any{
+				"runs": []map[string]any{{
+					"run_id": "run-async-gateway-test",
+					"status": "running",
+					"run": map[string]any{
+						"id":    "run-async-gateway-test",
+						"state": "running",
+					},
+					"repo_root": "/Users/example/codencer",
+				}},
+			})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs/run-async-gateway-test", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		writeTestJSON(t, w, map[string]any{
+			"run_id": "run-async-gateway-test",
+			"status": "running",
+			"run": map[string]any{
+				"id":    "run-async-gateway-test",
+				"state": "running",
+			},
+			"repo_root":   "/Users/example/codencer",
+			"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
+		})
+	})
 	mux.HandleFunc("/api/v2/projects/codencer/run-plan", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		relay.lastMachineID = r.URL.Query().Get("machine_id")
@@ -812,6 +976,23 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 					"run_id": "run-blocked",
 					"status": "blocked",
 				},
+			})
+			return
+		}
+		if wait, _ := req["wait"].(bool); !wait {
+			writeTestJSON(t, w, map[string]any{
+				"ok":      true,
+				"status":  "submitted",
+				"run_id":  "run-gateway-test",
+				"step_id": "step-gateway-test",
+				"task": map[string]any{
+					"run_id": "run-gateway-test",
+					"status": "submitted",
+					"evidence": map[string]any{
+						"logs_ref": "/Users/example/.codencer-live-test/runtime/daemon/state/artifacts/task.log",
+					},
+				},
+				"report_path": "/tmp/codencer/run-plans/run-gateway-test.json",
 			})
 			return
 		}

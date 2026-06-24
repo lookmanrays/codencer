@@ -827,7 +827,7 @@ func (s *Server) handleProjectRunCreate(w http.ResponseWriter, r *http.Request, 
 	mode := strings.TrimSpace(stringArg(req, "mode"))
 	runRecord, auditMetadata := s.beginRunRecord(r.Context(), principal, projectID, mode, req)
 	s.recordGatewayAuditWithMetadata(r.Context(), principal, "task_submitted", "Submitted "+executionKindLabel(mode)+" for project "+projectID, auditMetadata)
-	route := submitProjectTaskRoute
+	route := submitProjectTaskRoute(true)
 	if mode == "manifest" {
 		route = runProjectManifestRoute
 	}
