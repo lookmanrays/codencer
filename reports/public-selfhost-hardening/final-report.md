@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Commit hash at verification start: `80919e6b944cca9f442a948ac09266fd6da854bf`
+Commit hash at verification start: `2e464248bf13b09868263318fc7f40ccbedd6670`
 
 Branch: `next-phase`
 
@@ -14,7 +14,7 @@ Branch: `next-phase`
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and publish returns structured confirmation/unsupported blockers until Gateway ingest exists.
-- Redacted local absolute repo/report paths from default human CLI report output.
+- Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
@@ -38,11 +38,13 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1238`
   - `reports/gateway-console-screenshots/2026-06-24-1243`
   - `reports/gateway-console-screenshots/2026-06-24-1247`
+  - `reports/gateway-console-screenshots/2026-06-24-1259`
 
 ## Commands Run
 
 - `bash -n scripts/verify_public_selfhost_rc.sh` - passed
 - `go test ./cmd/codencer` - passed
+- `go test ./cmd/codencer ./internal/security` - passed
 - `go test ./internal/localexec` - passed
 - `go test ./internal/profile ./internal/adapters/codex` - passed
 - `go test ./internal/connector -count=1` - passed
@@ -71,5 +73,6 @@ Branch: `next-phase`
 - Gateway metadata ingest for explicit sync/publish remains unimplemented. The CLI now provides safe metadata-only preview/status and structured publish blockers; no local reports, logs, artifacts, or paths are uploaded.
 - Run history/audit synced-scope transport remains incomplete against the full public self-host hardening spec. Gateway-observed pagination, filters, and grouped lifecycle summaries are implemented.
 - Human interrupt lifecycle is still partial outside the existing gate/blocker primitives.
+- Full cross-surface redaction proof remains incomplete. Default local human CLI output and sync preview are covered, but explicit JSON/debug/path commands still require final policy review against the release gate.
 
 Verdict: NO-GO

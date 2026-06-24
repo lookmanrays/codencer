@@ -283,6 +283,7 @@ func TestSetupTimeoutFlagsWriteConfigs(t *testing.T) {
 }
 
 func TestExecutionCommandsJSON(t *testing.T) {
+	unsafeSummary := `done from /Users/example/private http://127.0.0.1:18085 token=secret-token`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
@@ -292,15 +293,15 @@ func TestExecutionCommandsJSON(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1":
 			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"id": "run-1", "project_id": "proj", "state": "completed"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/steps":
-			writeHTTPJSON(t, w, http.StatusOK, []map[string]any{{"id": "step-1", "state": "completed", "adapter": "fake-success"}})
+			writeHTTPJSON(t, w, http.StatusOK, []map[string]any{{"id": "step-1", "state": "completed", "adapter": "fake-success", "status_reason": unsafeSummary}})
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1":
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-1/steps":
 			writeHTTPJSON(t, w, http.StatusAccepted, map[string]any{"id": "step-1", "state": "running", "adapter": "fake-success"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1":
-			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"id": "step-1", "state": "completed", "adapter": "fake-success"})
+			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"id": "step-1", "state": "completed", "adapter": "fake-success", "status_reason": unsafeSummary})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/result":
-			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"step_id": "step-1", "state": "completed", "summary": "done"})
+			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"step_id": "step-1", "state": "completed", "summary": unsafeSummary})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/artifacts":
 			writeHTTPJSON(t, w, http.StatusOK, []map[string]any{})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/validations":
@@ -308,6 +309,8 @@ func TestExecutionCommandsJSON(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1/logs":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("logs"))
+		case r.Method == http.MethodGet && r.URL.Path == "/health":
+			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"ok": true})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -323,8 +326,22 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	if stdout, stderr, err := runCLI("project", "init", "--id", "proj", "--repo", repo, "--adapter", "fake", "--profile", "fake-success", "--daemon-url", server.URL, "--json"); err != nil {
 		t.Fatalf("project init failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
+	stdout, stderr, err := runCLI("project", "get", "proj")
+	if err != nil {
+		t.Fatalf("project get human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "repo:") || !strings.Contains(stdout, "hash=") || !strings.Contains(stdout, "daemon:          configured locally") {
+		t.Fatalf("project get human output missing safe local metadata: %s", stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
 
-	stdout, stderr, err := runCLI("run", "start", "--project", "proj", "--json")
+	stdout, stderr, err = runCLI("status")
+	if err != nil {
+		t.Fatalf("status human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
+
+	stdout, stderr, err = runCLI("run", "start", "--project", "proj", "--json")
 	if err != nil {
 		t.Fatalf("run start failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
@@ -347,6 +364,14 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	if !strings.Contains(stdout, `"status": "completed"`) || !strings.Contains(stdout, `"evidence"`) {
 		t.Fatalf("submit output wrong: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("submit", "--project", "proj", "--run", "run-1", "--goal", "do it", "--wait")
+	if err != nil {
+		t.Fatalf("submit human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "summary: done") || !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "<redacted-local-url>") || !strings.Contains(stdout, "token=<redacted>") {
+		t.Fatalf("submit human output missing sanitized summary: %s", stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
 	stdout, stderr, err = runCLI("run", "events", "run-1", "--project", "proj", "--json")
 	if err != nil {
 		t.Fatalf("run events failed: %v stderr=%s stdout=%s", err, stderr, stdout)
@@ -354,13 +379,29 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	if !strings.Contains(stdout, `"events"`) || !strings.Contains(stdout, `"step_completed"`) {
 		t.Fatalf("run events output wrong: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("run", "events", "run-1", "--project", "proj")
+	if err != nil {
+		t.Fatalf("run events human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "summary: done") || !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "<redacted-local-url>") {
+		t.Fatalf("run events human output missing sanitized summary: %s", stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
 	stdout, stderr, err = runCLI("run", "report", "run-1", "--project", "proj", "--json")
 	if err != nil {
 		t.Fatalf("run report failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
-	if !strings.Contains(stdout, `"tasks"`) || !strings.Contains(stdout, `"done"`) {
+	if !strings.Contains(stdout, `"tasks"`) || !strings.Contains(stdout, `"done from`) {
 		t.Fatalf("run report output wrong: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("run", "report", "run-1", "--project", "proj")
+	if err != nil {
+		t.Fatalf("run report human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "summary: done") || !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "<redacted-local-url>") {
+		t.Fatalf("run report human output missing sanitized summary: %s", stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
 	stdout, stderr, err = runCLI("run", "cancel", "run-1", "--project", "proj", "--json")
 	if err != nil {
 		t.Fatalf("run cancel failed: %v stderr=%s stdout=%s", err, stderr, stdout)
@@ -400,11 +441,14 @@ tasks:
 		!strings.Contains(stdout, `"scope": "local"`) ||
 		!strings.Contains(stdout, `"raw_artifacts_included": false`) ||
 		!strings.Contains(stdout, `"runs"`) ||
-		!strings.Contains(stdout, `"done"`) {
+		!strings.Contains(stdout, `"done from`) {
 		t.Fatalf("sync preview output wrong: %s", stdout)
 	}
 	if strings.Contains(stdout, repo) || strings.Contains(stdout, server.URL) || strings.Contains(stdout, `"daemon_url"`) || strings.Contains(stdout, `"report_path"`) || strings.Contains(stdout, `"logs_ref"`) {
 		t.Fatalf("sync preview leaked local path or daemon metadata: %s", stdout)
+	}
+	if strings.Contains(stdout, "/Users/example") || strings.Contains(stdout, "http://127.0.0.1:18085") || strings.Contains(stdout, "secret-token") {
+		t.Fatalf("sync preview leaked unsafe summary text: %s", stdout)
 	}
 	stdout, _, err = runCLI("sync", "publish", "--project", "proj", "--json")
 	if err == nil {
@@ -1241,6 +1285,31 @@ func assertJSON(t *testing.T, raw string) {
 	t.Helper()
 	var value any
 	decodeJSON(t, raw, &value)
+}
+
+func assertNoDefaultCLILeak(t *testing.T, output string, forbidden ...string) {
+	t.Helper()
+	for _, value := range forbidden {
+		if value != "" && strings.Contains(output, value) {
+			t.Fatalf("default CLI output leaked %q: %s", value, output)
+		}
+	}
+	for _, marker := range []string{
+		"/Users/",
+		"/home/",
+		"/private/tmp/",
+		"/var/folders/",
+		"repo_root",
+		"daemon_url",
+		"report_path",
+		"logs_ref",
+		"secret-token",
+		"http://127.0.0.1:18085",
+	} {
+		if strings.Contains(output, marker) {
+			t.Fatalf("default CLI output leaked %q: %s", marker, output)
+		}
+	}
 }
 
 func decodeJSON(t *testing.T, raw string, target any) {

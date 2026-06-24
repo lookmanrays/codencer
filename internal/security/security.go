@@ -111,6 +111,10 @@ func SanitizeRemoteJSON(data []byte) []byte {
 	return out
 }
 
+func SanitizeUserText(value string) string {
+	return sanitizeRemoteString(value)
+}
+
 func sanitizeRemoteValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:

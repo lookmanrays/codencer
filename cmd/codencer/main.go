@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,6 +41,8 @@ const (
 	exitUsage   = localexec.ExitInvalidInput
 	exitFailed  = localexec.ExitInternal
 )
+
+var cliLocalURLPattern = regexp.MustCompile(`https?://(?:127\.0\.0\.1|localhost|\[::1\]):[0-9]+[^\s"',)}\]]*`)
 
 type exitError struct {
 	code    int
@@ -2301,9 +2304,9 @@ func safeSyncString(value string) string {
 	data, _ := json.Marshal(payload)
 	var out map[string]string
 	if err := json.Unmarshal(security.SanitizeRemoteJSON(data), &out); err == nil {
-		return strings.TrimSpace(out["value"])
+		return safeCLIText(out["value"])
 	}
-	return security.Redact(value)
+	return safeCLIText(security.Redact(value))
 }
 
 func syncMachineWarning(machine local.MachineIdentity) []string {
@@ -3425,6 +3428,25 @@ func printHelpBlock(w io.Writer, usage, subcommands, flags, example string) {
 	fmt.Fprintf(w, "Examples:\n  %s\n", example)
 }
 
+func safeCLIText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return cliLocalURLPattern.ReplaceAllString(security.SanitizeUserText(value), "<redacted-local-url>")
+}
+
+func safeCLILocalRef(path string) string {
+	label, hash := security.SafePathLabel(path)
+	if label == "" {
+		return "local"
+	}
+	if hash == "" {
+		return label
+	}
+	return fmt.Sprintf("%s hash=%s", label, hash)
+}
+
 func printPaths(w io.Writer, paths local.Paths) {
 	fmt.Fprintf(w, "home:           %s\n", paths.Home)
 	fmt.Fprintf(w, "projects_file:  %s\n", paths.ProjectsFile)
@@ -3442,11 +3464,11 @@ func printPaths(w io.Writer, paths local.Paths) {
 func printProject(w io.Writer, p projectpkg.Project) {
 	fmt.Fprintf(w, "id:              %s\n", p.ID)
 	fmt.Fprintf(w, "name:            %s\n", p.Name)
-	fmt.Fprintf(w, "repo_root:       %s\n", p.RepoRoot)
+	fmt.Fprintf(w, "repo:            %s\n", safeCLILocalRef(p.RepoRoot))
 	fmt.Fprintf(w, "default_adapter: %s\n", p.DefaultAdapter)
 	fmt.Fprintf(w, "adapter_profile: %s\n", p.AdapterProfile)
 	if p.DaemonURL != "" {
-		fmt.Fprintf(w, "daemon_url:      %s\n", p.DaemonURL)
+		fmt.Fprintf(w, "daemon:          configured locally\n")
 	}
 	fmt.Fprintf(w, "shared_to_relay: %t\n", p.SharedToRelay)
 	if p.RelayInstanceID != "" {
@@ -3466,23 +3488,25 @@ func printMachine(w io.Writer, machine local.MachineIdentity, path string) {
 	fmt.Fprintf(w, "hostname:   %s\n", machine.Hostname)
 	fmt.Fprintf(w, "os:         %s\n", machine.OS)
 	fmt.Fprintf(w, "arch:       %s\n", machine.Arch)
-	fmt.Fprintf(w, "path:       %s\n", path)
+	if path != "" {
+		fmt.Fprintf(w, "path:       local machine identity file\n")
+	}
 }
 
 func printConnectorEnrollReport(w io.Writer, report *connectorops.EnrollReport) {
 	fmt.Fprintf(w, "connector_id: %s\n", report.ConnectorID)
 	fmt.Fprintf(w, "machine_id:   %s\n", report.MachineID)
 	fmt.Fprintf(w, "relay_url:    %s\n", report.RelayURL)
-	fmt.Fprintf(w, "config:       %s\n", report.ConfigPath)
-	fmt.Fprintf(w, "home:         %s\n", report.CodencerHome)
+	fmt.Fprintf(w, "config:       stored locally\n")
+	fmt.Fprintf(w, "home:         local Codencer home\n")
 	for _, warning := range report.Warnings {
-		fmt.Fprintf(w, "warning:      %s\n", warning)
+		fmt.Fprintf(w, "warning:      %s\n", safeCLIText(warning))
 	}
 }
 
 func printConnectorStatusReport(w io.Writer, report *connectorops.StatusReport) {
 	if report.Status == nil {
-		fmt.Fprintf(w, "config: %s\n", report.ConfigPath)
+		fmt.Fprintf(w, "config: stored locally\n")
 		return
 	}
 	fmt.Fprintf(w, "connector_id: %s\n", report.Status.ConnectorID)
@@ -3490,38 +3514,38 @@ func printConnectorStatusReport(w io.Writer, report *connectorops.StatusReport) 
 	fmt.Fprintf(w, "relay_url:    %s\n", report.Status.RelayURL)
 	fmt.Fprintf(w, "state:        %s\n", report.Status.SessionState)
 	if report.Status.LastError != "" {
-		fmt.Fprintf(w, "last_error:   %s\n", report.Status.LastError)
+		fmt.Fprintf(w, "last_error:   %s\n", safeCLIText(report.Status.LastError))
 	}
 }
 
 func printDoctor(w io.Writer, report local.DoctorReport) {
 	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-9s %-24s %s\n", strings.ToUpper(check.Status), check.Name, check.Detail)
+		fmt.Fprintf(w, "%-9s %-24s %s\n", strings.ToUpper(check.Status), check.Name, safeCLIText(check.Detail))
 	}
 	fmt.Fprintf(w, "summary: errors=%d warnings=%d skipped=%d unknown=%d\n", report.Summary.Errors, report.Summary.Warnings, report.Summary.Skipped, report.Summary.Unknown)
 }
 
 func printStatus(w io.Writer, report local.StatusReport) {
 	fmt.Fprintf(w, "status:        %s\n", report.Status)
-	fmt.Fprintf(w, "codencer_home: %s\n", report.Paths.Home)
+	fmt.Fprintf(w, "codencer_home: configured locally\n")
 	fmt.Fprintf(w, "projects:      %d\n", report.ProjectCount)
 	if report.CurrentProjectID != "" {
 		fmt.Fprintf(w, "current:       %s\n", report.CurrentProjectID)
 	}
 	if report.Project != nil {
-		fmt.Fprintf(w, "project:       %s (%s)\n", report.Project.ID, report.Project.RepoRoot)
+		fmt.Fprintf(w, "project:       %s repo=%s\n", report.Project.ID, safeCLILocalRef(report.Project.RepoRoot))
 		fmt.Fprintf(w, "adapter:       %s/%s\n", report.Project.DefaultAdapter, report.Project.AdapterProfile)
 	}
 	if report.Machine != nil {
 		fmt.Fprintf(w, "machine:       %s host_label=%s hostname=%s\n", report.Machine.MachineID, report.Machine.HostLabel, report.Machine.Hostname)
 	}
-	fmt.Fprintf(w, "daemon:        %s %s\n", report.Daemon.Status, report.Daemon.Detail)
-	fmt.Fprintf(w, "relay:         %s %s\n", report.Relay.Status, report.Relay.Detail)
+	fmt.Fprintf(w, "daemon:        %s %s\n", report.Daemon.Status, safeCLIText(report.Daemon.Detail))
+	fmt.Fprintf(w, "relay:         %s %s\n", report.Relay.Status, safeCLIText(report.Relay.Detail))
 	for _, executor := range report.Executors {
-		fmt.Fprintf(w, "executor:      %s %s %s\n", executor.ID, executor.Status, executor.Detail)
+		fmt.Fprintf(w, "executor:      %s %s %s\n", executor.ID, executor.Status, safeCLIText(executor.Detail))
 	}
 	for _, warning := range report.Warnings {
-		fmt.Fprintf(w, "warning:       %s\n", warning)
+		fmt.Fprintf(w, "warning:       %s\n", safeCLIText(warning))
 	}
 }
 
@@ -3531,29 +3555,29 @@ func printServiceReport(w io.Writer, report supervisor.ServiceReport) {
 	for _, service := range report.Services {
 		fmt.Fprintf(w, "service: %s configured=%t installed=%t state=%s health=%s\n", service.Name, service.Configured, service.Installed, service.ObservedState, service.Health)
 		if service.LastError != "" {
-			fmt.Fprintf(w, "error:   %s\n", service.LastError)
+			fmt.Fprintf(w, "error:   %s\n", safeCLIText(service.LastError))
 		}
 	}
 	for _, warning := range report.Warnings {
-		fmt.Fprintf(w, "warning: %s\n", warning)
+		fmt.Fprintf(w, "warning: %s\n", safeCLIText(warning))
 	}
 }
 
 func printWatchdogReport(w io.Writer, report supervisor.WatchdogReport) {
 	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-9s %-24s %s\n", strings.ToUpper(check.Status), check.Name, check.Message)
+		fmt.Fprintf(w, "%-9s %-24s %s\n", strings.ToUpper(check.Status), check.Name, safeCLIText(check.Message))
 	}
 	for _, blocker := range report.Blockers {
-		fmt.Fprintf(w, "blocker: %s %s\n", blocker.Type, blocker.Message)
+		fmt.Fprintf(w, "blocker: %s %s\n", blocker.Type, safeCLIText(blocker.Message))
 	}
 }
 
 func printRecoveryReport(w io.Writer, report supervisor.RecoveryReport) {
 	for _, action := range report.Actions {
-		fmt.Fprintf(w, "action: %s target=%s safe=%t done=%t reason=%s\n", action.Type, action.Target, action.Safe, action.Done, action.Reason)
+		fmt.Fprintf(w, "action: %s target=%s safe=%t done=%t reason=%s\n", action.Type, safeCLIText(action.Target), action.Safe, action.Done, safeCLIText(action.Reason))
 	}
 	for _, blocker := range report.Blockers {
-		fmt.Fprintf(w, "blocker: %s %s\n", blocker.Type, blocker.Message)
+		fmt.Fprintf(w, "blocker: %s %s\n", blocker.Type, safeCLIText(blocker.Message))
 	}
 }
 
@@ -3561,14 +3585,14 @@ func printLiveReport(w io.Writer, report live.Report) {
 	fmt.Fprintf(w, "profile: %s\n", report.Profile)
 	fmt.Fprintf(w, "ok: %t\n", report.OK)
 	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-14s %-28s %s\n", strings.ToUpper(check.Status), check.ID, check.Reason)
+		fmt.Fprintf(w, "%-14s %-28s %s\n", strings.ToUpper(check.Status), check.ID, safeCLIText(check.Reason))
 		if check.Blocker != nil {
-			fmt.Fprintf(w, "blocker: %s %s\n", check.Blocker.Type, check.Blocker.Message)
+			fmt.Fprintf(w, "blocker: %s %s\n", check.Blocker.Type, safeCLIText(check.Blocker.Message))
 		}
 	}
 	fmt.Fprintf(w, "summary: passed=%d failed=%d blocked=%d skipped=%d\n", report.Summary.Passed, report.Summary.Failed, report.Summary.Blocked, report.Summary.Skipped)
 	if report.ReportPath != "" {
-		fmt.Fprintf(w, "report: %s\n", report.ReportPath)
+		fmt.Fprintf(w, "report: available in the local Codencer report store\n")
 	}
 }
 
@@ -3581,10 +3605,10 @@ func printActivationReport(w io.Writer, report activation.Report) {
 		fmt.Fprintf(w, "mcp: %s\n", report.MCPURL)
 	}
 	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-14s %-32s %s\n", strings.ToUpper(check.Status), check.ID, check.Detail)
+		fmt.Fprintf(w, "%-14s %-32s %s\n", strings.ToUpper(check.Status), check.ID, safeCLIText(check.Detail))
 	}
 	if report.PackagePath != "" {
-		fmt.Fprintf(w, "package: %s\n", report.PackagePath)
+		fmt.Fprintf(w, "package: available in the local Codencer artifact store\n")
 	}
 }
 
@@ -3652,13 +3676,13 @@ func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 			fmt.Fprintf(w, "event: %s run=%s state=%s\n", event.Type, event.RunID, event.State)
 		}
 		if event.Summary != "" {
-			fmt.Fprintf(w, "summary: %s\n", event.Summary)
+			fmt.Fprintf(w, "summary: %s\n", safeCLIText(event.Summary))
 		}
 	}
 	if report.Task != nil {
 		fmt.Fprintf(w, "task: %s %s step=%s profile=%s\n", report.Task.TaskID, report.Task.Status, report.Task.StepID, report.Task.Profile)
 		if report.Task.Summary != "" {
-			fmt.Fprintf(w, "summary: %s\n", report.Task.Summary)
+			fmt.Fprintf(w, "summary: %s\n", safeCLIText(report.Task.Summary))
 		}
 	}
 	if report.Profile != nil {
@@ -3668,7 +3692,7 @@ func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 		fmt.Fprintf(w, "profile: %-20s adapter=%s daemon_adapter=%s\n", profile.ID, profile.Adapter, profile.DaemonAdapter)
 	}
 	if report.Blocker != nil {
-		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, report.Blocker.Message)
+		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, safeCLIText(report.Blocker.Message))
 	}
 }
 
@@ -3679,9 +3703,18 @@ func printRunPlanReport(w io.Writer, report localexec.RunPlanReport) {
 	}
 	for _, task := range report.Tasks {
 		fmt.Fprintf(w, "task: %s %s step=%s\n", task.TaskID, task.Status, task.StepID)
+		if task.Summary != "" {
+			fmt.Fprintf(w, "summary: %s\n", safeCLIText(task.Summary))
+		}
+		if task.Evidence.Result != nil && task.Evidence.Result.Summary != "" && task.Evidence.Result.Summary != task.Summary {
+			fmt.Fprintf(w, "result: %s\n", safeCLIText(task.Evidence.Result.Summary))
+		}
+	}
+	if report.Evidence.Result != nil && report.Evidence.Result.Summary != "" {
+		fmt.Fprintf(w, "summary: %s\n", safeCLIText(report.Evidence.Result.Summary))
 	}
 	if report.Blocker != nil {
-		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, report.Blocker.Message)
+		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, safeCLIText(report.Blocker.Message))
 	}
 	if report.ReportPath != "" {
 		fmt.Fprintln(w, "report: available in the local Codencer artifact store")
