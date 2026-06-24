@@ -86,6 +86,7 @@ export const RunEventsResponseSchema = AuditEventListResponseSchema.transform(
 export const HumanInterruptResponseSchema = z
   .object({
     follow_up: z.string().optional(),
+    follow_up_result: UnknownRecord.optional(),
     next_actions: UnknownRecord.optional(),
     ok: z.boolean(),
     project_id: z.string(),
@@ -102,6 +103,7 @@ export const HumanInterruptResponseSchema = z
   })
   .transform((payload) => ({
     followUp: payload.follow_up,
+    followUpResult: payload.follow_up_result ?? {},
     nextActions: payload.next_actions ?? {},
     ok: payload.ok,
     projectId: payload.project_id,

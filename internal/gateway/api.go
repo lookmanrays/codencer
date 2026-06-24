@@ -1028,30 +1028,68 @@ func (s *Server) handleProjectRunResume(w http.ResponseWriter, r *http.Request, 
 			args[key] = value
 		}
 	}
-	match, apiErr := s.resolveProject(r.Context(), principal, projectID, args, true)
-	if apiErr != nil {
-		s.recordGatewayAuditWithMetadata(r.Context(), principal, "resume_project_run_requested", "Run resume route resolution failed for project "+projectID+": "+apiErr.Code, map[string]any{"project_id": projectID, "run_id": runID})
-		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
-		return
-	}
-	auditMetadata := projectLifecycleAuditMetadata(match, args)
-	s.recordGatewayAuditWithMetadata(r.Context(), principal, "resume_project_run_requested", "Requested resume_project_run for run "+runID+" in project "+projectID, auditMetadata)
-	path, body, apiErr := resumeProjectRunRoute(args)
+	payload, apiErr := s.resumeProjectRunFromRecord(r.Context(), principal, RunRecord{ProjectID: projectID, RunID: runID}, args)
 	if apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	path = appendSelector(path, args)
-	_, response, apiErr := s.callRelay(r.Context(), match.Profile, http.MethodPost, path, body)
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) resumeProjectRunFromRecord(ctx context.Context, principal *authPrincipal, record RunRecord, args map[string]any) (map[string]any, *apiError) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	projectID := firstNonEmpty(stringValueFromAny(args["project_id"]), record.ProjectID)
+	runID := firstNonEmpty(stringValueFromAny(args["run_id"]), record.RunID)
+	if strings.TrimSpace(projectID) == "" {
+		return nil, &apiError{Status: http.StatusBadRequest, Code: "project_id_required", Message: "project_id is required"}
+	}
+	if strings.TrimSpace(runID) == "" {
+		return nil, &apiError{Status: http.StatusBadRequest, Code: "run_id_required", Message: "run_id is required"}
+	}
+	routeArgs := map[string]any{
+		"project_id": projectID,
+		"run_id":     runID,
+	}
+	for _, key := range []string{"relay_profile_id", "machine_id", "host_label", "reason"} {
+		if value := strings.TrimSpace(stringValueFromAny(args[key])); value != "" {
+			routeArgs[key] = value
+		}
+	}
+	for key, value := range map[string]string{
+		"relay_profile_id": record.RelayProfileID,
+		"machine_id":       record.MachineID,
+		"host_label":       record.HostLabel,
+	} {
+		if _, exists := routeArgs[key]; !exists && strings.TrimSpace(value) != "" {
+			routeArgs[key] = strings.TrimSpace(value)
+		}
+	}
+	if record.ID != "" {
+		routeArgs["run_history_id"] = record.ID
+	}
+	match, apiErr := s.resolveProject(ctx, principal, projectID, routeArgs, true)
+	if apiErr != nil {
+		s.recordGatewayAuditWithMetadata(ctx, principal, "resume_project_run_requested", "Run resume route resolution failed for project "+projectID+": "+apiErr.Code, map[string]any{"project_id": projectID, "run_id": runID})
+		return nil, apiErr
+	}
+	auditMetadata := projectLifecycleAuditMetadata(match, routeArgs)
+	s.recordGatewayAuditWithMetadata(ctx, principal, "resume_project_run_requested", "Requested resume_project_run for run "+runID+" in project "+projectID, auditMetadata)
+	path, body, apiErr := resumeProjectRunRoute(routeArgs)
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	path = appendSelector(path, routeArgs)
+	_, response, apiErr := s.callRelay(ctx, match.Profile, http.MethodPost, path, body)
 	payload, apiErr := responsePayload(match.Profile, response, apiErr)
 	if apiErr != nil {
-		s.recordGatewayAuditWithMetadata(r.Context(), principal, "run_failed", "Run resume failed for project "+projectID+": "+apiErr.Code, auditMetadata)
-		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
-		return
+		s.recordGatewayAuditWithMetadata(ctx, principal, "run_failed", "Run resume failed for project "+projectID+": "+apiErr.Code, auditMetadata)
+		return nil, apiErr
 	}
-	runRecord, auditMetadata := s.refreshRunRecordFromLifecyclePayload(r.Context(), principal, match, args, payload, reportStatusForPayload(payload, "available"))
+	runRecord, auditMetadata := s.refreshRunRecordFromLifecyclePayload(ctx, principal, match, routeArgs, payload, reportStatusForPayload(payload, "available"))
 	eventType := terminalAuditType(payload)
-	s.recordGatewayAuditWithMetadata(r.Context(), principal, eventType, terminalAuditSummary(projectID, payload), auditMetadata)
+	s.recordGatewayAuditWithMetadata(ctx, principal, eventType, terminalAuditSummary(projectID, payload), auditMetadata)
 	if eventType == "blocker" {
 		blockedMetadata := map[string]any{}
 		for key, value := range auditMetadata {
@@ -1060,10 +1098,10 @@ func (s *Server) handleProjectRunResume(w http.ResponseWriter, r *http.Request, 
 		blockedMetadata["operation"] = "resume_project_run"
 		blockedMetadata["status"] = "blocked"
 		blockedMetadata["blocker_type"] = "unsupported_operation"
-		s.recordGatewayAuditWithMetadata(r.Context(), principal, "resume_project_run_blocked", "Blocked unsupported resume_project_run for run "+runID+" in project "+projectID, blockedMetadata)
-		s.recordHumanInterruptAudit(r.Context(), principal, projectID, payload, auditMetadata)
+		s.recordGatewayAuditWithMetadata(ctx, principal, "resume_project_run_blocked", "Blocked unsupported resume_project_run for run "+runID+" in project "+projectID, blockedMetadata)
+		s.recordHumanInterruptAudit(ctx, principal, projectID, payload, auditMetadata)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload})
+	return map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload}, nil
 }
 
 func (s *Server) handleAuditEvents(w http.ResponseWriter, r *http.Request) {

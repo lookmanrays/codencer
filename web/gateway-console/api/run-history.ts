@@ -89,11 +89,20 @@ export async function respondToHumanInterrupt(
   if (isDemoMode()) {
     return HumanInterruptResponseSchema.parse({
       follow_up: input.followUp,
+      follow_up_result:
+        input.followUp === "resume"
+          ? {
+              ok: true,
+              result: { events: [{ type: "run_resumed" }] },
+              status: "running",
+            }
+          : undefined,
       next_actions: {
         cancel_operation: "codencer.cancel_project_run",
         cancel_supported: true,
+        resume_attempted: input.followUp === "resume",
         resume_operation: "codencer.resume_project_run",
-        resume_supported: false,
+        resume_supported: input.followUp === "resume",
       },
       ok: true,
       project_id: "codencer",

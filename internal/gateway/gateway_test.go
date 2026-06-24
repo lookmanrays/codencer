@@ -316,8 +316,11 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 	})
 	responseBody := mustJSON(t, response)
 	if !strings.Contains(responseBody, `"status":"human_interrupt_response_recorded"`) ||
-		!strings.Contains(responseBody, `"resume_supported":false`) ||
+		!strings.Contains(responseBody, `"resume_supported":true`) ||
+		!strings.Contains(responseBody, `"resume_attempted":true`) ||
 		!strings.Contains(responseBody, `"follow_up":"resume"`) ||
+		!strings.Contains(responseBody, `"follow_up_result"`) ||
+		!strings.Contains(responseBody, `"run_resumed"`) ||
 		!strings.Contains(responseBody, `"operator_response"`) {
 		t.Fatalf("expected recorded human interrupt response, got %s", responseBody)
 	}
@@ -328,7 +331,11 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		"limit":          20,
 	})
 	blockedEventsBody := mustJSON(t, blockedEvents)
-	if !strings.Contains(blockedEventsBody, `"human_interrupt_created"`) || !strings.Contains(blockedEventsBody, `"human_interrupt_responded"`) || !strings.Contains(blockedEventsBody, `"operator_response"`) {
+	if !strings.Contains(blockedEventsBody, `"human_interrupt_created"`) ||
+		!strings.Contains(blockedEventsBody, `"human_interrupt_responded"`) ||
+		!strings.Contains(blockedEventsBody, `"resume_project_run_requested"`) ||
+		!strings.Contains(blockedEventsBody, `"run_resumed"`) ||
+		!strings.Contains(blockedEventsBody, `"operator_response"`) {
 		t.Fatalf("expected human interrupt response audit event, got %s", blockedEventsBody)
 	}
 	assertNoGatewayMCPLeak(t, blockedEventsBody)
@@ -897,15 +904,21 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	})
 	interruptResponseBody := mustJSON(t, interruptResponse)
 	if !strings.Contains(interruptResponseBody, `"status":"human_interrupt_response_recorded"`) ||
-		!strings.Contains(interruptResponseBody, `"resume_supported":false`) ||
+		!strings.Contains(interruptResponseBody, `"resume_supported":true`) ||
+		!strings.Contains(interruptResponseBody, `"resume_attempted":true`) ||
 		!strings.Contains(interruptResponseBody, `"follow_up":"resume"`) ||
+		!strings.Contains(interruptResponseBody, `"follow_up_result"`) ||
+		!strings.Contains(interruptResponseBody, `"run_resumed"`) ||
 		!strings.Contains(interruptResponseBody, `"operator_response"`) {
 		t.Fatalf("human interrupt response endpoint missing expected payload: %s", interruptResponseBody)
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, interruptResponseBody)
 	blockedEventsAfterResponse := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedRunHistoryID+"/events", token.AccessToken)
 	blockedEventsAfterResponseBody := mustJSON(t, blockedEventsAfterResponse)
-	if !strings.Contains(blockedEventsAfterResponseBody, `"human_interrupt_responded"`) || !strings.Contains(blockedEventsAfterResponseBody, `"operator_response"`) {
+	if !strings.Contains(blockedEventsAfterResponseBody, `"human_interrupt_responded"`) ||
+		!strings.Contains(blockedEventsAfterResponseBody, `"resume_project_run_requested"`) ||
+		!strings.Contains(blockedEventsAfterResponseBody, `"run_resumed"`) ||
+		!strings.Contains(blockedEventsAfterResponseBody, `"operator_response"`) {
 		t.Fatalf("blocked run events missing human interrupt response audit: %s", blockedEventsAfterResponseBody)
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, blockedEventsAfterResponseBody)
@@ -1141,6 +1154,29 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			}},
 			"repo_root":   "/Users/example/codencer",
 			"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
+		})
+	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs/run-blocked/resume", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		writeTestJSON(t, w, map[string]any{
+			"ok":     true,
+			"run_id": "run-blocked",
+			"status": "running",
+			"run": map[string]any{
+				"id":    "run-blocked",
+				"state": "running",
+			},
+			"events": []map[string]any{{
+				"type":   "run_resumed",
+				"run_id": "run-blocked",
+				"state":  "running",
+			}},
+			"repo_root":   "/Users/example/codencer",
+			"report_path": "/tmp/codencer/run-plans/run-blocked.json",
 		})
 	})
 	mux.HandleFunc("/api/v2/projects/codencer/run-plan", func(w http.ResponseWriter, r *http.Request) {

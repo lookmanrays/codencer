@@ -389,7 +389,7 @@ func (s *Server) gatewayRunEventsTool() Tool {
 func (s *Server) humanInterruptResponseTool() Tool {
 	return Tool{
 		Name:        "codencer.respond_to_human_interrupt",
-		Description: "Record an explicit operator response to a Gateway-observed human interrupt without claiming automatic resume support.",
+		Description: "Record an explicit operator response to a Gateway-observed human interrupt and optionally perform an explicit follow-up such as resume.",
 		InputSchema: objectSchema([]string{"run_history_id", "response"}, map[string]any{
 			"run_history_id": stringSchema("Gateway run history id returned by submit/start/report tools."),
 			"response":       stringSchema("Operator answer, approval, denial, or decision text."),
@@ -459,12 +459,45 @@ func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *au
 	nextActions := map[string]any{
 		"resume_supported":          false,
 		"resume_operation":          "codencer.resume_project_run",
+		"resume_attempted":          false,
 		"cancel_supported":          true,
 		"cancel_operation":          "codencer.cancel_project_run",
 		"status_read_tool":          "codencer.get_project_run_status",
 		"report_read_tool":          "codencer.get_run_report",
 		"events_read_tool":          "codencer.get_gateway_run_events",
 		"planner_decision_required": true,
+	}
+	var followUpResult map[string]any
+	if strings.EqualFold(followUp, "resume") {
+		nextActions["resume_attempted"] = true
+		resumeArgs := map[string]any{}
+		for key, value := range args {
+			resumeArgs[key] = value
+		}
+		if reason != "" {
+			resumeArgs["reason"] = reason
+		}
+		result, resumeErr := s.resumeProjectRunFromRecord(ctx, principal, record, resumeArgs)
+		if resumeErr != nil {
+			blockedMetadata := runAuditMetadata(record)
+			blockedMetadata["operation"] = "resume_project_run"
+			blockedMetadata["status"] = "blocked"
+			blockedMetadata["blocker_type"] = resumeErr.Code
+			s.recordGatewayAuditWithMetadata(ctx, principal, "resume_project_run_blocked", "Blocked follow-up resume_project_run for run "+firstNonEmpty(record.RunID, record.ID)+" in project "+record.ProjectID, blockedMetadata)
+			followUpResult = map[string]any{
+				"ok":     false,
+				"status": "blocked",
+				"blocker": map[string]any{
+					"type":      resumeErr.Code,
+					"message":   resumeErr.Message,
+					"operation": "resume_project_run",
+				},
+			}
+		} else {
+			nextActions["resume_supported"] = true
+			nextActions["planner_decision_required"] = false
+			followUpResult = result
+		}
 	}
 	payload := map[string]any{
 		"ok":             true,
@@ -483,6 +516,9 @@ func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *au
 	}
 	if reason != "" {
 		payload["reason"] = reason
+	}
+	if followUpResult != nil {
+		payload["follow_up_result"] = followUpResult
 	}
 	return payload, nil
 }

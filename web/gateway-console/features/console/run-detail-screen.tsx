@@ -217,6 +217,12 @@ function HumanInterruptResponsePanel({
                 <Alert title="Response recorded" tone="success">
                   {respond.data.response?.operatorResponse ||
                     "The response was recorded and linked to this run."}
+                  {respond.data.followUp === "resume" ? (
+                    <span className="mt-xs block text-xs text-muted">
+                      Resume follow-up requested; check the audit timeline for
+                      the resumed or blocked outcome.
+                    </span>
+                  ) : null}
                 </Alert>
               ) : null}
               <div className="grid min-w-0 gap-md md:grid-cols-2">
