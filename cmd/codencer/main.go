@@ -3775,6 +3775,7 @@ func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 			fmt.Fprintf(w, "summary: %s\n", safeCLIText(event.Summary))
 		}
 	}
+	printExecutionProgress(w, report)
 	for _, interrupt := range report.HumanInterrupts {
 		printHumanInterrupt(w, interrupt)
 	}
@@ -3798,6 +3799,40 @@ func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 	if report.Blocker != nil {
 		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, safeCLIText(report.Blocker.Message))
 	}
+}
+
+func printExecutionProgress(w io.Writer, report localexec.ExecutionReport) {
+	if report.Task == nil {
+		return
+	}
+	runID := report.Task.RunID
+	if runID == "" && report.Run != nil {
+		runID = report.Run.ID
+	}
+	if runID != "" {
+		fmt.Fprintf(w, "progress: local run %s\n", safeCLIText(runID))
+	}
+	if report.Task.StepID != "" {
+		fmt.Fprintf(w, "progress: task submitted step=%s profile=%s\n", safeCLIText(report.Task.StepID), safeCLIText(report.Task.Profile))
+	}
+	if report.Task.Status != "" {
+		fmt.Fprintf(w, "progress: task status %s\n", safeCLIText(report.Task.Status))
+	}
+	switch report.Task.Status {
+	case "submitted", "running", "validating":
+		if runID != "" {
+			fmt.Fprintf(w, "next: codencer run report %s\n", safeCLIText(runID))
+		}
+	default:
+		if report.Task.Status != "" {
+			result := report.Task.Summary
+			if result == "" {
+				result = report.Status
+			}
+			fmt.Fprintf(w, "result: %s\n", safeCLIText(result))
+		}
+	}
+	fmt.Fprintln(w, "report: available in the local Codencer artifact store")
 }
 
 func printRunPlanReport(w io.Writer, report localexec.RunPlanReport) {

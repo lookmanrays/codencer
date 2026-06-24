@@ -453,6 +453,17 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	if !strings.Contains(stdout, "summary: done") || !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "<redacted-local-url>") || !strings.Contains(stdout, "token=<redacted>") {
 		t.Fatalf("submit human output missing sanitized summary: %s", stdout)
 	}
+	for _, want := range []string{
+		"progress: local run run-1",
+		"progress: task submitted step=step-1 profile=fake-success",
+		"progress: task status completed",
+		"result: done",
+		"report: available in the local Codencer artifact store",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("submit human output missing %q: %s", want, stdout)
+		}
+	}
 	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
 	stdout, stderr, err = runCLI("run", "events", "run-1", "--project", "proj", "--json")
 	if err != nil {
