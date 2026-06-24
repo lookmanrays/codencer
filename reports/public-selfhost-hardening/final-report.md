@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `f423750fac51ebce52dc8f5993223e0b31e93bcc`
+Implementation commit hash: `84238fee96a3c830a66e815c8c8fa653040f566a`
 
 Branch: `next-phase`
 
@@ -31,6 +31,10 @@ Branch: `next-phase`
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Gateway HTTP and MCP operator-response recording for Gateway-observed human interrupts, with sanitized `human_interrupt_responded` audit metadata and explicit next actions that keep automatic continuation separated from resume routing.
 - Wired project run resume through Gateway HTTP, Gateway MCP, Relay HTTP, Relay MCP, Connector project proxy, and local daemon-backed resume. Successful daemon-resumable states produce `run_resumed`; completed or otherwise non-resumable runs still return structured `run_resume_blocked` / `resume_project_run_blocked` blockers with sanitized audit metadata.
+- Updated Gateway Console manifest/run-plan submissions to use the async `wait=false` path, so both simple task mode and advanced manifest mode return after submission and rely on report polling for terminal evidence.
+- Added Gateway API regression coverage proving manifest-mode project run creation forwards `wait=false`, returns a submitted run, preserves `run_history_id`, and later resolves the terminal report through the report endpoint.
+- Fixed daemon resume recovery for missing run IDs so the daemon returns an error instead of panicking; local CLI resume now preserves the structured `unsupported_operation` blocker in that missing-run/non-resumable path.
+- Hardened Gateway Console e2e navigation from submit result to run detail by waiting for the run-detail URL transition, removing a release-verifier race around the `View full run` link.
 - Added a Gateway Console run-detail human interrupt response panel that appears for blocked/waiting runs, records sanitized operator responses through the Gateway API, refreshes run/audit data, and keeps resume framed as a separate capability check rather than automatic restart.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
 - Added isolated Antigravity proof plumbing: `CODENCER_ANTIGRAVITY_DAEMON_DIR` discovery override, preservation of explicit verifier workspace roots, and live-verifier support for `CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON`, `CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE`, and `CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR`.
@@ -89,6 +93,8 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1724`
   - `reports/gateway-console-screenshots/2026-06-24-1732`
   - `reports/gateway-console-screenshots/2026-06-24-1742`
+  - `reports/gateway-console-screenshots/2026-06-24-1828`
+  - `reports/gateway-console-screenshots/2026-06-24-1845`
 
 ## Commands Run
 
@@ -200,6 +206,23 @@ Branch: `next-phase`
 - `make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host` after routing Gateway/Relay/Connector project resume - passed
 - `make verify-public-release` after routing Gateway/Relay/Connector project resume - passed
 - `git diff --check` after routing Gateway/Relay/Connector project resume - passed
+- `cd web/gateway-console && npm run format:check` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run test -- --run tests/architecture.test.ts` after making Console manifest submit async - passed
+- `go test ./internal/gateway` after adding async manifest Gateway API regression coverage - passed
+- `cd web/gateway-console && npm run lint` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run typecheck` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run test` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run build` after making Console manifest submit async - passed
+- `make verify-gateway` after making Console manifest submit async - passed
+- `make verify-public-release` after making Console manifest submit async - passed
+- `make verify-gateway-console` after making Console manifest submit async - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1828`
+- `go test ./...` after making Console manifest submit async - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` initially failed after making Console manifest submit async because the local resume redaction proof exposed a daemon panic on missing-run resume and the Console e2e submit-detail navigation assertion was race-prone under the full verifier.
+- Isolated temp local resume reproducer after adding the daemon missing-run guard - passed with structured `unsupported_operation` and no daemon panic.
+- `go test ./internal/service ./internal/localexec ./cmd/codencer` after adding the daemon missing-run guard - passed
+- `cd web/gateway-console && npm run test:e2e` after hardening run-detail navigation - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after the daemon missing-run guard and e2e navigation hardening - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1845`
+- `git diff --check` after the daemon missing-run guard and e2e navigation hardening - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -210,6 +233,7 @@ Branch: `next-phase`
 - Latest Codex real executor RC subgate passed with the configured Codex binary and simulation disabled, but the overall default public RC gate remains `NO-GO` because Claude Code and Antigravity proofs were missing from that run.
 - Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
 - Local `codencer run resume` and project-level Gateway/Relay/Connector resume now route to daemon-backed `RecoveryService.ResumeRun` for states supported by the daemon (`created` and `paused_for_gate`). Completed/non-resumable runs still return structured `run_resume_blocked` or `resume_project_run_blocked` capability blockers with sanitized audit correlation.
+- Missing-run resume now returns a structured local `unsupported_operation` blocker instead of causing a daemon panic; public self-host release verification includes this path through the local run redaction proof.
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
