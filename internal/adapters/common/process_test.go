@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,6 +126,17 @@ func TestInvokeLocal_Simulation(t *testing.T) {
 	// Verify files
 	if _, err := os.Stat(filepath.Join(artifactRoot, "result.json")); err != nil {
 		t.Errorf("result.json not created: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(artifactRoot, "result.json"))
+	if err != nil {
+		t.Fatalf("read simulation result: %v", err)
+	}
+	var result domain.ResultSpec
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("simulation result should be valid ResultSpec JSON: %v", err)
+	}
+	if !result.IsSimulation {
+		t.Fatalf("simulation result must set is_simulation=true: %s", string(data))
 	}
 }
 

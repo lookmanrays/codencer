@@ -108,6 +108,24 @@ func TestNormalizeCoreMissingStateFieldFallsBackToFailedTerminal(t *testing.T) {
 	}
 }
 
+func TestNormalizeCoreDoesNotRelabelSimulationResultAsReal(t *testing.T) {
+	tmpDir := t.TempDir()
+	resultPath := filepath.Join(tmpDir, "result.json")
+	if err := os.WriteFile(resultPath, []byte(`{"version":"v1","state":"completed","summary":"Simulated successful claude task.","is_simulation":false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := NormalizeCore("attempt-sim", []*domain.Artifact{
+		{Name: "result.json", Path: resultPath, Type: domain.ArtifactTypeResultJSON},
+	}, "claude", false)
+	if err != nil {
+		t.Fatalf("NormalizeCore failed: %v", err)
+	}
+	if !res.IsSimulation {
+		t.Fatalf("expected known simulation artifact to remain simulation even with env simulation=false: %+v", res)
+	}
+}
+
 func writeTempStdout(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stdout.log")

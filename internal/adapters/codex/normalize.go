@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
 )
 
@@ -61,7 +62,7 @@ func NormalizeCore(attemptID string, artifacts []*domain.Artifact, adapterName s
 	res.Version = "v1"
 	res.AttemptID = attemptID
 	res.Adapter = adapterName
-	res.IsSimulation = isSimulation
+	res.IsSimulation = isSimulation || common.ResultLooksSimulated(adapterName, &res)
 	res.UpdatedAt = info.ModTime()
 
 	if res.Artifacts == nil {

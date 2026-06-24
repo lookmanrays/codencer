@@ -252,6 +252,26 @@ func TestNormalizeCoreRejectsUnknownResultState(t *testing.T) {
 	}
 }
 
+func TestNormalizeCoreDoesNotRelabelSimulationResultAsReal(t *testing.T) {
+	artifactRoot := t.TempDir()
+	resultPath := filepath.Join(artifactRoot, "result.json")
+	if err := os.WriteFile(resultPath, []byte(`{"version":"v1","state":"completed","summary":"Simulated successful codex task.","is_simulation":false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	artifacts, err := common.CollectStandardArtifacts(context.Background(), "attempt-sim", artifactRoot)
+	if err != nil {
+		t.Fatalf("collect artifacts: %v", err)
+	}
+	result, err := NormalizeCore("attempt-sim", artifacts, "codex", false)
+	if err != nil {
+		t.Fatalf("NormalizeCore failed: %v", err)
+	}
+	if !result.IsSimulation {
+		t.Fatalf("expected known simulation artifact to remain simulation even with env simulation=false: %+v", result)
+	}
+}
+
 func TestAdapterLegacyModeKeepsCodexAgentArguments(t *testing.T) {
 	workspaceRoot := filepath.Join(t.TempDir(), "workspace")
 	artifactRoot := filepath.Join(t.TempDir(), "artifacts")

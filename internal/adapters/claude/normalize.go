@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-bridge/internal/adapters/common"
 	"agent-bridge/internal/domain"
 )
 
@@ -64,7 +65,7 @@ func NormalizeCore(attemptID string, artifacts []*domain.Artifact, adapterName s
 	res.Version = "v1"
 	res.AttemptID = attemptID
 	res.Adapter = adapterName
-	res.IsSimulation = isSimulation
+	res.IsSimulation = isSimulation || common.ResultLooksSimulated(adapterName, &res)
 	res.UpdatedAt = time.Now().UTC()
 	if res.Artifacts == nil {
 		res.Artifacts = make(map[string]string)

@@ -30,6 +30,30 @@ func truthySimulationEnv(value string) bool {
 	}
 }
 
+// ResultLooksSimulated detects the deterministic simulation artifact shape.
+// Real-executor verifiers rely on is_simulation=false, so adapters must not
+// relabel a simulation-produced result as real if environment values change
+// between execution and normalization.
+func ResultLooksSimulated(adapterName string, result *domain.ResultSpec) bool {
+	if result == nil {
+		return false
+	}
+	if result.IsSimulation {
+		return true
+	}
+	adapter := strings.ToLower(strings.TrimSpace(adapterName))
+	text := strings.ToLower(strings.TrimSpace(result.Summary + "\n" + result.RawOutput))
+	if adapter != "" {
+		if strings.Contains(text, "simulated successful "+adapter+" task") {
+			return true
+		}
+		if strings.Contains(text, "simulation: "+adapter+" adapter relay completed successfully") {
+			return true
+		}
+	}
+	return strings.Contains(text, "simulation mode: executing stub")
+}
+
 // RunSimulation writes stub files to the artifact root to simulate the orchestrator's
 // interaction with an adapter. This is used for ORCHESTRATOR LIFECYCLE VERIFICATION ONLY
 // and does not execute any real agent logic.
@@ -43,12 +67,15 @@ func RunSimulation(ctx context.Context, step *domain.Step, attempt *domain.Attem
 		echo "Executing Simulated %s for attempt %s" > "%s"
 		cat << 'EOF' > "%s"
 {
+  "version": "v1",
+  "adapter": "%s",
   "state": "completed",
   "summary": "Simulated successful %s task.",
+  "is_simulation": true,
   "needs_human_decision": false
 }
 EOF
-	`, attempt.Adapter, attempt.ID, stdoutPath, resultPath, attempt.Adapter)
+	`, attempt.Adapter, attempt.ID, stdoutPath, resultPath, attempt.Adapter, attempt.Adapter)
 
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
 	cmd.Dir = workspaceRoot
