@@ -386,6 +386,23 @@ func addProjectMCPTools(server *mcpServer, tools map[string]mcpTool) {
 		return fmt.Sprintf("/api/v2/projects/%s/runs/%s", projectID, runID), nil, nil
 	})
 	setToolReadOnly(tools, "codencer.get_project_run")
+	tools["codencer.cancel_project_run"] = projectRouteTool(server, "codencer.cancel_project_run", "Cancel a run for a shared project.", "runs:write", objectSchema([]string{"project_id", "run_id"}, map[string]any{
+		"project_id": stringSchema("Shared project identifier."),
+		"run_id":     stringSchema("Run identifier."),
+		"reason":     stringSchema("Optional planner/operator reason."),
+	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
+		runID, apiErr := requiredString(args, "run_id")
+		if apiErr != nil {
+			return "", nil, apiErr
+		}
+		payload := map[string]any{}
+		copyOptional(payload, args, "reason")
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return "", nil, &apiError{Status: http.StatusBadRequest, Code: "malformed_request", Message: err.Error()}
+		}
+		return fmt.Sprintf("/api/v2/projects/%s/runs/%s/cancel", projectID, runID), body, nil
+	})
 	tools["codencer.submit_project_task"] = projectSubmitTool(server, "codencer.submit_project_task", false)
 	tools["codencer.submit_project_task_and_wait"] = projectSubmitTool(server, "codencer.submit_project_task_and_wait", true)
 	tools["codencer.run_project_manifest"] = projectRouteTool(server, "codencer.run_project_manifest", "Run a project manifest sequentially for a shared project.", "runs:write", objectSchema([]string{"project_id"}, map[string]any{

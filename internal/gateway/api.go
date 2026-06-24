@@ -784,6 +784,10 @@ func (s *Server) handleProjectByID(w http.ResponseWriter, r *http.Request) {
 		s.handleProjectRunReportGet(w, r, projectID, parts[2])
 		return
 	}
+	if len(parts) == 4 && parts[1] == "runs" && parts[3] == "cancel" {
+		s.handleProjectRunCancel(w, r, projectID, parts[2])
+		return
+	}
 	if len(parts) > 1 {
 		writeAPIError(w, http.StatusNotFound, "route_not_found", "project route not found")
 		return
@@ -904,6 +908,57 @@ func (s *Server) handleProjectRunReportGet(w http.ResponseWriter, r *http.Reques
 	runRecord, auditMetadata := s.refreshRunRecordFromReport(r.Context(), principal, match, args, payload)
 	s.recordTerminalRunAuditOnce(r.Context(), principal, projectID, payload, auditMetadata)
 	s.recordGatewayAuditWithMetadata(r.Context(), principal, "report_read", "Read run report "+runID+" for project "+projectID, auditMetadata)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload})
+}
+
+func (s *Server) handleProjectRunCancel(w http.ResponseWriter, r *http.Request, projectID, runID string) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:write"})
+	if !ok {
+		return
+	}
+	args := map[string]any{"project_id": projectID, "run_id": runID}
+	var req map[string]any
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			writeAPIError(w, http.StatusBadRequest, "malformed_request", err.Error())
+			return
+		}
+	}
+	for key, value := range req {
+		args[key] = value
+	}
+	for _, key := range []string{"relay_profile_id", "machine_id", "host_label"} {
+		if value := strings.TrimSpace(r.URL.Query().Get(key)); value != "" {
+			args[key] = value
+		}
+	}
+	match, apiErr := s.resolveProject(r.Context(), principal, projectID, args, true)
+	if apiErr != nil {
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "cancel_project_run_requested", "Run cancel route resolution failed for project "+projectID+": "+apiErr.Code, map[string]any{"project_id": projectID, "run_id": runID})
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	auditMetadata := projectLifecycleAuditMetadata(match, args)
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, "cancel_project_run_requested", "Requested cancel_project_run for run "+runID+" in project "+projectID, auditMetadata)
+	path, body, apiErr := cancelProjectRunRoute(args)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	path = appendSelector(path, args)
+	_, response, apiErr := s.callRelay(r.Context(), match.Profile, http.MethodPost, path, body)
+	payload, apiErr := responsePayload(match.Profile, response, apiErr)
+	if apiErr != nil {
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "run_failed", "Run cancel failed for project "+projectID+": "+apiErr.Code, auditMetadata)
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	runRecord, auditMetadata := s.refreshRunRecordFromLifecyclePayload(r.Context(), principal, match, args, payload, reportStatusForPayload(payload, "available"))
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload), auditMetadata)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload})
 }
 

@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.describe.configure({ mode: "serial" });
+
 const routes = [
   ["/ui-system", "Codencer Gateway Console UI"],
   ["/console", "Self-host bridge status"],

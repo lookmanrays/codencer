@@ -71,6 +71,10 @@ func (s *Server) finishRunRecord(ctx context.Context, record RunRecord, payload 
 }
 
 func (s *Server) refreshRunRecordFromReport(ctx context.Context, principal *authPrincipal, match relayProjectMatch, args map[string]any, payload any) (RunRecord, map[string]any) {
+	return s.refreshRunRecordFromLifecyclePayload(ctx, principal, match, args, payload, reportStatusForPayload(payload, "completed"))
+}
+
+func (s *Server) refreshRunRecordFromLifecyclePayload(ctx context.Context, principal *authPrincipal, match relayProjectMatch, args map[string]any, payload any, reportStatus string) (RunRecord, map[string]any) {
 	if s.store == nil || principal == nil || principal.WorkspaceID == "" {
 		return RunRecord{}, map[string]any{"project_id": match.Project.ProjectID, "run_id": stringArg(args, "run_id")}
 	}
@@ -95,7 +99,7 @@ func (s *Server) refreshRunRecordFromReport(ctx context.Context, principal *auth
 	}
 	record, _ = s.applyRouteToRunRecord(ctx, record, principal, match, args)
 	record.RunID = firstNonEmpty(record.RunID, runID)
-	return s.finishRunRecord(ctx, record, payload, reportStatusForPayload(payload, "completed"))
+	return s.finishRunRecord(ctx, record, payload, reportStatus)
 }
 
 func applyPayloadToRunRecord(record *RunRecord, payload any, reportStatus string) {
@@ -117,7 +121,8 @@ func applyPayloadToRunRecord(record *RunRecord, payload any, reportStatus string
 	}
 	record.ResultSummary = firstNonEmpty(resultSummaryFromPayload(obj), record.ResultSummary)
 	record.ResultDetails = firstNonEmpty(resultDetailsFromPayload(obj), record.ResultDetails, record.ResultSummary)
-	if terminalAuditType(obj) == "run_completed" || terminalAuditType(obj) == "run_failed" || terminalAuditType(obj) == "blocker" {
+	eventType := terminalAuditType(obj)
+	if eventType == "run_completed" || eventType == "run_failed" || eventType == "blocker" || eventType == "run_cancelled" {
 		record.CompletedAt = time.Now().UTC()
 	}
 }

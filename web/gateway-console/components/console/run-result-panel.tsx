@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileText } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { KeyValueList } from "@/components/ui/key-value-list";
 import type { RunSubmitResult } from "@/schemas/runs";
 import type { RunRecord } from "@/schemas/run-history";
@@ -72,12 +72,13 @@ export function RunResultPanel({
         ) : null}
         {runHistoryId ? (
           <div>
-            <Button asChild size="sm" variant="secondary">
-              <Link href={`/console/runs/${runHistoryId}`}>
-                <FileText aria-hidden="true" className="h-4 w-4" />
-                View full run
-              </Link>
-            </Button>
+            <Link
+              className={buttonVariants({ size: "sm", variant: "secondary" })}
+              href={`/console/runs/${runHistoryId}`}
+            >
+              <FileText aria-hidden="true" className="h-4 w-4" />
+              View full run
+            </Link>
           </div>
         ) : null}
       </div>

@@ -182,6 +182,7 @@ func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
 	}
 
 	var daemon *httptest.Server
+	var cancelled atomic.Bool
 	daemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/instance":
@@ -193,6 +194,16 @@ func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning})
+		case "/api/v1/runs/run-1":
+			switch r.Method {
+			case http.MethodPatch:
+				cancelled.Store(true)
+				_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
+			case http.MethodGet:
+				_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
+			default:
+				http.NotFound(w, r)
+			}
 		default:
 			http.NotFound(w, r)
 		}
@@ -229,6 +240,21 @@ func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
 	}
 	if !strings.Contains(string(response.Body), `"run-1"`) || !strings.Contains(string(response.Body), `"started"`) {
 		t.Fatalf("unexpected project response: %s", string(response.Body))
+	}
+
+	response = client.handleRequest(context.Background(), relayproto.CommandRequest{
+		RequestID: "req-project-cancel",
+		Method:    http.MethodPost,
+		Path:      "/codencer/v1/projects/proj/runs/run-1/cancel",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected ok cancel response, got %+v", response)
+	}
+	if !cancelled.Load() {
+		t.Fatal("expected project cancel request to reach daemon run cancel endpoint")
+	}
+	if !strings.Contains(string(response.Body), `"run-1"`) || !strings.Contains(string(response.Body), `"cancelled"`) {
+		t.Fatalf("unexpected project cancel response: %s", string(response.Body))
 	}
 }
 

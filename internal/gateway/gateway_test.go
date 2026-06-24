@@ -235,6 +235,11 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		t.Fatalf("expected async start response, got %s", startedBody)
 	}
 	assertNoGatewayMCPLeak(t, startedBody)
+	startedPayload, _ := mcpStructuredContent(t, started).(map[string]any)
+	startedRunHistoryID := stringValueFromAny(startedPayload["run_history_id"])
+	if startedRunHistoryID == "" {
+		t.Fatalf("start response did not return run_history_id: %s", startedBody)
+	}
 
 	asyncSubmit := mcpToolCall(t, server.URL, session, "codencer.submit_project_task", map[string]any{
 		"relay_profile_id": "default",
@@ -291,13 +296,22 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		"relay_profile_id": "default",
 		"project_id":       "codencer",
 		"run_id":           "run-async-gateway-test",
-		"run_history_id":   runHistoryID,
+		"run_history_id":   startedRunHistoryID,
 	})
 	cancelBody := mustJSON(t, cancel)
-	if !strings.Contains(cancelBody, `"type":"unsupported_operation"`) || !strings.Contains(cancelBody, `"operation":"cancel_project_run"`) {
-		t.Fatalf("expected structured cancel capability blocker, got %s", cancelBody)
+	if !strings.Contains(cancelBody, `"status":"cancelled"`) || !strings.Contains(cancelBody, `"run_id":"run-async-gateway-test"`) {
+		t.Fatalf("expected forwarded cancel response, got %s", cancelBody)
 	}
 	assertNoGatewayMCPLeak(t, cancelBody)
+	cancelEvents := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
+		"run_history_id": startedRunHistoryID,
+		"limit":          20,
+	})
+	cancelEventsBody := mustJSON(t, cancelEvents)
+	if !strings.Contains(cancelEventsBody, `"cancel_project_run_requested"`) || !strings.Contains(cancelEventsBody, `"run_cancelled"`) {
+		t.Fatalf("expected cancel lifecycle audit events, got %s", cancelEventsBody)
+	}
+	assertNoGatewayMCPLeak(t, cancelEventsBody)
 
 	resume := mcpToolCall(t, server.URL, session, "codencer.resume_project_run", map[string]any{
 		"relay_profile_id": "default",
@@ -632,6 +646,17 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("async report endpoint returned run_history_id=%v want %s: %s", asyncReport["run_history_id"], asyncRunHistoryID, asyncReportBody)
 	}
 	assertNoGatewayMCPLeak(t, asyncReportBody)
+	cancelResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-async-console/cancel?relay_profile_id=default&machine_id=mach-1", token.AccessToken, map[string]any{
+		"reason": "operator requested stop",
+	})
+	cancelResultBody := mustJSON(t, cancelResult)
+	if !strings.Contains(cancelResultBody, `"status":"cancelled"`) || !strings.Contains(cancelResultBody, `"run_id":"run-async-console"`) {
+		t.Fatalf("project run cancel endpoint did not cancel through relay: %s", cancelResultBody)
+	}
+	if cancelResult["run_history_id"] != asyncRunHistoryID {
+		t.Fatalf("cancel endpoint returned run_history_id=%v want %s: %s", cancelResult["run_history_id"], asyncRunHistoryID, cancelResultBody)
+	}
+	assertNoGatewayMCPLeak(t, cancelResultBody)
 	report := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-gateway-test/report?relay_profile_id=default&machine_id=mach-1", token.AccessToken)
 	reportBody := mustJSON(t, report)
 	if !strings.Contains(reportBody, `"status":"completed"`) || !strings.Contains(reportBody, `"run_id":"run-gateway-test"`) {
@@ -957,6 +982,24 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
 		})
 	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs/run-async-gateway-test/cancel", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		writeTestJSON(t, w, map[string]any{
+			"ok":     true,
+			"run_id": "run-async-gateway-test",
+			"status": "cancelled",
+			"run": map[string]any{
+				"id":    "run-async-gateway-test",
+				"state": "cancelled",
+			},
+			"repo_root":   "/Users/example/codencer",
+			"report_path": "/tmp/codencer/run-plans/run-async-gateway-test.json",
+		})
+	})
 	mux.HandleFunc("/api/v2/projects/codencer/run-plan", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		relay.lastMachineID = r.URL.Query().Get("machine_id")
@@ -1064,6 +1107,23 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 				"status":  "completed",
 				"summary": "async console task completed",
 			}},
+		})
+	})
+	mux.HandleFunc("/api/v2/projects/codencer/runs/run-async-console/cancel", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		writeTestJSON(t, w, map[string]any{
+			"ok":     true,
+			"run_id": "run-async-console",
+			"status": "cancelled",
+			"run": map[string]any{
+				"id":    "run-async-console",
+				"state": "cancelled",
+			},
+			"report_path": "/Users/example/.codencer-live-test/artifacts/run-plans/run-async-console.json",
 		})
 	})
 	mux.HandleFunc("/api/v2/projects/codencer/reports/run-plans/run-gateway-test", func(w http.ResponseWriter, r *http.Request) {

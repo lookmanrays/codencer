@@ -48,6 +48,10 @@ func (c *Client) handleProjectRequest(ctx context.Context, cfg *Config, request 
 		service := localexec.NewService()
 		report, err := service.GetRun(ctx, localexec.RunOptions{BaseOptions: projectBaseOptions(cfg, project), RunID: tail[1]})
 		return projectExecutionResponse(response, report, err)
+	case len(tail) == 3 && tail[0] == "runs" && tail[2] == "cancel" && request.Method == http.MethodPost:
+		service := localexec.NewService()
+		report, err := service.CancelRun(ctx, localexec.RunOptions{BaseOptions: projectBaseOptions(cfg, project), RunID: tail[1]})
+		return projectExecutionResponse(response, report, err)
 	case len(tail) == 1 && tail[0] == "submit" && request.Method == http.MethodPost:
 		opts, err := decodeProjectSubmit(projectBaseOptions(cfg, project), request.Body)
 		if err != nil {

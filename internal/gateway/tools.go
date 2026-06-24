@@ -155,7 +155,7 @@ func buildTools(server *Server) map[string]Tool {
 			return "/api/v2/projects/" + projectID + "/reports/run-plans/" + runID, nil, nil
 		}),
 		"codencer.get_gateway_run_events": server.gatewayRunEventsTool(),
-		"codencer.cancel_project_run":     server.unsupportedProjectLifecycleTool("codencer.cancel_project_run", "Return an explicit capability blocker for project-run cancellation when the selected route cannot cancel safely.", "cancel_project_run"),
+		"codencer.cancel_project_run":     server.projectForwardTool("codencer.cancel_project_run", "Cancel a shared project run through the selected Gateway relay.", []string{"project_id", "run_id"}, cancelProjectRunRoute),
 		"codencer.resume_project_run":     server.unsupportedProjectLifecycleTool("codencer.resume_project_run", "Return an explicit capability blocker for project-run resume when the selected route cannot resume safely.", "resume_project_run"),
 		"codencer.get_blocker": {
 			Name:        "codencer.get_blocker",
@@ -262,6 +262,10 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				return ToolResult{}, apiErr
 			}
 			path = appendSelector(path, args)
+			if name == "codencer.cancel_project_run" {
+				auditMetadata = projectLifecycleAuditMetadata(match, args)
+				s.recordGatewayAuditWithMetadata(ctx, principal, "cancel_project_run_requested", "Requested cancel_project_run for run "+requiredStringValue(args, "run_id")+" in project "+projectID, auditMetadata)
+			}
 			method := http.MethodGet
 			if body != nil {
 				method = http.MethodPost
@@ -275,6 +279,8 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				eventType := "run_failed"
 				if name == "codencer.get_run_report" {
 					eventType = "report_read"
+				} else if name == "codencer.cancel_project_run" {
+					auditMetadata = projectLifecycleAuditMetadata(match, args)
 				} else {
 					runRecord.Status = "failed"
 					runRecord.ResultSummary = "Gateway relay call failed: " + apiErr.Code
@@ -288,6 +294,10 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				_ = record
 				s.recordTerminalRunAuditOnce(ctx, principal, projectID, payload, metadata)
 				s.recordGatewayAuditWithMetadata(ctx, principal, "report_read", "Read run report "+requiredStringValue(args, "run_id")+" for project "+projectID, metadata)
+			} else if name == "codencer.cancel_project_run" {
+				record, metadata := s.refreshRunRecordFromLifecyclePayload(ctx, principal, match, args, payload, reportStatusForPayload(payload, "available"))
+				_ = record
+				s.recordGatewayAuditWithMetadata(ctx, principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload), metadata)
 			} else if recordRun {
 				runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, payload, reportStatusForPayload(payload, "available"))
 				if obj, ok := payload.(map[string]any); ok && runRecord.ID != "" {
@@ -460,6 +470,28 @@ func selectedProjectLocation(project relayProject, args map[string]any) projectL
 	return projectLocation{}
 }
 
+func projectLifecycleAuditMetadata(match relayProjectMatch, args map[string]any) map[string]any {
+	metadata := map[string]any{
+		"project_id":       match.Project.ProjectID,
+		"run_id":           requiredStringValue(args, "run_id"),
+		"relay_profile_id": match.Profile.ID,
+	}
+	if runHistoryID := strings.TrimSpace(stringArg(args, "run_history_id")); runHistoryID != "" {
+		metadata["run_history_id"] = runHistoryID
+	}
+	location := selectedProjectLocation(match.Project, args)
+	for key, value := range map[string]string{
+		"connector_id": location.ConnectorID,
+		"machine_id":   location.MachineID,
+		"host_label":   location.HostLabel,
+	} {
+		if strings.TrimSpace(value) != "" {
+			metadata[key] = strings.TrimSpace(value)
+		}
+	}
+	return metadata
+}
+
 func resolvedExecutorLabel(project relayProject, args map[string]any) string {
 	return firstNonEmpty(
 		strings.TrimSpace(stringArg(args, "profile")),
@@ -491,6 +523,10 @@ func terminalAuditType(payload any) string {
 	switch status {
 	case "submitted", "started", "starting", "queued", "pending", "running", "in_progress", "validating":
 		return "run_started"
+	case "cancel_requested", "cancelling", "canceling":
+		return "run_cancel_requested"
+	case "cancelled", "canceled":
+		return "run_cancelled"
 	case "failed", "failed_adapter", "failed_bridge", "failed_validation", "timeout", "adapter_error", "bridge_error":
 		return "run_failed"
 	case "blocked", "question", "manual_approval_required", "needs_approval", "needs_manual_attention", "permission_request_required", "unsafe_action", "validation_failed":
@@ -510,6 +546,10 @@ func terminalAuditSummary(projectID string, payload any) string {
 		outcome = "failed"
 	case "blocker":
 		outcome = "reached blocker"
+	case "run_cancel_requested":
+		outcome = "cancel requested"
+	case "run_cancelled":
+		outcome = "cancelled"
 	}
 	if runID == "" {
 		return "Run " + outcome + " for project " + projectID
@@ -684,6 +724,24 @@ func getProjectRunRoute(args map[string]any) (string, []byte, *apiError) {
 		return "", nil, apiErr
 	}
 	return "/api/v2/projects/" + projectID + "/runs/" + runID, nil, nil
+}
+
+func cancelProjectRunRoute(args map[string]any) (string, []byte, *apiError) {
+	projectID, apiErr := requiredString(args, "project_id")
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	runID, apiErr := requiredString(args, "run_id")
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	payload := map[string]any{}
+	copyOptional(payload, args, "reason")
+	body, apiErr := jsonBody(payload)
+	if apiErr != nil {
+		return "", nil, apiErr
+	}
+	return "/api/v2/projects/" + projectID + "/runs/" + runID + "/cancel", body, nil
 }
 
 func submitProjectTaskRoute(wait bool) func(map[string]any) (string, []byte, *apiError) {
