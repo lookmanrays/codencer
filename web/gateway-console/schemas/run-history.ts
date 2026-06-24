@@ -83,4 +83,41 @@ export const RunEventsResponseSchema = AuditEventListResponseSchema.transform(
   }),
 );
 
+export const HumanInterruptResponseSchema = z
+  .object({
+    follow_up: z.string().optional(),
+    next_actions: UnknownRecord.optional(),
+    ok: z.boolean(),
+    project_id: z.string(),
+    reason: z.string().optional(),
+    response: z
+      .object({
+        operator_response: z.string(),
+        type: z.string(),
+      })
+      .optional(),
+    run_history_id: z.string(),
+    run_id: z.string().optional(),
+    status: z.string(),
+  })
+  .transform((payload) => ({
+    followUp: payload.follow_up,
+    nextActions: payload.next_actions ?? {},
+    ok: payload.ok,
+    projectId: payload.project_id,
+    reason: payload.reason,
+    response: payload.response
+      ? {
+          operatorResponse: payload.response.operator_response,
+          type: payload.response.type,
+        }
+      : undefined,
+    runHistoryId: payload.run_history_id,
+    runId: payload.run_id,
+    status: payload.status,
+  }));
+
 export type RunRecord = z.infer<typeof RunRecordSchema>;
+export type HumanInterruptResponse = z.infer<
+  typeof HumanInterruptResponseSchema
+>;

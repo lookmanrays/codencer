@@ -1,17 +1,34 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
 import { RunResultPanel } from "@/components/console/run-result-panel";
 import { DemoModeNotice } from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { KeyValueList } from "@/components/ui/key-value-list";
 import { LoadingPanel } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/format";
 import { isDemoMode } from "@/api/config";
-import { useRun, useRunEvents } from "@/api/run-history";
+import {
+  useRespondToHumanInterrupt,
+  useRun,
+  useRunEvents,
+} from "@/api/run-history";
+import type { AuditEvent } from "@/schemas/audit";
+import type { RunRecord } from "@/schemas/run-history";
 
 export function RunDetailScreen({ id }: { id: string }) {
   const run = useRun(id);
@@ -102,6 +119,10 @@ export function RunDetailScreen({ id }: { id: string }) {
             </CardContent>
           </Card>
           <RunResultPanel run={run.data.run} />
+          <HumanInterruptResponsePanel
+            events={events.data?.events ?? []}
+            run={run.data.run}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Safe artifacts and logs</CardTitle>
@@ -140,6 +161,160 @@ export function RunDetailScreen({ id }: { id: string }) {
       ) : null}
     </PageShell>
   );
+}
+
+function HumanInterruptResponsePanel({
+  events,
+  run,
+}: {
+  events: AuditEvent[];
+  run: RunRecord;
+}) {
+  const state = useMemo(() => humanInterruptState(run, events), [events, run]);
+  const respond = useRespondToHumanInterrupt();
+  const [responseType, setResponseType] = useState("answer");
+  const [followUp, setFollowUp] = useState("resume");
+  const [response, setResponse] = useState("");
+  if (!state.visible) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Human interrupt response</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid min-w-0 gap-md">
+          {state.responseRecorded ? (
+            <Alert title="Response recorded" tone="success">
+              {state.operatorResponse ||
+                "An operator response has been recorded in the audit trail."}
+            </Alert>
+          ) : (
+            <Alert title="Waiting for human action" tone="warning">
+              {state.prompt ||
+                "The run is waiting for an explicit operator response."}
+            </Alert>
+          )}
+          {state.responseRecorded ? null : (
+            <form
+              className="grid min-w-0 gap-md"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (!response.trim()) return;
+                await respond.mutateAsync({
+                  followUp: followUp === "none" ? undefined : followUp,
+                  response: response.trim(),
+                  responseType,
+                  runHistoryId: run.id,
+                });
+              }}
+            >
+              {respond.error ? (
+                <Alert title="Response was not recorded" tone="danger">
+                  {respond.error.message}
+                </Alert>
+              ) : null}
+              {respond.data ? (
+                <Alert title="Response recorded" tone="success">
+                  {respond.data.response?.operatorResponse ||
+                    "The response was recorded and linked to this run."}
+                </Alert>
+              ) : null}
+              <div className="grid min-w-0 gap-md md:grid-cols-2">
+                <Field id="interrupt-response-type" label="Response type">
+                  <Select onValueChange={setResponseType} value={responseType}>
+                    <SelectTrigger
+                      aria-label="Response type"
+                      id="interrupt-response-type"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="answer">Answer</SelectItem>
+                      <SelectItem value="approve">Approve</SelectItem>
+                      <SelectItem value="deny">Deny</SelectItem>
+                      <SelectItem value="confirm">Confirm</SelectItem>
+                      <SelectItem value="retry">Retry</SelectItem>
+                      <SelectItem value="decision">Decision</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field
+                  description="Resume records intent only; true resume still returns an explicit capability result."
+                  id="interrupt-follow-up"
+                  label="Follow-up"
+                >
+                  <Select onValueChange={setFollowUp} value={followUp}>
+                    <SelectTrigger
+                      aria-label="Follow-up"
+                      id="interrupt-follow-up"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="resume">Resume</SelectItem>
+                      <SelectItem value="cancel">Cancel</SelectItem>
+                      <SelectItem value="start_new_task">
+                        Start new task
+                      </SelectItem>
+                      <SelectItem value="none">None</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              <Field
+                description="This response is sanitized and stored as Gateway audit metadata."
+                id="operator-response"
+                label="Operator response"
+              >
+                <Textarea
+                  id="operator-response"
+                  onChange={(event) => setResponse(event.target.value)}
+                  placeholder="Answer the question or record the approval decision."
+                  value={response}
+                />
+              </Field>
+              <div className="flex min-w-0 flex-wrap gap-sm">
+                <Button
+                  disabled={respond.isPending || !response.trim()}
+                  type="submit"
+                >
+                  Record response
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function humanInterruptState(run: RunRecord, events: AuditEvent[]) {
+  const created = events.find(
+    (event) => event.type === "human_interrupt_created",
+  );
+  const responded = events.find(
+    (event) => event.type === "human_interrupt_responded",
+  );
+  const blockedStatus = ["blocked", "waiting_for_human", "question"].includes(
+    (run.status || "").toLowerCase(),
+  );
+  const visible = Boolean(created || responded || blockedStatus);
+  const prompt =
+    stringMetadata(created, "prompt") ||
+    stringMetadata(created, "requested_action") ||
+    created?.summary;
+  return {
+    operatorResponse: stringMetadata(responded, "operator_response"),
+    prompt,
+    responseRecorded: Boolean(responded),
+    visible,
+  };
+}
+
+function stringMetadata(event: AuditEvent | undefined, key: string) {
+  const value = event?.metadata?.[key];
+  return typeof value === "string" ? value : "";
 }
 
 function scopeLabel(scope?: string) {

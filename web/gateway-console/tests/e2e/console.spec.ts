@@ -164,13 +164,34 @@ test("run history and audit expose pagination and grouped lifecycle", async ({
 
   await page.goto("/console/audit");
   await expect(page.getByText(/grouped lifecycle/i)).toBeVisible();
-  await expect(page.getByText(/lifecycle events for run/i)).toBeVisible();
+  await expect(
+    page.getByText(/lifecycle events for run/i).first(),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /view run/i }).first(),
   ).toBeVisible();
   await expect(
     page.getByText(/showing \d+ events from offset 0/i),
   ).toBeVisible();
+});
+
+test("run detail records human interrupt response", async ({ page }) => {
+  await page.goto("/console/runs/runhist_demo_blocked");
+  await expect(
+    page.getByRole("heading", { name: /human interrupt response/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/waiting for human action/i)).toBeVisible();
+  await expect(page.getByText(/inspect README only/i)).toBeVisible();
+  await expect(page.getByText(/resume records intent only/i)).toBeVisible();
+  await page
+    .getByLabel(/operator response/i)
+    .fill("Proceed with README-only inspection. Do not modify files.");
+  await page.getByRole("button", { name: /record response/i }).click();
+  await expect(page.getByText(/response recorded/i).first()).toBeVisible();
+  await expect(page.getByText(/README-only inspection/i).first()).toBeVisible();
+  const visibleText = await page.locator("body").innerText();
+  expect(visibleText).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);
+  expect(visibleText).not.toContain("relay-secret");
 });
 
 test("oauth approve and deny controls exist", async ({ page }) => {
