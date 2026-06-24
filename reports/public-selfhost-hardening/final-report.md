@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `3eefe92a55e8915ef903b11546c8b037ef054c2a`
+Implementation commit hash: `9c2b34836c2d6cbe38e91e039d31661274848fc6`
 
 Branch: `next-phase`
 
@@ -28,6 +28,7 @@ Branch: `next-phase`
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Gateway HTTP and MCP operator-response recording for Gateway-observed human interrupts, with sanitized `human_interrupt_responded` audit metadata and explicit next actions that keep true resume marked unsupported.
+- Added Gateway MCP audit evidence for unsupported resume attempts: `codencer.resume_project_run` now records sanitized `resume_project_run_requested` and `resume_project_run_blocked` events with run/project/relay correlation metadata while returning the structured capability blocker.
 - Added a Gateway Console run-detail human interrupt response panel that appears for blocked/waiting runs, records sanitized operator responses through the Gateway API, refreshes run/audit data, and keeps resume framed as a separate capability check rather than automatic restart.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
 - Added isolated Antigravity proof plumbing: `CODENCER_ANTIGRAVITY_DAEMON_DIR` discovery override, preservation of explicit verifier workspace roots, and live-verifier support for `CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON`, `CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE`, and `CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR`.
@@ -174,6 +175,11 @@ Branch: `next-phase`
 - `go test ./internal/gateway` after asserting sync publish audit records - passed
 - `make verify-gateway` after asserting sync publish audit records - passed
 - `make verify-public-release` after asserting sync publish audit records - passed
+- `go test ./internal/gateway` after adding unsupported resume blocker audit evidence - passed
+- `go test ./...` after adding unsupported resume blocker audit evidence - passed
+- `make verify-gateway` after adding unsupported resume blocker audit evidence - passed
+- `python3 scripts/check_public_boundary.py` after adding unsupported resume blocker audit evidence - passed
+- `make verify-public-release` after adding unsupported resume blocker audit evidence - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -183,11 +189,11 @@ Branch: `next-phase`
 - Antigravity real executor proof is not proven in the public self-host RC gate.
 - Latest Codex real executor RC subgate passed with the configured Codex binary and simulation disabled, but the overall default public RC gate remains `NO-GO` because Claude Code and Antigravity proofs were missing from that run.
 - Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
-- `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route.
+- `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route. Gateway MCP unsupported resume attempts now record sanitized `resume_project_run_requested` and `resume_project_run_blocked` audit events for run-history correlation.
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
-- Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, and a Console run-detail response panel now exist, but true resume remains incomplete.
+- Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, unsupported resume-attempt audit, and a Console run-detail response panel now exist, but true resume remains incomplete.
 - Full explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, run events, run report, and run resume blocker output in deterministic tests/verifiers.
 
 Verdict: NO-GO
