@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `9c2b34836c2d6cbe38e91e039d31661274848fc6`
+Implementation commit hash: `a206a2bde44de87ae50a2886ae5fe0bf111abfeb`
 
 Branch: `next-phase`
 
@@ -24,6 +24,7 @@ Branch: `next-phase`
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
 - Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run events`, `run report`, and the structured `run resume` capability blocker.
+- Strengthened the Gateway smoke used by source-tree and unpacked-artifact self-host verification so it runs with an isolated store-backed Gateway, seeds Relay profiles through the public API, and checks Gateway API outputs for relays, projects, machines, connectors, executors, runs, run detail, run events, audit events, and activation commands for local path, daemon URL, token, and unsafe field leaks.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
@@ -180,6 +181,11 @@ Branch: `next-phase`
 - `make verify-gateway` after adding unsupported resume blocker audit evidence - passed
 - `python3 scripts/check_public_boundary.py` after adding unsupported resume blocker audit evidence - passed
 - `make verify-public-release` after adding unsupported resume blocker audit evidence - passed
+- `bash -n scripts/verify_gateway.sh` after adding store-backed Gateway API redaction sweep - passed
+- `make verify-gateway` after adding store-backed Gateway API redaction sweep - passed
+- `make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host` after adding store-backed Gateway API redaction sweep - passed
+- `make verify-public-release` after adding store-backed Gateway API redaction sweep - passed
+- `git diff --check` after adding store-backed Gateway API redaction sweep - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -194,6 +200,6 @@ Branch: `next-phase`
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, unsupported resume-attempt audit, and a Console run-detail response panel now exist, but true resume remains incomplete.
-- Full explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, run events, run report, and run resume blocker output in deterministic tests/verifiers.
+- Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, run events, run report, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
 
 Verdict: NO-GO
