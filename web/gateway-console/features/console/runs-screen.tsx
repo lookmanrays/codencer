@@ -79,6 +79,7 @@ function RunHistoryCard({ run }: { run: RunRecord }) {
               ),
             },
             { label: "Run ID", value: run.runId || "n/a" },
+            { label: "Scope", value: scopeLabel(run.scope) },
             {
               label: "Machine",
               value: run.hostLabel || run.machineId || "n/a",
@@ -113,6 +114,13 @@ function RunHistoryCard({ run }: { run: RunRecord }) {
       </CardContent>
     </Card>
   );
+}
+
+function scopeLabel(scope?: string) {
+  if (scope === "gateway_submitted") return "Gateway-submitted";
+  if (scope === "synced") return "Synced";
+  if (scope === "local") return "Local";
+  return scope || "n/a";
 }
 
 function executionModeDisplay(mode: "real" | "simulation" | "unknown"): {

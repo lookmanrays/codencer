@@ -22,9 +22,9 @@ The active goal requires an attached specification package with named files:
 - `docs/acceptance/public-selfhost-release-gate.yaml`
 
 I could not find attachment files containing those exact filenames or exact
-document bodies in `/Users/lookman/.codex/attachments`. I did read the active
-goal text and the prior public self-host RC attachments. The spec files added
-to the repository are therefore derived from the available goal/spec text. The
+document bodies in the local Codex attachment cache. I did read the active goal
+text and the prior public self-host RC attachments. The spec files added to the
+repository are therefore derived from the available goal/spec text. The
 requirement to copy an exact provided spec package remains `unclear` because
 the exact package was not available in the current attachment cache.
 
@@ -35,12 +35,12 @@ the exact package was not available in the current attachment cache.
 | Spec files present | Partially implemented | Files now exist, but exact-source fidelity is unclear. |
 | Acceptance YAML present | Implemented | `docs/acceptance/public-selfhost-release-gate.yaml` exists. |
 | Local-first source of truth | Partially implemented | Local daemon/CLI exists; default outputs still expose local paths/daemon URLs in some JSON structures. |
-| Explicit sync/publish | Missing | No clear local-to-Gateway sync/publish command or dry-run behavior found. |
-| Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first, but progress/report/redaction and async follow-up commands are incomplete. |
-| Async run lifecycle | Partially implemented | Local `run start/list/get/status` and Gateway run list/detail/events exist; no complete submit/status/events/report/cancel/resume contract. |
+| Explicit sync/publish | Partially implemented | `codencer sync status/preview/publish` now provides metadata-only preview and structured blockers; Gateway ingest remains unimplemented. |
+| Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first; default human output redacts local paths, but progress UX remains narrow. |
+| Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; `resume` is a structured unsupported blocker until daemon HTTP resume exists. |
 | Human interrupt lifecycle | Partially implemented | Low-level gates/blockers exist; no complete planning/question/permission/OS-action resume/cancel lifecycle. |
 | Real executor proofs | Partially implemented | Codex real gate exists; Claude Code and Antigravity release-gate proofs are not proven. |
-| Run history/audit/console | Partially implemented | Gateway-observed run history and audit exist; pagination, filters, grouping, and local/synced/Gateway scopes are incomplete. |
+| Run history/audit/console | Partially implemented | Gateway-observed run history/audit and `scope` exist; pagination, filtering breadth, and grouping remain incomplete. |
 | Redaction | Partially implemented | Gateway sanitization exists; local CLI and some reports can still expose local paths/daemon URLs. |
 | Public/private boundary | Partially implemented | Docs/checks exist; public repo still contains cloud-control-plane packages that need boundary review against the new specs. |
 | Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` exists; it still supports `PARTIAL` and does not require Claude/Antigravity proof. |
@@ -55,7 +55,7 @@ the exact package was not available in the current attachment cache.
 | Fake/simulation cannot satisfy GO | Partially implemented | Codex real gate rejects simulation in `web/gateway-console/tests/live/verify-live.mjs`; fake-only overall gate still can be reported as `PARTIAL`, which is now forbidden. |
 | Artifact-backed verifier | Implemented | `make verify-public-selfhost-rc` builds/unpacks artifacts through `scripts/verify_public_selfhost_rc.sh`. |
 | Codex, Claude Code, and Antigravity real proofs | Missing | Codex path exists; no equivalent required release proof for Claude Code or Antigravity found. |
-| Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks; local CLI and required pagination/scope checks are not covered. |
+| Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks; local sync preview redaction is tested; pagination/grouping checks remain incomplete. |
 | Machine-readable and human report | Implemented | `reports/public-selfhost-rc/<timestamp>/summary.json` and `.md` are produced by the RC script. |
 
 ### 01 - Local-first Source of Truth
@@ -63,9 +63,9 @@ the exact package was not available in the current attachment cache.
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Manual local CLI runs stay local by default | Partially implemented | `codencer submit` calls `internal/localexec.Service.Submit`; no Gateway dependency by default. |
-| Gateway is control plane/index/sync target, not global source of truth | Partially implemented | Gateway records only Gateway-observed run history in `internal/gateway/run_history.go`; docs and CLI behavior still need explicit source/scope language. |
-| Raw logs/artifacts not uploaded by default | Partially implemented | Gateway sanitizes report JSON; no explicit sync/publish command found. Local reports can include `logs_ref` and artifact refs. |
-| Explicit sync/publish behavior | Missing | No `codencer sync` or publish flow found in CLI search. |
+| Gateway is control plane/index/sync target, not global source of truth | Partially implemented | Gateway records Gateway-observed run history and local sync preview reports `scope=local`; actual sync ingest is not implemented. |
+| Raw logs/artifacts not uploaded by default | Partially implemented | Gateway sanitizes report JSON; `codencer sync` is metadata-only and blocks raw artifact/log upload. Local reports can still contain local refs on disk. |
+| Explicit sync/publish behavior | Partially implemented | `codencer sync status/preview/publish` exists; publish returns structured confirmation/unsupported blockers rather than uploading implicitly. |
 | Default output does not leak local paths | Partially implemented | Gateway sanitization exists; `localexec.ProjectSummary` includes `repo_root` and `daemon_url`, and run plan reports include `report_path`. |
 
 ### 02 - Execution Lifecycle
@@ -98,7 +98,7 @@ the exact package was not available in the current attachment cache.
 | `codencer run cancel` | Missing | No local CLI cancel subcommand found. |
 | `codencer run resume` | Missing | No local CLI resume subcommand found. |
 | `codencer executor list/scan/test/default` | Implemented | Implemented in `cmd/codencer/main.go`. |
-| `codencer sync` or publish equivalent | Missing | No command found. |
+| `codencer sync` or publish equivalent | Partially implemented | `codencer sync status/preview/publish` exists with metadata-only preview and no raw upload. |
 | Public defaults are local/self-host | Partially implemented | Config/default docs and scripts exist; needs re-check against new specs. |
 
 ### 05 - Executor Adapters and Client Proofs
@@ -121,7 +121,7 @@ the exact package was not available in the current attachment cache.
 | Pagination | Partially implemented | `limit` exists; no offset/cursor/next token. |
 | Filters | Partially implemented | Runs support project/status; audit has no visible filter API beyond limit. |
 | Grouped audit | Partially implemented | Events link to run detail; no grouped audit API/view found. |
-| Local/synced/Gateway-submitted scopes | Missing | Run records do not expose required scope taxonomy. |
+| Local/synced/Gateway-submitted scopes | Partially implemented | Gateway run records expose `scope=gateway_submitted`; sync preview reports local run metadata as `scope=local`. No Gateway synced ingest yet. |
 | Execution mode visible | Implemented for current UI | Gateway Console shows `Real executor`, `Simulation`, or `Unknown`. |
 
 ### 07 - Public vs Cloud Boundary
@@ -142,6 +142,6 @@ The release remains `NO-GO` until at least these are resolved:
 4. Async lifecycle must include submit/status/events/report/cancel/resume behavior or explicit structured capability blockers where unsupported.
 5. Human interrupt lifecycle must be first-class across CLI/MCP/UI/Gateway or explicitly proven with structured blockers and audit.
 6. Local CLI output must be redacted by default, especially `repo_root`, `daemon_url`, `report_path`, `logs_ref`, and artifact paths.
-7. Run history/audit must add required pagination, filters, grouping, and scope fields.
-8. Explicit sync/publish behavior must be implemented or documented as unsupported with safe defaults and no implicit upload.
+7. Run history/audit must add required pagination, broader filters, and grouping.
+8. Gateway metadata ingest for explicit sync/publish remains unimplemented; current CLI preview/publish behavior is safe but not a completed sync transport.
 9. The final hardening report must end with exactly `Verdict: GO` or `Verdict: NO-GO`.

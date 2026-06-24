@@ -481,6 +481,7 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	runs, err := s.store.ListRunRecords(r.Context(), principal.WorkspaceID, RunRecordFilters{
 		ProjectID: r.URL.Query().Get("project_id"),
 		Status:    r.URL.Query().Get("status"),
+		Scope:     r.URL.Query().Get("scope"),
 		Limit:     limit,
 	})
 	if err != nil {

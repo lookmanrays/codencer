@@ -30,6 +30,7 @@ import (
 	"agent-bridge/internal/projectconfig"
 	"agent-bridge/internal/proof"
 	"agent-bridge/internal/readiness"
+	"agent-bridge/internal/security"
 	setuppkg "agent-bridge/internal/setup"
 	"agent-bridge/internal/supervisor"
 )
@@ -105,6 +106,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runSubmit(args[1:], stdout)
 	case "run-plan":
 		return runRunPlan(args[1:], stdout)
+	case "sync":
+		return runSync(args[1:], stdout)
 	case "profile":
 		return runProfile(args[1:], stdout)
 	case "executor":
@@ -2027,6 +2030,309 @@ func runRunPlan(args []string, stdout io.Writer) error {
 	return finishRunPlanReport(stdout, parsed.bool("json"), report, err)
 }
 
+type syncReport struct {
+	OK                    bool                `json:"ok"`
+	Action                string              `json:"action"`
+	Mode                  string              `json:"mode"`
+	Scope                 string              `json:"scope"`
+	DestinationGatewayURL string              `json:"destination_gateway_url"`
+	DestinationSource     string              `json:"destination_source"`
+	RawArtifactsIncluded  bool                `json:"raw_artifacts_included"`
+	RawArtifactsSupported bool                `json:"raw_artifacts_supported"`
+	GatewayIngestReady    bool                `json:"gateway_ingest_ready"`
+	Projects              []syncProjectRecord `json:"projects"`
+	Runs                  []syncRunRecord     `json:"runs"`
+	Blocker               *localexec.Blocker  `json:"blocker,omitempty"`
+	Warnings              []string            `json:"warnings,omitempty"`
+}
+
+type syncProjectRecord struct {
+	ID             string `json:"id"`
+	Name           string `json:"name,omitempty"`
+	DefaultAdapter string `json:"default_adapter,omitempty"`
+	Profile        string `json:"profile,omitempty"`
+	SharedToRelay  bool   `json:"shared_to_relay"`
+	MachineID      string `json:"machine_id,omitempty"`
+	HostLabel      string `json:"host_label,omitempty"`
+}
+
+type syncRunRecord struct {
+	RunID            string   `json:"run_id"`
+	ProjectID        string   `json:"project_id"`
+	Status           string   `json:"status,omitempty"`
+	Title            string   `json:"title,omitempty"`
+	Summary          string   `json:"summary,omitempty"`
+	ExecutorProfile  string   `json:"executor_profile,omitempty"`
+	Mode             string   `json:"mode,omitempty"`
+	Scope            string   `json:"scope"`
+	ReportStatus     string   `json:"report_status"`
+	ExecutionMode    string   `json:"execution_mode,omitempty"`
+	SafeArtifactRefs []string `json:"safe_artifact_refs,omitempty"`
+}
+
+func runSync(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer sync <status|preview|publish> [flags]")
+	}
+	parsed, err := parseArgs(args[1:], []string{"json", "confirm", "include-raw-artifacts"}, []string{"project", "repo", "config", "gateway"})
+	if err != nil {
+		return err
+	}
+	if len(parsed.positionals) != 0 {
+		return usageError(parsed.bool("json"), stdout, "sync "+args[0]+" does not accept positional arguments")
+	}
+	report, err := buildSyncReport(args[0], parsed)
+	if err != nil {
+		return jsonAwareError(parsed.bool("json"), stdout, exitUsage, err.Error())
+	}
+	if parsed.bool("include-raw-artifacts") {
+		report.OK = false
+		report.Blocker = &localexec.Blocker{
+			Type:                 localexec.BlockerUnsafeAction,
+			Message:              "raw artifact/log sync is not supported by the public self-host sync command",
+			NeedsPlannerDecision: true,
+		}
+	}
+	if args[0] == "publish" && report.Blocker == nil {
+		if !parsed.bool("confirm") {
+			report.OK = false
+			report.Blocker = &localexec.Blocker{
+				Type:                 "confirmation_required",
+				Message:              "sync publish requires --confirm after reviewing codencer sync preview",
+				NeedsPlannerDecision: true,
+			}
+		} else {
+			report.OK = false
+			report.Blocker = &localexec.Blocker{
+				Type:                 localexec.BlockerUnsupportedOperation,
+				Message:              "Gateway metadata ingest is not implemented yet; no local reports, logs, artifacts, or paths were uploaded",
+				NeedsPlannerDecision: true,
+			}
+		}
+	}
+	if parsed.bool("json") {
+		_ = writeJSON(stdout, report)
+	} else {
+		printSyncReport(stdout, report)
+	}
+	if report.Blocker != nil {
+		return exitError{code: localexec.ExitBlocked, message: report.Blocker.Message, printed: true}
+	}
+	return nil
+}
+
+func buildSyncReport(action string, parsed parsedArgs) (syncReport, error) {
+	switch action {
+	case "status", "preview", "publish":
+	default:
+		return syncReport{}, fmt.Errorf("unknown sync command %q", action)
+	}
+	repoRoot, err := repoRootForCommand(parsed.value("repo"))
+	if err != nil {
+		return syncReport{}, err
+	}
+	paths, err := local.ResolvePaths(repoRoot, parsed.value("config"))
+	if err != nil {
+		return syncReport{}, err
+	}
+	cfg, err := local.LoadConfig(paths.ConfigFile)
+	if err != nil {
+		return syncReport{}, err
+	}
+	connection := local.ResolveConnection(cfg, parsed.value("gateway"))
+	registry, machine, err := loadRegistryWithMachine(paths, time.Now().UTC())
+	if err != nil {
+		return syncReport{}, err
+	}
+	projectID := strings.TrimSpace(parsed.value("project"))
+	projects := syncProjects(registry, projectID)
+	runs, warnings := syncRuns(paths, projectID)
+	return syncReport{
+		OK:                    true,
+		Action:                action,
+		Mode:                  "metadata_only",
+		Scope:                 "local",
+		DestinationGatewayURL: connection.GatewayURL,
+		DestinationSource:     connection.Source,
+		RawArtifactsIncluded:  false,
+		RawArtifactsSupported: false,
+		GatewayIngestReady:    false,
+		Projects:              projects,
+		Runs:                  runs,
+		Warnings:              append(warnings, syncMachineWarning(machine)...),
+	}, nil
+}
+
+func syncProjects(registry *projectpkg.Registry, projectID string) []syncProjectRecord {
+	out := []syncProjectRecord{}
+	if registry == nil {
+		return out
+	}
+	for _, project := range projectpkg.ListProjects(registry) {
+		if projectID != "" && project.ID != projectID {
+			continue
+		}
+		out = append(out, syncProjectRecord{
+			ID:             project.ID,
+			Name:           project.Name,
+			DefaultAdapter: project.DefaultAdapter,
+			Profile:        project.AdapterProfile,
+			SharedToRelay:  project.SharedToRelay,
+			MachineID:      project.MachineID,
+			HostLabel:      project.HostLabel,
+		})
+	}
+	return out
+}
+
+func syncRuns(paths local.Paths, projectID string) ([]syncRunRecord, []string) {
+	pattern := filepath.Join(paths.ArtifactsDir, "run-plans", "*.json")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return []syncRunRecord{}, []string{"could not scan local run reports"}
+	}
+	out := []syncRunRecord{}
+	warnings := []string{}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			warnings = append(warnings, "skipped unreadable local run report")
+			continue
+		}
+		var report localexec.RunPlanReport
+		if err := json.Unmarshal(data, &report); err != nil {
+			warnings = append(warnings, "skipped malformed local run report")
+			continue
+		}
+		project := ""
+		if report.Project != nil {
+			project = report.Project.ID
+		}
+		if projectID != "" && project != projectID {
+			continue
+		}
+		runID := ""
+		if report.Run != nil {
+			runID = report.Run.ID
+		}
+		record := syncRunRecord{
+			RunID:            runID,
+			ProjectID:        project,
+			Status:           report.Status,
+			Mode:             "task",
+			Scope:            "local",
+			ReportStatus:     "local",
+			Summary:          safeSyncString(runPlanSummary(report)),
+			ExecutorProfile:  firstRunPlanProfile(report),
+			ExecutionMode:    runPlanExecutionMode(report),
+			SafeArtifactRefs: safeArtifactNames(report),
+		}
+		if len(report.Tasks) > 0 {
+			record.Title = safeSyncString(report.Tasks[0].Title)
+		}
+		if report.ManifestPath != "" {
+			record.Mode = "manifest"
+		}
+		out = append(out, record)
+	}
+	return out, warnings
+}
+
+func runPlanSummary(report localexec.RunPlanReport) string {
+	if len(report.Tasks) > 0 {
+		if report.Tasks[0].Summary != "" {
+			return report.Tasks[0].Summary
+		}
+		if report.Tasks[0].Evidence.Result != nil {
+			return report.Tasks[0].Evidence.Result.Summary
+		}
+	}
+	if report.Evidence.Result != nil {
+		return report.Evidence.Result.Summary
+	}
+	if report.Blocker != nil {
+		return report.Blocker.Message
+	}
+	return report.Status
+}
+
+func firstRunPlanProfile(report localexec.RunPlanReport) string {
+	if len(report.Tasks) > 0 {
+		return report.Tasks[0].Profile
+	}
+	if report.Project != nil {
+		return report.Project.Profile
+	}
+	return ""
+}
+
+func runPlanExecutionMode(report localexec.RunPlanReport) string {
+	for _, task := range report.Tasks {
+		if task.Evidence.Result == nil {
+			continue
+		}
+		if task.Evidence.Result.IsSimulation {
+			return "simulation"
+		}
+		return "real"
+	}
+	return "unknown"
+}
+
+func safeArtifactNames(report localexec.RunPlanReport) []string {
+	names := []string{}
+	for _, task := range report.Tasks {
+		for _, artifact := range task.Evidence.Artifacts {
+			if artifact != nil && strings.TrimSpace(artifact.Name) != "" {
+				names = append(names, artifact.Name)
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func safeSyncString(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	payload := map[string]any{"value": value}
+	data, _ := json.Marshal(payload)
+	var out map[string]string
+	if err := json.Unmarshal(security.SanitizeRemoteJSON(data), &out); err == nil {
+		return strings.TrimSpace(out["value"])
+	}
+	return security.Redact(value)
+}
+
+func syncMachineWarning(machine local.MachineIdentity) []string {
+	if machine.MachineID == "" {
+		return []string{"machine identity is missing; run codencer init"}
+	}
+	return nil
+}
+
+func printSyncReport(w io.Writer, report syncReport) {
+	fmt.Fprintf(w, "sync: %s mode=%s scope=%s\n", report.Action, report.Mode, report.Scope)
+	fmt.Fprintf(w, "destination: %s (%s)\n", report.DestinationGatewayURL, report.DestinationSource)
+	fmt.Fprintf(w, "projects: %d\n", len(report.Projects))
+	fmt.Fprintf(w, "runs: %d\n", len(report.Runs))
+	fmt.Fprintf(w, "raw_artifacts_included: %t\n", report.RawArtifactsIncluded)
+	for _, run := range report.Runs {
+		fmt.Fprintf(w, "run: %s project=%s status=%s scope=%s\n", firstNonEmpty(run.RunID, "unknown"), run.ProjectID, run.Status, run.Scope)
+		if run.Summary != "" {
+			fmt.Fprintf(w, "summary: %s\n", run.Summary)
+		}
+	}
+	for _, warning := range report.Warnings {
+		fmt.Fprintf(w, "warning: %s\n", warning)
+	}
+	if report.Blocker != nil {
+		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, report.Blocker.Message)
+	}
+}
+
 func runProfile(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer profile <list|get> --json")
@@ -3037,7 +3343,7 @@ func contextBackground() context.Context {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: codencer <version|init|login|whoami|logout|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|profile|executor|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
+	fmt.Fprintln(w, "Usage: codencer <version|init|login|whoami|logout|paths|config|doctor|status|project|machine|connector|gateway|run|submit|run-plan|sync|profile|executor|service|watchdog|recover|live|readiness|setup|activation|accept|proof|demo> [flags]")
 }
 
 func wantsHelp(args []string) bool {
@@ -3064,7 +3370,7 @@ func printCommandHelp(w io.Writer, path []string) {
 	key := strings.Join(path, " ")
 	switch key {
 	case "":
-		printHelpBlock(w, "codencer [command] [flags]", "version, init, login, paths, config, doctor, status, project, machine, connector, gateway, executor, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
+		printHelpBlock(w, "codencer [command] [flags]", "version, init, login, paths, config, doctor, status, project, machine, connector, gateway, run, submit, sync, executor, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
 	case "project":
 		printHelpBlock(w, "codencer project <init|adopt|scan|list|get|use|status|share|unshare|remove> [flags]", "init, adopt, scan, list, get, use, status, share, unshare, remove", "--json, --config <path>, --repo <path>", "codencer project init --repo . --adapter fake --profile fake-success --share-to-relay --json")
 	case "project init":
@@ -3089,6 +3395,8 @@ func printCommandHelp(w io.Writer, path []string) {
 		printHelpBlock(w, "codencer gateway relay <add|list|status|remove> [flags]", "add, list, status, remove", "--json, --config <path>, --gateway <url>, --id <id>, --url <relay-url>, --token-env <env>", "codencer gateway relay add --id personal --url http://127.0.0.1:8090 --token-env CODENCER_RELAY_TOKEN --json")
 	case "run":
 		printHelpBlock(w, "codencer run <start|list|get|status|events|report|cancel|resume> [flags]", "start, list, get, status, events, report, cancel, resume", "--json, --project <id>, --repo <path>, --config <path>", "codencer run events run-123 --project codencer --json")
+	case "sync":
+		printHelpBlock(w, "codencer sync <status|preview|publish> [flags]", "status, preview, publish", "--json, --project <id>, --repo <path>, --config <path>, --gateway <url>, --confirm, --include-raw-artifacts", "codencer sync preview --project codencer --json")
 	case "executor":
 		printHelpBlock(w, "codencer executor <list|scan|test|default> [flags]", "list, scan, test, default", "--json, --repo <path>, --config <path>", "codencer executor default codex-workspace --repo . --json")
 	case "login":

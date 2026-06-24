@@ -416,6 +416,7 @@ export const demoSnapshot: DemoSnapshot = {
       resultSummary:
         "Codencer bridges planners to coding executors through local and self-host services.",
       runId: "run_demo_console",
+      scope: "gateway_submitted",
       startedAt: "2026-06-20T12:18:00Z",
       status: "completed",
       stepId: "step_demo_console",

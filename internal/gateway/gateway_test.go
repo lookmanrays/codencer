@@ -503,6 +503,7 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		!strings.Contains(runsBody, `"title":"Gateway Console task"`) ||
 		!strings.Contains(runsBody, `"goal":"Return deterministic evidence."`) ||
 		!strings.Contains(runsBody, `"executor_profile":"fake-success"`) ||
+		!strings.Contains(runsBody, `"scope":"gateway_submitted"`) ||
 		!strings.Contains(runsBody, `"relay_profile_id":"default"`) ||
 		!strings.Contains(runsBody, `"connector_id":"connector-1"`) ||
 		!strings.Contains(runsBody, `"machine_id":"mach-1"`) ||
@@ -510,9 +511,14 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("run history list missing expected safe metadata: %s", runsBody)
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, runsBody)
+	scopedRuns := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs?scope=gateway_submitted", token.AccessToken)
+	if scopedRunsBody := mustJSON(t, scopedRuns); !strings.Contains(scopedRunsBody, `"id":"`+runHistoryID+`"`) {
+		t.Fatalf("run history scope filter missing expected run: %s", scopedRunsBody)
+	}
 	runDetail := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+runHistoryID, token.AccessToken)
 	runDetailBody := mustJSON(t, runDetail)
 	if !strings.Contains(runDetailBody, `"run_id":"run-gateway-test"`) ||
+		!strings.Contains(runDetailBody, `"scope":"gateway_submitted"`) ||
 		!strings.Contains(runDetailBody, `"report_status":"completed"`) ||
 		!strings.Contains(runDetailBody, `"result_details":"Artifacts: stdout.log"`) {
 		t.Fatalf("run history detail missing expected result metadata: %s", runDetailBody)

@@ -221,11 +221,25 @@ describe("domain schemas", () => {
                 },
               },
             },
+            scope: "gateway_submitted",
             updated_at: "2026-06-20T12:00:01Z",
           },
         ],
       }).runs[0]?.executionMode,
     ).toBe("real");
+    expect(
+      RunListResponseSchema.parse({
+        runs: [
+          {
+            created_at: "2026-06-20T12:00:00Z",
+            id: "runhist-scope",
+            project_id: "codencer",
+            scope: "gateway_submitted",
+            updated_at: "2026-06-20T12:00:01Z",
+          },
+        ],
+      }).runs[0]?.scope,
+    ).toBe("gateway_submitted");
   });
 
   it("maps relay-derived machine statuses to dashboard states", () => {

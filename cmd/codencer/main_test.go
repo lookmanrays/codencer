@@ -392,6 +392,34 @@ tasks:
 	if !strings.Contains(stdout, `"report_path"`) || !strings.Contains(stdout, `"task_id": "one"`) {
 		t.Fatalf("run-plan output wrong: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("sync", "preview", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("sync preview failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"mode": "metadata_only"`) ||
+		!strings.Contains(stdout, `"scope": "local"`) ||
+		!strings.Contains(stdout, `"raw_artifacts_included": false`) ||
+		!strings.Contains(stdout, `"runs"`) ||
+		!strings.Contains(stdout, `"done"`) {
+		t.Fatalf("sync preview output wrong: %s", stdout)
+	}
+	if strings.Contains(stdout, repo) || strings.Contains(stdout, server.URL) || strings.Contains(stdout, `"daemon_url"`) || strings.Contains(stdout, `"report_path"`) || strings.Contains(stdout, `"logs_ref"`) {
+		t.Fatalf("sync preview leaked local path or daemon metadata: %s", stdout)
+	}
+	stdout, _, err = runCLI("sync", "publish", "--project", "proj", "--json")
+	if err == nil {
+		t.Fatalf("expected sync publish to require confirmation: %s", stdout)
+	}
+	if !strings.Contains(stdout, `"type": "confirmation_required"`) {
+		t.Fatalf("sync publish missing confirmation blocker: %s", stdout)
+	}
+	stdout, _, err = runCLI("sync", "publish", "--project", "proj", "--include-raw-artifacts", "--json")
+	if err == nil {
+		t.Fatalf("expected sync publish with raw artifacts to fail: %s", stdout)
+	}
+	if !strings.Contains(stdout, `"type": "unsafe_action"`) {
+		t.Fatalf("sync raw publish missing unsafe blocker: %s", stdout)
+	}
 }
 
 func TestProfileAndDaemonNotRunningJSON(t *testing.T) {

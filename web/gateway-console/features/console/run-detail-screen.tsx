@@ -78,6 +78,10 @@ export function RunDetailScreen({ id }: { id: string }) {
                   },
                   { label: "Run mode", value: run.data.run.mode || "task" },
                   {
+                    label: "Scope",
+                    value: scopeLabel(run.data.run.scope),
+                  },
+                  {
                     label: "Report",
                     value: run.data.run.reportStatus || "n/a",
                   },
@@ -136,4 +140,11 @@ export function RunDetailScreen({ id }: { id: string }) {
       ) : null}
     </PageShell>
   );
+}
+
+function scopeLabel(scope?: string) {
+  if (scope === "gateway_submitted") return "Gateway-submitted";
+  if (scope === "synced") return "Synced";
+  if (scope === "local") return "Local";
+  return scope || "n/a";
 }
