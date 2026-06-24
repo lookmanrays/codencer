@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `5792a13cb5af2129917d876cd28a16d119f1b3f6`
+Implementation commit hash: `39520cc3aa140db65cbd79e92cc1daf982793645`
 
 Branch: `next-phase`
 
@@ -34,6 +34,7 @@ Branch: `next-phase`
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Gateway HTTP and MCP operator-response recording for Gateway-observed human interrupts, with sanitized `human_interrupt_responded` audit metadata and explicit next actions that keep automatic continuation separated from resume routing.
 - Added explicit `follow_up=resume` behavior for Gateway-observed human interrupt responses. The response is recorded first, then Gateway uses the stored safe route metadata to attempt `resume_project_run`, returning either a resumed run payload or a structured blocker while auditing `resume_project_run_requested`, `run_resumed`, or `resume_project_run_blocked`.
+- Added explicit `follow_up=cancel` behavior for Gateway-observed human interrupt responses. The response is recorded first, then Gateway uses the stored safe route metadata to attempt `cancel_project_run`, returning either a cancelled run payload or a structured blocker while auditing `cancel_project_run_requested`, `run_cancelled`, or `cancel_project_run_blocked`.
 - Wired project run resume through Gateway HTTP, Gateway MCP, Relay HTTP, Relay MCP, Connector project proxy, and local daemon-backed resume. Successful daemon-resumable states produce `run_resumed`; completed or otherwise non-resumable runs still return structured `run_resume_blocked` / `resume_project_run_blocked` blockers with sanitized audit metadata.
 - Updated Gateway Console manifest/run-plan submissions to use the async `wait=false` path, so both simple task mode and advanced manifest mode return after submission and rely on report polling for terminal evidence.
 - Added Gateway API regression coverage proving manifest-mode project run creation forwards `wait=false`, returns a submitted run, preserves `run_history_id`, and later resolves the terminal report through the report endpoint.
@@ -105,6 +106,8 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1909`
   - `reports/gateway-console-screenshots/2026-06-24-1912`
   - `reports/gateway-console-screenshots/2026-06-24-1923`
+  - `reports/gateway-console-screenshots/2026-06-24-1938`
+  - `reports/gateway-console-screenshots/2026-06-24-1942`
 
 ## Commands Run
 
@@ -267,6 +270,21 @@ Branch: `next-phase`
 - `go test ./...` after adding local submit progress output - passed
 - `make verify-public-release` after adding local submit progress output - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local submit progress output - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1923`
+- `gofmt -w internal/gateway/api.go internal/gateway/tools.go internal/gateway/gateway_test.go` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npx prettier --write api/run-history.ts features/console/run-detail-screen.tsx` after adding explicit human-interrupt follow-up cancel - passed
+- `go test ./internal/gateway` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run format:check` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run lint` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run typecheck` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run test` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run test:e2e` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run build` after adding explicit human-interrupt follow-up cancel - failed once when run concurrently with `npm run test:e2e` because both commands shared `.next`; passed when rerun sequentially
+- `go test ./...` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-gateway` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-gateway-console` after adding explicit human-interrupt follow-up cancel - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1938`
+- `make verify-gateway-console-live` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-public-release` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding explicit human-interrupt follow-up cancel - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1942`
 - `git diff --check` - passed
 
 ## Remaining Blockers
@@ -279,7 +297,7 @@ Branch: `next-phase`
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
-- Human interrupt lifecycle is still partial: local report/event records, local and project-level daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, explicit `follow_up=resume` handling, resume-attempt audit, and a Console run-detail response panel now exist. Broader planner/executor continuation after arbitrary answer/approval/permission responses remains incomplete.
+- Human interrupt lifecycle is still partial: local report/event records, local and project-level daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, explicit `follow_up=resume/cancel` handling, resume/cancel-attempt audit, and a Console run-detail response panel now exist. Broader planner/executor continuation after arbitrary answer/approval/permission responses remains incomplete.
 - Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, submit, run events, run report, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
 
 Verdict: NO-GO
