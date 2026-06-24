@@ -162,6 +162,19 @@ export const demoSnapshot: DemoSnapshot = {
         "Non-interactive Codex execution with workspace write access.",
     },
     {
+      id: "antigravity-default",
+      adapter: "antigravity",
+      daemon_adapter: "antigravity",
+      description:
+        "Antigravity execution through the daemon's repo-scoped binding.",
+    },
+    {
+      id: "antigravity-broker",
+      adapter: "antigravity",
+      daemon_adapter: "antigravity-broker",
+      description: "Antigravity execution through the configured broker.",
+    },
+    {
       id: "fake-blocker",
       adapter: "fake",
       daemon_adapter: "fake-blocker",

@@ -178,8 +178,8 @@ reject_real_executor_simulation_env() {
       else
         echo "$name=<unset>"
       fi
-      case "$value" in
-        1|true|TRUE|True)
+      case "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" in
+        1|true)
           bad=1
           ;;
       esac
@@ -496,7 +496,8 @@ if [ "$FAILURES" -eq 0 ]; then
           gate_passed=1
         fi
       else
-        if run_gate "$gate_name" env ALL_ADAPTERS_SIMULATION_MODE=0 CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs"; then
+        adapter_env_name="$(printf '%s_SIMULATION_MODE' "$real_adapter" | tr '[:lower:]-' '[:upper:]_')"
+        if run_gate "$gate_name" env ALL_ADAPTERS_SIMULATION_MODE=0 "$adapter_env_name=0" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs"; then
           gate_passed=1
         fi
       fi

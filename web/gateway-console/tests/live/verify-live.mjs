@@ -37,13 +37,14 @@ const taskTimeoutSeconds = parsePositiveInt(
   executorAdapter === "fake" ? 120 : 300,
   "CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS",
 );
+const executorDefaults = taskDefaultsForExecutorProfile(executorProfile);
 const relayProxyTimeoutSeconds = taskTimeoutSeconds + 30;
 const gatewayRelayRequestTimeoutSeconds = relayProxyTimeoutSeconds + 30;
 const uiSubmitTimeoutMs = (gatewayRelayRequestTimeoutSeconds + 30) * 1000;
 const executorGoal =
   executorAdapter === "fake"
     ? "Run fake-safe task from live Gateway Console."
-    : "Inspect the project README and return a short summary. Do not modify files.";
+    : executorDefaults.goal;
 
 const tmpRoot = await fs.mkdtemp(
   path.join(os.tmpdir(), "codencer-console-live-"),
@@ -235,9 +236,9 @@ try {
     await expect(
       page.getByRole("combobox", { name: "Executor" }),
     ).toContainText(executorProfile);
-    if (executorProfile === "codex-workspace") {
+    if (realExecutorGate) {
       await expect(page.getByLabel(/title/i)).toHaveValue(
-        "Codex workspace smoke task",
+        executorDefaults.title,
       );
       await expect(page.getByLabel(/goal/i)).toHaveValue(executorGoal);
       await expect(page.getByLabel(/title/i)).not.toHaveValue(
@@ -296,7 +297,7 @@ try {
       const uiRun = (runsPayload.runs ?? []).find(
         (run) =>
           run.executor_profile === executorProfile &&
-          run.title === "Codex workspace smoke task",
+          run.title === executorDefaults.title,
       );
       if (!uiRun) {
         throw new Error(
@@ -319,9 +320,7 @@ try {
     ).toBeVisible();
     await expect(
       page
-        .getByText(
-          /Codex workspace smoke task|Gateway Console fake-safe task|Gateway Console task/i,
-        )
+        .getByText(new RegExp(escapeRegExp(executorDefaults.title), "i"))
         .first(),
     ).toBeVisible();
     await expect(page.getByText(executorProfile).first()).toBeVisible();
@@ -633,6 +632,7 @@ async function startLocalSelfHostStack(root) {
   );
   const daemonEnv = {
     ALL_ADAPTERS_SIMULATION_MODE: "0",
+    ANTIGRAVITY_SIMULATION_MODE: "0",
     ARTIFACT_ROOT: path.join(state, "artifacts"),
     CLAUDE_SIMULATION_MODE: "0",
     CODEX_SIMULATION_MODE: "0",
@@ -879,6 +879,34 @@ function assertNoRealGateSimulationEnv() {
   }
 }
 
+function taskDefaultsForExecutorProfile(profile) {
+  if (profile.startsWith("codex")) {
+    return {
+      title:
+        profile === "codex-workspace"
+          ? "Codex workspace smoke task"
+          : "Codex executor smoke task",
+      goal: "Inspect the project README and return a short summary. Do not modify files.",
+    };
+  }
+  if (profile.startsWith("claude")) {
+    return {
+      title: "Claude CLI smoke task",
+      goal: "Inspect the project README and return a short summary. Do not modify files.",
+    };
+  }
+  if (profile.startsWith("antigravity")) {
+    return {
+      title: "Antigravity smoke task",
+      goal: "Inspect the project README and return a short summary. Do not modify files.",
+    };
+  }
+  return {
+    title: "Gateway Console fake-safe task",
+    goal: "Run a deterministic fake-safe task from Gateway Console.",
+  };
+}
+
 function assertRealRunHistoryRecord(label, record) {
   assertNoSimulationText(JSON.stringify(record), label);
   if (record.executor_profile !== executorProfile) {
@@ -940,9 +968,11 @@ function assertRealExecutorReport(label, payload) {
 function assertNoSimulationText(text, label) {
   if (!text) return;
   for (const pattern of [
+    /"is_simulation"\s*:\s*true/i,
     /Simulation Mode/i,
-    /Executing Simulated codex/i,
-    /Simulated successful codex task/i,
+    /Executing Simulated [A-Za-z0-9_-]+/i,
+    /Simulated successful [A-Za-z0-9_-]+ task/i,
+    /Simulation:\s+[A-Za-z0-9_-]+ adapter relay completed successfully/i,
   ]) {
     if (pattern.test(text)) {
       throw new Error(`${label} contained simulated executor text: ${pattern}`);
@@ -967,9 +997,15 @@ function hasRealOutputOrArtifact(payload) {
     .map(({ value }) => value.trim())
     .filter((value) => !/^(completed|ok|success)$/i.test(value));
   const artifactNames = findStringValuesByKey(payload, "name").filter((value) =>
-    /codex|stdout|stderr|last[-_ ]?message|result|report/i.test(value),
+    /codex|claude|antigravity|stdout|stderr|last[-_ ]?message|result|report/i.test(
+      value,
+    ),
   );
   return outputs.length > 0 || artifactNames.length > 0;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function findStringValuesByKey(value, key) {
@@ -1053,6 +1089,8 @@ async function assertGatewayCollectionEndpoints(
   }
   assertNoSensitiveEndpointLeak(serialized, label);
   for (const expected of [
+    "antigravity-broker",
+    "antigravity-default",
     "codex-workspace",
     "codex-full",
     "claude-default",

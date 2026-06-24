@@ -99,6 +99,26 @@ test("elevated Codex executor requires confirmation", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^submit$/i })).toBeEnabled();
 });
 
+test("Antigravity executor uses real-executor defaults", async ({ page }) => {
+  await page.goto("/console/projects");
+  await page.getByRole("combobox", { name: "Executor" }).click();
+  await page.getByRole("option", { name: /antigravity-default/i }).click();
+  await expect(page.getByLabel(/title/i)).toHaveValue("Antigravity smoke task");
+  await expect(page.getByLabel(/goal/i)).toHaveValue(
+    "Inspect the project README and return a short summary. Do not modify files.",
+  );
+  await expect(page.getByLabel(/title/i)).not.toHaveValue(
+    "Gateway Console fake-safe task",
+  );
+  await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
+  await page.getByRole("button", { name: /^advanced$/i }).click();
+  await page.getByRole("combobox", { name: /execution mode/i }).click();
+  await page.getByRole("option", { name: /manifest \/ run plan/i }).click();
+  await expect(page.getByLabel(/manifest \/ run plan/i)).toHaveValue(
+    /profile: antigravity-default/,
+  );
+});
+
 test("manifest run plan is advanced and guided", async ({ page }) => {
   await page.goto("/console/projects");
   await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();

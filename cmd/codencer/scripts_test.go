@@ -126,8 +126,8 @@ func TestPublicSelfHostRCVerifierRejectsRealExecutorSimulation(t *testing.T) {
 		"assertRealExecutorReport",
 		"assertNoSimulationText",
 		"Simulation Mode",
-		"Executing Simulated codex",
-		"Simulated successful codex task",
+		"Executing Simulated [A-Za-z0-9_-]+",
+		"Simulated successful [A-Za-z0-9_-]+ task",
 		"is_simulation",
 	} {
 		if !strings.Contains(verifierBody, want) {

@@ -522,6 +522,11 @@ function taskDefaultsForExecutor(
     goal =
       "Inspect the project README and return a short summary. Do not modify files.";
     timeoutSeconds = 300;
+  } else if (normalized.startsWith("antigravity")) {
+    title = "Antigravity smoke task";
+    goal =
+      "Inspect the project README and return a short summary. Do not modify files.";
+    timeoutSeconds = 300;
   }
   return {
     goal,
@@ -568,6 +573,12 @@ function taskDefaultsForExecutorTitle(executorID: string) {
   if (executorID.startsWith("claude")) {
     return {
       title: "Claude CLI smoke task",
+      goal: "Inspect the project README and return a short summary. Do not modify files.",
+    };
+  }
+  if (executorID.startsWith("antigravity")) {
+    return {
+      title: "Antigravity smoke task",
       goal: "Inspect the project README and return a short summary. Do not modify files.",
     };
   }
