@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `bfd998abf5c3bfd2ff9b932e8bc3111f4dab1bb8`
+Implementation commit hash: `eb7575ad8963e93648d20e3a5fdcb97611733c21`
 
 Branch: `next-phase`
 
@@ -11,6 +11,7 @@ Branch: `next-phase`
 - Added the public self-host release spec files under `docs/specs/` and the acceptance gate at `docs/acceptance/public-selfhost-release-gate.yaml`.
 - Created the pre-change implementation audit at `reports/public-selfhost-hardening/implementation-audit.md`.
 - Hardened the public self-host RC verifier so it emits only `GO` or `NO-GO`, rejects real-executor simulation env values, runs configured real executor gates by adapter, and fails the release gate when required real proofs are missing.
+- Removed stale active public-doc wording that said missing real executor proof reports `PARTIAL`; active RC docs now say missing/skipped/simulated/failed required real executor proof is `NO-GO`, and the public boundary checker rejects stale `reports PARTIAL` claims plus malformed hardening-report final verdict lines.
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
 - Added Gateway MCP async lifecycle tools: `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run`, `codencer.get_project_run_status`, `codencer.get_gateway_run_events`, true project-scoped `codencer.cancel_project_run`, and a structured `codencer.resume_project_run` capability blocker.
@@ -138,6 +139,10 @@ Branch: `next-phase`
 - `make verify-gateway-console` after adding Console human interrupt response panel - passed
 - `make verify-gateway-console-live` after adding Console human interrupt response panel - passed
 - `make verify-public-release` after adding Console human interrupt response panel - passed
+- `python3 -m py_compile scripts/check_public_boundary.py` after adding RC verdict-language boundary checks - passed
+- `python3 scripts/check_docs_links.py` after aligning RC verdict docs with NO-GO policy - passed
+- `python3 scripts/check_public_boundary.py` after aligning RC verdict docs with NO-GO policy - passed
+- `make verify-public-release` after aligning RC verdict docs with NO-GO policy - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed

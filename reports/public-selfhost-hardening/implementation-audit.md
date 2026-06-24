@@ -43,7 +43,7 @@ the exact package was not available in the current attachment cache.
 | Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, and grouped lifecycle summaries; synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway/sync sanitization exists and artifact-backed release verification now covers default human CLI output for init, config show, project init/status/scan, executor list, sync preview, submit, and run output; full explicit JSON/debug/path surface policy proof is still incomplete. |
 | Public/private boundary | Partially implemented | Docs/checks exist; public repo still contains cloud-control-plane packages that need boundary review against the new specs. |
-| Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` emits only `GO`/`NO-GO`, requires configured real-proof coverage, and reports `NO-GO` when required proofs are missing; Antigravity remains unproven. |
+| Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` emits only `GO`/`NO-GO`, requires configured real-proof coverage, reports `NO-GO` when required proofs are missing, and public boundary checks reject stale active docs claiming `PARTIAL` verdicts; Antigravity remains unproven. |
 
 ## Requirement Audit
 
@@ -51,7 +51,7 @@ the exact package was not available in the current attachment cache.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Final verdicts only `GO` or `NO-GO` | Implemented | `scripts/verify_public_selfhost_rc.sh` emits `GO` or `NO-GO`; no `PARTIAL` branch remains. |
+| Final verdicts only `GO` or `NO-GO` | Implemented | `scripts/verify_public_selfhost_rc.sh` emits `GO` or `NO-GO`; no `PARTIAL` branch remains, active docs now describe missing real proof as `NO-GO`, and `scripts/check_public_boundary.py` rejects stale `reports PARTIAL` claims plus malformed final hardening-report verdict lines. |
 | Fake/simulation cannot satisfy GO | Implemented for current verifier | Real executor gates reject simulation text/metadata and missing required real proofs force `NO-GO`; Codex and Claude real gates passed with simulation disabled. |
 | Artifact-backed verifier | Implemented | `make verify-public-selfhost-rc` builds/unpacks artifacts through `scripts/verify_public_selfhost_rc.sh`. |
 | Codex, Claude Code, and Antigravity real proofs | Partially implemented | Codex passed current artifact-backed scoped proof in `reports/public-selfhost-rc/20260624T120012Z`; Codex and Claude Code passed earlier artifact-backed real gates in `reports/public-selfhost-rc/20260624T105654Z`; Antigravity remains missing. |
