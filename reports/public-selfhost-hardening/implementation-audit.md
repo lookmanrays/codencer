@@ -35,7 +35,7 @@ the exact package was not available in the current attachment cache.
 | Spec files present | Partially implemented | Files now exist, but exact-source fidelity is unclear. |
 | Acceptance YAML present | Implemented | `docs/acceptance/public-selfhost-release-gate.yaml` exists. |
 | Local-first source of truth | Partially implemented | Local daemon/CLI exists; default project/status/run/submit human output is redacted, while explicit JSON/debug outputs still carry local state for operator tooling. |
-| Explicit sync/publish | Partially implemented | `codencer sync status/preview/publish` now provides metadata-only preview and structured blockers; Gateway ingest remains unimplemented. |
+| Explicit sync/publish | Partially implemented | `codencer sync status/preview/publish` now provides metadata-only preview; confirmed publish ingests sanitized metadata into Gateway run history. Raw logs/artifacts remain blocked. |
 | Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first; default human output redacts local paths, but progress UX remains narrow. |
 | Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; `resume` is a structured unsupported blocker until daemon HTTP resume exists. |
 | Human interrupt lifecycle | Partially implemented | Low-level gates/blockers exist; no complete planning/question/permission/OS-action resume/cancel lifecycle. |
@@ -63,9 +63,9 @@ the exact package was not available in the current attachment cache.
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Manual local CLI runs stay local by default | Partially implemented | `codencer submit` calls `internal/localexec.Service.Submit`; no Gateway dependency by default. |
-| Gateway is control plane/index/sync target, not global source of truth | Partially implemented | Gateway records Gateway-observed run history and local sync preview reports `scope=local`; actual sync ingest is not implemented. |
+| Gateway is control plane/index/sync target, not global source of truth | Partially implemented | Gateway records Gateway-observed run history; local sync preview reports `scope=local`; confirmed sync publish creates sanitized `scope=synced` history records. |
 | Raw logs/artifacts not uploaded by default | Partially implemented | Gateway sanitizes report JSON; `codencer sync` is metadata-only and blocks raw artifact/log upload. Local reports can still contain local refs on disk. |
-| Explicit sync/publish behavior | Partially implemented | `codencer sync status/preview/publish` exists; publish returns structured confirmation/unsupported blockers rather than uploading implicitly. |
+| Explicit sync/publish behavior | Partially implemented | `codencer sync status/preview/publish` exists; publish requires `--confirm`, requires login, blocks raw artifact/log requests, and sends only sanitized metadata. |
 | Default output does not leak local paths | Partially implemented | Default human output for project/status/submit/run events/run report is redacted and tested; explicit `--json` reports still include local `repo_root`, `daemon_url`, and `report_path` for operator tooling. |
 
 ### 02 - Execution Lifecycle
@@ -121,7 +121,7 @@ the exact package was not available in the current attachment cache.
 | Pagination | Implemented for Gateway-observed history | Runs and audit support `limit`/`offset` and return `pagination.has_more`/`next_offset`; Console exposes previous/next controls. |
 | Filters | Implemented for Gateway-observed history | Runs support project/status/scope; audit supports event type, project, run ID, and run history filters. |
 | Grouped audit | Implemented for Gateway-observed history | Audit responses include grouped lifecycle summaries, and Console renders a grouped lifecycle section linking to run detail. |
-| Local/synced/Gateway-submitted scopes | Partially implemented | Gateway run records expose `scope=gateway_submitted`; sync preview reports local run metadata as `scope=local`. No Gateway synced ingest yet. |
+| Local/synced/Gateway-submitted scopes | Partially implemented | Gateway run records expose `scope=gateway_submitted`; sync preview reports local run metadata as `scope=local`; confirmed sync publish records `scope=synced`. |
 | Execution mode visible | Implemented for current UI | Gateway Console shows `Real executor`, `Simulation`, or `Unknown`. |
 
 ### 07 - Public vs Cloud Boundary
@@ -141,6 +141,6 @@ The release remains `NO-GO` until at least these are resolved:
 3. Async lifecycle must include submit/status/events/report/cancel/resume behavior or explicit structured capability blockers where unsupported.
 4. Human interrupt lifecycle must be first-class across CLI/MCP/UI/Gateway or explicitly proven with structured blockers and audit.
 5. Full redaction proof across every CLI/MCP/UI/Gateway surface remains incomplete, although default local human CLI output and sync preview are now covered.
-6. Gateway metadata ingest for explicit sync/publish remains unimplemented; current CLI preview/publish behavior is safe but not a completed sync transport.
-7. Run history/audit synced-scope transport remains incomplete even though Gateway-observed pagination/filter/grouping now exists.
+6. Raw log/artifact sync remains unsupported by design; only sanitized metadata-only `codencer sync publish --confirm` is implemented.
+7. Broader incremental sync policy and external source reconciliation remain incomplete even though Gateway-observed and explicit synced metadata history now exist.
 8. The final hardening report must end with exactly `Verdict: GO` or `Verdict: NO-GO`.

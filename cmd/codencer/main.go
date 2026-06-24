@@ -2043,6 +2043,10 @@ type syncReport struct {
 	RawArtifactsIncluded  bool                `json:"raw_artifacts_included"`
 	RawArtifactsSupported bool                `json:"raw_artifacts_supported"`
 	GatewayIngestReady    bool                `json:"gateway_ingest_ready"`
+	Published             bool                `json:"published"`
+	PublishedScope        string              `json:"published_scope,omitempty"`
+	SyncedRuns            int                 `json:"synced_runs,omitempty"`
+	RunHistoryIDs         []string            `json:"run_history_ids,omitempty"`
 	Projects              []syncProjectRecord `json:"projects"`
 	Runs                  []syncRunRecord     `json:"runs"`
 	Blocker               *localexec.Blocker  `json:"blocker,omitempty"`
@@ -2105,11 +2109,9 @@ func runSync(args []string, stdout io.Writer) error {
 				NeedsPlannerDecision: true,
 			}
 		} else {
-			report.OK = false
-			report.Blocker = &localexec.Blocker{
-				Type:                 localexec.BlockerUnsupportedOperation,
-				Message:              "Gateway metadata ingest is not implemented yet; no local reports, logs, artifacts, or paths were uploaded",
-				NeedsPlannerDecision: true,
+			if err := publishSyncReport(context.Background(), parsed, &report); err != nil {
+				report.OK = false
+				report.Blocker = err
 			}
 		}
 	}
@@ -2122,6 +2124,85 @@ func runSync(args []string, stdout io.Writer) error {
 		return exitError{code: localexec.ExitBlocked, message: report.Blocker.Message, printed: true}
 	}
 	return nil
+}
+
+func publishSyncReport(ctx context.Context, parsed parsedArgs, report *syncReport) *localexec.Blocker {
+	_, _, session, err := loadCodencerSession(parsed.value("config"))
+	if err != nil {
+		return &localexec.Blocker{
+			Type:                 localexec.BlockerConfigurationRequired,
+			Message:              "codencer login is required before sync publish",
+			NeedsPlannerDecision: true,
+			Retryable:            true,
+		}
+	}
+	gatewayURL := firstNonEmpty(parsed.value("gateway"), session.GatewayURL, report.DestinationGatewayURL)
+	if gatewayURL == "" || strings.TrimSpace(session.AccessToken) == "" {
+		return &localexec.Blocker{
+			Type:                 localexec.BlockerConfigurationRequired,
+			Message:              "codencer login is required before sync publish",
+			NeedsPlannerDecision: true,
+			Retryable:            true,
+		}
+	}
+	client := account.NewClient(gatewayURL, session.AccessToken)
+	response, err := client.SyncRuns(ctx, account.SyncRunsRequest{
+		Mode:     report.Mode,
+		Scope:    report.Scope,
+		Projects: accountSyncProjects(report.Projects),
+		Runs:     accountSyncRuns(report.Runs),
+	})
+	if err != nil {
+		return &localexec.Blocker{
+			Type:                 localexec.BlockerBridgeError,
+			Message:              "Gateway metadata sync failed: " + err.Error(),
+			NeedsPlannerDecision: true,
+			Retryable:            true,
+		}
+	}
+	report.OK = true
+	report.GatewayIngestReady = true
+	report.Published = response.OK
+	report.PublishedScope = response.Scope
+	report.SyncedRuns = response.SyncedRuns
+	report.RunHistoryIDs = append([]string(nil), response.RunHistoryIDs...)
+	return nil
+}
+
+func accountSyncProjects(records []syncProjectRecord) []account.SyncProjectRecord {
+	out := make([]account.SyncProjectRecord, 0, len(records))
+	for _, record := range records {
+		out = append(out, account.SyncProjectRecord{
+			ID:             record.ID,
+			Name:           record.Name,
+			DefaultAdapter: record.DefaultAdapter,
+			Profile:        record.Profile,
+			SharedToRelay:  record.SharedToRelay,
+			MachineID:      record.MachineID,
+			HostLabel:      record.HostLabel,
+		})
+	}
+	return out
+}
+
+func accountSyncRuns(records []syncRunRecord) []account.SyncRunRecord {
+	out := make([]account.SyncRunRecord, 0, len(records))
+	for _, record := range records {
+		out = append(out, account.SyncRunRecord{
+			RunID:            record.RunID,
+			ProjectID:        record.ProjectID,
+			Status:           record.Status,
+			Title:            record.Title,
+			Summary:          record.Summary,
+			ExecutorProfile:  record.ExecutorProfile,
+			Mode:             record.Mode,
+			Scope:            record.Scope,
+			ReportStatus:     record.ReportStatus,
+			ExecutionMode:    record.ExecutionMode,
+			SafeArtifactRefs: append([]string(nil), record.SafeArtifactRefs...),
+		})
+	}
+	return out
 }
 
 func buildSyncReport(action string, parsed parsedArgs) (syncReport, error) {
@@ -2322,6 +2403,9 @@ func printSyncReport(w io.Writer, report syncReport) {
 	fmt.Fprintf(w, "projects: %d\n", len(report.Projects))
 	fmt.Fprintf(w, "runs: %d\n", len(report.Runs))
 	fmt.Fprintf(w, "raw_artifacts_included: %t\n", report.RawArtifactsIncluded)
+	if report.Published {
+		fmt.Fprintf(w, "published: true scope=%s synced_runs=%d\n", firstNonEmpty(report.PublishedScope, "synced"), report.SyncedRuns)
+	}
 	for _, run := range report.Runs {
 		fmt.Fprintf(w, "run: %s project=%s status=%s scope=%s\n", firstNonEmpty(run.RunID, "unknown"), run.ProjectID, run.Status, run.Scope)
 		if run.Summary != "" {

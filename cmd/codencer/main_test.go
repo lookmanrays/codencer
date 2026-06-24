@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"agent-bridge/internal/account"
 	gatewaypkg "agent-bridge/internal/gateway"
 )
 
@@ -457,12 +459,69 @@ tasks:
 	if !strings.Contains(stdout, `"type": "confirmation_required"`) {
 		t.Fatalf("sync publish missing confirmation blocker: %s", stdout)
 	}
+	stdout, _, err = runCLI("sync", "publish", "--project", "proj", "--confirm", "--json")
+	if err == nil {
+		t.Fatalf("expected sync publish with no login to fail: %s", stdout)
+	}
+	if !strings.Contains(stdout, `"type": "configuration_required"`) {
+		t.Fatalf("sync publish missing login blocker: %s", stdout)
+	}
 	stdout, _, err = runCLI("sync", "publish", "--project", "proj", "--include-raw-artifacts", "--json")
 	if err == nil {
 		t.Fatalf("expected sync publish with raw artifacts to fail: %s", stdout)
 	}
 	if !strings.Contains(stdout, `"type": "unsafe_action"`) {
 		t.Fatalf("sync raw publish missing unsafe blocker: %s", stdout)
+	}
+
+	gatewayServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/gateway/v1/sync/runs" {
+			t.Fatalf("unexpected sync publish request %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer gateway-token" {
+			t.Fatalf("sync publish missing bearer token: %s", got)
+		}
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(r.Body)
+		payload := body.String()
+		for _, forbidden := range []string{repo, server.URL, `"daemon_url"`, `"report_path"`, `"logs_ref"`, "/Users/example", "127.0.0.1:18085", "secret-token"} {
+			if strings.Contains(payload, forbidden) {
+				t.Fatalf("sync publish leaked %q in request body: %s", forbidden, payload)
+			}
+		}
+		if !strings.Contains(payload, `"mode":"metadata_only"`) || !strings.Contains(payload, `"scope":"local"`) || !strings.Contains(payload, `"runs"`) {
+			t.Fatalf("sync publish request missing metadata-only payload: %s", payload)
+		}
+		writeHTTPJSON(t, w, http.StatusOK, map[string]any{
+			"ok":              true,
+			"mode":            "metadata_only",
+			"scope":           "synced",
+			"synced_runs":     1,
+			"run_history_ids": []string{"runhist-sync-1"},
+		})
+	}))
+	defer gatewayServer.Close()
+	session := account.NewSession(gatewayServer.URL, account.TokenResponse{
+		AccessToken: "gateway-token",
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(time.Hour).UTC(),
+		Scope:       "projects:read runs:write",
+		Resource:    gatewayServer.URL + "/mcp",
+		UserID:      "user-test",
+		WorkspaceID: "workspace-test",
+	}, time.Now().UTC())
+	if err := account.SaveSession(account.SessionPath(home), session); err != nil {
+		t.Fatalf("save test session: %v", err)
+	}
+	stdout, stderr, err = runCLI("sync", "publish", "--project", "proj", "--gateway", gatewayServer.URL, "--confirm", "--json")
+	if err != nil {
+		t.Fatalf("sync publish failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"published": true`) || !strings.Contains(stdout, `"published_scope": "synced"`) || !strings.Contains(stdout, `"synced_runs": 1`) || !strings.Contains(stdout, `"runhist-sync-1"`) {
+		t.Fatalf("sync publish output missing ingest result: %s", stdout)
+	}
+	if strings.Contains(stdout, repo) || strings.Contains(stdout, server.URL) || strings.Contains(stdout, "/Users/example") || strings.Contains(stdout, "secret-token") {
+		t.Fatalf("sync publish output leaked sensitive local data: %s", stdout)
 	}
 }
 

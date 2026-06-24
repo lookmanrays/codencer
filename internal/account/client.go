@@ -118,6 +118,45 @@ type ConnectorCompleteResponse struct {
 	OK bool `json:"ok"`
 }
 
+type SyncProjectRecord struct {
+	ID             string `json:"id"`
+	Name           string `json:"name,omitempty"`
+	DefaultAdapter string `json:"default_adapter,omitempty"`
+	Profile        string `json:"profile,omitempty"`
+	SharedToRelay  bool   `json:"shared_to_relay"`
+	MachineID      string `json:"machine_id,omitempty"`
+	HostLabel      string `json:"host_label,omitempty"`
+}
+
+type SyncRunRecord struct {
+	RunID            string   `json:"run_id"`
+	ProjectID        string   `json:"project_id"`
+	Status           string   `json:"status,omitempty"`
+	Title            string   `json:"title,omitempty"`
+	Summary          string   `json:"summary,omitempty"`
+	ExecutorProfile  string   `json:"executor_profile,omitempty"`
+	Mode             string   `json:"mode,omitempty"`
+	Scope            string   `json:"scope"`
+	ReportStatus     string   `json:"report_status"`
+	ExecutionMode    string   `json:"execution_mode,omitempty"`
+	SafeArtifactRefs []string `json:"safe_artifact_refs,omitempty"`
+}
+
+type SyncRunsRequest struct {
+	Mode     string              `json:"mode"`
+	Scope    string              `json:"scope"`
+	Projects []SyncProjectRecord `json:"projects"`
+	Runs     []SyncRunRecord     `json:"runs"`
+}
+
+type SyncRunsResponse struct {
+	OK            bool     `json:"ok"`
+	Mode          string   `json:"mode"`
+	Scope         string   `json:"scope"`
+	SyncedRuns    int      `json:"synced_runs"`
+	RunHistoryIDs []string `json:"run_history_ids"`
+}
+
 func NewClient(gatewayURL, accessToken string) *Client {
 	return &Client{
 		GatewayURL:  NormalizeGatewayURL(gatewayURL),
@@ -195,6 +234,12 @@ func (c *Client) ConnectorLogin(ctx context.Context, input ConnectorLoginRequest
 func (c *Client) ConnectorComplete(ctx context.Context, input ConnectorCompleteRequest) error {
 	var out ConnectorCompleteResponse
 	return c.do(ctx, http.MethodPost, "/api/gateway/v1/connectors/complete", input, &out)
+}
+
+func (c *Client) SyncRuns(ctx context.Context, input SyncRunsRequest) (SyncRunsResponse, error) {
+	var out SyncRunsResponse
+	err := c.do(ctx, http.MethodPost, "/api/gateway/v1/sync/runs", input, &out)
+	return out, err
 }
 
 func (c *Client) do(ctx context.Context, method, path string, payload any, out any) error {

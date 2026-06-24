@@ -37,6 +37,37 @@ type auditEventGroup struct {
 	Summary      string    `json:"summary"`
 }
 
+type syncRunsRequest struct {
+	Mode     string               `json:"mode"`
+	Scope    string               `json:"scope"`
+	Projects []syncProjectPayload `json:"projects"`
+	Runs     []syncRunPayload     `json:"runs"`
+}
+
+type syncProjectPayload struct {
+	ID             string `json:"id"`
+	Name           string `json:"name,omitempty"`
+	DefaultAdapter string `json:"default_adapter,omitempty"`
+	Profile        string `json:"profile,omitempty"`
+	SharedToRelay  bool   `json:"shared_to_relay"`
+	MachineID      string `json:"machine_id,omitempty"`
+	HostLabel      string `json:"host_label,omitempty"`
+}
+
+type syncRunPayload struct {
+	RunID            string   `json:"run_id"`
+	ProjectID        string   `json:"project_id"`
+	Status           string   `json:"status,omitempty"`
+	Title            string   `json:"title,omitempty"`
+	Summary          string   `json:"summary,omitempty"`
+	ExecutorProfile  string   `json:"executor_profile,omitempty"`
+	Mode             string   `json:"mode,omitempty"`
+	Scope            string   `json:"scope"`
+	ReportStatus     string   `json:"report_status"`
+	ExecutionMode    string   `json:"execution_mode,omitempty"`
+	SafeArtifactRefs []string `json:"safe_artifact_refs,omitempty"`
+}
+
 func (s *Server) requireStore() *apiError {
 	if s.store == nil {
 		return &apiError{Status: http.StatusServiceUnavailable, Code: "gateway_store_not_configured", Message: "Gateway persistent store is not configured"}
@@ -567,6 +598,172 @@ func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": record})
+}
+
+func (s *Server) handleSyncRuns(w http.ResponseWriter, r *http.Request) {
+	if apiErr := s.requireStore(); apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:write"})
+	if !ok {
+		return
+	}
+	var req syncRunsRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "malformed_request", err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Mode) != "" && strings.TrimSpace(req.Mode) != "metadata_only" {
+		writeAPIError(w, http.StatusBadRequest, "unsupported_sync_mode", "only metadata_only sync is supported")
+		return
+	}
+	projectNames := map[string]string{}
+	projectProfiles := map[string]string{}
+	projectMachines := map[string]syncProjectPayload{}
+	for _, project := range req.Projects {
+		projectID := safeSyncField(project.ID, 120)
+		if projectID == "" {
+			continue
+		}
+		projectNames[projectID] = safeSyncField(project.Name, 240)
+		projectProfiles[projectID] = firstNonEmpty(safeSyncField(project.Profile, 120), safeSyncField(project.DefaultAdapter, 120))
+		projectMachines[projectID] = syncProjectPayload{
+			ID:        projectID,
+			Name:      projectNames[projectID],
+			Profile:   projectProfiles[projectID],
+			MachineID: safeSyncField(project.MachineID, 120),
+			HostLabel: safeSyncField(project.HostLabel, 120),
+		}
+	}
+
+	runHistoryIDs := []string{}
+	now := time.Now().UTC()
+	for _, run := range req.Runs {
+		record := syncedRunRecordFromPayload(principal, run, projectNames, projectProfiles, projectMachines, now)
+		if record.ProjectID == "" || record.RunID == "" {
+			continue
+		}
+		saved, err := s.store.UpsertRunRecord(r.Context(), record)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "sync_record_invalid", err.Error())
+			return
+		}
+		runHistoryIDs = append(runHistoryIDs, saved.ID)
+		metadata := runAuditMetadata(saved)
+		metadata["scope"] = "synced"
+		s.recordGatewayAuditWithMetadata(r.Context(), principal, "sync.run_published", "Synced metadata-only run "+saved.RunID+" for project "+saved.ProjectID, metadata)
+	}
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, "sync.publish", "Published metadata-only sync to Gateway", map[string]any{
+		"scope":         "synced",
+		"mode":          "metadata_only",
+		"project_count": len(projectNames),
+		"run_count":     len(runHistoryIDs),
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":              true,
+		"mode":            "metadata_only",
+		"scope":           "synced",
+		"synced_runs":     len(runHistoryIDs),
+		"run_history_ids": runHistoryIDs,
+	})
+}
+
+func syncedRunRecordFromPayload(principal *authPrincipal, run syncRunPayload, projectNames, projectProfiles map[string]string, projectMachines map[string]syncProjectPayload, now time.Time) RunRecord {
+	projectID := safeSyncField(run.ProjectID, 120)
+	runID := safeSyncField(run.RunID, 160)
+	project := projectMachines[projectID]
+	status := firstNonEmpty(safeSyncField(run.Status, 80), "synced")
+	reportStatus := firstNonEmpty(safeSyncField(run.ReportStatus, 80), "synced")
+	mode := normalizeRunMode(safeSyncField(run.Mode, 80))
+	executor := firstNonEmpty(safeSyncField(run.ExecutorProfile, 120), projectProfiles[projectID])
+	summary := safeSyncField(run.Summary, 1200)
+	artifactRefs := safeSyncArtifactRefs(run.SafeArtifactRefs)
+	resultDetails := summary
+	if len(artifactRefs) > 0 {
+		artifactSummary := "Artifacts: " + strings.Join(artifactRefs, ", ")
+		if resultDetails == "" {
+			resultDetails = artifactSummary
+		} else {
+			resultDetails += "\n" + artifactSummary
+		}
+	}
+	report := map[string]any{
+		"source":             "codencer sync publish",
+		"mode":               "metadata_only",
+		"scope":              "synced",
+		"run_id":             runID,
+		"project_id":         projectID,
+		"status":             status,
+		"report_status":      reportStatus,
+		"summary":            summary,
+		"execution_mode":     safeSyncField(run.ExecutionMode, 80),
+		"safe_artifact_refs": artifactRefs,
+	}
+	switch strings.TrimSpace(run.ExecutionMode) {
+	case "simulation":
+		report["evidence"] = map[string]any{"result": map[string]any{"summary": summary, "is_simulation": true}}
+	case "real":
+		report["evidence"] = map[string]any{"result": map[string]any{"summary": summary, "is_simulation": false}}
+	}
+	completedAt := time.Time{}
+	switch strings.TrimSpace(status) {
+	case "completed", "failed", "blocked", "cancelled", "canceled":
+		completedAt = now
+	}
+	record := RunRecord{
+		WorkspaceID:     principal.WorkspaceID,
+		ActorUserID:     principal.UserID,
+		ProjectID:       projectID,
+		ProjectName:     projectNames[projectID],
+		RunID:           runID,
+		Title:           firstNonEmpty(safeSyncField(run.Title, 240), "Synced run "+runID),
+		Mode:            mode,
+		Scope:           "synced",
+		ExecutorProfile: executor,
+		Status:          status,
+		ReportStatus:    reportStatus,
+		ResultSummary:   summary,
+		ResultDetails:   resultDetails,
+		MachineID:       safeSyncField(project.MachineID, 120),
+		HostLabel:       safeSyncField(project.HostLabel, 120),
+		StartedAt:       now,
+		CompletedAt:     completedAt,
+		Report:          report,
+	}
+	return record
+}
+
+func safeSyncField(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return safeExcerpt(value, limit)
+}
+
+func safeSyncArtifactRefs(values []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = safeSyncField(value, 160)
+		if value == "" || strings.Contains(value, "://") || strings.ContainsAny(value, `/\`) || strings.Contains(value, "<redacted-local-path>") {
+			continue
+		}
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (s *Server) handleProjectByID(w http.ResponseWriter, r *http.Request) {

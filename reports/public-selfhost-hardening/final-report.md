@@ -13,7 +13,7 @@ Branch: `next-phase`
 - Hardened the public self-host RC verifier so it emits only `GO` or `NO-GO`, rejects real-executor simulation env values, runs configured real executor gates by adapter, and fails the release gate when required real proofs are missing.
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
-- Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and publish returns structured confirmation/unsupported blockers until Gateway ingest exists.
+- Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
@@ -70,8 +70,8 @@ Branch: `next-phase`
 - Claude Code real executor proof is not configured or proven in the public self-host RC gate.
 - Antigravity real executor proof is not configured or proven in the public self-host RC gate.
 - `codencer run resume` is exposed as a structured blocker because the daemon does not yet expose a resume HTTP route.
-- Gateway metadata ingest for explicit sync/publish remains unimplemented. The CLI now provides safe metadata-only preview/status and structured publish blockers; no local reports, logs, artifacts, or paths are uploaded.
-- Run history/audit synced-scope transport remains incomplete against the full public self-host hardening spec. Gateway-observed pagination, filters, and grouped lifecycle summaries are implemented.
+- Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
+- Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial outside the existing gate/blocker primitives.
 - Full cross-surface redaction proof remains incomplete. Default local human CLI output and sync preview are covered, but explicit JSON/debug/path commands still require final policy review against the release gate.
 

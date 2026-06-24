@@ -496,25 +496,54 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("report endpoint returned run_history_id=%v want %s: %s", report["run_history_id"], runHistoryID, reportBody)
 	}
 	assertNoGatewayMCPLeak(t, reportBody)
-	_, err = server.store.UpsertRunRecord(context.Background(), RunRecord{
-		ID:              "hist-synced-extra",
-		WorkspaceID:     token.WorkspaceID,
-		ActorUserID:     token.UserID,
-		ProjectID:       "codencer",
-		ProjectName:     "Codencer",
-		RunID:           "run-synced-extra",
-		Title:           "Synced metadata-only run",
-		Goal:            "Metadata-only sync preview.",
-		Scope:           "synced",
-		ExecutorProfile: "codex-workspace",
-		Status:          "completed",
-		ReportStatus:    "completed",
-		ResultSummary:   "Synced safe summary",
-		CreatedAt:       time.Now().Add(-time.Minute).UTC(),
-		UpdatedAt:       time.Now().Add(-time.Minute).UTC(),
+	syncResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/sync/runs", token.AccessToken, map[string]any{
+		"mode":  "metadata_only",
+		"scope": "local",
+		"projects": []map[string]any{{
+			"id":         "codencer",
+			"name":       "Codencer",
+			"profile":    "codex-workspace",
+			"machine_id": "mach-sync",
+			"host_label": "sync-host",
+		}},
+		"runs": []map[string]any{{
+			"run_id":             "run-synced-extra",
+			"project_id":         "codencer",
+			"title":              "Synced metadata-only run",
+			"status":             "completed",
+			"report_status":      "local",
+			"summary":            "Synced from /Users/example/private token=secret-token",
+			"executor_profile":   "codex-workspace",
+			"mode":               "task",
+			"scope":              "local",
+			"execution_mode":     "real",
+			"safe_artifact_refs": []string{"stdout.log", "/Users/example/private/report.json", "http://127.0.0.1:18085/raw.log"},
+		}},
 	})
-	if err != nil {
-		t.Fatalf("seed synced run record: %v", err)
+	syncResultBody := mustJSON(t, syncResult)
+	if !strings.Contains(syncResultBody, `"scope":"synced"`) || !strings.Contains(syncResultBody, `"synced_runs":1`) {
+		t.Fatalf("sync ingest response wrong: %s", syncResultBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, syncResultBody)
+	syncedIDs, _ := syncResult["run_history_ids"].([]any)
+	if len(syncedIDs) != 1 {
+		t.Fatalf("sync ingest missing run history id: %s", syncResultBody)
+	}
+	syncedRunHistoryID, _ := syncedIDs[0].(string)
+	if syncedRunHistoryID == "" {
+		t.Fatalf("sync ingest returned blank run history id: %s", syncResultBody)
+	}
+	rawSync := apiRaw(t, httpServer.URL+"/api/gateway/v1/sync/runs", token.AccessToken, map[string]any{
+		"mode":          "metadata_only",
+		"scope":         "local",
+		"projects":      []map[string]any{},
+		"runs":          []map[string]any{},
+		"raw_artifacts": []string{"must-not-upload"},
+	})
+	rawSyncBody := readBody(t, rawSync)
+	rawSync.Body.Close()
+	if rawSync.StatusCode != http.StatusBadRequest || !strings.Contains(rawSyncBody, "unknown field") {
+		t.Fatalf("sync ingest should reject unknown raw artifact fields, status=%d body=%s", rawSync.StatusCode, rawSyncBody)
 	}
 	runs := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs", token.AccessToken)
 	runsBody := mustJSON(t, runs)
@@ -540,7 +569,7 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("run history pagination did not expose next page: %s", pagedRunsBody)
 	}
 	syncedRuns := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs?scope=synced", token.AccessToken)
-	if syncedRunsBody := mustJSON(t, syncedRuns); !strings.Contains(syncedRunsBody, `"id":"hist-synced-extra"`) || strings.Contains(syncedRunsBody, `"id":"`+runHistoryID+`"`) {
+	if syncedRunsBody := mustJSON(t, syncedRuns); !strings.Contains(syncedRunsBody, `"id":"`+syncedRunHistoryID+`"`) || !strings.Contains(syncedRunsBody, `"run_id":"run-synced-extra"`) || !strings.Contains(syncedRunsBody, `redacted-local-path`) || strings.Contains(syncedRunsBody, `"id":"`+runHistoryID+`"`) || strings.Contains(syncedRunsBody, `/Users/example`) || strings.Contains(syncedRunsBody, `secret-token`) || strings.Contains(syncedRunsBody, `127.0.0.1:18085`) {
 		t.Fatalf("run history scope filter returned wrong runs: %s", syncedRunsBody)
 	}
 	scopedRuns := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs?scope=gateway_submitted", token.AccessToken)
