@@ -3,8 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPDIR_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/codencer-public-selfhost.XXXXXX")"
+DAEMON_PID=""
 
 cleanup() {
+  if [[ -n "${DAEMON_PID:-}" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
+    kill "$DAEMON_PID" 2>/dev/null || true
+    wait "$DAEMON_PID" 2>/dev/null || true
+  fi
   rm -rf "$TMPDIR_ROOT"
 }
 trap cleanup EXIT
@@ -107,6 +112,111 @@ assert_no_default_output_leak() {
   fi
 }
 
+wait_for_daemon() {
+  local daemon_url="$1"
+  local daemon_log="$2"
+  for _ in $(seq 1 150); do
+    if curl -fsS "$daemon_url/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ -n "${DAEMON_PID:-}" ]] && ! kill -0 "$DAEMON_PID" 2>/dev/null; then
+      echo "daemon exited early; log follows" >&2
+      cat "$daemon_log" >&2 || true
+      return 1
+    fi
+    sleep 0.1
+  done
+  echo "daemon did not become healthy at $daemon_url; log follows" >&2
+  cat "$daemon_log" >&2 || true
+  return 1
+}
+
+verify_default_run_output_redaction() {
+  local exec_repo="$TMPDIR_ROOT/local-exec-repo"
+  local exec_home="$TMPDIR_ROOT/local-exec-home"
+  local state="$TMPDIR_ROOT/local-exec-state"
+  local daemon_port daemon_url daemon_config daemon_log run_id events_run_id
+  mkdir -p "$exec_repo" "$exec_home" "$state"
+
+  git -C "$exec_repo" init -q
+  printf '# Public self-host local run redaction probe\n' > "$exec_repo/README.md"
+  git -C "$exec_repo" add README.md
+  git -C "$exec_repo" -c user.name=Codencer -c user.email=codencer@example.invalid commit -q -m "initial"
+
+  daemon_port="$(free_port)"
+  daemon_url="http://127.0.0.1:$daemon_port"
+  daemon_config="$TMPDIR_ROOT/local-exec-daemon.json"
+  daemon_log="$TMPDIR_ROOT/local-exec-daemon.log"
+  cat > "$daemon_config" <<JSON
+{
+  "log_level": "error",
+  "db_path": "$state/codencer.db",
+  "artifact_root": "$state/artifacts",
+  "workspace_root": "$state/workspace",
+  "repo_root": "$exec_repo",
+  "host": "127.0.0.1",
+  "port": $daemon_port
+}
+JSON
+
+  env \
+    PORT="$daemon_port" \
+    HOST="127.0.0.1" \
+    DB_PATH="$state/codencer.db" \
+    ARTIFACT_ROOT="$state/artifacts" \
+    WORKSPACE_ROOT="$state/workspace" \
+    LOG_LEVEL="error" \
+    REPO_ROOT="$exec_repo" \
+    "$ROOT/bin/orchestratord" --config "$daemon_config" --repo-root "$exec_repo" > "$daemon_log" 2>&1 &
+  DAEMON_PID="$!"
+  wait_for_daemon "$daemon_url" "$daemon_log"
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" init --json >/dev/null
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" project init \
+    --id codencer \
+    --repo "$exec_repo" \
+    --adapter fake \
+    --profile fake-success \
+    --daemon-url "$daemon_url" \
+    --json >/dev/null
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run start --project codencer --json > "$TMPDIR_ROOT/run-start.json"
+  events_run_id="$(json_get "$TMPDIR_ROOT/run-start.json" "run.id")"
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run events "$events_run_id" --project codencer > "$TMPDIR_ROOT/run-events-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-events-human.txt" "codencer run events human output"
+  grep -q 'event:' "$TMPDIR_ROOT/run-events-human.txt" || { cat "$TMPDIR_ROOT/run-events-human.txt" >&2; exit 1; }
+
+  run_id="public-redaction-run"
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" submit \
+    --project codencer \
+    --run "$run_id" \
+    --goal "fake success submit" \
+    --profile fake-success \
+    --wait > "$TMPDIR_ROOT/submit-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/submit-human.txt" "codencer submit human output"
+  grep -q 'summary:' "$TMPDIR_ROOT/submit-human.txt" || { cat "$TMPDIR_ROOT/submit-human.txt" >&2; exit 1; }
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run report "$run_id" --project codencer > "$TMPDIR_ROOT/run-report-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-report-human.txt" "codencer run report human output"
+  grep -q 'summary:' "$TMPDIR_ROOT/run-report-human.txt" || { cat "$TMPDIR_ROOT/run-report-human.txt" >&2; exit 1; }
+
+  set +e
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run resume "$run_id" --project codencer > "$TMPDIR_ROOT/run-resume-human.txt"
+  local resume_code=$?
+  set -e
+  if [[ "$resume_code" -eq 0 ]]; then
+    echo "codencer run resume unexpectedly succeeded in capability-blocker proof" >&2
+    cat "$TMPDIR_ROOT/run-resume-human.txt" >&2
+    exit 1
+  fi
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-resume-human.txt" "codencer run resume human output"
+  grep -q 'blocker: unsupported_operation' "$TMPDIR_ROOT/run-resume-human.txt" || { cat "$TMPDIR_ROOT/run-resume-human.txt" >&2; exit 1; }
+
+  kill "$DAEMON_PID" 2>/dev/null || true
+  wait "$DAEMON_PID" 2>/dev/null || true
+  DAEMON_PID=""
+}
+
 home="$TMPDIR_ROOT/home"
 repo="$TMPDIR_ROOT/repo"
 gateway_port="$(free_port)"
@@ -146,6 +256,7 @@ assert_no_default_output_leak "$TMPDIR_ROOT/project-scan-human.txt" "codencer pr
 assert_no_default_output_leak "$TMPDIR_ROOT/executor-list-human.txt" "codencer executor list human output"
 "$ROOT/bin/codencer" sync preview > "$TMPDIR_ROOT/sync-preview-human.txt"
 assert_no_default_output_leak "$TMPDIR_ROOT/sync-preview-human.txt" "codencer sync preview human output"
+verify_default_run_output_redaction
 
 "$ROOT/bin/codencer" config profiles list --json > "$TMPDIR_ROOT/profiles.json"
 grep -q '"name": "self-host"' "$TMPDIR_ROOT/profiles.json" || { cat "$TMPDIR_ROOT/profiles.json" >&2; exit 1; }
