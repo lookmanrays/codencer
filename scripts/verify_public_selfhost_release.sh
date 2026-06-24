@@ -200,6 +200,32 @@ JSON
   assert_no_default_output_leak "$TMPDIR_ROOT/run-report-human.txt" "codencer run report human output"
   grep -q 'summary:' "$TMPDIR_ROOT/run-report-human.txt" || { cat "$TMPDIR_ROOT/run-report-human.txt" >&2; exit 1; }
 
+  local interrupt_run_id="public-human-interrupt-run"
+  set +e
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" submit \
+    --project codencer \
+    --run "$interrupt_run_id" \
+    --goal "fake blocker interrupt" \
+    --profile fake-blocker \
+    --wait > "$TMPDIR_ROOT/submit-human-interrupt.txt"
+  local interrupt_code=$?
+  set -e
+  if [[ "$interrupt_code" -eq 0 ]]; then
+    echo "codencer submit unexpectedly succeeded in human-interrupt proof" >&2
+    cat "$TMPDIR_ROOT/submit-human-interrupt.txt" >&2
+    exit 1
+  fi
+  assert_no_default_output_leak "$TMPDIR_ROOT/submit-human-interrupt.txt" "codencer submit human interrupt output"
+  grep -q 'human_interrupt: clarifying_question_required status=waiting_for_human action=answer_question' "$TMPDIR_ROOT/submit-human-interrupt.txt" || { cat "$TMPDIR_ROOT/submit-human-interrupt.txt" >&2; exit 1; }
+  grep -q 'prompt: Fake adapter requires planner attention.' "$TMPDIR_ROOT/submit-human-interrupt.txt" || { cat "$TMPDIR_ROOT/submit-human-interrupt.txt" >&2; exit 1; }
+  grep -q 'allowed_responses: answer,cancel' "$TMPDIR_ROOT/submit-human-interrupt.txt" || { cat "$TMPDIR_ROOT/submit-human-interrupt.txt" >&2; exit 1; }
+  grep -q 'blocker: question' "$TMPDIR_ROOT/submit-human-interrupt.txt" || { cat "$TMPDIR_ROOT/submit-human-interrupt.txt" >&2; exit 1; }
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run report "$interrupt_run_id" --project codencer > "$TMPDIR_ROOT/run-report-human-interrupt.txt" || true
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-report-human-interrupt.txt" "codencer run report human interrupt output"
+  grep -q 'human_interrupt: clarifying_question_required status=waiting_for_human action=answer_question' "$TMPDIR_ROOT/run-report-human-interrupt.txt" || { cat "$TMPDIR_ROOT/run-report-human-interrupt.txt" >&2; exit 1; }
+  grep -q 'allowed_responses: answer,cancel' "$TMPDIR_ROOT/run-report-human-interrupt.txt" || { cat "$TMPDIR_ROOT/run-report-human-interrupt.txt" >&2; exit 1; }
+
   set +e
   CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run resume "$run_id" --project codencer > "$TMPDIR_ROOT/run-resume-human.txt"
   local resume_code=$?
