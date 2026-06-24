@@ -191,6 +191,90 @@ reject_real_executor_simulation_env() {
   fi
 }
 
+required_real_executors() {
+  python3 - <<'PY'
+import os
+raw=os.environ.get("CODENCER_E2E_REQUIRED_REAL_EXECUTORS", "codex,claude,antigravity")
+items=[item.strip() for item in raw.split(",") if item.strip()]
+for item in items:
+  print(item)
+PY
+}
+
+configured_real_executors() {
+  python3 - <<'PY'
+import os
+raw=os.environ.get("CODENCER_E2E_REAL_EXECUTORS", "").strip()
+if not raw:
+  raw=os.environ.get("CODENCER_E2E_REAL_EXECUTOR", "").strip()
+items=[item.strip() for item in raw.split(",") if item.strip()]
+for item in items:
+  print(item)
+PY
+}
+
+executor_profile_for() {
+  local adapter="$1"
+  local adapter_key
+  adapter_key="$(printf '%s' "$adapter" | tr '[:lower:]-' '[:upper:]_')"
+  local specific="CODENCER_E2E_${adapter_key}_PROFILE"
+  local value="${!specific:-${CODENCER_E2E_REAL_EXECUTOR_PROFILE:-}}"
+  if [ -n "$value" ]; then
+    echo "$value"
+    return
+  fi
+  case "$adapter" in
+    codex) echo "codex-workspace" ;;
+    claude) echo "claude-default" ;;
+    antigravity) echo "antigravity-default" ;;
+    *) echo "$adapter" ;;
+  esac
+}
+
+executor_command_for() {
+  local adapter="$1"
+  local adapter_key
+  adapter_key="$(printf '%s' "$adapter" | tr '[:lower:]-' '[:upper:]_')"
+  local specific="CODENCER_E2E_${adapter_key}_COMMAND"
+  local value="${!specific:-}"
+  if [ -n "$value" ]; then
+    echo "$value"
+    return
+  fi
+  case "$adapter" in
+    codex) echo "${CODEX_BINARY:-${CODENCER_E2E_REAL_EXECUTOR_COMMAND:-codex}}" ;;
+    claude) echo "${CLAUDE_BINARY:-${CODENCER_E2E_REAL_EXECUTOR_COMMAND:-claude}}" ;;
+    antigravity) echo "${CODENCER_E2E_REAL_EXECUTOR_COMMAND:-}" ;;
+    *) echo "${CODENCER_E2E_REAL_EXECUTOR_COMMAND:-$adapter}" ;;
+  esac
+}
+
+assert_required_real_executor_coverage() {
+  local proven="$1"
+  local log="$REPORT_DIR/required_real_executor_proofs.log"
+  local missing=0
+  {
+    echo "Required real executor proofs:"
+    echo "proven=${proven:-<none>}"
+    while IFS= read -r required; do
+      [ -n "$required" ] || continue
+      if printf '%s\n' "$proven" | tr ',' '\n' | grep -qx "$required"; then
+        echo "$required=passed"
+      else
+        echo "$required=missing"
+        missing=1
+      fi
+    done < <(required_real_executors)
+  } > "$log"
+  if [ "$missing" -ne 0 ]; then
+    cat "$log" >&2
+    write_gate required_real_executor_proofs "failed" "missing required real executor proof" "$log"
+    FAILURES=1
+    return 1
+  fi
+  write_gate required_real_executor_proofs "passed" "all required real executor proofs passed" "$log"
+}
+
 run_gate() {
   local name="$1"
   shift
@@ -372,42 +456,65 @@ if [ "$FAILURES" -eq 0 ]; then
 fi
 
 real_status="skipped"
-real_reason="set CODENCER_E2E_REAL_EXECUTOR=codex and CODENCER_E2E_REAL_EXECUTOR_COMMAND=codex to run the real executor gate"
-if [ "$FAILURES" -eq 0 ] && [ -n "${CODENCER_E2E_REAL_EXECUTOR:-}" ]; then
-  real_adapter="$CODENCER_E2E_REAL_EXECUTOR"
-  real_command="${CODENCER_E2E_REAL_EXECUTOR_COMMAND:-$real_adapter}"
-  case "$real_adapter" in
-    codex) real_profile="${CODENCER_E2E_REAL_EXECUTOR_PROFILE:-codex-workspace}" ;;
-    claude) real_profile="${CODENCER_E2E_REAL_EXECUTOR_PROFILE:-claude-default}" ;;
-    *) real_profile="${CODENCER_E2E_REAL_EXECUTOR_PROFILE:-$real_adapter}" ;;
-  esac
-  if command -v "$real_command" >/dev/null 2>&1; then
-    real_status="configured"
-    real_env_log="$REPORT_DIR/real_executor_env.log"
-    if ! reject_real_executor_simulation_env "$real_adapter" "$real_env_log"; then
-      real_status="failed"
-      real_reason="real executor gate refused simulation environment values"
-      write_gate real_executor_e2e "failed" "$real_reason" "$real_env_log"
-      FAILURES=1
-    elif [ "$real_adapter" = "codex" ]; then
-      run_gate real_executor_e2e env ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CODEX_BINARY="$real_command" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
-    elif [ "$real_adapter" = "claude" ]; then
-      run_gate real_executor_e2e env ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 CLAUDE_BINARY="$real_command" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
-    else
-      run_gate real_executor_e2e env ALL_ADAPTERS_SIMULATION_MODE=0 CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs" || true
-    fi
-    if [ "$FAILURES" -eq 0 ]; then
-      real_status="passed"
-      real_reason="real executor $real_adapter passed through Gateway/Relay/Connector/daemon"
-    fi
+real_reason="set CODENCER_E2E_REAL_EXECUTORS=codex,claude,antigravity and per-executor commands to run real executor gates"
+proven_real_executor=""
+if [ "$FAILURES" -eq 0 ]; then
+  configured_file="$TMPDIR_ROOT/configured-real-executors.txt"
+  configured_real_executors > "$configured_file"
+  if [ ! -s "$configured_file" ]; then
+    write_gate real_executor_e2e "failed" "$real_reason" ""
+    FAILURES=1
   else
-    real_status="unavailable"
-    real_reason="executor command $real_command was not found on PATH"
-    write_gate real_executor_e2e "skipped" "$real_reason" ""
+    real_status="configured"
+    while IFS= read -r real_adapter; do
+      [ -n "$real_adapter" ] || continue
+      real_profile="$(executor_profile_for "$real_adapter")"
+      real_command="$(executor_command_for "$real_adapter")"
+      gate_name="real_executor_e2e_${real_adapter//-/_}"
+      real_env_log="$REPORT_DIR/${gate_name}_env.log"
+      if [ -n "$real_command" ] && ! command -v "$real_command" >/dev/null 2>&1; then
+        real_status="failed"
+        real_reason="executor command $real_command was not found on PATH"
+        write_gate "$gate_name" "failed" "$real_reason" ""
+        FAILURES=1
+        continue
+      fi
+      if ! reject_real_executor_simulation_env "$real_adapter" "$real_env_log"; then
+        real_status="failed"
+        real_reason="real executor gate refused simulation environment values"
+        write_gate "$gate_name" "failed" "$real_reason" "$real_env_log"
+        FAILURES=1
+        continue
+      fi
+      gate_passed=0
+      if [ "$real_adapter" = "codex" ]; then
+        if run_gate "$gate_name" env ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CODEX_BINARY="$real_command" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs"; then
+          gate_passed=1
+        fi
+      elif [ "$real_adapter" = "claude" ]; then
+        if run_gate "$gate_name" env ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 CLAUDE_BINARY="$real_command" CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs"; then
+          gate_passed=1
+        fi
+      else
+        if run_gate "$gate_name" env ALL_ADAPTERS_SIMULATION_MODE=0 CODENCER_E2E_REAL_EXECUTOR_COMMAND="$real_command" CODENCER_E2E_BIN_DIR="$BIN_DIR" CODENCER_E2E_EXECUTOR_ADAPTER="$real_adapter" CODENCER_E2E_EXECUTOR_PROFILE="$real_profile" bash -c "cd '$ROOT/web/gateway-console' && node tests/live/verify-live.mjs"; then
+          gate_passed=1
+        fi
+      fi
+      if [ "$gate_passed" -eq 1 ]; then
+        if [ -n "$proven_real_executor" ]; then
+          proven_real_executor="$proven_real_executor,$real_adapter"
+        else
+          proven_real_executor="$real_adapter"
+        fi
+      fi
+    done < "$configured_file"
+    if [ -n "$proven_real_executor" ]; then
+      real_status="passed"
+      real_reason="real executor proofs passed for $proven_real_executor"
+    fi
   fi
-else
-  write_gate real_executor_e2e "skipped" "$real_reason" ""
 fi
+assert_required_real_executor_coverage "$proven_real_executor" || true
 
 if [ "$FAILURES" -ne 0 ]; then
   write_summary "NO-GO" "one or more deterministic release-candidate gates failed"
@@ -420,7 +527,8 @@ if [ "$real_status" = "passed" ]; then
   write_summary "GO" "$real_reason"
   echo "GO for Public Self-host RC"
 else
-  write_summary "PARTIAL" "$real_reason"
-  echo "PARTIAL for Public Self-host RC"
+  write_summary "NO-GO" "$real_reason"
+  echo "NO-GO for Public Self-host RC"
+  exit 1
 fi
 echo "Report: $REPORT_DIR/summary.md"

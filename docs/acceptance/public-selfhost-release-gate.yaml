@@ -1,0 +1,99 @@
+version: codencer.io/v1alpha1
+kind: AcceptanceGate
+metadata:
+  id: public-selfhost-release-gate
+  name: Public self-host release gate
+  verdict_policy:
+    allowed: ["GO", "NO-GO"]
+    forbidden: ["PARTIAL", "mostly GO", "probably", "good enough", "accepted with caveats"]
+status:
+  current_verdict: NO-GO
+  reason: Required public self-host hardening gates are not fully proven.
+gates:
+  - id: specs_present
+    required: true
+    evidence:
+      - docs/specs/00-public-selfhost-release-gate.md
+      - docs/specs/01-local-first-source-of-truth.md
+      - docs/specs/02-execution-lifecycle.md
+      - docs/specs/03-human-interrupts-and-permissions.md
+      - docs/specs/04-cli-commands-and-control-plane.md
+      - docs/specs/05-executor-adapters-and-client-proofs.md
+      - docs/specs/06-run-history-audit-and-console.md
+      - docs/specs/07-public-vs-cloud-boundary.md
+      - docs/specs/99-research-anchors.md
+  - id: implementation_audit_present
+    required: true
+    evidence:
+      - reports/public-selfhost-hardening/implementation-audit.md
+  - id: local_first_cli
+    required: true
+    checks:
+      - codencer submit defaults to local execution
+      - local CLI runs are not uploaded to Gateway by default
+      - raw logs and artifacts are not published by default
+  - id: async_lifecycle
+    required: true
+    checks:
+      - submit returns a run identifier
+      - status is queryable
+      - events are queryable
+      - report is queryable
+      - cancel is supported or returns structured capability blocker
+      - resume is supported or returns structured capability blocker
+  - id: human_interrupt_lifecycle
+    required: true
+    checks:
+      - planning approval
+      - clarifying questions
+      - permission requests
+      - OS/system human-action-required
+      - resume/cancel
+      - audit
+  - id: real_executor_proofs
+    required: true
+    checks:
+      - Codex real executor proof
+      - Claude Code real executor proof
+      - Antigravity real executor proof
+      - fake and simulation never satisfy GO
+  - id: run_history_audit_console
+    required: true
+    checks:
+      - compact run history
+      - run detail
+      - grouped audit
+      - pagination
+      - filters
+      - local/synced/Gateway-submitted scopes
+  - id: redaction
+    required: true
+    checks:
+      - CLI output
+      - MCP output
+      - Gateway API output
+      - Gateway Console rendered HTML
+  - id: public_private_boundary
+    required: true
+    checks:
+      - public defaults are self-host/local
+      - private managed service code is absent
+      - hosted endpoint claims are future/private-only unless explicitly verified
+  - id: verifier_contract
+    required: true
+    commands:
+      - gofmt -w ...
+      - go test ./...
+      - make verify-gateway
+      - make verify-gateway-console
+      - make verify-gateway-console-live
+      - make verify-public-selfhost-rc
+      - make verify-public-release
+      - make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host
+      - git diff --check
+      - git diff --cached --check
+final_report:
+  path: reports/public-selfhost-hardening/final-report.md
+  required_final_line_one_of:
+    - "Verdict: GO"
+    - "Verdict: NO-GO"

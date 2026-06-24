@@ -1821,7 +1821,7 @@ func runProjectRemove(args []string, stdout io.Writer) error {
 
 func runRun(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer run <start|list|get|status> [flags]")
+		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer run <start|list|get|status|events|report|cancel|resume> [flags]")
 	}
 	service := localexec.NewService()
 	switch args[0] {
@@ -1889,6 +1889,74 @@ func runRun(args []string, stdout io.Writer) error {
 				ConfigPath: parsed.value("config"),
 			},
 			RunID: runID,
+		})
+		return finishExecutionReport(stdout, parsed.bool("json"), report, err)
+	case "events":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"project", "repo", "config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer run events <id> [--project <id>] [--json]")
+		}
+		report, err := service.Events(contextBackground(), localexec.RunOptions{
+			BaseOptions: localexec.BaseOptions{
+				ProjectID:  parsed.value("project"),
+				RepoRoot:   parsed.value("repo"),
+				ConfigPath: parsed.value("config"),
+			},
+			RunID: parsed.positionals[0],
+		})
+		return finishExecutionReport(stdout, parsed.bool("json"), report, err)
+	case "report":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"project", "repo", "config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer run report <id> [--project <id>] [--json]")
+		}
+		report, err := service.GetRunPlanReport(contextBackground(), localexec.RunPlanReportOptions{
+			BaseOptions: localexec.BaseOptions{
+				ProjectID:  parsed.value("project"),
+				RepoRoot:   parsed.value("repo"),
+				ConfigPath: parsed.value("config"),
+			},
+			RunID: parsed.positionals[0],
+		})
+		return finishRunPlanReport(stdout, parsed.bool("json"), report, err)
+	case "cancel":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"project", "repo", "config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer run cancel <id> [--project <id>] [--json]")
+		}
+		report, err := service.CancelRun(contextBackground(), localexec.RunOptions{
+			BaseOptions: localexec.BaseOptions{
+				ProjectID:  parsed.value("project"),
+				RepoRoot:   parsed.value("repo"),
+				ConfigPath: parsed.value("config"),
+			},
+			RunID: parsed.positionals[0],
+		})
+		return finishExecutionReport(stdout, parsed.bool("json"), report, err)
+	case "resume":
+		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"project", "repo", "config"})
+		if err != nil {
+			return err
+		}
+		if len(parsed.positionals) != 1 {
+			return usageError(parsed.bool("json"), stdout, "usage: codencer run resume <id> [--project <id>] [--json]")
+		}
+		report, err := service.ResumeRun(contextBackground(), localexec.RunOptions{
+			BaseOptions: localexec.BaseOptions{
+				ProjectID:  parsed.value("project"),
+				RepoRoot:   parsed.value("repo"),
+				ConfigPath: parsed.value("config"),
+			},
+			RunID: parsed.positionals[0],
 		})
 		return finishExecutionReport(stdout, parsed.bool("json"), report, err)
 	default:
@@ -3019,6 +3087,8 @@ func printCommandHelp(w io.Writer, path []string) {
 		printHelpBlock(w, "codencer gateway <relay|status|config> [flags]", "relay, status, config show", "--json, --config <path>, --gateway <url>", "codencer gateway status --json")
 	case "gateway relay":
 		printHelpBlock(w, "codencer gateway relay <add|list|status|remove> [flags]", "add, list, status, remove", "--json, --config <path>, --gateway <url>, --id <id>, --url <relay-url>, --token-env <env>", "codencer gateway relay add --id personal --url http://127.0.0.1:8090 --token-env CODENCER_RELAY_TOKEN --json")
+	case "run":
+		printHelpBlock(w, "codencer run <start|list|get|status|events|report|cancel|resume> [flags]", "start, list, get, status, events, report, cancel, resume", "--json, --project <id>, --repo <path>, --config <path>", "codencer run events run-123 --project codencer --json")
 	case "executor":
 		printHelpBlock(w, "codencer executor <list|scan|test|default> [flags]", "list, scan, test, default", "--json, --repo <path>, --config <path>", "codencer executor default codex-workspace --repo . --json")
 	case "login":
@@ -3256,7 +3326,7 @@ func finishLocalexecError(stdout io.Writer, asJSON bool, err error) error {
 func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 	fmt.Fprintf(w, "status: %s\n", report.Status)
 	if report.Project != nil {
-		fmt.Fprintf(w, "project: %s %s\n", report.Project.ID, report.Project.RepoRoot)
+		fmt.Fprintf(w, "project: %s profile=%s shared_to_relay=%t\n", report.Project.ID, report.Project.Profile, report.Project.SharedToRelay)
 	}
 	if report.Run != nil {
 		fmt.Fprintf(w, "run: %s %s\n", report.Run.ID, report.Run.State)
@@ -3266,6 +3336,16 @@ func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 	}
 	for _, step := range report.Steps {
 		fmt.Fprintf(w, "step: %s %s %s\n", step.ID, step.Adapter, step.State)
+	}
+	for _, event := range report.Events {
+		if event.StepID != "" {
+			fmt.Fprintf(w, "event: %s run=%s step=%s state=%s\n", event.Type, event.RunID, event.StepID, event.State)
+		} else {
+			fmt.Fprintf(w, "event: %s run=%s state=%s\n", event.Type, event.RunID, event.State)
+		}
+		if event.Summary != "" {
+			fmt.Fprintf(w, "summary: %s\n", event.Summary)
+		}
 	}
 	if report.Task != nil {
 		fmt.Fprintf(w, "task: %s %s step=%s profile=%s\n", report.Task.TaskID, report.Task.Status, report.Task.StepID, report.Task.Profile)
@@ -3296,7 +3376,7 @@ func printRunPlanReport(w io.Writer, report localexec.RunPlanReport) {
 		fmt.Fprintf(w, "blocker: %s %s\n", report.Blocker.Type, report.Blocker.Message)
 	}
 	if report.ReportPath != "" {
-		fmt.Fprintf(w, "report: %s\n", report.ReportPath)
+		fmt.Fprintln(w, "report: available in the local Codencer artifact store")
 	}
 }
 

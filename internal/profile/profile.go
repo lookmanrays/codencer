@@ -69,6 +69,18 @@ func Builtins() map[string]Profile {
 			OutputFormat:  "json",
 			Description:   "Non-interactive Claude CLI execution.",
 		},
+		"antigravity-default": {
+			ID:            "antigravity-default",
+			Adapter:       "antigravity",
+			DaemonAdapter: "antigravity",
+			Description:   "Antigravity execution through the daemon's repo-scoped binding.",
+		},
+		"antigravity-broker": {
+			ID:            "antigravity-broker",
+			Adapter:       "antigravity",
+			DaemonAdapter: "antigravity-broker",
+			Description:   "Antigravity execution through the configured broker.",
+		},
 		"fake-success": {
 			ID:            "fake-success",
 			Adapter:       "fake",
@@ -165,6 +177,8 @@ func defaultProfileForAdapter(adapter string) string {
 		return "codex-workspace"
 	case "claude":
 		return "claude-default"
+	case "antigravity":
+		return "antigravity-default"
 	case "fake", "fake-success", "fake-failure", "fake-blocker", "fake-timeout":
 		if strings.HasPrefix(adapter, "fake-") {
 			return adapter

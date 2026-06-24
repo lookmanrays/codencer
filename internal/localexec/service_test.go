@@ -32,6 +32,7 @@ func TestSubmitDaemonNotRunningBlocker(t *testing.T) {
 }
 
 func TestRunStartListGetStatusViaHTTP(t *testing.T) {
+	cancelled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
@@ -45,6 +46,9 @@ func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 			writeTestJSON(t, w, http.StatusOK, domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCompleted})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/steps":
 			writeTestJSON(t, w, http.StatusOK, []*domain.Step{{ID: "step-1", State: domain.StepStateCompleted}})
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1":
+			cancelled = true
+			w.WriteHeader(http.StatusOK)
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -73,6 +77,27 @@ func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 	}
 	if got.Status != string(domain.RunStateCompleted) || len(got.Steps) != 1 {
 		t.Fatalf("unexpected get report: %+v", got)
+	}
+	events, err := service.Events(context.Background(), RunOptions{BaseOptions: base, RunID: "run-1"})
+	if err != nil {
+		t.Fatalf("Events error: %v", err)
+	}
+	if len(events.Events) == 0 || events.Events[0].RunID != "run-1" {
+		t.Fatalf("unexpected events report: %+v", events)
+	}
+	cancel, err := service.CancelRun(context.Background(), RunOptions{BaseOptions: base, RunID: "run-1"})
+	if err != nil {
+		t.Fatalf("CancelRun error: %v", err)
+	}
+	if !cancelled || !cancel.OK {
+		t.Fatalf("expected daemon abort call and ok report, cancelled=%t report=%+v", cancelled, cancel)
+	}
+	resume, err := service.ResumeRun(context.Background(), RunOptions{BaseOptions: base, RunID: "run-1"})
+	if err != nil {
+		t.Fatalf("ResumeRun error: %v", err)
+	}
+	if resume.ExitCode != ExitBlocked || resume.Blocker == nil || resume.Blocker.Type != BlockerUnsupportedOperation {
+		t.Fatalf("expected unsupported resume blocker, got %+v", resume)
 	}
 }
 

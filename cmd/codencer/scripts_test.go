@@ -107,11 +107,15 @@ func TestPublicSelfHostRCVerifierRejectsRealExecutorSimulation(t *testing.T) {
 		"ALL_ADAPTERS_SIMULATION_MODE=0",
 		"CODEX_SIMULATION_MODE=0",
 		"CODEX_BINARY=\"$real_command\"",
-		"real_executor_env.log",
+		"${gate_name}_env.log",
+		"required_real_executor_proofs",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("public self-host RC verifier missing real executor simulation guard marker %q", want)
 		}
+	}
+	if strings.Contains(body, "PARTIAL for Public Self-host RC") || strings.Contains(body, `write_summary "PARTIAL"`) {
+		t.Fatal("public self-host RC verifier must not emit PARTIAL under the public release gate")
 	}
 	verifier, err := os.ReadFile(filepath.Join(repo, "web", "gateway-console", "tests", "live", "verify-live.mjs"))
 	if err != nil {

@@ -194,6 +194,123 @@ func (s *Service) Status(ctx context.Context, opts RunOptions) (ExecutionReport,
 	}), nil
 }
 
+func (s *Service) Events(ctx context.Context, opts RunOptions) (ExecutionReport, error) {
+	if strings.TrimSpace(opts.RunID) == "" {
+		return ExecutionReport{}, reportError(ExitInvalidInput, BlockerInvalidInput, "run id is required")
+	}
+	resolved, err := s.resolve(ctx, opts.BaseOptions)
+	if err != nil {
+		return ExecutionReport{}, err
+	}
+	run, err := resolved.client.GetRun(ctx, opts.RunID)
+	if err != nil {
+		return resolved.daemonReport(err), nil
+	}
+	steps, err := resolved.client.GetRunSteps(ctx, opts.RunID)
+	if err != nil {
+		return resolved.daemonReport(err), nil
+	}
+	return resolved.report(ExecutionReport{
+		OK:       true,
+		Status:   "ok",
+		Run:      run,
+		Steps:    steps,
+		Events:   eventsFromRunAndSteps(run, steps),
+		ExitCode: ExitSuccess,
+	}), nil
+}
+
+func (s *Service) CancelRun(ctx context.Context, opts RunOptions) (ExecutionReport, error) {
+	if strings.TrimSpace(opts.RunID) == "" {
+		return ExecutionReport{}, reportError(ExitInvalidInput, BlockerInvalidInput, "run id is required")
+	}
+	resolved, err := s.resolve(ctx, opts.BaseOptions)
+	if err != nil {
+		return ExecutionReport{}, err
+	}
+	if err := resolved.client.AbortRun(ctx, opts.RunID); err != nil {
+		return resolved.daemonReport(err), nil
+	}
+	report := ExecutionReport{
+		OK:       true,
+		Status:   "cancel_requested",
+		ExitCode: ExitSuccess,
+	}
+	if run, err := resolved.client.GetRun(ctx, opts.RunID); err == nil {
+		report.Run = run
+		report.Status = string(run.State)
+	}
+	return resolved.report(report), nil
+}
+
+func (s *Service) ResumeRun(ctx context.Context, opts RunOptions) (ExecutionReport, error) {
+	if strings.TrimSpace(opts.RunID) == "" {
+		return ExecutionReport{}, reportError(ExitInvalidInput, BlockerInvalidInput, "run id is required")
+	}
+	resolved, err := s.resolve(ctx, opts.BaseOptions)
+	if err != nil {
+		return ExecutionReport{}, err
+	}
+	blocker := &Blocker{
+		Type:                 BlockerUnsupportedOperation,
+		Message:              "run resume is not yet exposed by the local daemon HTTP API; approve/reject pending gates or start a new task",
+		NeedsPlannerDecision: true,
+		Retryable:            false,
+	}
+	return resolved.report(ExecutionReport{
+		OK:       false,
+		Status:   "blocked",
+		Blocker:  blocker,
+		ExitCode: ExitBlocked,
+	}), nil
+}
+
+func eventsFromRunAndSteps(run *domain.Run, steps []*domain.Step) []RunEvent {
+	events := []RunEvent{}
+	if run != nil {
+		events = append(events, RunEvent{
+			Type:      "run_created",
+			RunID:     run.ID,
+			State:     string(run.State),
+			CreatedAt: formatEventTime(run.CreatedAt),
+		})
+		if run.State != "" && run.State != domain.RunStateCreated {
+			events = append(events, RunEvent{
+				Type:      "run_" + string(run.State),
+				RunID:     run.ID,
+				State:     string(run.State),
+				Summary:   run.RecoveryNotes,
+				CreatedAt: formatEventTime(run.UpdatedAt),
+			})
+		}
+	}
+	for _, step := range steps {
+		if step == nil {
+			continue
+		}
+		runID := ""
+		if run != nil {
+			runID = run.ID
+		}
+		events = append(events, RunEvent{
+			Type:      "step_" + string(step.State),
+			RunID:     runID,
+			StepID:    step.ID,
+			State:     string(step.State),
+			Summary:   step.StatusReason,
+			CreatedAt: formatEventTime(step.UpdatedAt),
+		})
+	}
+	return events
+}
+
+func formatEventTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
 func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionReport, error) {
 	resolved, err := s.resolve(ctx, opts.BaseOptions)
 	if err != nil {

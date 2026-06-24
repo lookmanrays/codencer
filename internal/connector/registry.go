@@ -266,9 +266,11 @@ func (r *Registry) resolveInstance(ctx context.Context, candidate SharedInstance
 		return SharedInstance{}, fmt.Errorf("no daemon url for shared instance")
 	}
 
-	liveInfo, err := r.clientFactory(daemonURL).GetInstance(ctx)
-	if err == nil {
-		info = *liveInfo
+	if candidate.DaemonURL != "" || info.ID == "" {
+		liveInfo, err := r.clientFactory(daemonURL).GetInstance(ctx)
+		if err == nil {
+			info = *liveInfo
+		}
 	}
 	if info.ID == "" {
 		return SharedInstance{}, fmt.Errorf("could not resolve instance identity")

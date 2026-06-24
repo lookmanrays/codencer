@@ -31,6 +31,7 @@ const (
 	BlockerUnsafeAction          = "unsafe_action"
 	BlockerInvalidInput          = "invalid_input"
 	BlockerConfigurationRequired = "configuration_required"
+	BlockerUnsupportedOperation  = "unsupported_operation"
 )
 
 type Blocker struct {
@@ -64,6 +65,15 @@ type ProjectSummary struct {
 	RelayInstanceID string `json:"relay_instance_id,omitempty"`
 }
 
+type RunEvent struct {
+	Type      string `json:"type"`
+	RunID     string `json:"run_id"`
+	StepID    string `json:"step_id,omitempty"`
+	State     string `json:"state,omitempty"`
+	Summary   string `json:"summary,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
 type TaskReport struct {
 	OK             bool         `json:"ok"`
 	Status         string       `json:"status"`
@@ -89,6 +99,7 @@ type ExecutionReport struct {
 	Run              *domain.Run          `json:"run,omitempty"`
 	Runs             []*domain.Run        `json:"runs,omitempty"`
 	Steps            []*domain.Step       `json:"steps,omitempty"`
+	Events           []RunEvent           `json:"events,omitempty"`
 	Task             *TaskReport          `json:"task,omitempty"`
 	Blocker          *Blocker             `json:"blocker,omitempty"`
 	DaemonURL        string               `json:"daemon_url,omitempty"`

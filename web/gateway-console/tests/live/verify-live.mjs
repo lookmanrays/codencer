@@ -270,7 +270,7 @@ try {
     await expect(page.getByText(executorProfile).first()).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
-    await expect(page.getByText(/Summary/i)).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Summary" })).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
     await expect(

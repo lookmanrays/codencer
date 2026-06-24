@@ -289,6 +289,12 @@ func TestExecutionCommandsJSON(t *testing.T) {
 			writeHTTPJSON(t, w, http.StatusCreated, map[string]any{"id": "run-1", "project_id": "proj", "state": "running"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs":
 			writeHTTPJSON(t, w, http.StatusOK, []map[string]any{{"id": "run-1", "project_id": "proj", "state": "completed"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1":
+			writeHTTPJSON(t, w, http.StatusOK, map[string]any{"id": "run-1", "project_id": "proj", "state": "completed"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/steps":
+			writeHTTPJSON(t, w, http.StatusOK, []map[string]any{{"id": "step-1", "state": "completed", "adapter": "fake-success"}})
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1":
+			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-1/steps":
 			writeHTTPJSON(t, w, http.StatusAccepted, map[string]any{"id": "step-1", "state": "running", "adapter": "fake-success"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1":
@@ -340,6 +346,34 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	}
 	if !strings.Contains(stdout, `"status": "completed"`) || !strings.Contains(stdout, `"evidence"`) {
 		t.Fatalf("submit output wrong: %s", stdout)
+	}
+	stdout, stderr, err = runCLI("run", "events", "run-1", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("run events failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"events"`) || !strings.Contains(stdout, `"step_completed"`) {
+		t.Fatalf("run events output wrong: %s", stdout)
+	}
+	stdout, stderr, err = runCLI("run", "report", "run-1", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("run report failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"tasks"`) || !strings.Contains(stdout, `"done"`) {
+		t.Fatalf("run report output wrong: %s", stdout)
+	}
+	stdout, stderr, err = runCLI("run", "cancel", "run-1", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("run cancel failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, `"status": "completed"`) {
+		t.Fatalf("run cancel output wrong: %s", stdout)
+	}
+	stdout, _, err = runCLI("run", "resume", "run-1", "--project", "proj", "--json")
+	if err == nil {
+		t.Fatalf("expected run resume to return unsupported blocker: %s", stdout)
+	}
+	if !strings.Contains(stdout, `"type": "unsupported_operation"`) {
+		t.Fatalf("run resume blocker output wrong: %s", stdout)
 	}
 
 	manifest := filepath.Join(t.TempDir(), "manifest.yaml")
