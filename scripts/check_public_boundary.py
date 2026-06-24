@@ -110,6 +110,12 @@ ACTIVE_RELEASE_LABEL_RE = re.compile(
     r"\b(beta|alpha|staging)\b|v0\.2|verify-beta|verify_beta|beta-track",
     re.IGNORECASE,
 )
+PRIVATE_MANAGED_SERVICE_PATH_RE = re.compile(
+    r"(^|/)(billing|metering|quotas?|plans?|kms|vault|managed[-_]?runners?|"
+    r"support[-_]?admin|admin[-_]?console|marketplace[-_]?submission|"
+    r"official[-_]?connector[-_]?(credentials?|secrets?))(/|\.|$)",
+    re.IGNORECASE,
+)
 PARTIAL_RC_VERDICT_CLAIM_RE = re.compile(
     r"reports\s+`?PARTIAL`?|`?PARTIAL`?\s+instead\s+of\s+`?GO`?",
     re.IGNORECASE,
@@ -257,7 +263,13 @@ def should_scan_primary_stale_reference(rel: str) -> bool:
 def should_scan_active_release_labels(rel: str) -> bool:
     if rel == "scripts/check_public_boundary.py":
         return False
-    return rel == "Makefile" or rel.startswith(".github/") or rel.startswith("scripts/")
+    return rel == "Makefile" or rel.startswith(".github/") or rel.startswith("deploy/") or rel.startswith("scripts/")
+
+
+def should_scan_private_managed_service_path(rel: str) -> bool:
+    if rel.startswith("docs/") or rel.startswith("reports/"):
+        return False
+    return rel.startswith(("cmd/", "deploy/", "internal/", "scripts/", "web/"))
 
 
 def endpoint_allowed(rel: str) -> bool:
@@ -300,6 +312,8 @@ def check_active_grove_docs(failures: list[str]) -> None:
 def check_tracked_file(rel: str, failures: list[str]) -> None:
     path = ROOT / rel
     name = Path(rel).name
+    if should_scan_private_managed_service_path(rel) and PRIVATE_MANAGED_SERVICE_PATH_RE.search(rel):
+        fail(f"private managed-service path is not allowed in public repository: {rel}", failures)
     if name.startswith(".env") and not is_example_env(rel):
         fail(f"tracked non-example env file is not allowed: {rel}", failures)
     if any(part in rel for part in RUNTIME_NAME_PARTS):
