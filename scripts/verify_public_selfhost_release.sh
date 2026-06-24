@@ -182,9 +182,37 @@ JSON
 
   CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run start --project codencer --json > "$TMPDIR_ROOT/run-start.json"
   events_run_id="$(json_get "$TMPDIR_ROOT/run-start.json" "run.id")"
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run list --project codencer > "$TMPDIR_ROOT/run-list-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-list-human.txt" "codencer run list human output"
+  grep -q "run: $events_run_id codencer" "$TMPDIR_ROOT/run-list-human.txt" || { cat "$TMPDIR_ROOT/run-list-human.txt" >&2; exit 1; }
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run status --project codencer > "$TMPDIR_ROOT/run-status-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-status-human.txt" "codencer run status human output"
+  grep -q "run: $events_run_id codencer" "$TMPDIR_ROOT/run-status-human.txt" || { cat "$TMPDIR_ROOT/run-status-human.txt" >&2; exit 1; }
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run get "$events_run_id" --project codencer > "$TMPDIR_ROOT/run-get-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-get-human.txt" "codencer run get human output"
+  grep -q "run: $events_run_id" "$TMPDIR_ROOT/run-get-human.txt" || { cat "$TMPDIR_ROOT/run-get-human.txt" >&2; exit 1; }
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run status "$events_run_id" --project codencer > "$TMPDIR_ROOT/run-status-id-human.txt"
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-status-id-human.txt" "codencer run status id human output"
+  grep -q "run: $events_run_id" "$TMPDIR_ROOT/run-status-id-human.txt" || { cat "$TMPDIR_ROOT/run-status-id-human.txt" >&2; exit 1; }
+
   CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run events "$events_run_id" --project codencer > "$TMPDIR_ROOT/run-events-human.txt"
   assert_no_default_output_leak "$TMPDIR_ROOT/run-events-human.txt" "codencer run events human output"
   grep -q 'event:' "$TMPDIR_ROOT/run-events-human.txt" || { cat "$TMPDIR_ROOT/run-events-human.txt" >&2; exit 1; }
+
+  set +e
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run cancel "$events_run_id" --project codencer > "$TMPDIR_ROOT/run-cancel-human.txt"
+  local cancel_code=$?
+  set -e
+  if [[ "$cancel_code" -ne 23 ]]; then
+    echo "codencer run cancel returned unexpected exit code $cancel_code in bridge-error proof" >&2
+    cat "$TMPDIR_ROOT/run-cancel-human.txt" >&2
+    exit 1
+  fi
+  assert_no_default_output_leak "$TMPDIR_ROOT/run-cancel-human.txt" "codencer run cancel human output"
+  grep -q "blocker: bridge_error abort requested for run $events_run_id, but no active execution was registered" "$TMPDIR_ROOT/run-cancel-human.txt" || { cat "$TMPDIR_ROOT/run-cancel-human.txt" >&2; exit 1; }
 
   run_id="public-redaction-run"
   CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" submit \
