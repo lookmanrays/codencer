@@ -55,7 +55,7 @@ export async function submitProjectRun(input: ParsedTaskRunInput) {
           manifest_text: input.manifestText,
           mode: "manifest",
           relay_profile_id: input.relayProfileId,
-          wait: true,
+          wait: false,
         }
       : {
           ...executorFields,

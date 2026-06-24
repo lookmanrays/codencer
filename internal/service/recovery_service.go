@@ -323,6 +323,9 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 	if err != nil {
 		return err
 	}
+	if run == nil {
+		return fmt.Errorf("run not found: %s", runID)
+	}
 
 	if run.State != domain.RunStatePausedForGate && run.State != domain.RunStateCreated {
 		return fmt.Errorf("run %s is not in a resumable state (must be paused_for_gate or created)", runID)

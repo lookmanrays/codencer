@@ -60,10 +60,12 @@ test("project task form submits demo run without unsafe output", async ({
   await expect(page.getByText(/run_demo_console/i)).toBeVisible();
   await expect(page.getByText(/README summary/i)).toBeVisible();
   await expect(page.getByText(/local\/self-host bridge/i)).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /view full run/i }),
-  ).toBeVisible();
-  await page.getByRole("link", { name: /view full run/i }).click();
+  const fullRunLink = page.getByRole("link", { name: /view full run/i });
+  await expect(fullRunLink).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/console\/runs\/runhist_demo_console$/),
+    fullRunLink.click(),
+  ]);
   await expect(page.getByRole("heading", { name: /full run/i })).toBeVisible();
   await expect(page.getByText("Real executor").first()).toBeVisible();
   await expect(page.getByText(/run_demo_console/i).first()).toBeVisible();

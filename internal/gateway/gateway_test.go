@@ -699,6 +699,32 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("async report endpoint returned run_history_id=%v want %s: %s", asyncReport["run_history_id"], asyncRunHistoryID, asyncReportBody)
 	}
 	assertNoGatewayMCPLeak(t, asyncReportBody)
+	asyncManifestResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"manifest_name":    "Async Gateway Console manifest",
+		"manifest_text":    "version: codencer.io/v1alpha1\nkind: RunManifest\n",
+		"mode":             "manifest",
+		"wait":             false,
+	})
+	asyncManifestBody := mustJSON(t, asyncManifestResult)
+	if !strings.Contains(asyncManifestBody, `"status":"submitted"`) || strings.Contains(asyncManifestBody, `"status":"completed"`) || !strings.Contains(asyncManifestBody, `"run_id":"run-async-manifest"`) {
+		t.Fatalf("manifest project run endpoint did not honor wait=false: %s", asyncManifestBody)
+	}
+	asyncManifestHistoryID, _ := asyncManifestResult["run_history_id"].(string)
+	if asyncManifestHistoryID == "" {
+		t.Fatalf("async manifest endpoint did not return run_history_id: %s", asyncManifestBody)
+	}
+	assertNoGatewayMCPLeak(t, asyncManifestBody)
+	asyncManifestReport := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-async-manifest/report?relay_profile_id=default&machine_id=mach-1", token.AccessToken)
+	asyncManifestReportBody := mustJSON(t, asyncManifestReport)
+	if !strings.Contains(asyncManifestReportBody, `"status":"completed"`) || !strings.Contains(asyncManifestReportBody, `"run_id":"run-async-manifest"`) {
+		t.Fatalf("async manifest report endpoint did not return terminal report: %s", asyncManifestReportBody)
+	}
+	if asyncManifestReport["run_history_id"] != asyncManifestHistoryID {
+		t.Fatalf("async manifest report endpoint returned run_history_id=%v want %s: %s", asyncManifestReport["run_history_id"], asyncManifestHistoryID, asyncManifestReportBody)
+	}
+	assertNoGatewayMCPLeak(t, asyncManifestReportBody)
 	cancelResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-async-console/cancel?relay_profile_id=default&machine_id=mach-1", token.AccessToken, map[string]any{
 		"reason": "operator requested stop",
 	})
@@ -1120,6 +1146,24 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 	mux.HandleFunc("/api/v2/projects/codencer/run-plan", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		relay.lastMachineID = r.URL.Query().Get("machine_id")
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req["manifest_name"] == "Async Gateway Console manifest" {
+			if wait, _ := req["wait"].(bool); wait {
+				t.Fatalf("expected async console manifest to forward wait=false")
+			}
+			writeTestJSON(t, w, map[string]any{
+				"ok":     true,
+				"status": "submitted",
+				"run_id": "run-async-manifest",
+				"run": map[string]any{
+					"id":    "run-async-manifest",
+					"state": "submitted",
+				},
+				"report_path": "/tmp/codencer/run-plans/run-async-manifest.json",
+			})
+			return
+		}
 		writeTestJSON(t, w, map[string]any{
 			"ok":          true,
 			"status":      "completed",
@@ -1223,6 +1267,20 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 				"task_id": "async",
 				"status":  "completed",
 				"summary": "async console task completed",
+			}},
+		})
+	})
+	mux.HandleFunc("/api/v2/projects/codencer/reports/run-plans/run-async-manifest", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		writeTestJSON(t, w, map[string]any{
+			"run_id":      "run-async-manifest",
+			"status":      "completed",
+			"report_path": "/Users/example/.codencer-live-test/artifacts/run-plans/run-async-manifest.json",
+			"run":         map[string]any{"id": "run-async-manifest", "state": "completed"},
+			"tasks": []map[string]any{{
+				"task_id": "async-manifest",
+				"status":  "completed",
+				"summary": "async manifest completed",
 			}},
 		})
 	})

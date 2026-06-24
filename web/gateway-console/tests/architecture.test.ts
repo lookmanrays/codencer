@@ -64,6 +64,7 @@ describe("Gateway Console architecture guards", () => {
     );
 
     expect(runsAPI).toContain("wait: false");
+    expect(runsAPI).not.toContain("wait: true");
     expect(runsAPI).toContain("refetchInterval");
     expect(runsAPI).toContain("shouldPollRunReport");
   });
