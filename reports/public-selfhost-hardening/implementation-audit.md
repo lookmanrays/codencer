@@ -42,7 +42,7 @@ the exact package was not available in the current attachment cache.
 | Real executor proofs | Partially implemented | Codex has prior artifact-backed proof and latest rerun invoked the real Codex binary with simulation disabled but failed on an external Codex usage-limit error; earlier Claude Code proof exists; Antigravity remains unproven and now fails early when the provided LS workspace does not match the isolated verifier repo. |
 | Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, grouped lifecycle summaries, and explicit synced metadata audit events; broader synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway/sync sanitization exists and artifact-backed release verification now covers default human CLI output for init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, submit, run events, run report, and run resume blocker output. Source-tree and unpacked-artifact Gateway smoke now also sweeps public Gateway API outputs for relays, projects, machines, connectors, executors, runs, run detail/events, audit events, and activation commands. Broader explicit JSON/debug/path surface policy proof is still incomplete. |
-| Public/private boundary | Partially implemented | Docs/checks exist; public repo still contains cloud-control-plane packages that need boundary review against the new specs. |
+| Public/private boundary | Implemented for current public boundary | Public boundary docs classify self-host/community cloud-control-plane primitives separately from private managed-service candidates. `scripts/check_public_boundary.py` now scans active deploy files for stale release labels, rejects commercial endpoints as public defaults, rejects tracked runtime state/secrets/local paths, checks release artifacts, and rejects source/deploy/script/web paths that match obvious private managed-service categories such as billing, metering, KMS/Vault, managed runners, support/admin consoles, marketplace submission material, or official connector credentials. |
 | Public RC verifier | Partially implemented | `make verify-public-selfhost-rc` emits only `GO`/`NO-GO`, requires configured real-proof coverage, reports `NO-GO` when required proofs are missing, and public boundary checks reject stale active docs claiming `PARTIAL` verdicts; Antigravity remains unproven. |
 
 ## Requirement Audit
@@ -128,9 +128,9 @@ the exact package was not available in the current attachment cache.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Public/self-host defaults | Partially implemented | Public release checks exist. Needs re-audit after spec addition. |
-| Private managed service code absent | Partially implemented | Public repo still has `internal/cloud` and `cmd/codencer-cloud*` packages; existing boundary docs classify them, but new spec may require stricter handling. |
-| Hosted proof not claimed unless run | Partially implemented | Docs were previously cleaned; must re-run stale/boundary checks after new specs. |
+| Public/self-host defaults | Implemented for current boundary | `make verify-public-release` passes, public default files are checked for commercial endpoints, and active self-host cloud deploy defaults now use `v0.3.0-local-prod-rc.1` instead of stale beta labels. |
+| Private managed service code absent | Implemented for current boundary | Self-host/community cloud-control-plane packages remain public and documented as non-managed-service primitives. The boundary checker rejects obvious private managed-service source/deploy path classes and production hosted endpoints/defaults. |
+| Hosted proof not claimed unless run | Implemented for current boundary | `scripts/check_public_boundary.py` rejects stale active release labels and mixed public self-host RC verdict language; current final report remains `NO-GO` where live proof is missing. |
 
 ## Immediate Blocking Items for GO
 

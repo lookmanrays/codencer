@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `ce39c4904b70beb2673c3297728b641bc021ecd5`
+Implementation commit hash: `7a815a57e559fdaf7221794a25c0c02f18553b47`
 
 Branch: `next-phase`
 
@@ -45,6 +45,8 @@ Branch: `next-phase`
 - Hardened the direct Antigravity adapter so unsupported or out-of-workspace permission waits become manual-attention results instead of timing out, without exposing the requested local target path or command string.
 - Fixed connector shared-instance discovery so an allowlisted manifest identity is not overwritten by an unrelated daemon that happens to be listening on the manifest URL during tests.
 - Tightened the live Console verifier so the real executor result check targets the Summary heading deterministically.
+- Updated active self-host cloud deploy defaults from stale `v0.2.0-beta` to `v0.3.0-local-prod-rc.1`.
+- Extended the public boundary checker so active `deploy/` files are scanned for stale release labels and source/deploy/script/web paths with obvious private managed-service categories such as billing, metering, KMS/Vault, managed runners, support/admin consoles, marketplace submission material, or official connector credentials are rejected.
 
 ## Proofs
 
@@ -252,6 +254,10 @@ Branch: `next-phase`
 - `make verify-gateway-console-live` after adding explicit human-interrupt follow-up resume - passed
 - `make verify-public-release` after adding explicit human-interrupt follow-up resume - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding explicit human-interrupt follow-up resume - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1912`
+- `python3 -m py_compile scripts/check_public_boundary.py` after adding active deploy release-label scans - passed
+- `python3 scripts/check_public_boundary.py` after adding active deploy release-label scans - passed
+- `rg -n "v0\\.2\\.0-beta|v0\\.2|verify-beta|verify_beta|beta-track" deploy scripts/check_public_boundary.py -S` after updating deploy defaults - passed with only the checker regex itself matching
+- `make verify-public-release` after adding active deploy release-label scans - passed
 - `git diff --check` - passed
 
 ## Remaining Blockers
