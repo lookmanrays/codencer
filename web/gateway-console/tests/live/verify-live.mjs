@@ -526,13 +526,16 @@ async function runGatewayMCPProof(gatewayBase, token) {
     goal:
       executorAdapter === "fake"
         ? "Run fake-safe task through Gateway MCP."
-        : `Run a safe deterministic task through Gateway MCP with ${executorProfile}.`,
+        : executorGoal,
     machine_id: location.machine_id,
     profile: executorProfile,
     project_id: "codencer",
     relay_profile_id: relay.relay_profile_id,
     timeout_seconds: taskTimeoutSeconds,
-    title: "Gateway MCP live task",
+    title:
+      executorAdapter === "fake"
+        ? "Gateway MCP live task"
+        : executorDefaults.title,
   });
   const runId =
     submit.run_id ??
