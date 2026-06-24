@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `ab7f9c2de679428767dace873b76f0b67de329b1`
+Implementation commit hash: `40de3d8c3dcc3b100ce2e88d4c5e1c839a9b8b67`
 
 Branch: `next-phase`
 
@@ -13,6 +13,8 @@ Branch: `next-phase`
 - Hardened the public self-host RC verifier so it emits only `GO` or `NO-GO`, rejects real-executor simulation env values, runs configured real executor gates by adapter, and fails the release gate when required real proofs are missing.
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
+- Added Gateway MCP async lifecycle tools: `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run`, `codencer.get_project_run_status`, `codencer.get_gateway_run_events`, and structured `codencer.cancel_project_run` / `codencer.resume_project_run` capability blockers.
+- Preserved `codencer.submit_project_task_and_wait` as a compatibility tool while adding non-blocking submit/start paths for planners that should not hold one long HTTP/MCP request open.
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
@@ -28,9 +30,9 @@ Branch: `next-phase`
 ## Proofs
 
 - Current scoped Codex artifact-backed RC proof passed:
-  - Report: `reports/public-selfhost-rc/20260624T120012Z/summary.md`
+  - Report: `reports/public-selfhost-rc/20260624T122313Z/summary.md`
   - Gates: `real_executor_e2e_codex`, `required_real_executor_proofs`
-  - Verdict: `GO` only for the scoped requirement `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex`.
+  - Verdict: overall `NO-GO` for the default public gate because Claude Code and Antigravity were missing in that run; the Codex subgate itself passed.
   - Evidence: live verifier log shows `Adapter Execution: Starting process`, `adapter=codex`, and binary `/Applications/Codex.app/Contents/Resources/codex`; simulation env was forced to `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
 - Default all-real-executor RC proof remains `NO-GO`:
   - Report: `reports/public-selfhost-rc/20260624T115347Z/summary.md`
@@ -65,8 +67,10 @@ Branch: `next-phase`
 - `go test ./internal/profile ./internal/adapters/codex` - passed
 - `go test ./internal/connector -count=1` - passed
 - `go test ./internal/gateway` - passed
+- `go test ./internal/gateway` after adding Gateway MCP async lifecycle tools - passed
 - `go test ./internal/localexec ./internal/gateway ./cmd/codencer` - passed
 - `go test ./...` - passed
+- `go test ./...` after adding Gateway MCP async lifecycle tools - passed
 - `cd web/gateway-console && npm run format:check` - passed
 - `cd web/gateway-console && npm run lint` - passed
 - `cd web/gateway-console && npm run typecheck` - passed
@@ -75,11 +79,12 @@ Branch: `next-phase`
 - `cd web/gateway-console && npm run build` - passed
 - `cd web/gateway-console && npm run test:e2e` - passed
 - `make verify-gateway` - passed
+- `make verify-gateway` after adding Gateway MCP async lifecycle tools - passed
 - `make verify-gateway-console` - passed
 - `make verify-gateway-console-live` - passed
 - `go test ./internal/adapters/antigravity` - passed
 - `cd web/gateway-console && npm run format:check && npm run lint -- tests/live/verify-live.mjs` - passed
-- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing; report `reports/public-selfhost-rc/20260624T122313Z/summary.md`
 - `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - passed with scoped `GO` for Codex-only proof
 - `make verify-public-release` - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed
@@ -91,7 +96,8 @@ Branch: `next-phase`
 
 - Antigravity real executor proof is not proven in the public self-host RC gate.
 - Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
-- `codencer run resume` is exposed as a structured blocker because the daemon does not yet expose a resume HTTP route.
+- `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route.
+- Gateway MCP `codencer.cancel_project_run` is currently a structured capability blocker for project-level Gateway routing; local CLI cancellation support remains separate and limited by daemon/executor capability.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial: local report/event records and Gateway blocker audit exist, but complete operator answer/resume UI/MCP flows are not fully proven.
