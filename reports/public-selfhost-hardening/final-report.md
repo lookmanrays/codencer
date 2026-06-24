@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `5ebc8985b7112bb770c8d90c53c8f5e667eaea90`
+Implementation commit hash: `518322742dc6e5945d54dd8f34a3de3fd9c06ee2`
 
 Branch: `next-phase`
 
@@ -19,6 +19,8 @@ Branch: `next-phase`
 - Wired project run cancellation through Gateway HTTP, Gateway MCP, Relay HTTP, Relay MCP, Connector project proxy, and local daemon-backed cancellation, with Gateway run history/audit events for `cancel_project_run_requested` and terminal `run_cancelled`.
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
+- Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
+- Extended the artifact-backed public self-host release verifier with a default CLI redaction gate covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, and `sync preview`.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
@@ -69,6 +71,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1616`
   - `reports/gateway-console-screenshots/2026-06-24-1626`
   - `reports/gateway-console-screenshots/2026-06-24-1631`
+  - `reports/gateway-console-screenshots/2026-06-24-1643`
 
 ## Commands Run
 
@@ -87,6 +90,10 @@ Branch: `next-phase`
 - `go test ./...` after adding Gateway Console async submit/report polling - passed
 - `go test ./internal/connector ./internal/gateway ./internal/relay ./internal/localexec` after adding project-scoped cancel routing - passed
 - `go test ./...` after adding project-scoped cancel routing - passed
+- `bash -n scripts/verify_public_selfhost_release.sh` after adding default CLI redaction checks - passed
+- `go test ./cmd/codencer -run 'TestInitHumanOutputDoesNotLeakLocalPaths|TestConfigProfilesAndSelfHostDefaultsJSON'` - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` - passed
+- `go test ./...` after default init/config redaction - passed
 - `cd web/gateway-console && npm run format:check` - passed
 - `cd web/gateway-console && npm run lint` - passed
 - `cd web/gateway-console && npm run typecheck` - passed
@@ -111,6 +118,8 @@ Branch: `next-phase`
 - `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - passed with scoped `GO` for Codex-only proof
 - `make verify-public-release` - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed after project-scoped cancel routing and console e2e stabilization
+- `make verify-public-release` after default CLI redaction checks - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after default CLI redaction checks - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -125,6 +134,6 @@ Branch: `next-phase`
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial: local report/event records and Gateway blocker audit exist, but complete operator answer/resume UI/MCP flows are not fully proven.
-- Full cross-surface redaction proof remains incomplete. Default local human CLI output and sync preview are covered, but explicit JSON/debug/path commands still require final policy review against the release gate.
+- Full cross-surface redaction proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, and run output in deterministic tests/verifiers, but explicit JSON/debug/path commands still require final policy review against the release gate.
 
 Verdict: NO-GO
