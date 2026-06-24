@@ -744,6 +744,24 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if syncedRunHistoryID == "" {
 		t.Fatalf("sync ingest returned blank run history id: %s", syncResultBody)
 	}
+	syncPublishAudit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events?type=sync.publish", token.AccessToken)
+	syncPublishAuditBody := mustJSON(t, syncPublishAudit)
+	if !strings.Contains(syncPublishAuditBody, `"type":"sync.publish"`) ||
+		!strings.Contains(syncPublishAuditBody, `"scope":"synced"`) ||
+		!strings.Contains(syncPublishAuditBody, `"mode":"metadata_only"`) ||
+		!strings.Contains(syncPublishAuditBody, `"run_count":1`) {
+		t.Fatalf("sync publish audit missing aggregate metadata: %s", syncPublishAuditBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, syncPublishAuditBody)
+	syncRunAudit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events?type=sync.run_published&run_history_id="+syncedRunHistoryID, token.AccessToken)
+	syncRunAuditBody := mustJSON(t, syncRunAudit)
+	if !strings.Contains(syncRunAuditBody, `"type":"sync.run_published"`) ||
+		!strings.Contains(syncRunAuditBody, `"run_history_id":"`+syncedRunHistoryID+`"`) ||
+		!strings.Contains(syncRunAuditBody, `"run_id":"run-synced-extra"`) ||
+		!strings.Contains(syncRunAuditBody, `"scope":"synced"`) {
+		t.Fatalf("sync run audit missing per-run metadata: %s", syncRunAuditBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, syncRunAuditBody)
 	rawSync := apiRaw(t, httpServer.URL+"/api/gateway/v1/sync/runs", token.AccessToken, map[string]any{
 		"mode":          "metadata_only",
 		"scope":         "local",
@@ -864,6 +882,8 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		"executor_selected",
 		"run_started",
 		"run_completed",
+		"sync.publish",
+		"sync.run_published",
 		"human_interrupt_created",
 		"human_interrupt_responded",
 		"report_read",
