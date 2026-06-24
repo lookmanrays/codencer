@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `eb7575ad8963e93648d20e3a5fdcb97611733c21`
+Implementation commit hash: `dfd742248bcee4cdb89ce60a3a94da375a66fe89`
 
 Branch: `next-phase`
 
@@ -13,6 +13,7 @@ Branch: `next-phase`
 - Hardened the public self-host RC verifier so it emits only `GO` or `NO-GO`, rejects real-executor simulation env values, runs configured real executor gates by adapter, and fails the release gate when required real proofs are missing.
 - Removed stale active public-doc wording that said missing real executor proof reports `PARTIAL`; active RC docs now say missing/skipped/simulated/failed required real executor proof is `NO-GO`, and the public boundary checker rejects stale `reports PARTIAL` claims plus malformed hardening-report final verdict lines.
 - Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
+- Hardened simulation result handling so the shared simulation runner writes `is_simulation=true`, and Codex/Claude normalizers preserve or infer simulation status from deterministic simulation artifacts instead of relabeling them as real when normalization runs with simulation env disabled.
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
 - Added Gateway MCP async lifecycle tools: `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run`, `codencer.get_project_run_status`, `codencer.get_gateway_run_events`, true project-scoped `codencer.cancel_project_run`, and a structured `codencer.resume_project_run` capability blocker.
 - Preserved `codencer.submit_project_task_and_wait` as a compatibility tool while adding non-blocking submit/start paths for planners that should not hold one long HTTP/MCP request open.
@@ -36,6 +37,10 @@ Branch: `next-phase`
 
 ## Proofs
 
+- Latest Codex artifact-backed RC proof passed the Codex real-executor subgate and returned overall `NO-GO` only because Claude Code and Antigravity proofs were missing:
+  - Report: `reports/public-selfhost-rc/20260624T142643Z/summary.md`
+  - Gates: `real_executor_e2e_codex` passed; `required_real_executor_proofs` failed with `claude=missing` and `antigravity=missing`.
+  - Evidence: live verifier preflight printed `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0`, daemon log showed `Adapter Execution: Starting process` with `adapter=codex` and binary `/Applications/Codex.app/Contents/Resources/codex`, and the verifier accepted the run only after checking `is_simulation=false` plus absence of simulated Codex log/summary text.
 - Current scoped Codex artifact-backed RC proof passed:
   - Report: `reports/public-selfhost-rc/20260624T122313Z/summary.md`
   - Gates: `real_executor_e2e_codex`, `required_real_executor_proofs`
@@ -77,6 +82,8 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1643`
   - `reports/gateway-console-screenshots/2026-06-24-1656`
   - `reports/gateway-console-screenshots/2026-06-24-1708`
+  - `reports/gateway-console-screenshots/2026-06-24-1724`
+  - `reports/gateway-console-screenshots/2026-06-24-1732`
 
 ## Commands Run
 
@@ -143,6 +150,20 @@ Branch: `next-phase`
 - `python3 scripts/check_docs_links.py` after aligning RC verdict docs with NO-GO policy - passed
 - `python3 scripts/check_public_boundary.py` after aligning RC verdict docs with NO-GO policy - passed
 - `make verify-public-release` after aligning RC verdict docs with NO-GO policy - passed
+- `go test ./internal/adapters/common ./internal/adapters/codex ./internal/adapters/claude` after preventing simulation artifacts from passing as real - passed
+- `go test ./...` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run format:check` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run lint` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run typecheck` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run test` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run build` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run test:e2e` after preventing simulation artifacts from passing as real - passed
+- `make verify-gateway` after preventing simulation artifacts from passing as real - passed
+- `make verify-gateway-console` after preventing simulation artifacts from passing as real - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1724`
+- `make verify-gateway-console-live` after preventing simulation artifacts from passing as real - passed
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` after preventing simulation artifacts from passing as real - failed by design with `NO-GO` after `real_executor_e2e_codex` passed and Claude/Antigravity required proofs were missing; report `reports/public-selfhost-rc/20260624T142643Z/summary.md`
+- `make verify-public-release` after preventing simulation artifacts from passing as real - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after preventing simulation artifacts from passing as real - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1732`
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -150,7 +171,7 @@ Branch: `next-phase`
 ## Remaining Blockers
 
 - Antigravity real executor proof is not proven in the public self-host RC gate.
-- Latest Codex real executor rerun is blocked by Codex account usage limits despite invoking the real binary with `is_simulation=false`; prior Codex proof remains the latest passing Codex proof.
+- Latest Codex real executor RC subgate passed with the configured Codex binary and simulation disabled, but the overall default public RC gate remains `NO-GO` because Claude Code and Antigravity proofs were missing from that run.
 - Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
 - `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route.
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
