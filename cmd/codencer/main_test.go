@@ -332,7 +332,20 @@ func TestExecutionCommandsJSON(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/steps":
 			writeHTTPJSON(t, w, http.StatusOK, []map[string]any{{"id": "step-1", "state": "completed", "adapter": "fake-success", "status_reason": unsafeSummary}})
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1":
-			w.WriteHeader(http.StatusOK)
+			var req struct {
+				Action string `json:"action"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode patch action: %v", err)
+			}
+			switch req.Action {
+			case "abort":
+				w.WriteHeader(http.StatusOK)
+			case "resume":
+				writeHTTPJSON(t, w, http.StatusOK, map[string]any{"id": "run-1", "project_id": "proj", "state": "running", "recovery_notes": unsafeSummary})
+			default:
+				t.Fatalf("unexpected patch action %q", req.Action)
+			}
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-1/steps":
 			writeHTTPJSON(t, w, http.StatusAccepted, map[string]any{"id": "step-1", "state": "running", "adapter": "fake-success"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-1":
@@ -446,13 +459,21 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	if !strings.Contains(stdout, `"status": "completed"`) {
 		t.Fatalf("run cancel output wrong: %s", stdout)
 	}
-	stdout, _, err = runCLI("run", "resume", "run-1", "--project", "proj", "--json")
-	if err == nil {
-		t.Fatalf("expected run resume to return unsupported blocker: %s", stdout)
+	stdout, stderr, err = runCLI("run", "resume", "run-1", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("run resume failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
-	if !strings.Contains(stdout, `"type": "unsupported_operation"`) {
-		t.Fatalf("run resume blocker output wrong: %s", stdout)
+	if !strings.Contains(stdout, `"status": "running"`) || !strings.Contains(stdout, `"run_resumed"`) {
+		t.Fatalf("run resume output wrong: %s", stdout)
 	}
+	stdout, stderr, err = runCLI("run", "resume", "run-1", "--project", "proj")
+	if err != nil {
+		t.Fatalf("run resume human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "event: run_resumed") || !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "<redacted-local-url>") {
+		t.Fatalf("run resume human output missing sanitized resume event: %s", stdout)
+	}
+	assertNoDefaultCLILeak(t, stdout, repo, server.URL)
 
 	manifest := filepath.Join(t.TempDir(), "manifest.yaml")
 	if err := os.WriteFile(manifest, []byte(`version: codencer.io/v1alpha1

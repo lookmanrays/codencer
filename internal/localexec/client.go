@@ -87,6 +87,14 @@ func (c *Client) AbortRun(ctx context.Context, runID string) error {
 	return c.doJSON(ctx, http.MethodPatch, "/api/v1/runs/"+url.PathEscape(runID), nil, map[string]string{"action": "abort"}, nil)
 }
 
+func (c *Client) ResumeRun(ctx context.Context, runID string) (*domain.Run, error) {
+	var run domain.Run
+	if err := c.doJSON(ctx, http.MethodPatch, "/api/v1/runs/"+url.PathEscape(runID), nil, map[string]string{"action": "resume"}, &run); err != nil {
+		return nil, err
+	}
+	return &run, nil
+}
+
 func (c *Client) SubmitTask(ctx context.Context, runID string, task *domain.TaskSpec) (*domain.Step, error) {
 	var step domain.Step
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/runs/"+url.PathEscape(runID)+"/steps", nil, task, &step); err != nil {

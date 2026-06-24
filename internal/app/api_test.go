@@ -153,10 +153,12 @@ func newAPIRouteProofEnv(t *testing.T, adapters map[string]domain.Adapter) *apiR
 		repoRoot,
 	)
 	gateSvc := service.NewGateService(gatesRepo, runsRepo, stepsRepo, attemptsRepo)
+	recoverySvc := service.NewRecoveryService(runsRepo, stepsRepo, attemptsRepo, gatesRepo, artifactRoot, workspaceRoot)
 
 	handler := &APIHandler{
-		RunSvc:  runSvc,
-		GateSvc: gateSvc,
+		RunSvc:      runSvc,
+		GateSvc:     gateSvc,
+		RecoverySvc: recoverySvc,
 		AppCtx: &AppContext{
 			Config: &Config{
 				Host:          "127.0.0.1",
@@ -975,6 +977,38 @@ func TestAPI_RouteProofs(t *testing.T) {
 		}
 		if step.State != domain.StepStateCancelled {
 			t.Fatalf("expected step to be cancelled, got %s", step.State)
+		}
+	})
+
+	t.Run("PATCH /api/v1/runs/{id} resumes a paused run", func(t *testing.T) {
+		env := newAPIRouteProofEnv(t, nil)
+		ctx := context.Background()
+		runID := "resume-route-run"
+		now := time.Now().UTC()
+
+		if _, err := env.runSvc.StartRun(ctx, runID, "resume-proj", "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := env.runsRepo.UpdateState(ctx, &domain.Run{ID: runID, State: domain.RunStatePausedForGate, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/runs/"+runID, strings.NewReader(`{"action":"resume"}`))
+		w := httptest.NewRecorder()
+		env.mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+		}
+
+		var run domain.Run
+		if err := json.NewDecoder(w.Body).Decode(&run); err != nil {
+			t.Fatal(err)
+		}
+		if run.State != domain.RunStateRunning {
+			t.Fatalf("expected running run response, got %s", run.State)
+		}
+		if !strings.Contains(run.RecoveryNotes, "Resume requested") {
+			t.Fatalf("expected resume recovery note, got %q", run.RecoveryNotes)
 		}
 	})
 

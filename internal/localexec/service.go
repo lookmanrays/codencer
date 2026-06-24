@@ -252,11 +252,31 @@ func (s *Service) ResumeRun(ctx context.Context, opts RunOptions) (ExecutionRepo
 	if err != nil {
 		return ExecutionReport{}, err
 	}
+	run, err := resolved.client.ResumeRun(ctx, opts.RunID)
+	if err == nil {
+		return resolved.report(ExecutionReport{
+			OK:     true,
+			Status: string(run.State),
+			Run:    run,
+			Events: []RunEvent{{
+				Type:      "run_resumed",
+				RunID:     run.ID,
+				State:     string(run.State),
+				Summary:   run.RecoveryNotes,
+				CreatedAt: formatEventTime(run.UpdatedAt),
+			}},
+			ExitCode: ExitSuccess,
+		}), nil
+	}
+	if daemonErr, ok := err.(*DaemonError); ok && daemonErr.Kind == BlockerDaemonNotRunning {
+		return resolved.daemonReport(err), nil
+	}
 	blocker := &Blocker{
 		Type:                 BlockerUnsupportedOperation,
-		Message:              "run resume is not yet exposed by the local daemon HTTP API; approve/reject pending gates or start a new task",
+		Message:              "run resume is not supported for the current daemon/run state; approve/reject pending gates or start a new task",
 		NeedsPlannerDecision: true,
 		Retryable:            false,
+		ObservedFacts:        []string{daemonErrorMessage(err)},
 	}
 	interrupt := humanInterruptFromBlocker(blocker, resolved.project.ID, opts.RunID, "", resolved.project.AdapterProfile, "", "")
 	if interrupt != nil {
@@ -267,8 +287,24 @@ func (s *Service) ResumeRun(ctx context.Context, opts RunOptions) (ExecutionRepo
 		Status:          "blocked",
 		Blocker:         blocker,
 		HumanInterrupts: interruptList(interrupt),
-		ExitCode:        ExitBlocked,
+		Events: []RunEvent{{
+			Type:    "run_resume_blocked",
+			RunID:   opts.RunID,
+			State:   "blocked",
+			Summary: blocker.Message,
+		}},
+		ExitCode: ExitBlocked,
 	}), nil
+}
+
+func daemonErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	if daemonErr, ok := err.(*DaemonError); ok {
+		return strings.TrimSpace(daemonErr.Message)
+	}
+	return strings.TrimSpace(err.Error())
 }
 
 func eventsFromRunAndSteps(run *domain.Run, steps []*domain.Step) []RunEvent {

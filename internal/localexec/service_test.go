@@ -33,6 +33,7 @@ func TestSubmitDaemonNotRunningBlocker(t *testing.T) {
 
 func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 	cancelled := false
+	resumed := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
@@ -47,8 +48,22 @@ func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-1/steps":
 			writeTestJSON(t, w, http.StatusOK, []*domain.Step{{ID: "step-1", State: domain.StepStateCompleted}})
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1":
-			cancelled = true
-			w.WriteHeader(http.StatusOK)
+			var req struct {
+				Action string `json:"action"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode patch action: %v", err)
+			}
+			switch req.Action {
+			case "abort":
+				cancelled = true
+				w.WriteHeader(http.StatusOK)
+			case "resume":
+				resumed = true
+				writeTestJSON(t, w, http.StatusOK, domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning, RecoveryNotes: "Resume requested by operator."})
+			default:
+				t.Fatalf("unexpected patch action %q", req.Action)
+			}
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -96,8 +111,32 @@ func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeRun error: %v", err)
 	}
+	if !resumed || !resume.OK || resume.Status != string(domain.RunStateRunning) || len(resume.Events) != 1 || resume.Events[0].Type != "run_resumed" {
+		t.Fatalf("expected daemon resume call and run_resumed report, resumed=%t report=%+v", resumed, resume)
+	}
+}
+
+func TestResumeRunMapsDaemonUnsupportedToStructuredBlocker(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/runs/run-1" {
+			http.Error(w, "run run-1 is not in a resumable state", http.StatusConflict)
+			return
+		}
+		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	resume, err := service.ResumeRun(context.Background(), RunOptions{BaseOptions: base, RunID: "run-1"})
+	if err != nil {
+		t.Fatalf("ResumeRun error: %v", err)
+	}
 	if resume.ExitCode != ExitBlocked || resume.Blocker == nil || resume.Blocker.Type != BlockerUnsupportedOperation {
 		t.Fatalf("expected unsupported resume blocker, got %+v", resume)
+	}
+	if len(resume.Events) != 1 || resume.Events[0].Type != "run_resume_blocked" {
+		t.Fatalf("expected run_resume_blocked event, got %+v", resume.Events)
 	}
 }
 

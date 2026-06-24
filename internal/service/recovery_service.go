@@ -337,6 +337,7 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 	slog.Info("Resuming run", "runID", runID)
 
 	run.State = domain.RunStateRunning
+	run.RecoveryNotes = "Resume requested by operator."
 	run.UpdatedAt = time.Now().UTC()
 	return s.runsRepo.UpdateState(ctx, run)
 }

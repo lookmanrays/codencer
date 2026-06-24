@@ -243,6 +243,24 @@ func (h *APIHandler) handleRunByID(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		if req.Action == "resume" {
+			if h.RecoverySvc == nil {
+				http.Error(w, "recovery service unavailable", http.StatusNotImplemented)
+				return
+			}
+			if err := h.RecoverySvc.ResumeRun(r.Context(), id); err != nil {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
+			run, err := h.RunSvc.GetRun(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(run)
+			return
+		}
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 
 	default:
