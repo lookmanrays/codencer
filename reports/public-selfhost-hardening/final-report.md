@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `acbefa129912a4c5d6f572daadf642f03df6c060`
+Implementation commit hash: `3eefe92a55e8915ef903b11546c8b037ef054c2a`
 
 Branch: `next-phase`
 
@@ -20,6 +20,7 @@ Branch: `next-phase`
 - Updated Gateway Console simple-task submit to send `wait=false`, poll the run report until terminal status, display `pending` while waiting, and emit the terminal audit event once when report refresh observes completion.
 - Wired project run cancellation through Gateway HTTP, Gateway MCP, Relay HTTP, Relay MCP, Connector project proxy, and local daemon-backed cancellation, with Gateway run history/audit events for `cancel_project_run_requested` and terminal `run_cancelled`.
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
+- Added Gateway test coverage proving metadata-only `codencer sync publish` emits sanitized aggregate `sync.publish` and per-run `sync.run_published` audit events.
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
 - Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run events`, `run report`, and the structured `run resume` capability blocker.
@@ -170,6 +171,9 @@ Branch: `next-phase`
 - `./scripts/verify_public_selfhost_release.sh` after correcting the local run events proof - passed
 - `make verify-public-release` after adding isolated local run CLI redaction checks - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding isolated local run CLI redaction checks - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1742`
+- `go test ./internal/gateway` after asserting sync publish audit records - passed
+- `make verify-gateway` after asserting sync publish audit records - passed
+- `make verify-public-release` after asserting sync publish audit records - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
@@ -182,7 +186,7 @@ Branch: `next-phase`
 - `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route.
 - Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
-- Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
+- Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial: local report/event records, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, and a Console run-detail response panel now exist, but true resume remains incomplete.
 - Full explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, run events, run report, and run resume blocker output in deterministic tests/verifiers.
 
