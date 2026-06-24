@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `40de3d8c3dcc3b100ce2e88d4c5e1c839a9b8b67`
+Implementation commit hash: `b44a5d947e30f98728e8238582705d0b02f1d8c1`
 
 Branch: `next-phase`
 
@@ -15,6 +15,7 @@ Branch: `next-phase`
 - Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
 - Added Gateway MCP async lifecycle tools: `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run`, `codencer.get_project_run_status`, `codencer.get_gateway_run_events`, and structured `codencer.cancel_project_run` / `codencer.resume_project_run` capability blockers.
 - Preserved `codencer.submit_project_task_and_wait` as a compatibility tool while adding non-blocking submit/start paths for planners that should not hold one long HTTP/MCP request open.
+- Updated Gateway Console simple-task submit to send `wait=false`, poll the run report until terminal status, display `pending` while waiting, and emit the terminal audit event once when report refresh observes completion.
 - Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
@@ -34,6 +35,11 @@ Branch: `next-phase`
   - Gates: `real_executor_e2e_codex`, `required_real_executor_proofs`
   - Verdict: overall `NO-GO` for the default public gate because Claude Code and Antigravity were missing in that run; the Codex subgate itself passed.
   - Evidence: live verifier log shows `Adapter Execution: Starting process`, `adapter=codex`, and binary `/Applications/Codex.app/Contents/Resources/codex`; simulation env was forced to `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
+- Latest Codex artifact-backed RC rerun is `NO-GO` due to an external Codex usage-limit error, not simulation:
+  - Report: `reports/public-selfhost-rc/20260624T125824Z/summary.md`
+  - Gate: `real_executor_e2e_codex`
+  - Evidence: live verifier printed `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0`, daemon log showed `Adapter Execution: Starting process` with binary `/Applications/Codex.app/Contents/Resources/codex`, and report payload had `is_simulation=false`.
+  - Blocker: Codex CLI returned `You've hit your usage limit`; the verifier correctly returned `NO-GO`.
 - Default all-real-executor RC proof remains `NO-GO`:
   - Report: `reports/public-selfhost-rc/20260624T115347Z/summary.md`
   - Gates passed through `real_executor_e2e_codex`, then `required_real_executor_proofs` failed because Claude Code and Antigravity were missing from that run.
@@ -57,6 +63,8 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1259`
   - `reports/gateway-console-screenshots/2026-06-24-1323`
   - `reports/gateway-console-screenshots/2026-06-24-1403`
+  - `reports/gateway-console-screenshots/2026-06-24-1553`
+  - `reports/gateway-console-screenshots/2026-06-24-1556`
 
 ## Commands Run
 
@@ -68,9 +76,11 @@ Branch: `next-phase`
 - `go test ./internal/connector -count=1` - passed
 - `go test ./internal/gateway` - passed
 - `go test ./internal/gateway` after adding Gateway MCP async lifecycle tools - passed
+- `go test ./internal/localexec` after adding async report refresh - passed
 - `go test ./internal/localexec ./internal/gateway ./cmd/codencer` - passed
 - `go test ./...` - passed
 - `go test ./...` after adding Gateway MCP async lifecycle tools - passed
+- `go test ./...` after adding Gateway Console async submit/report polling - passed
 - `cd web/gateway-console && npm run format:check` - passed
 - `cd web/gateway-console && npm run lint` - passed
 - `cd web/gateway-console && npm run typecheck` - passed
@@ -80,11 +90,14 @@ Branch: `next-phase`
 - `cd web/gateway-console && npm run test:e2e` - passed
 - `make verify-gateway` - passed
 - `make verify-gateway` after adding Gateway MCP async lifecycle tools - passed
+- `make verify-gateway` after adding Gateway Console async submit/report polling - passed
 - `make verify-gateway-console` - passed
 - `make verify-gateway-console-live` - passed
+- `make verify-gateway-console-live` after adding terminal audit-on-report refresh - passed
 - `go test ./internal/adapters/antigravity` - passed
 - `cd web/gateway-console && npm run format:check && npm run lint -- tests/live/verify-live.mjs` - passed
 - `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing; report `reports/public-selfhost-rc/20260624T122313Z/summary.md`
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex make verify-public-selfhost-rc` - failed with `NO-GO` due to external Codex usage limit after invoking the real Codex binary with simulation disabled; report `reports/public-selfhost-rc/20260624T125824Z/summary.md`
 - `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - passed with scoped `GO` for Codex-only proof
 - `make verify-public-release` - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed
@@ -95,6 +108,7 @@ Branch: `next-phase`
 ## Remaining Blockers
 
 - Antigravity real executor proof is not proven in the public self-host RC gate.
+- Latest Codex real executor rerun is blocked by Codex account usage limits despite invoking the real binary with `is_simulation=false`; prior Codex proof remains the latest passing Codex proof.
 - Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
 - `codencer run resume` and Gateway MCP `codencer.resume_project_run` are exposed as structured blockers because the daemon/Relay path does not yet expose a true resume route.
 - Gateway MCP `codencer.cancel_project_run` is currently a structured capability blocker for project-level Gateway routing; local CLI cancellation support remains separate and limited by daemon/executor capability.

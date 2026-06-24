@@ -37,9 +37,9 @@ the exact package was not available in the current attachment cache.
 | Local-first source of truth | Partially implemented | Local daemon/CLI exists; default project/status/run/submit human output is redacted, while explicit JSON/debug outputs still carry local state for operator tooling. |
 | Explicit sync/publish | Partially implemented | `codencer sync status/preview/publish` now provides metadata-only preview; confirmed publish ingests sanitized metadata into Gateway run history. Raw logs/artifacts remain blocked. |
 | Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first; default human output redacts local paths, but progress UX remains narrow. |
-| Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; Gateway MCP now exposes async start/submit/list/status/report/events and structured cancel/resume capability blockers. Console submit still uses a blocking report path for immediate result display. |
+| Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; Gateway MCP exposes async start/submit/list/status/report/events and structured cancel/resume capability blockers. Gateway Console now submits simple tasks with `wait=false`, polls run reports, and records terminal audit events on report refresh. |
 | Human interrupt lifecycle | Partially implemented | Local reports/events now expose first-class `human_interrupts`, Gateway blocker outcomes emit `human_interrupt_created` audit events, and Antigravity unsafe permission waits now fail fast as manual-attention results; complete answer/resume UI/MCP lifecycle remains incomplete. |
-| Real executor proofs | Partially implemented | Codex has current artifact-backed proof; earlier Claude Code proof exists; Antigravity remains unproven and now fails early when the provided LS workspace does not match the isolated verifier repo. |
+| Real executor proofs | Partially implemented | Codex has prior artifact-backed proof and latest rerun invoked the real Codex binary with simulation disabled but failed on an external Codex usage-limit error; earlier Claude Code proof exists; Antigravity remains unproven and now fails early when the provided LS workspace does not match the isolated verifier repo. |
 | Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, and grouped lifecycle summaries; synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway/sync sanitization exists and default local human CLI output is tested for path/daemon URL redaction; full cross-surface redaction proof is still incomplete. |
 | Public/private boundary | Partially implemented | Docs/checks exist; public repo still contains cloud-control-plane packages that need boundary review against the new specs. |
@@ -73,7 +73,7 @@ the exact package was not available in the current attachment cache.
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Submit/status/events/report/cancel/resume lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists. Gateway MCP now exposes `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run_status`, `codencer.get_run_report`, `codencer.get_gateway_run_events`, and structured `cancel_project_run`/`resume_project_run` capability blockers. |
-| Long-running tasks not dependent on one blocking request | Partially implemented | Local submit can run without `--wait`, Relay MCP has async project tools, and Gateway MCP now has a non-blocking async lifecycle. Gateway Console still submits through a blocking Relay call for immediate result rendering. |
+| Long-running tasks not dependent on one blocking request | Partially implemented | Local submit can run without `--wait`, Relay MCP has async project tools, Gateway MCP has a non-blocking async lifecycle, and Gateway Console simple-task submit now returns after submission and polls reports until terminal evidence is available. Manifest mode remains a blocking advanced path. |
 | `get_run_report` for simple and manifest runs | Implemented for covered Gateway paths | Gateway tests cover submit/get report and manifest report paths. |
 | Run state transitions include waiting/canceled/resumed | Partially implemented | Domain has states/gates in daemon tests; Gateway MCP preserves non-terminal `submitted/running` states and exposes structured cancel/resume blockers where project-level Relay support is absent. |
 
@@ -137,7 +137,7 @@ the exact package was not available in the current attachment cache.
 The release remains `NO-GO` until at least these are resolved:
 
 1. Antigravity real executor proof must pass or the final verdict must remain `NO-GO`.
-2. Async lifecycle has local, Relay MCP, and Gateway MCP coverage with structured blockers where unsupported; Gateway Console still needs a fully non-blocking submit/status polling mode before this area is fully complete.
+2. Async lifecycle now covers local, Relay MCP, Gateway MCP, and Gateway Console simple-task submit/report polling; manifest mode, true remote cancel, and true resume remain incomplete or structured blockers.
 3. Human interrupt lifecycle still needs complete operator answer/resume UI/MCP flows; first-class local interrupt records and Gateway audit now exist for blocker outcomes.
 4. Full redaction proof across every CLI/MCP/UI/Gateway surface remains incomplete, although default local human CLI output and sync preview are now covered.
 5. Raw log/artifact sync remains unsupported by design; only sanitized metadata-only `codencer sync publish --confirm` is implemented.
