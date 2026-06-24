@@ -158,6 +158,18 @@ func TestSubmitWaitMapsCompletedAndQuestionBlocker(t *testing.T) {
 			if tc.blocker != "" && (report.Blocker == nil || report.Blocker.Type != tc.blocker) {
 				t.Fatalf("blocker = %+v, want %s", report.Blocker, tc.blocker)
 			}
+			if tc.blocker == BlockerQuestion {
+				if len(report.HumanInterrupts) != 1 {
+					t.Fatalf("expected one report human interrupt, got %+v", report.HumanInterrupts)
+				}
+				interrupt := report.HumanInterrupts[0]
+				if interrupt.Type != "clarifying_question_required" || interrupt.Status != "waiting_for_human" || interrupt.RequestedAction != "answer_question" {
+					t.Fatalf("unexpected human interrupt: %+v", interrupt)
+				}
+				if report.Task == nil || len(report.Task.HumanInterrupts) != 1 || report.Task.Blocker == nil || report.Task.Blocker.Interrupt == nil {
+					t.Fatalf("expected task and blocker interrupt metadata, got task=%+v", report.Task)
+				}
+			}
 		})
 	}
 }

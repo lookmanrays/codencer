@@ -3763,10 +3763,18 @@ func printExecutionReport(w io.Writer, report localexec.ExecutionReport) {
 			fmt.Fprintf(w, "summary: %s\n", safeCLIText(event.Summary))
 		}
 	}
+	for _, interrupt := range report.HumanInterrupts {
+		printHumanInterrupt(w, interrupt)
+	}
 	if report.Task != nil {
 		fmt.Fprintf(w, "task: %s %s step=%s profile=%s\n", report.Task.TaskID, report.Task.Status, report.Task.StepID, report.Task.Profile)
 		if report.Task.Summary != "" {
 			fmt.Fprintf(w, "summary: %s\n", safeCLIText(report.Task.Summary))
+		}
+		if len(report.HumanInterrupts) == 0 {
+			for _, interrupt := range report.Task.HumanInterrupts {
+				printHumanInterrupt(w, interrupt)
+			}
 		}
 	}
 	if report.Profile != nil {
@@ -3793,6 +3801,14 @@ func printRunPlanReport(w io.Writer, report localexec.RunPlanReport) {
 		if task.Evidence.Result != nil && task.Evidence.Result.Summary != "" && task.Evidence.Result.Summary != task.Summary {
 			fmt.Fprintf(w, "result: %s\n", safeCLIText(task.Evidence.Result.Summary))
 		}
+		if len(report.HumanInterrupts) == 0 {
+			for _, interrupt := range task.HumanInterrupts {
+				printHumanInterrupt(w, interrupt)
+			}
+		}
+	}
+	for _, interrupt := range report.HumanInterrupts {
+		printHumanInterrupt(w, interrupt)
 	}
 	if report.Evidence.Result != nil && report.Evidence.Result.Summary != "" {
 		fmt.Fprintf(w, "summary: %s\n", safeCLIText(report.Evidence.Result.Summary))
@@ -3802,6 +3818,16 @@ func printRunPlanReport(w io.Writer, report localexec.RunPlanReport) {
 	}
 	if report.ReportPath != "" {
 		fmt.Fprintln(w, "report: available in the local Codencer artifact store")
+	}
+}
+
+func printHumanInterrupt(w io.Writer, interrupt localexec.HumanInterrupt) {
+	fmt.Fprintf(w, "human_interrupt: %s status=%s action=%s\n", interrupt.Type, interrupt.Status, interrupt.RequestedAction)
+	if interrupt.Prompt != "" {
+		fmt.Fprintf(w, "prompt: %s\n", safeCLIText(interrupt.Prompt))
+	}
+	if len(interrupt.AllowedResponses) > 0 {
+		fmt.Fprintf(w, "allowed_responses: %s\n", strings.Join(interrupt.AllowedResponses, ","))
 	}
 }
 

@@ -35,13 +35,28 @@ const (
 )
 
 type Blocker struct {
-	Type                 string   `json:"type"`
-	Message              string   `json:"message"`
-	NeedsPlannerDecision bool     `json:"needs_planner_decision"`
-	Retryable            bool     `json:"retryable,omitempty"`
-	Questions            []string `json:"questions,omitempty"`
-	ObservedFacts        []string `json:"observed_facts,omitempty"`
-	EvidenceRefs         []string `json:"evidence_refs,omitempty"`
+	Type                 string          `json:"type"`
+	Message              string          `json:"message"`
+	NeedsPlannerDecision bool            `json:"needs_planner_decision"`
+	Retryable            bool            `json:"retryable,omitempty"`
+	Questions            []string        `json:"questions,omitempty"`
+	ObservedFacts        []string        `json:"observed_facts,omitempty"`
+	EvidenceRefs         []string        `json:"evidence_refs,omitempty"`
+	Interrupt            *HumanInterrupt `json:"interrupt,omitempty"`
+}
+
+type HumanInterrupt struct {
+	RunID            string   `json:"run_id"`
+	StepID           string   `json:"step_id,omitempty"`
+	ProjectID        string   `json:"project_id"`
+	ExecutorProfile  string   `json:"executor_profile,omitempty"`
+	Type             string   `json:"type"`
+	Status           string   `json:"status"`
+	Prompt           string   `json:"prompt,omitempty"`
+	RequestedAction  string   `json:"requested_action,omitempty"`
+	AllowedResponses []string `json:"allowed_responses,omitempty"`
+	CreatedAt        string   `json:"created_at,omitempty"`
+	UpdatedAt        string   `json:"updated_at,omitempty"`
 }
 
 type Evidence struct {
@@ -75,21 +90,22 @@ type RunEvent struct {
 }
 
 type TaskReport struct {
-	OK             bool         `json:"ok"`
-	Status         string       `json:"status"`
-	TaskID         string       `json:"task_id,omitempty"`
-	ProjectID      string       `json:"project_id"`
-	RunID          string       `json:"run_id"`
-	StepID         string       `json:"step_id"`
-	Adapter        string       `json:"adapter"`
-	Profile        string       `json:"profile"`
-	AdapterProfile string       `json:"adapter_profile"`
-	Title          string       `json:"title,omitempty"`
-	Summary        string       `json:"summary,omitempty"`
-	Step           *domain.Step `json:"step,omitempty"`
-	Blocker        *Blocker     `json:"blocker,omitempty"`
-	Evidence       Evidence     `json:"evidence,omitempty"`
-	ExitCode       int          `json:"exit_code"`
+	OK              bool             `json:"ok"`
+	Status          string           `json:"status"`
+	TaskID          string           `json:"task_id,omitempty"`
+	ProjectID       string           `json:"project_id"`
+	RunID           string           `json:"run_id"`
+	StepID          string           `json:"step_id"`
+	Adapter         string           `json:"adapter"`
+	Profile         string           `json:"profile"`
+	AdapterProfile  string           `json:"adapter_profile"`
+	Title           string           `json:"title,omitempty"`
+	Summary         string           `json:"summary,omitempty"`
+	Step            *domain.Step     `json:"step,omitempty"`
+	Blocker         *Blocker         `json:"blocker,omitempty"`
+	HumanInterrupts []HumanInterrupt `json:"human_interrupts,omitempty"`
+	Evidence        Evidence         `json:"evidence,omitempty"`
+	ExitCode        int              `json:"exit_code"`
 }
 
 type ExecutionReport struct {
@@ -100,6 +116,7 @@ type ExecutionReport struct {
 	Runs             []*domain.Run        `json:"runs,omitempty"`
 	Steps            []*domain.Step       `json:"steps,omitempty"`
 	Events           []RunEvent           `json:"events,omitempty"`
+	HumanInterrupts  []HumanInterrupt     `json:"human_interrupts,omitempty"`
 	Task             *TaskReport          `json:"task,omitempty"`
 	Blocker          *Blocker             `json:"blocker,omitempty"`
 	DaemonURL        string               `json:"daemon_url,omitempty"`
@@ -111,17 +128,18 @@ type ExecutionReport struct {
 }
 
 type RunPlanReport struct {
-	OK            bool            `json:"ok"`
-	Status        string          `json:"status"`
-	ManifestPath  string          `json:"manifest_path"`
-	Project       *ProjectSummary `json:"project,omitempty"`
-	Run           *domain.Run     `json:"run,omitempty"`
-	Tasks         []TaskReport    `json:"tasks"`
-	StoppedAtTask string          `json:"stopped_at_task,omitempty"`
-	Blocker       *Blocker        `json:"blocker,omitempty"`
-	Evidence      Evidence        `json:"evidence,omitempty"`
-	ReportPath    string          `json:"report_path,omitempty"`
-	ExitCode      int             `json:"exit_code"`
+	OK              bool             `json:"ok"`
+	Status          string           `json:"status"`
+	ManifestPath    string           `json:"manifest_path"`
+	Project         *ProjectSummary  `json:"project,omitempty"`
+	Run             *domain.Run      `json:"run,omitempty"`
+	Tasks           []TaskReport     `json:"tasks"`
+	StoppedAtTask   string           `json:"stopped_at_task,omitempty"`
+	Blocker         *Blocker         `json:"blocker,omitempty"`
+	HumanInterrupts []HumanInterrupt `json:"human_interrupts,omitempty"`
+	Evidence        Evidence         `json:"evidence,omitempty"`
+	ReportPath      string           `json:"report_path,omitempty"`
+	ExitCode        int              `json:"exit_code"`
 }
 
 type ErrorReport struct {

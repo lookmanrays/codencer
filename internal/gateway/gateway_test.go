@@ -599,6 +599,29 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("run event history missing grouped audit or pagination metadata: %s", runEventsBody)
 	}
 	assertNoGatewayConsoleSensitiveLeak(t, runEventsBody)
+	blockedRun := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"title":            "Blocked Gateway task",
+		"goal":             "Ask for a safe operator decision.",
+		"timeout_seconds":  30,
+	})
+	blockedBody := mustJSON(t, blockedRun)
+	blockedRunHistoryID, _ := blockedRun["run_history_id"].(string)
+	if blockedRunHistoryID == "" || !strings.Contains(blockedBody, `"status":"blocked"`) || !strings.Contains(blockedBody, `"type":"question"`) {
+		t.Fatalf("blocked run did not return blocker and history id: %s", blockedBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, blockedBody)
+	blockedEvents := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedRunHistoryID+"/events", token.AccessToken)
+	blockedEventsBody := mustJSON(t, blockedEvents)
+	for _, want := range []string{`"type":"blocker"`, `"type":"human_interrupt_created"`, `"interrupt_type":"clarifying_question_required"`, `"status":"waiting_for_human"`, `"requested_action":"answer_question"`} {
+		if !strings.Contains(blockedEventsBody, want) {
+			t.Fatalf("blocked run events missing %s: %s", want, blockedEventsBody)
+		}
+	}
+	if strings.Contains(blockedEventsBody, "/Users/example") || strings.Contains(blockedEventsBody, "relay-secret") || strings.Contains(blockedEventsBody, "/tmp/codencer/secret") {
+		t.Fatalf("blocked run events leaked sensitive data: %s", blockedEventsBody)
+	}
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	auditBody := mustJSON(t, audit)
 	for _, eventType := range []string{
@@ -610,6 +633,7 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		"executor_selected",
 		"run_started",
 		"run_completed",
+		"human_interrupt_created",
 		"report_read",
 	} {
 		if !strings.Contains(auditBody, `"`+eventType+`"`) {
@@ -771,6 +795,26 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 	mux.HandleFunc("/api/v2/projects/codencer/submit", func(w http.ResponseWriter, r *http.Request) {
 		requireRelayAuth(t, r)
 		relay.lastHostLabel = r.URL.Query().Get("host_label")
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req["title"] == "Blocked Gateway task" {
+			writeTestJSON(t, w, map[string]any{
+				"ok":      false,
+				"status":  "blocked",
+				"run_id":  "run-blocked",
+				"step_id": "step-blocked",
+				"blocker": map[string]any{
+					"type":      "question",
+					"message":   "Need operator choice from /Users/example/private token=relay-secret",
+					"questions": []string{"Choose a safe path without exposing /tmp/codencer/secret"},
+				},
+				"task": map[string]any{
+					"run_id": "run-blocked",
+					"status": "blocked",
+				},
+			})
+			return
+		}
 		writeTestJSON(t, w, map[string]any{
 			"ok":      true,
 			"status":  "completed",

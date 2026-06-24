@@ -38,7 +38,7 @@ the exact package was not available in the current attachment cache.
 | Explicit sync/publish | Partially implemented | `codencer sync status/preview/publish` now provides metadata-only preview; confirmed publish ingests sanitized metadata into Gateway run history. Raw logs/artifacts remain blocked. |
 | Local CLI submit UX | Partially implemented | `codencer submit` exists and is local-first; default human output redacts local paths, but progress UX remains narrow. |
 | Async run lifecycle | Partially implemented | Local `run start/list/get/status/events/report/cancel/resume` exists; `resume` is a structured unsupported blocker until daemon HTTP resume exists. |
-| Human interrupt lifecycle | Partially implemented | Low-level gates/blockers exist; no complete planning/question/permission/OS-action resume/cancel lifecycle. |
+| Human interrupt lifecycle | Partially implemented | Local reports/events now expose first-class `human_interrupts`, and Gateway blocker outcomes emit `human_interrupt_created` audit events; complete answer/resume UI/MCP lifecycle remains incomplete. |
 | Real executor proofs | Partially implemented | Codex real gate exists; Claude Code and Antigravity release-gate proofs are not proven. |
 | Run history/audit/console | Partially implemented | Gateway-observed run history/audit now includes scope, limit/offset pagination, server-side filters, and grouped lifecycle summaries; synced/local ingest transport remains incomplete. |
 | Redaction | Partially implemented | Gateway/sync sanitization exists and default local human CLI output is tested for path/daemon URL redaction; full cross-surface redaction proof is still incomplete. |
@@ -55,7 +55,7 @@ the exact package was not available in the current attachment cache.
 | Fake/simulation cannot satisfy GO | Partially implemented | Real executor gates reject simulation text/metadata and missing required real proofs force `NO-GO`; Claude/Antigravity proof execution remains unproven. |
 | Artifact-backed verifier | Implemented | `make verify-public-selfhost-rc` builds/unpacks artifacts through `scripts/verify_public_selfhost_rc.sh`. |
 | Codex, Claude Code, and Antigravity real proofs | Missing | Codex path exists; no equivalent required release proof for Claude Code or Antigravity found. |
-| Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks and now asserts run/audit pagination plus grouped audit arrays; broader human-interrupt and multi-executor proof coverage remains incomplete. |
+| Missing reports/audit/path leaks fail gate | Partially implemented | Existing Gateway live verifier checks report/audit/leaks and now asserts run/audit pagination plus grouped audit arrays; human interrupt audit is covered for blocker outcomes, but multi-executor proof coverage remains incomplete. |
 | Machine-readable and human report | Implemented | `reports/public-selfhost-rc/<timestamp>/summary.json` and `.md` are produced by the RC script. |
 
 ### 01 - Local-first Source of Truth
@@ -81,11 +81,11 @@ the exact package was not available in the current attachment cache.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Planning approval required | Partially implemented | Low-level gates/manual approval exist in daemon/app tests. Not exposed as release-level CLI/MCP/UI lifecycle. |
-| Clarifying questions | Partially implemented | `localexec.Blocker` has `Questions`; no first-class resume/answer flow found. |
-| Permission requests | Partially implemented | Dangerous executor confirmation exists in Gateway Console; no generalized permission-request lifecycle. |
-| OS/system human action required | Missing | No first-class OS/system action interrupt model found. |
-| Resume/cancel/audit interrupt lifecycle | Missing | Abort/cancel exists in lower-level routes; no complete public interrupt lifecycle. |
+| Planning approval required | Partially implemented | Local blockers map manual approvals to `planning_approval_required` interrupt records; no complete UI/MCP approval lifecycle. |
+| Clarifying questions | Partially implemented | Question blockers now produce `clarifying_question_required` interrupt records and Gateway `human_interrupt_created` audit; no first-class answer/resume command. |
+| Permission requests | Partially implemented | Dangerous executor confirmation exists in Gateway Console, and unsafe-action blockers map to `permission_request_required`; no generalized permission-request lifecycle. |
+| OS/system human action required | Partially implemented | Daemon-not-running blockers map to `os_system_human_action_required` records; no full OS-action resolver flow. |
+| Resume/cancel/audit interrupt lifecycle | Partially implemented | Local events include `human_interrupt_created`; Gateway audit records blocker interrupts; resume still returns a structured unsupported/capability blocker. |
 
 ### 04 - CLI Commands and Control Plane
 
@@ -117,7 +117,7 @@ the exact package was not available in the current attachment cache.
 | --- | --- | --- |
 | Compact run history | Implemented | `/api/gateway/v1/runs` and `/console/runs` exist. |
 | Run detail | Implemented | `/api/gateway/v1/runs/{id}` and `/console/runs/[id]` exist. |
-| Audit lifecycle events | Implemented for Gateway-observed runs | Gateway records task/route/relay/connector/executor/start/terminal/report events. |
+| Audit lifecycle events | Implemented for Gateway-observed runs | Gateway records task/route/relay/connector/executor/start/terminal/report events and `human_interrupt_created` for blocker outcomes. |
 | Pagination | Implemented for Gateway-observed history | Runs and audit support `limit`/`offset` and return `pagination.has_more`/`next_offset`; Console exposes previous/next controls. |
 | Filters | Implemented for Gateway-observed history | Runs support project/status/scope; audit supports event type, project, run ID, and run history filters. |
 | Grouped audit | Implemented for Gateway-observed history | Audit responses include grouped lifecycle summaries, and Console renders a grouped lifecycle section linking to run detail. |
@@ -139,7 +139,7 @@ The release remains `NO-GO` until at least these are resolved:
 1. Claude Code real executor proof must be implemented or the final verdict must remain `NO-GO`.
 2. Antigravity real executor proof must be implemented or the final verdict must remain `NO-GO`.
 3. Async lifecycle must include submit/status/events/report/cancel/resume behavior or explicit structured capability blockers where unsupported.
-4. Human interrupt lifecycle must be first-class across CLI/MCP/UI/Gateway or explicitly proven with structured blockers and audit.
+4. Human interrupt lifecycle still needs complete operator answer/resume UI/MCP flows; first-class local interrupt records and Gateway audit now exist for blocker outcomes.
 5. Full redaction proof across every CLI/MCP/UI/Gateway surface remains incomplete, although default local human CLI output and sync preview are now covered.
 6. Raw log/artifact sync remains unsupported by design; only sanitized metadata-only `codencer sync publish --confirm` is implemented.
 7. Broader incremental sync policy and external source reconciliation remain incomplete even though Gateway-observed and explicit synced metadata history now exist.

@@ -17,6 +17,7 @@ import (
 	manifestpkg "agent-bridge/internal/manifest"
 	profilepkg "agent-bridge/internal/profile"
 	projectpkg "agent-bridge/internal/project"
+	"agent-bridge/internal/security"
 	"agent-bridge/internal/validation"
 )
 
@@ -257,11 +258,16 @@ func (s *Service) ResumeRun(ctx context.Context, opts RunOptions) (ExecutionRepo
 		NeedsPlannerDecision: true,
 		Retryable:            false,
 	}
+	interrupt := humanInterruptFromBlocker(blocker, resolved.project.ID, opts.RunID, "", resolved.project.AdapterProfile, "", "")
+	if interrupt != nil {
+		blocker.Interrupt = interrupt
+	}
 	return resolved.report(ExecutionReport{
-		OK:       false,
-		Status:   "blocked",
-		Blocker:  blocker,
-		ExitCode: ExitBlocked,
+		OK:              false,
+		Status:          "blocked",
+		Blocker:         blocker,
+		HumanInterrupts: interruptList(interrupt),
+		ExitCode:        ExitBlocked,
 	}), nil
 }
 
@@ -300,6 +306,16 @@ func eventsFromRunAndSteps(run *domain.Run, steps []*domain.Step) []RunEvent {
 			Summary:   step.StatusReason,
 			CreatedAt: formatEventTime(step.UpdatedAt),
 		})
+		if step.State == domain.StepStateNeedsApproval || step.State == domain.StepStateNeedsManualAttention {
+			events = append(events, RunEvent{
+				Type:      "human_interrupt_created",
+				RunID:     runID,
+				StepID:    step.ID,
+				State:     "waiting_for_human",
+				Summary:   step.StatusReason,
+				CreatedAt: formatEventTime(step.UpdatedAt),
+			})
+		}
 	}
 	return events
 }
@@ -346,11 +362,12 @@ func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionRepo
 			return ExecutionReport{}, reportError(ExitInternal, BlockerBridgeError, err.Error())
 		}
 		return resolved.report(ExecutionReport{
-			OK:       true,
-			Status:   "submitted",
-			Run:      run,
-			Task:     &taskReport,
-			ExitCode: ExitSuccess,
+			OK:              true,
+			Status:          "submitted",
+			Run:             run,
+			Task:            &taskReport,
+			HumanInterrupts: taskReport.HumanInterrupts,
+			ExitCode:        ExitSuccess,
 		}), nil
 	}
 	taskReport := s.waitForTask(ctx, resolved.client, resolved.project.ID, run.ID, taskID, step.ID, resolution)
@@ -358,12 +375,13 @@ func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionRepo
 		return ExecutionReport{}, reportError(ExitInternal, BlockerBridgeError, err.Error())
 	}
 	report := resolved.report(ExecutionReport{
-		OK:       taskReport.OK,
-		Status:   taskReport.Status,
-		Run:      run,
-		Task:     &taskReport,
-		Blocker:  taskReport.Blocker,
-		ExitCode: taskReport.ExitCode,
+		OK:              taskReport.OK,
+		Status:          taskReport.Status,
+		Run:             run,
+		Task:            &taskReport,
+		Blocker:         taskReport.Blocker,
+		HumanInterrupts: taskReport.HumanInterrupts,
+		ExitCode:        taskReport.ExitCode,
 	})
 	return report, nil
 }
@@ -376,14 +394,15 @@ func writeSubmitRunReport(resolved *resolvedContext, run *domain.Run, taskReport
 		run = &domain.Run{ID: taskReport.RunID, ProjectID: taskReport.ProjectID}
 	}
 	report := RunPlanReport{
-		OK:       taskReport.OK,
-		Status:   taskReport.Status,
-		Project:  resolved.projectSummary(taskReport.Profile),
-		Run:      run,
-		Tasks:    []TaskReport{taskReport},
-		Blocker:  taskReport.Blocker,
-		Evidence: taskReport.Evidence,
-		ExitCode: taskReport.ExitCode,
+		OK:              taskReport.OK,
+		Status:          taskReport.Status,
+		Project:         resolved.projectSummary(taskReport.Profile),
+		Run:             run,
+		Tasks:           []TaskReport{taskReport},
+		Blocker:         taskReport.Blocker,
+		HumanInterrupts: taskReport.HumanInterrupts,
+		Evidence:        taskReport.Evidence,
+		ExitCode:        taskReport.ExitCode,
 	}
 	path, err := writeRunPlanReport(resolved.paths.ArtifactsDir, run.ID, report)
 	if err != nil {
@@ -451,6 +470,7 @@ func (s *Service) RunPlan(ctx context.Context, opts RunPlanOptions) (RunPlanRepo
 		report.OK = false
 		report.Status = taskReport.Status
 		report.Blocker = taskReport.Blocker
+		report.HumanInterrupts = append(report.HumanInterrupts, taskReport.HumanInterrupts...)
 		report.StoppedAtTask = taskID
 		report.ExitCode = taskReport.ExitCode
 
@@ -467,6 +487,11 @@ func (s *Service) RunPlan(ctx context.Context, opts RunPlanOptions) (RunPlanRepo
 		report.Status = "invalid_input"
 		report.ExitCode = ExitInvalidInput
 		report.Blocker = &Blocker{Type: BlockerInvalidInput, Message: "manifest has no tasks", NeedsPlannerDecision: true}
+	}
+	if len(report.HumanInterrupts) == 0 {
+		for _, task := range report.Tasks {
+			report.HumanInterrupts = append(report.HumanInterrupts, task.HumanInterrupts...)
+		}
 	}
 	report.ReportPath, err = writeRunPlanReport(resolved.paths.ArtifactsDir, run.ID, report)
 	if err != nil {
@@ -1059,39 +1084,131 @@ func taskReportFromStep(taskID, projectID, runID string, step *domain.Step, reso
 	if evidence.Result != nil && evidence.Result.Summary != "" {
 		summary = evidence.Result.Summary
 	}
+	interrupt := humanInterruptFromBlocker(blocker, projectID, runID, stepID, resolution.ProfileID, formatEventTime(stepCreatedAt(step)), formatEventTime(stepUpdatedAt(step)))
+	if interrupt != nil {
+		blocker.Interrupt = interrupt
+	}
 	return TaskReport{
-		OK:             ok,
-		Status:         status,
-		TaskID:         taskID,
-		ProjectID:      projectID,
-		RunID:          runID,
-		StepID:         stepID,
-		Adapter:        resolution.Adapter,
-		Profile:        resolution.ProfileID,
-		AdapterProfile: resolution.DaemonAdapter,
-		Title:          title,
-		Summary:        summary,
-		Step:           step,
-		Blocker:        blocker,
-		Evidence:       evidence,
-		ExitCode:       exitCode,
+		OK:              ok,
+		Status:          status,
+		TaskID:          taskID,
+		ProjectID:       projectID,
+		RunID:           runID,
+		StepID:          stepID,
+		Adapter:         resolution.Adapter,
+		Profile:         resolution.ProfileID,
+		AdapterProfile:  resolution.DaemonAdapter,
+		Title:           title,
+		Summary:         summary,
+		Step:            step,
+		Blocker:         blocker,
+		HumanInterrupts: interruptList(interrupt),
+		Evidence:        evidence,
+		ExitCode:        exitCode,
 	}
 }
 
 func daemonTaskReport(taskID, projectID, runID string, resolution profilepkg.Resolution, err error) TaskReport {
 	blocker := daemonBlocker(err)
-	return TaskReport{
-		OK:             false,
-		Status:         "blocked",
-		TaskID:         taskID,
-		ProjectID:      projectID,
-		RunID:          runID,
-		Adapter:        resolution.Adapter,
-		Profile:        resolution.ProfileID,
-		AdapterProfile: resolution.DaemonAdapter,
-		Blocker:        blocker,
-		ExitCode:       daemonExitCode(err),
+	interrupt := humanInterruptFromBlocker(blocker, projectID, runID, "", resolution.ProfileID, "", "")
+	if interrupt != nil {
+		blocker.Interrupt = interrupt
 	}
+	return TaskReport{
+		OK:              false,
+		Status:          "blocked",
+		TaskID:          taskID,
+		ProjectID:       projectID,
+		RunID:           runID,
+		Adapter:         resolution.Adapter,
+		Profile:         resolution.ProfileID,
+		AdapterProfile:  resolution.DaemonAdapter,
+		Blocker:         blocker,
+		HumanInterrupts: interruptList(interrupt),
+		ExitCode:        daemonExitCode(err),
+	}
+}
+
+func humanInterruptFromBlocker(blocker *Blocker, projectID, runID, stepID, executorProfile, createdAt, updatedAt string) *HumanInterrupt {
+	if blocker == nil {
+		return nil
+	}
+	interruptType, requestedAction, allowed := humanInterruptContract(blocker.Type)
+	if interruptType == "" {
+		return nil
+	}
+	prompt := strings.TrimSpace(blocker.Message)
+	if prompt == "" && len(blocker.Questions) > 0 {
+		prompt = blocker.Questions[0]
+	}
+	interrupt := &HumanInterrupt{
+		RunID:            strings.TrimSpace(runID),
+		StepID:           strings.TrimSpace(stepID),
+		ProjectID:        strings.TrimSpace(projectID),
+		ExecutorProfile:  strings.TrimSpace(executorProfile),
+		Type:             interruptType,
+		Status:           "waiting_for_human",
+		Prompt:           safeHumanInterruptText(prompt),
+		RequestedAction:  requestedAction,
+		AllowedResponses: append([]string(nil), allowed...),
+		CreatedAt:        createdAt,
+		UpdatedAt:        updatedAt,
+	}
+	if interrupt.UpdatedAt == "" {
+		interrupt.UpdatedAt = interrupt.CreatedAt
+	}
+	return interrupt
+}
+
+func humanInterruptContract(blockerType string) (string, string, []string) {
+	switch blockerType {
+	case BlockerManualApproval:
+		return "planning_approval_required", "approve_or_reject", []string{"approve", "reject", "cancel"}
+	case BlockerQuestion:
+		return "clarifying_question_required", "answer_question", []string{"answer", "cancel"}
+	case BlockerUnsafeAction:
+		return "permission_request_required", "confirm_or_deny", []string{"confirm", "deny", "cancel"}
+	case BlockerDaemonNotRunning:
+		return "os_system_human_action_required", "start_or_configure_daemon", []string{"retry", "cancel"}
+	case BlockerUnsupportedOperation:
+		return "executor_specific_human_decision_required", "choose_alternate_action", []string{"cancel", "start_new_task"}
+	default:
+		return "", "", nil
+	}
+}
+
+func interruptList(interrupt *HumanInterrupt) []HumanInterrupt {
+	if interrupt == nil {
+		return nil
+	}
+	return []HumanInterrupt{*interrupt}
+}
+
+func stepCreatedAt(step *domain.Step) time.Time {
+	if step == nil {
+		return time.Time{}
+	}
+	return step.CreatedAt
+}
+
+func stepUpdatedAt(step *domain.Step) time.Time {
+	if step == nil {
+		return time.Time{}
+	}
+	return step.UpdatedAt
+}
+
+func safeHumanInterruptText(value string) string {
+	value = strings.TrimSpace(security.Redact(value))
+	if value == "" {
+		return ""
+	}
+	data, _ := json.Marshal(map[string]any{"value": value})
+	var decoded map[string]string
+	if json.Unmarshal(security.SanitizeRemoteJSON(data), &decoded) == nil {
+		return strings.TrimSpace(decoded["value"])
+	}
+	return value
 }
 
 func daemonBlocker(err error) *Blocker {

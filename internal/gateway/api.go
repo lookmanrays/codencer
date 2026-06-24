@@ -864,7 +864,11 @@ func (s *Server) handleProjectRunCreate(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, payload, "available")
-	s.recordGatewayAuditWithMetadata(r.Context(), principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload), auditMetadata)
+	eventType := terminalAuditType(payload)
+	s.recordGatewayAuditWithMetadata(r.Context(), principal, eventType, terminalAuditSummary(projectID, payload), auditMetadata)
+	if eventType == "blocker" {
+		s.recordHumanInterruptAudit(r.Context(), principal, projectID, payload, auditMetadata)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_history_id": runRecord.ID, "result": payload})
 }
 

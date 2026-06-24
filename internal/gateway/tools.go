@@ -279,7 +279,11 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 				s.recordGatewayAuditWithMetadata(ctx, principal, "report_read", "Read run report "+requiredStringValue(args, "run_id")+" for project "+projectID, metadata)
 			} else {
 				runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, payload, "available")
-				s.recordGatewayAuditWithMetadata(ctx, principal, terminalAuditType(payload), terminalAuditSummary(projectID, payload), auditMetadata)
+				eventType := terminalAuditType(payload)
+				s.recordGatewayAuditWithMetadata(ctx, principal, eventType, terminalAuditSummary(projectID, payload), auditMetadata)
+				if eventType == "blocker" {
+					s.recordHumanInterruptAudit(ctx, principal, projectID, payload, auditMetadata)
+				}
 			}
 			return successToolResult(description, payload), nil
 		},
@@ -355,7 +359,7 @@ func terminalAuditType(payload any) string {
 	switch status {
 	case "failed", "failed_adapter", "failed_bridge", "failed_validation", "timeout", "adapter_error", "bridge_error":
 		return "run_failed"
-	case "blocked", "question", "manual_approval_required", "validation_failed":
+	case "blocked", "question", "manual_approval_required", "needs_approval", "needs_manual_attention", "permission_request_required", "unsafe_action", "validation_failed":
 		return "blocker"
 	default:
 		return "run_completed"
@@ -375,6 +379,113 @@ func terminalAuditSummary(projectID string, payload any) string {
 		return "Run " + outcome + " for project " + projectID
 	}
 	return "Run " + runID + " " + outcome + " for project " + projectID
+}
+
+func (s *Server) recordHumanInterruptAudit(ctx context.Context, principal *authPrincipal, projectID string, payload any, baseMetadata map[string]any) {
+	interrupt := humanInterruptFromPayload(payload)
+	if interrupt == nil {
+		return
+	}
+	metadata := map[string]any{}
+	for key, value := range baseMetadata {
+		metadata[key] = value
+	}
+	for key, value := range interrupt {
+		metadata[key] = value
+	}
+	summary := "Human interrupt for project " + projectID
+	if prompt, _ := interrupt["prompt"].(string); strings.TrimSpace(prompt) != "" {
+		summary = prompt
+	}
+	s.recordGatewayAuditWithMetadata(ctx, principal, "human_interrupt_created", summary, metadata)
+}
+
+func humanInterruptFromPayload(payload any) map[string]any {
+	obj, _ := payload.(map[string]any)
+	if obj == nil {
+		return nil
+	}
+	blocker := blockerMapFromPayload(obj)
+	if blocker == nil {
+		status := strings.ToLower(firstNonEmpty(stringValueFromAny(obj["status"]), nestedString(obj, "task", "status")))
+		if status != "blocked" && status != "question" && status != "manual_approval_required" && status != "needs_approval" && status != "needs_manual_attention" {
+			return nil
+		}
+		blocker = map[string]any{"type": status}
+	}
+	blockerType := firstNonEmpty(
+		stringValueFromAny(blocker["type"]),
+		stringValueFromAny(blocker["blocker_type"]),
+		stringValueFromAny(blocker["reason"]),
+	)
+	interruptType, action, responses := gatewayHumanInterruptContract(blockerType)
+	if interruptType == "" {
+		interruptType, action, responses = "executor_specific_human_decision_required", "choose_alternate_action", []string{"cancel", "start_new_task"}
+	}
+	prompt := firstNonEmpty(
+		stringValueFromAny(blocker["message"]),
+		stringValueFromAny(blocker["summary"]),
+		resultSummaryFromPayload(obj),
+	)
+	out := map[string]any{
+		"interrupt_type":    interruptType,
+		"status":            "waiting_for_human",
+		"requested_action":  action,
+		"allowed_responses": responses,
+	}
+	if prompt != "" {
+		out["prompt"] = safeExcerpt(prompt, 1200)
+	}
+	if questions := stringSliceValue(blocker["questions"]); len(questions) > 0 {
+		out["questions"] = questions
+	}
+	return out
+}
+
+func blockerMapFromPayload(obj map[string]any) map[string]any {
+	if blocker, _ := obj["blocker"].(map[string]any); blocker != nil {
+		return blocker
+	}
+	if task, _ := obj["task"].(map[string]any); task != nil {
+		if blocker, _ := task["blocker"].(map[string]any); blocker != nil {
+			return blocker
+		}
+	}
+	return nil
+}
+
+func gatewayHumanInterruptContract(blockerType string) (string, string, []string) {
+	switch strings.TrimSpace(blockerType) {
+	case "manual_approval_required", "needs_approval", "approval_required", "needs_planner_decision":
+		return "planning_approval_required", "approve_or_reject", []string{"approve", "reject", "cancel"}
+	case "question", "clarifying_question_required", "needs_manual_attention":
+		return "clarifying_question_required", "answer_question", []string{"answer", "cancel"}
+	case "unsafe_action", "permission_request_required":
+		return "permission_request_required", "confirm_or_deny", []string{"confirm", "deny", "cancel"}
+	case "daemon_not_running", "system_action_required", "os_system_human_action_required":
+		return "os_system_human_action_required", "start_or_configure_daemon", []string{"retry", "cancel"}
+	case "unsupported_operation", "executor_decision_required", "executor_specific_human_decision_required":
+		return "executor_specific_human_decision_required", "choose_alternate_action", []string{"cancel", "start_new_task"}
+	default:
+		return "", "", nil
+	}
+}
+
+func stringSliceValue(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := []string{}
+		for _, item := range typed {
+			if text := stringValueFromAny(item); text != "" {
+				out = append(out, safeExcerpt(text, 600))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func runIDFromPayload(payload any) string {

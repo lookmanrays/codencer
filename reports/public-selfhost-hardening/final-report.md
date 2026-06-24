@@ -17,6 +17,7 @@ Branch: `next-phase`
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
+- Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
 - Fixed connector shared-instance discovery so an allowlisted manifest identity is not overwritten by an unrelated daemon that happens to be listening on the manifest URL during tests.
 - Tightened the live Console verifier so the real executor result check targets the Summary heading deterministically.
@@ -39,6 +40,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1243`
   - `reports/gateway-console-screenshots/2026-06-24-1247`
   - `reports/gateway-console-screenshots/2026-06-24-1259`
+  - `reports/gateway-console-screenshots/2026-06-24-1323`
 
 ## Commands Run
 
@@ -49,6 +51,7 @@ Branch: `next-phase`
 - `go test ./internal/profile ./internal/adapters/codex` - passed
 - `go test ./internal/connector -count=1` - passed
 - `go test ./internal/gateway` - passed
+- `go test ./internal/localexec ./internal/gateway ./cmd/codencer` - passed
 - `go test ./...` - passed
 - `cd web/gateway-console && npm run format:check` - passed
 - `cd web/gateway-console && npm run lint` - passed
@@ -72,7 +75,7 @@ Branch: `next-phase`
 - `codencer run resume` is exposed as a structured blocker because the daemon does not yet expose a resume HTTP route.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.
-- Human interrupt lifecycle is still partial outside the existing gate/blocker primitives.
+- Human interrupt lifecycle is still partial: local report/event records and Gateway blocker audit exist, but complete operator answer/resume UI/MCP flows are not fully proven.
 - Full cross-surface redaction proof remains incomplete. Default local human CLI output and sync preview are covered, but explicit JSON/debug/path commands still require final policy review against the release gate.
 
 Verdict: NO-GO
