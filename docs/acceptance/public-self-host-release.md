@@ -33,9 +33,9 @@ reports/public-selfhost-rc/<timestamp>/summary.json
 reports/public-selfhost-rc/<timestamp>/summary.md
 ```
 
-`GO` requires a configured real executor gate. Without a real executor, the gate
-reports `PARTIAL`, not `GO`, even when deterministic fake executor plumbing
-passes.
+`GO` requires every required real executor gate to be configured and proven. If
+any required real executor proof is missing, skipped, simulated, or failed, the
+gate reports `NO-GO`, even when deterministic fake executor plumbing passes.
 
 Codex example:
 

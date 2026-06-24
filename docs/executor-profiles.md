@@ -74,5 +74,6 @@ The RC verifier exercises artifact-backed `codencer setup self-host` and
 least `300` seconds and at least as large as
 `CODENCER_E2E_EXECUTOR_TIMEOUT_SECONDS` when that environment variable is set.
 
-If no real executor is configured, the verifier reports `PARTIAL`, not `GO`.
-That is expected for CI smoke and is not live product proof.
+If no required real executor is configured and proven, the verifier reports
+`NO-GO`. Deterministic fake executor plumbing is useful CI smoke, but it is not
+live product proof and cannot satisfy the public self-host RC gate.

@@ -110,6 +110,10 @@ ACTIVE_RELEASE_LABEL_RE = re.compile(
     r"\b(beta|alpha|staging)\b|v0\.2|verify-beta|verify_beta|beta-track",
     re.IGNORECASE,
 )
+PARTIAL_RC_VERDICT_CLAIM_RE = re.compile(
+    r"reports\s+`?PARTIAL`?|`?PARTIAL`?\s+instead\s+of\s+`?GO`?",
+    re.IGNORECASE,
+)
 SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)\b[A-Z0-9_]*(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|CLIENT_SECRET)[A-Z0-9_]*\s*[:=]\s*['\"]?([^'\"\s#]+)"
 )
@@ -325,6 +329,8 @@ def check_tracked_file(rel: str, failures: list[str]) -> None:
         for line_number, line in enumerate(text.splitlines(), start=1):
             if PRIMARY_STALE_RE.search(line):
                 fail(f"stale primary release reference in {rel}:{line_number}: {line.strip()}", failures)
+            if PARTIAL_RC_VERDICT_CLAIM_RE.search(line):
+                fail(f"stale public self-host RC verdict claim in {rel}:{line_number}: {line.strip()}", failures)
     elif should_scan_active_release_labels(rel):
         for line_number, line in enumerate(text.splitlines(), start=1):
             if ACTIVE_RELEASE_LABEL_RE.search(line):
@@ -334,6 +340,17 @@ def check_tracked_file(rel: str, failures: list[str]) -> None:
 def scan_source_tree(failures: list[str]) -> None:
     for rel in repository_files():
         check_tracked_file(rel, failures)
+
+
+def check_hardening_final_report(failures: list[str]) -> None:
+    rel = "reports/public-selfhost-hardening/final-report.md"
+    text = read_text(ROOT / rel)
+    if text is None:
+        fail(f"missing hardening final report: {rel}", failures)
+        return
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines or lines[-1] not in {"Verdict: GO", "Verdict: NO-GO"}:
+        fail(f"{rel} must end with exactly 'Verdict: GO' or 'Verdict: NO-GO'", failures)
 
 
 def check_self_host_default_files(failures: list[str]) -> None:
@@ -423,6 +440,7 @@ def main() -> int:
     check_required_files(failures)
     check_text_requirements(failures)
     check_active_grove_docs(failures)
+    check_hardening_final_report(failures)
     check_self_host_default_files(failures)
     scan_source_tree(failures)
     scan_release_artifacts(failures)

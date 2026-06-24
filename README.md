@@ -450,7 +450,7 @@ git diff --check
 uses the unpacked binaries for self-host Gateway/Relay/Connector/daemon smoke,
 runs Gateway Console live verification, writes
 `reports/public-selfhost-rc/<timestamp>/summary.json` and `.md`, and reports
-`PARTIAL` instead of `GO` when no real executor gate is configured.
+`NO-GO` when no required real executor gate is configured or proven.
 
 If a live/external check is skipped, report it as skipped, not passed.
 
