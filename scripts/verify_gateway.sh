@@ -61,6 +61,65 @@ assert_no_mcp_leaks() {
   fi
 }
 
+assert_no_gateway_api_leaks() {
+  local file="$1"
+  local label="$2"
+  local forbidden
+  for forbidden in "$TMPDIR_ROOT" "$repo" "$home" "$home2" "$state" "$daemon_url" "$planner_token" "$gateway_token"; do
+    if [[ -n "$forbidden" ]] && grep -Fq "$forbidden" "$file"; then
+      echo "$label leaked sensitive verifier state: $forbidden" >&2
+      cat "$file" >&2
+      exit 1
+    fi
+  done
+  if grep -Eq '/Users/|/home/|/tmp/|/var/folders/|CODENCER_HOME|\.codencer-live-test' "$file"; then
+    echo "$label leaked an absolute local path" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  if grep -Eq '("daemon_url"|"repo_root"|"report_path"|"logs_ref"|"normalized_task_ref"|"original_input_ref"|"local_path"|"private_key"|"access_token"|"refresh_token"|"enrollment_token")' "$file"; then
+    echo "$label exposed a forbidden sensitive field" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  if grep -Eiq '(bearer [A-Za-z0-9._~+/=-]{8,}|client_secret|planner_token)' "$file"; then
+    echo "$label leaked token-like material" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
+gateway_api_get() {
+  local path="$1"
+  local out="$2"
+  local status
+  status="$(curl -sS -o "$out" -w "%{http_code}" -H "Authorization: Bearer $gateway_token" "$gateway_url$path")"
+  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+    echo "Gateway API $path returned HTTP $status" >&2
+    cat "$out" >&2 || true
+    exit 1
+  fi
+  assert_no_gateway_api_leaks "$out" "Gateway API $path"
+}
+
+gateway_api_post() {
+  local path="$1"
+  local body="$2"
+  local out="$3"
+  local status
+  status="$(curl -sS -o "$out" -w "%{http_code}" \
+    -H "Authorization: Bearer $gateway_token" \
+    -H "Content-Type: application/json" \
+    --data "$body" \
+    "$gateway_url$path")"
+  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+    echo "Gateway API $path returned HTTP $status" >&2
+    cat "$out" >&2 || true
+    exit 1
+  fi
+  assert_no_gateway_api_leaks "$out" "Gateway API $path"
+}
+
 repo="$TMPDIR_ROOT/repo"
 home="$TMPDIR_ROOT/home"
 home2="$TMPDIR_ROOT/home2"
@@ -251,6 +310,13 @@ cat > "$gateway_config" <<JSON
   "public_base_url": "$gateway_url",
   "mcp_url": "$gateway_url/mcp",
   "listen_addr": "127.0.0.1:$gateway_port",
+  "store": {
+    "path": "$TMPDIR_ROOT/gateway.db"
+  },
+  "default_relay": {
+    "url": "$relay_url",
+    "token_env": "CODENCER_RELAY_PERSONAL_TOKEN"
+  },
   "auth": {
     "mode": "bearer-dev",
     "token_env": "CODENCER_GATEWAY_MCP_TOKEN"
@@ -288,6 +354,8 @@ if ! wait_http "$gateway_url/health"; then
   cat "$TMPDIR_ROOT/gateway.log" >&2 || true
   exit 1
 fi
+gateway_api_post "/api/gateway/v1/relays" "{\"id\":\"personal\",\"name\":\"Personal self-host Relay\",\"url\":\"$relay_url\",\"token_env\":\"CODENCER_RELAY_PERSONAL_TOKEN\",\"enabled\":true}" "$TMPDIR_ROOT/api-seed-personal-relay.json"
+gateway_api_post "/api/gateway/v1/relays" "{\"id\":\"backup\",\"name\":\"Backup profile to same Relay\",\"url\":\"$relay_url\",\"token_env\":\"CODENCER_RELAY_PERSONAL_TOKEN\",\"enabled\":true}" "$TMPDIR_ROOT/api-seed-backup-relay.json"
 
 curl -fsS -H "Accept: application/json" "$gateway_url/.well-known/oauth-protected-resource/mcp" > "$TMPDIR_ROOT/gateway-protected-resource.json"
 grep -q "$gateway_url/mcp" "$TMPDIR_ROOT/gateway-protected-resource.json" || { cat "$TMPDIR_ROOT/gateway-protected-resource.json" >&2; exit 1; }
@@ -390,6 +458,35 @@ test -n "$run_id"
 mcp_tool "codencer.get_run_report" "{\"relay_profile_id\":\"personal\",\"project_id\":\"codencer\",\"machine_id\":\"$machine_id\",\"run_id\":\"$run_id\"}" "$TMPDIR_ROOT/run-report.json"
 grep -q "$run_id" "$TMPDIR_ROOT/run-report.json" || { cat "$TMPDIR_ROOT/run-report.json" >&2; exit 1; }
 assert_no_mcp_leaks "$TMPDIR_ROOT/run-report.json"
+
+gateway_api_get "/api/gateway/v1/relays" "$TMPDIR_ROOT/api-relays.json"
+grep -q '"relays"' "$TMPDIR_ROOT/api-relays.json" || { cat "$TMPDIR_ROOT/api-relays.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/projects" "$TMPDIR_ROOT/api-projects.json"
+grep -q '"projects"' "$TMPDIR_ROOT/api-projects.json" || { cat "$TMPDIR_ROOT/api-projects.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/machines" "$TMPDIR_ROOT/api-machines.json"
+grep -q '"machines"' "$TMPDIR_ROOT/api-machines.json" || { cat "$TMPDIR_ROOT/api-machines.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/connectors" "$TMPDIR_ROOT/api-connectors.json"
+grep -q '"connectors"' "$TMPDIR_ROOT/api-connectors.json" || { cat "$TMPDIR_ROOT/api-connectors.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/executors" "$TMPDIR_ROOT/api-executors.json"
+grep -q '"executors"' "$TMPDIR_ROOT/api-executors.json" || { cat "$TMPDIR_ROOT/api-executors.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/runs" "$TMPDIR_ROOT/api-runs.json"
+grep -q '"runs"' "$TMPDIR_ROOT/api-runs.json" || { cat "$TMPDIR_ROOT/api-runs.json" >&2; exit 1; }
+run_history_id="$(python3 - "$TMPDIR_ROOT/api-runs.json" <<'PY'
+import json, sys
+payload=json.load(open(sys.argv[1]))
+runs=payload.get("runs") or []
+print(runs[0].get("id", "") if runs else "")
+PY
+)"
+test -n "$run_history_id"
+gateway_api_get "/api/gateway/v1/runs/$run_history_id" "$TMPDIR_ROOT/api-run-detail.json"
+grep -q "$run_id" "$TMPDIR_ROOT/api-run-detail.json" || { cat "$TMPDIR_ROOT/api-run-detail.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/runs/$run_history_id/events" "$TMPDIR_ROOT/api-run-events.json"
+grep -q '"events"' "$TMPDIR_ROOT/api-run-events.json" || { cat "$TMPDIR_ROOT/api-run-events.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/audit-events" "$TMPDIR_ROOT/api-audit-events.json"
+grep -q '"audit_events"' "$TMPDIR_ROOT/api-audit-events.json" || { cat "$TMPDIR_ROOT/api-audit-events.json" >&2; exit 1; }
+gateway_api_get "/api/gateway/v1/activation/commands" "$TMPDIR_ROOT/api-activation-commands.json"
+grep -q '"commands"' "$TMPDIR_ROOT/api-activation-commands.json" || { cat "$TMPDIR_ROOT/api-activation-commands.json" >&2; exit 1; }
 
 mcp_tool "codencer.run_project_manifest" "{\"project_id\":\"codencer\",\"manifest_text\":\"version: v0.3\\nkind: codencer.run_plan\\n\",\"wait\":true}" "$TMPDIR_ROOT/ambiguous-relay.json"
 grep -q 'ambiguous_relay_profile' "$TMPDIR_ROOT/ambiguous-relay.json" || { cat "$TMPDIR_ROOT/ambiguous-relay.json" >&2; exit 1; }
