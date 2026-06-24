@@ -286,9 +286,10 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 			if name == "codencer.get_run_report" {
 				record, metadata := s.refreshRunRecordFromReport(ctx, principal, match, args, payload)
 				_ = record
+				s.recordTerminalRunAuditOnce(ctx, principal, projectID, payload, metadata)
 				s.recordGatewayAuditWithMetadata(ctx, principal, "report_read", "Read run report "+requiredStringValue(args, "run_id")+" for project "+projectID, metadata)
 			} else if recordRun {
-				runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, payload, "available")
+				runRecord, auditMetadata = s.finishRunRecord(ctx, runRecord, payload, reportStatusForPayload(payload, "available"))
 				if obj, ok := payload.(map[string]any); ok && runRecord.ID != "" {
 					obj["run_history_id"] = runRecord.ID
 					payload = obj
@@ -1146,6 +1147,36 @@ func intArg(args map[string]any, key string, defaultValue, minValue, maxValue in
 		return maxValue
 	}
 	return out
+}
+
+func boolArg(args map[string]any, key string, defaultValue bool) bool {
+	value, ok := args[key]
+	if !ok {
+		return defaultValue
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		default:
+			return defaultValue
+		}
+	case float64:
+		return typed != 0
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err != nil {
+			return defaultValue
+		}
+		return parsed != 0
+	default:
+		return defaultValue
+	}
 }
 
 func copyOptional(dst, src map[string]any, keys ...string) {

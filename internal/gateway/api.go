@@ -827,7 +827,7 @@ func (s *Server) handleProjectRunCreate(w http.ResponseWriter, r *http.Request, 
 	mode := strings.TrimSpace(stringArg(req, "mode"))
 	runRecord, auditMetadata := s.beginRunRecord(r.Context(), principal, projectID, mode, req)
 	s.recordGatewayAuditWithMetadata(r.Context(), principal, "task_submitted", "Submitted "+executionKindLabel(mode)+" for project "+projectID, auditMetadata)
-	route := submitProjectTaskRoute(true)
+	route := submitProjectTaskRoute(boolArg(req, "wait", true))
 	if mode == "manifest" {
 		route = runProjectManifestRoute
 	}
@@ -863,7 +863,7 @@ func (s *Server) handleProjectRunCreate(w http.ResponseWriter, r *http.Request, 
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
-	runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, payload, "available")
+	runRecord, auditMetadata = s.finishRunRecord(r.Context(), runRecord, payload, reportStatusForPayload(payload, "available"))
 	eventType := terminalAuditType(payload)
 	s.recordGatewayAuditWithMetadata(r.Context(), principal, eventType, terminalAuditSummary(projectID, payload), auditMetadata)
 	if eventType == "blocker" {
@@ -902,6 +902,7 @@ func (s *Server) handleProjectRunReportGet(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	runRecord, auditMetadata := s.refreshRunRecordFromReport(r.Context(), principal, match, args, payload)
+	s.recordTerminalRunAuditOnce(r.Context(), principal, projectID, payload, auditMetadata)
 	s.recordGatewayAuditWithMetadata(r.Context(), principal, "report_read", "Read run report "+runID+" for project "+projectID, auditMetadata)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "project_id": projectID, "run_id": runID, "run_history_id": runRecord.ID, "result": payload})
 }
@@ -1192,6 +1193,28 @@ func (s *Server) recordGatewayAuditWithMetadata(ctx context.Context, principal *
 		Summary:     security.Redact(strings.TrimSpace(summary)),
 		Metadata:    sanitizeMap(metadata),
 	})
+}
+
+func (s *Server) recordTerminalRunAuditOnce(ctx context.Context, principal *authPrincipal, projectID string, payload any, metadata map[string]any) {
+	eventType := terminalAuditType(payload)
+	if eventType == "run_started" {
+		return
+	}
+	runHistoryID := stringValueFromAny(metadata["run_history_id"])
+	if s.store != nil && principal != nil && strings.TrimSpace(runHistoryID) != "" {
+		events, err := s.store.ListAuditEvents(ctx, principal.WorkspaceID, AuditEventFilters{
+			Type:         eventType,
+			RunHistoryID: runHistoryID,
+			Limit:        1,
+		})
+		if err == nil && len(events) > 0 {
+			return
+		}
+	}
+	s.recordGatewayAuditWithMetadata(ctx, principal, eventType, terminalAuditSummary(projectID, payload), metadata)
+	if eventType == "blocker" {
+		s.recordHumanInterruptAudit(ctx, principal, projectID, payload, metadata)
+	}
 }
 
 func (s *Server) recordProjectRouteAudit(ctx context.Context, principal *authPrincipal, match relayProjectMatch, args map[string]any, metadata map[string]any) {

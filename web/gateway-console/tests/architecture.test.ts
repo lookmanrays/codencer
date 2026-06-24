@@ -56,6 +56,17 @@ describe("Gateway Console architecture guards", () => {
     process.env.NEXT_PUBLIC_CODENCER_CONSOLE_MODE = "demo";
     expect(consoleMode()).toBe("demo");
   });
+
+  it("submits product tasks asynchronously and polls for terminal reports", () => {
+    const runsAPI = fs.readFileSync(
+      path.join(packageRoot, "api/runs.ts"),
+      "utf8",
+    );
+
+    expect(runsAPI).toContain("wait: false");
+    expect(runsAPI).toContain("refetchInterval");
+    expect(runsAPI).toContain("shouldPollRunReport");
+  });
 });
 
 function scanTextFiles(targets: string[]) {

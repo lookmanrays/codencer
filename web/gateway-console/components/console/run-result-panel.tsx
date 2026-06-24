@@ -14,20 +14,23 @@ export function RunResultPanel({
   result?: RunSubmitResult;
   run?: RunRecord;
 }) {
+  const status = run?.status || result?.status || "completed";
+  const pending = isPendingRunStatus(status);
   const summary =
     run?.resultSummary ||
     result?.summary ||
     run?.resultDetails ||
     result?.details ||
-    "Run completed, but no executor result text was returned.";
+    (pending
+      ? "Run submitted; waiting for executor result."
+      : "Run completed, but no executor result text was returned.");
   const details = run?.resultDetails || result?.details || summary;
   const runHistoryId = run?.id || result?.runHistoryId;
   const runId = run?.runId || result?.runId || "n/a";
   const executor = run?.executorProfile || result?.executorProfile || "n/a";
   const executionMode =
     run?.executionMode || result?.executionMode || "unknown";
-  const status = run?.status || result?.status || "completed";
-  const reportStatus = run?.reportStatus || "completed";
+  const reportStatus = run?.reportStatus || (pending ? "pending" : "completed");
   const execution = executionModeDisplay(executionMode);
   return (
     <Alert
@@ -80,6 +83,22 @@ export function RunResultPanel({
       </div>
     </Alert>
   );
+}
+
+function isPendingRunStatus(status?: string) {
+  const normalized = (status ?? "").trim().toLowerCase();
+  return [
+    "collecting_artifacts",
+    "dispatching",
+    "in_progress",
+    "pending",
+    "queued",
+    "running",
+    "started",
+    "starting",
+    "submitted",
+    "validating",
+  ].includes(normalized);
 }
 
 function executionModeDisplay(mode: "real" | "simulation" | "unknown"): {

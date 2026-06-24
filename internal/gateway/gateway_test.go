@@ -606,6 +606,32 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("project run endpoint did not return run_history_id: %s", runResultBody)
 	}
 	assertNoGatewayMCPLeak(t, runResultBody)
+	asyncRunResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"title":            "Async Gateway Console task",
+		"goal":             "Return immediately and refresh by report polling.",
+		"timeout_seconds":  30,
+		"wait":             false,
+	})
+	asyncRunBody := mustJSON(t, asyncRunResult)
+	if !strings.Contains(asyncRunBody, `"status":"submitted"`) || strings.Contains(asyncRunBody, `"status":"completed"`) || !strings.Contains(asyncRunBody, `"run_id":"run-async-console"`) {
+		t.Fatalf("project run endpoint did not honor wait=false: %s", asyncRunBody)
+	}
+	asyncRunHistoryID, _ := asyncRunResult["run_history_id"].(string)
+	if asyncRunHistoryID == "" {
+		t.Fatalf("async project run endpoint did not return run_history_id: %s", asyncRunBody)
+	}
+	assertNoGatewayMCPLeak(t, asyncRunBody)
+	asyncReport := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-async-console/report?relay_profile_id=default&machine_id=mach-1", token.AccessToken)
+	asyncReportBody := mustJSON(t, asyncReport)
+	if !strings.Contains(asyncReportBody, `"status":"completed"`) || !strings.Contains(asyncReportBody, `"run_id":"run-async-console"`) {
+		t.Fatalf("async project run report endpoint did not return terminal report: %s", asyncReportBody)
+	}
+	if asyncReport["run_history_id"] != asyncRunHistoryID {
+		t.Fatalf("async report endpoint returned run_history_id=%v want %s: %s", asyncReport["run_history_id"], asyncRunHistoryID, asyncReportBody)
+	}
+	assertNoGatewayMCPLeak(t, asyncReportBody)
 	report := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs/run-gateway-test/report?relay_profile_id=default&machine_id=mach-1", token.AccessToken)
 	reportBody := mustJSON(t, report)
 	if !strings.Contains(reportBody, `"status":"completed"`) || !strings.Contains(reportBody, `"run_id":"run-gateway-test"`) {
@@ -979,6 +1005,24 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			})
 			return
 		}
+		if req["title"] == "Async Gateway Console task" {
+			if wait, _ := req["wait"].(bool); wait {
+				t.Fatalf("expected async console task to forward wait=false")
+			}
+			writeTestJSON(t, w, map[string]any{
+				"ok":      true,
+				"status":  "submitted",
+				"run_id":  "run-async-console",
+				"step_id": "step-async-console",
+				"task": map[string]any{
+					"run_id":  "run-async-console",
+					"status":  "submitted",
+					"step_id": "step-async-console",
+				},
+				"report_path": "/tmp/codencer/run-plans/run-async-console.json",
+			})
+			return
+		}
 		if wait, _ := req["wait"].(bool); !wait {
 			writeTestJSON(t, w, map[string]any{
 				"ok":      true,
@@ -1006,6 +1050,20 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 					"logs_ref": "/Users/example/.codencer-live-test/runtime/daemon/state/artifacts/task.log",
 				},
 			},
+		})
+	})
+	mux.HandleFunc("/api/v2/projects/codencer/reports/run-plans/run-async-console", func(w http.ResponseWriter, r *http.Request) {
+		requireRelayAuth(t, r)
+		writeTestJSON(t, w, map[string]any{
+			"run_id":      "run-async-console",
+			"status":      "completed",
+			"report_path": "/Users/example/.codencer-live-test/artifacts/run-plans/run-async-console.json",
+			"run":         map[string]any{"id": "run-async-console", "state": "completed"},
+			"tasks": []map[string]any{{
+				"task_id": "async",
+				"status":  "completed",
+				"summary": "async console task completed",
+			}},
 		})
 	})
 	mux.HandleFunc("/api/v2/projects/codencer/reports/run-plans/run-gateway-test", func(w http.ResponseWriter, r *http.Request) {

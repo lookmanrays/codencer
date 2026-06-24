@@ -66,6 +66,7 @@ export async function submitProjectRun(input: ParsedTaskRunInput) {
           relay_profile_id: input.relayProfileId,
           timeout_seconds: input.timeoutSeconds,
           title: input.title,
+          wait: false,
         };
   return gatewayJSON(
     `/projects/${encodeURIComponent(input.projectId)}/runs`,
@@ -98,6 +99,8 @@ export function useProjectRunReport(input: {
       input.runId ?? "",
     ),
     queryFn: () => getProjectRunReport(input),
+    refetchInterval: (query) =>
+      shouldPollRunReport(query.state.data?.status) ? 2000 : false,
   });
 }
 
@@ -146,4 +149,21 @@ async function getProjectRunReport(input: {
     `/projects/${encodeURIComponent(input.projectId)}/runs/${encodeURIComponent(input.runId)}/report${suffix}`,
     RunReportResponseSchema,
   );
+}
+
+function shouldPollRunReport(status?: string) {
+  const normalized = (status ?? "").trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    "collecting_artifacts",
+    "dispatching",
+    "in_progress",
+    "pending",
+    "queued",
+    "running",
+    "started",
+    "starting",
+    "submitted",
+    "validating",
+  ].includes(normalized);
 }

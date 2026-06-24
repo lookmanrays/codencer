@@ -224,6 +224,60 @@ func TestSubmitPersistsReportForGetRunPlanReport(t *testing.T) {
 	}
 }
 
+func TestSubmitNonWaitRunPlanReportRefreshesFromDaemon(t *testing.T) {
+	stepFetched := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+			writeTestJSON(t, w, http.StatusCreated, domain.Run{ID: "run-async", ProjectID: "proj", State: domain.RunStateRunning})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-async/steps":
+			var task domain.TaskSpec
+			if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+				t.Fatalf("decode task: %v", err)
+			}
+			writeTestJSON(t, w, http.StatusAccepted, domain.Step{ID: "step-async", Title: task.Title, State: domain.StepStateRunning, Adapter: task.AdapterProfile})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-async":
+			stepFetched = true
+			writeTestJSON(t, w, http.StatusOK, domain.Step{ID: "step-async", Title: "async task", State: domain.StepStateCompleted, Adapter: "fake-success"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-async/result":
+			writeTestJSON(t, w, http.StatusOK, domain.ResultSpec{StepID: "step-async", State: domain.StepStateCompleted, Summary: "async task completed"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-async/artifacts":
+			writeTestJSON(t, w, http.StatusOK, []*domain.Artifact{})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-async/validations":
+			writeTestJSON(t, w, http.StatusOK, map[string][]*domain.ValidationResult{})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/steps/step-async/logs":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("async logs"))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	submit, err := service.Submit(context.Background(), SubmitOptions{BaseOptions: base, Goal: "do it", Wait: false})
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if submit.Status != "submitted" || submit.Run == nil || submit.Run.ID != "run-async" {
+		t.Fatalf("unexpected non-wait submit report: %+v", submit)
+	}
+	report, err := service.GetRunPlanReport(context.Background(), RunPlanReportOptions{BaseOptions: base, RunID: submit.Run.ID})
+	if err != nil {
+		t.Fatalf("GetRunPlanReport error: %v", err)
+	}
+	if !stepFetched {
+		t.Fatal("expected report read to refresh daemon step state")
+	}
+	if !report.OK || report.Status != string(domain.StepStateCompleted) || len(report.Tasks) != 1 {
+		t.Fatalf("unexpected refreshed report: %+v", report)
+	}
+	if report.Tasks[0].StepID != "step-async" || report.Tasks[0].Summary != "async task completed" {
+		t.Fatalf("unexpected refreshed task report: %+v", report.Tasks[0])
+	}
+}
+
 func setupProject(t *testing.T, daemonURL, adapter, adapterProfile string) BaseOptions {
 	t.Helper()
 	home := t.TempDir()

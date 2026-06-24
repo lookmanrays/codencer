@@ -526,7 +526,131 @@ func (s *Service) GetRunPlanReport(ctx context.Context, opts RunPlanReportOption
 	if report.ReportPath == "" {
 		report.ReportPath = path
 	}
+	refreshed, changed := s.refreshNonTerminalRunPlanReport(ctx, resolved, report)
+	if changed {
+		refreshed.ReportPath = ""
+		writtenPath, err := writeRunPlanReport(resolved.paths.ArtifactsDir, opts.RunID, refreshed)
+		if err != nil {
+			return RunPlanReport{}, reportError(ExitInternal, BlockerBridgeError, err.Error())
+		}
+		refreshed.ReportPath = writtenPath
+		return refreshed, nil
+	}
 	return report, nil
+}
+
+func (s *Service) refreshNonTerminalRunPlanReport(ctx context.Context, resolved *resolvedContext, report RunPlanReport) (RunPlanReport, bool) {
+	if resolved == nil || resolved.client == nil || report.Run == nil || strings.TrimSpace(report.Run.ID) == "" || len(report.Tasks) == 0 {
+		return report, false
+	}
+	if runPlanReportTerminal(report) {
+		return report, false
+	}
+	runID := report.Run.ID
+	tasks := make([]TaskReport, 0, len(report.Tasks))
+	changed := false
+	for _, task := range report.Tasks {
+		next, ok := s.refreshTaskReport(ctx, resolved, runID, task)
+		if ok {
+			changed = true
+		}
+		tasks = append(tasks, next)
+	}
+	if !changed {
+		return report, false
+	}
+	report.Tasks = tasks
+	applyTaskReportsToRunPlan(&report)
+	return report, true
+}
+
+func (s *Service) refreshTaskReport(ctx context.Context, resolved *resolvedContext, runID string, task TaskReport) (TaskReport, bool) {
+	if strings.TrimSpace(task.StepID) == "" || taskReportTerminal(task) {
+		return task, false
+	}
+	step, err := resolved.client.GetStep(ctx, task.StepID)
+	if err != nil || step == nil {
+		return task, false
+	}
+	resolution := profilepkg.Resolution{
+		ProfileID:     firstNonEmpty(task.Profile, task.AdapterProfile, resolved.project.AdapterProfile),
+		Adapter:       firstNonEmpty(task.Adapter, resolved.project.DefaultAdapter),
+		DaemonAdapter: firstNonEmpty(task.AdapterProfile, task.Adapter, resolved.project.DefaultAdapter),
+	}
+	if step.State.IsTerminal() || step.State == domain.StepStateNeedsApproval || step.State == domain.StepStateNeedsManualAttention {
+		evidence := fetchEvidence(context.Background(), resolved.client, task.StepID)
+		result := evidence.Result
+		if result == nil {
+			result = &domain.ResultSpec{State: step.State, Summary: step.StatusReason}
+		}
+		blocker, exitCode := blockerForResult(step, result, evidence)
+		return taskReportFromStep(firstNonEmpty(task.TaskID, "task"), firstNonEmpty(task.ProjectID, resolved.project.ID), runID, step, resolution, blocker, evidence, exitCode), true
+	}
+	task.Status = string(step.State)
+	task.Step = step
+	task.Title = firstNonEmpty(step.Title, task.Title)
+	task.Summary = firstNonEmpty(step.StatusReason, task.Summary)
+	return task, true
+}
+
+func applyTaskReportsToRunPlan(report *RunPlanReport) {
+	if report == nil || len(report.Tasks) == 0 {
+		return
+	}
+	report.OK = true
+	report.Status = "completed"
+	report.ExitCode = ExitSuccess
+	report.Blocker = nil
+	report.HumanInterrupts = nil
+	report.Evidence = Evidence{}
+	for _, task := range report.Tasks {
+		report.HumanInterrupts = append(report.HumanInterrupts, task.HumanInterrupts...)
+		if !taskReportTerminal(task) {
+			report.Status = firstNonEmpty(task.Status, "submitted")
+			report.OK = true
+			report.ExitCode = ExitSuccess
+			return
+		}
+		if task.ExitCode != ExitSuccess {
+			report.OK = false
+			report.Status = task.Status
+			report.ExitCode = task.ExitCode
+			report.Blocker = task.Blocker
+			report.Evidence = task.Evidence
+			return
+		}
+	}
+	first := report.Tasks[0]
+	report.Status = first.Status
+	report.Evidence = first.Evidence
+}
+
+func runPlanReportTerminal(report RunPlanReport) bool {
+	if terminalReportStatus(report.Status) {
+		return true
+	}
+	if len(report.Tasks) == 0 {
+		return false
+	}
+	for _, task := range report.Tasks {
+		if !taskReportTerminal(task) {
+			return false
+		}
+	}
+	return true
+}
+
+func taskReportTerminal(task TaskReport) bool {
+	return terminalReportStatus(task.Status)
+}
+
+func terminalReportStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "completed_with_warnings", "failed_validation", "failed_adapter", "failed_bridge", "failed_retryable", "cancelled", "blocked", BlockerValidationFailed, BlockerManualApproval, BlockerQuestion, BlockerUnknown, BlockerAdapterError, BlockerBridgeError, BlockerTimeout, BlockerFailedTerminal, BlockerUnsafeAction, BlockerInvalidInput, BlockerConfigurationRequired, BlockerUnsupportedOperation:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) executeManifestTask(ctx context.Context, resolved *resolvedContext, runID, taskID string, task manifestpkg.Task, execution manifestpkg.Execution, manifestPath string, retry manifestpkg.RetryPolicy) TaskReport {

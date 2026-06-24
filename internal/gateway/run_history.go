@@ -95,7 +95,7 @@ func (s *Server) refreshRunRecordFromReport(ctx context.Context, principal *auth
 	}
 	record, _ = s.applyRouteToRunRecord(ctx, record, principal, match, args)
 	record.RunID = firstNonEmpty(record.RunID, runID)
-	return s.finishRunRecord(ctx, record, payload, "completed")
+	return s.finishRunRecord(ctx, record, payload, reportStatusForPayload(payload, "completed"))
 }
 
 func applyPayloadToRunRecord(record *RunRecord, payload any, reportStatus string) {
@@ -120,6 +120,13 @@ func applyPayloadToRunRecord(record *RunRecord, payload any, reportStatus string
 	if terminalAuditType(obj) == "run_completed" || terminalAuditType(obj) == "run_failed" || terminalAuditType(obj) == "blocker" {
 		record.CompletedAt = time.Now().UTC()
 	}
+}
+
+func reportStatusForPayload(payload any, terminalStatus string) string {
+	if terminalAuditType(payload) == "run_started" {
+		return "pending"
+	}
+	return terminalStatus
 }
 
 func runAuditMetadata(record RunRecord) map[string]any {
