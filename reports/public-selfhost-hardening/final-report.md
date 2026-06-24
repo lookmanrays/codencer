@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `84238fee96a3c830a66e815c8c8fa653040f566a`
+Implementation commit hash: `71cbd08107d7c9c5e6e1d393f286b25be222e321`
 
 Branch: `next-phase`
 
@@ -25,6 +25,8 @@ Branch: `next-phase`
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
 - Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run events`, `run report`, and the structured `run resume` capability blocker.
+- Sanitized setup human output step details, next commands, and secret-key step labels so local config/token paths are hidden in default output while operator Gateway/Relay URLs remain visible.
+- Extended the artifact-backed public self-host release verifier with additional default human CLI redaction gates covering `config profiles list`, `config profiles use`, `config set`, `executor scan`, `executor test`, `executor default`, `setup self-host`, `setup relay`, and `activation self-host`.
 - Strengthened the Gateway smoke used by source-tree and unpacked-artifact self-host verification so it runs with an isolated store-backed Gateway, seeds Relay profiles through the public API, and checks Gateway API outputs for relays, projects, machines, connectors, executors, runs, run detail, run events, audit events, and activation commands for local path, daemon URL, token, and unsafe field leaks.
 - Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
 - Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
@@ -95,6 +97,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1742`
   - `reports/gateway-console-screenshots/2026-06-24-1828`
   - `reports/gateway-console-screenshots/2026-06-24-1845`
+  - `reports/gateway-console-screenshots/2026-06-24-1858`
 
 ## Commands Run
 
@@ -225,6 +228,14 @@ Branch: `next-phase`
 - `git diff --check` after the daemon missing-run guard and e2e navigation hardening - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
 - `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
+- `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go` after broadening default human CLI redaction checks - passed
+- `bash -n scripts/verify_public_selfhost_release.sh` after broadening default human CLI redaction checks - passed
+- `go test ./cmd/codencer` after broadening default human CLI redaction checks - passed
+- `make build-codencer` after broadening default human CLI redaction checks - passed
+- `./scripts/verify_public_selfhost_release.sh` after broadening default human CLI redaction checks - passed
+- `go test ./...` after broadening default human CLI redaction checks - passed
+- `make verify-public-release` after broadening default human CLI redaction checks - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after broadening default human CLI redaction checks - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1858`
 - `git diff --check` - passed
 
 ## Remaining Blockers
@@ -238,6 +249,6 @@ Branch: `next-phase`
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial: local report/event records, local and project-level daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, resume-attempt audit, and a Console run-detail response panel now exist, but automatic continuation after human response remains incomplete.
-- Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, project init/status/scan, executor list, sync preview, submit, run events, run report, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
+- Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, submit, run events, run report, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
 
 Verdict: NO-GO
