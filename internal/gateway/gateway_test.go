@@ -217,6 +217,7 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		"codencer.get_project_run",
 		"codencer.get_project_run_status",
 		"codencer.get_gateway_run_events",
+		"codencer.respond_to_human_interrupt",
 		"codencer.cancel_project_run",
 		"codencer.resume_project_run",
 	} {
@@ -291,6 +292,46 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		t.Fatalf("expected Gateway run events, got %s", eventsBody)
 	}
 	assertNoGatewayMCPLeak(t, eventsBody)
+
+	blocked := mcpToolCall(t, server.URL, session, "codencer.submit_project_task", map[string]any{
+		"relay_profile_id": "default",
+		"project_id":       "codencer",
+		"machine_id":       "mach-1",
+		"title":            "Blocked Gateway task",
+		"goal":             "Ask for a safe operator decision.",
+	})
+	blockedBody := mustJSON(t, blocked)
+	blockedPayload, _ := mcpStructuredContent(t, blocked).(map[string]any)
+	blockedRunHistoryID := stringValueFromAny(blockedPayload["run_history_id"])
+	if blockedRunHistoryID == "" || !strings.Contains(blockedBody, `"status":"blocked"`) || !strings.Contains(blockedBody, `"type":"question"`) {
+		t.Fatalf("expected blocked run response with history id, got %s", blockedBody)
+	}
+	assertNoGatewayMCPLeak(t, blockedBody)
+
+	response := mcpToolCall(t, server.URL, session, "codencer.respond_to_human_interrupt", map[string]any{
+		"run_history_id": blockedRunHistoryID,
+		"response_type":  "answer",
+		"response":       "Use the documented safe path, not /Users/example/private token=relay-secret.",
+		"follow_up":      "resume",
+	})
+	responseBody := mustJSON(t, response)
+	if !strings.Contains(responseBody, `"status":"human_interrupt_response_recorded"`) ||
+		!strings.Contains(responseBody, `"resume_supported":false`) ||
+		!strings.Contains(responseBody, `"follow_up":"resume"`) ||
+		!strings.Contains(responseBody, `"operator_response"`) {
+		t.Fatalf("expected recorded human interrupt response, got %s", responseBody)
+	}
+	assertNoGatewayMCPLeak(t, responseBody)
+
+	blockedEvents := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
+		"run_history_id": blockedRunHistoryID,
+		"limit":          20,
+	})
+	blockedEventsBody := mustJSON(t, blockedEvents)
+	if !strings.Contains(blockedEventsBody, `"human_interrupt_created"`) || !strings.Contains(blockedEventsBody, `"human_interrupt_responded"`) || !strings.Contains(blockedEventsBody, `"operator_response"`) {
+		t.Fatalf("expected human interrupt response audit event, got %s", blockedEventsBody)
+	}
+	assertNoGatewayMCPLeak(t, blockedEventsBody)
 
 	cancel := mcpToolCall(t, server.URL, session, "codencer.cancel_project_run", map[string]any{
 		"relay_profile_id": "default",
@@ -792,6 +833,26 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if strings.Contains(blockedEventsBody, "/Users/example") || strings.Contains(blockedEventsBody, "relay-secret") || strings.Contains(blockedEventsBody, "/tmp/codencer/secret") {
 		t.Fatalf("blocked run events leaked sensitive data: %s", blockedEventsBody)
 	}
+	interruptResponse := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedRunHistoryID+"/human-interrupts/respond", token.AccessToken, map[string]any{
+		"response_type": "answer",
+		"response":      "Use the documented safe path, not /Users/example/private token=relay-secret.",
+		"follow_up":     "resume",
+		"reason":        "Operator reviewed the blocker.",
+	})
+	interruptResponseBody := mustJSON(t, interruptResponse)
+	if !strings.Contains(interruptResponseBody, `"status":"human_interrupt_response_recorded"`) ||
+		!strings.Contains(interruptResponseBody, `"resume_supported":false`) ||
+		!strings.Contains(interruptResponseBody, `"follow_up":"resume"`) ||
+		!strings.Contains(interruptResponseBody, `"operator_response"`) {
+		t.Fatalf("human interrupt response endpoint missing expected payload: %s", interruptResponseBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, interruptResponseBody)
+	blockedEventsAfterResponse := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/runs/"+blockedRunHistoryID+"/events", token.AccessToken)
+	blockedEventsAfterResponseBody := mustJSON(t, blockedEventsAfterResponse)
+	if !strings.Contains(blockedEventsAfterResponseBody, `"human_interrupt_responded"`) || !strings.Contains(blockedEventsAfterResponseBody, `"operator_response"`) {
+		t.Fatalf("blocked run events missing human interrupt response audit: %s", blockedEventsAfterResponseBody)
+	}
+	assertNoGatewayConsoleSensitiveLeak(t, blockedEventsAfterResponseBody)
 	audit := apiGet[map[string]any](t, httpServer.URL+"/api/gateway/v1/audit-events", token.AccessToken)
 	auditBody := mustJSON(t, audit)
 	for _, eventType := range []string{
@@ -804,6 +865,7 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		"run_started",
 		"run_completed",
 		"human_interrupt_created",
+		"human_interrupt_responded",
 		"report_read",
 	} {
 		if !strings.Contains(auditBody, `"`+eventType+`"`) {

@@ -546,17 +546,21 @@ func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
 	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/runs/"), "/"), "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		writeAPIError(w, http.StatusBadRequest, "run_id_required", "run history id is required")
+		return
+	}
+	if len(parts) == 3 && parts[1] == "human-interrupts" && parts[2] == "respond" {
+		s.handleRunHumanInterruptRespond(w, r, parts[0])
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:read"})
 	if !ok {
-		return
-	}
-	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/gateway/v1/runs/"), "/"), "/")
-	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
-		writeAPIError(w, http.StatusBadRequest, "run_id_required", "run history id is required")
 		return
 	}
 	record, err := s.store.GetRunRecord(r.Context(), principal.WorkspaceID, parts[0])
@@ -598,6 +602,39 @@ func (s *Server) handleRunByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": record})
+}
+
+func (s *Server) handleRunHumanInterruptRespond(w http.ResponseWriter, r *http.Request, runHistoryID string) {
+	if r.Method != http.MethodPost {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	principal, ok := s.authenticateConsoleAPI(w, r, []string{"projects:read", "runs:write"})
+	if !ok {
+		return
+	}
+	record, err := s.store.GetRunRecord(r.Context(), principal.WorkspaceID, runHistoryID)
+	if err == sql.ErrNoRows {
+		writeAPIError(w, http.StatusNotFound, "run_not_found", "run not found")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "gateway_store_error", err.Error())
+		return
+	}
+	var req map[string]any
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			writeAPIError(w, http.StatusBadRequest, "malformed_request", err.Error())
+			return
+		}
+	}
+	payload, apiErr := s.recordHumanInterruptResponse(r.Context(), principal, record, req)
+	if apiErr != nil {
+		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) handleSyncRuns(w http.ResponseWriter, r *http.Request) {

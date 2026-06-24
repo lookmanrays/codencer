@@ -154,9 +154,10 @@ func buildTools(server *Server) map[string]Tool {
 			}
 			return "/api/v2/projects/" + projectID + "/reports/run-plans/" + runID, nil, nil
 		}),
-		"codencer.get_gateway_run_events": server.gatewayRunEventsTool(),
-		"codencer.cancel_project_run":     server.projectForwardTool("codencer.cancel_project_run", "Cancel a shared project run through the selected Gateway relay.", []string{"project_id", "run_id"}, cancelProjectRunRoute),
-		"codencer.resume_project_run":     server.unsupportedProjectLifecycleTool("codencer.resume_project_run", "Return an explicit capability blocker for project-run resume when the selected route cannot resume safely.", "resume_project_run"),
+		"codencer.get_gateway_run_events":     server.gatewayRunEventsTool(),
+		"codencer.respond_to_human_interrupt": server.humanInterruptResponseTool(),
+		"codencer.cancel_project_run":         server.projectForwardTool("codencer.cancel_project_run", "Cancel a shared project run through the selected Gateway relay.", []string{"project_id", "run_id"}, cancelProjectRunRoute),
+		"codencer.resume_project_run":         server.unsupportedProjectLifecycleTool("codencer.resume_project_run", "Return an explicit capability blocker for project-run resume when the selected route cannot resume safely.", "resume_project_run"),
 		"codencer.get_blocker": {
 			Name:        "codencer.get_blocker",
 			Description: "Read the blocker from a Gateway-routed project run report.",
@@ -370,6 +371,107 @@ func (s *Server) gatewayRunEventsTool() Tool {
 			}), nil
 		},
 	}
+}
+
+func (s *Server) humanInterruptResponseTool() Tool {
+	return Tool{
+		Name:        "codencer.respond_to_human_interrupt",
+		Description: "Record an explicit operator response to a Gateway-observed human interrupt without claiming automatic resume support.",
+		InputSchema: objectSchema([]string{"run_history_id", "response"}, map[string]any{
+			"run_history_id": stringSchema("Gateway run history id returned by submit/start/report tools."),
+			"response":       stringSchema("Operator answer, approval, denial, or decision text."),
+			"response_type":  stringSchema("Optional response type, such as answer, approve, deny, or decision."),
+			"follow_up":      stringSchema("Optional requested follow-up, such as resume, cancel, or start_new_task."),
+			"reason":         stringSchema("Optional operator/planner reason."),
+		}),
+		ReadOnly:       false,
+		RequiredScopes: []string{"projects:read", "runs:write"},
+		Invoke: func(ctx context.Context, principal *authPrincipal, args map[string]any) (ToolResult, *apiError) {
+			if s.store == nil || principal == nil || principal.WorkspaceID == "" {
+				return ToolResult{}, &apiError{Status: http.StatusServiceUnavailable, Code: "gateway_store_unavailable", Message: "Gateway human interrupt response requires the Gateway store"}
+			}
+			runHistoryID, apiErr := requiredString(args, "run_history_id")
+			if apiErr != nil {
+				return ToolResult{}, apiErr
+			}
+			record, err := s.store.GetRunRecord(ctx, principal.WorkspaceID, runHistoryID)
+			if err == sql.ErrNoRows {
+				return ToolResult{}, &apiError{Status: http.StatusNotFound, Code: "run_not_found", Message: "run history record not found"}
+			}
+			if err != nil {
+				return ToolResult{}, &apiError{Status: http.StatusInternalServerError, Code: "gateway_store_error", Message: err.Error()}
+			}
+			payload, apiErr := s.recordHumanInterruptResponse(ctx, principal, record, args)
+			if apiErr != nil {
+				return ToolResult{}, apiErr
+			}
+			return successToolResult("Recorded human interrupt response.", payload), nil
+		},
+	}
+}
+
+func (s *Server) recordHumanInterruptResponse(ctx context.Context, principal *authPrincipal, record RunRecord, args map[string]any) (map[string]any, *apiError) {
+	response := safeExcerpt(firstNonEmpty(
+		stringValueFromAny(args["response"]),
+		stringValueFromAny(args["answer"]),
+		stringValueFromAny(args["decision"]),
+		stringValueFromAny(args["action"]),
+	), 1200)
+	if response == "" {
+		return nil, &apiError{Status: http.StatusBadRequest, Code: "human_response_required", Message: "response is required"}
+	}
+	responseType := safeExcerpt(firstNonEmpty(
+		stringValueFromAny(args["response_type"]),
+		stringValueFromAny(args["action"]),
+		"response",
+	), 120)
+	followUp := safeExcerpt(firstNonEmpty(
+		stringValueFromAny(args["follow_up"]),
+		stringValueFromAny(args["next_action"]),
+	), 120)
+	reason := safeExcerpt(stringValueFromAny(args["reason"]), 600)
+
+	metadata := runAuditMetadata(record)
+	metadata["interrupt_status"] = "responded"
+	metadata["response_type"] = responseType
+	metadata["operator_response"] = response
+	if followUp != "" {
+		metadata["follow_up"] = followUp
+	}
+	if reason != "" {
+		metadata["reason"] = reason
+	}
+	s.recordGatewayAuditWithMetadata(ctx, principal, "human_interrupt_responded", "Recorded human interrupt response for run "+firstNonEmpty(record.RunID, record.ID)+" in project "+record.ProjectID, metadata)
+
+	nextActions := map[string]any{
+		"resume_supported":          false,
+		"resume_operation":          "codencer.resume_project_run",
+		"cancel_supported":          true,
+		"cancel_operation":          "codencer.cancel_project_run",
+		"status_read_tool":          "codencer.get_project_run_status",
+		"report_read_tool":          "codencer.get_run_report",
+		"events_read_tool":          "codencer.get_gateway_run_events",
+		"planner_decision_required": true,
+	}
+	payload := map[string]any{
+		"ok":             true,
+		"status":         "human_interrupt_response_recorded",
+		"run_history_id": record.ID,
+		"run_id":         record.RunID,
+		"project_id":     record.ProjectID,
+		"response": map[string]any{
+			"type":              responseType,
+			"operator_response": response,
+		},
+		"next_actions": nextActions,
+	}
+	if followUp != "" {
+		payload["follow_up"] = followUp
+	}
+	if reason != "" {
+		payload["reason"] = reason
+	}
+	return payload, nil
 }
 
 func (s *Server) unsupportedProjectLifecycleTool(name, description, operation string) Tool {
