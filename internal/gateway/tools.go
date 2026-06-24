@@ -507,6 +507,12 @@ func (s *Server) unsupportedProjectLifecycleTool(name, description, operation st
 				"relay_profile_id": match.Profile.ID,
 			}
 			s.recordGatewayAuditWithMetadata(ctx, principal, operation+"_requested", "Requested "+operation+" for run "+runID+" in project "+projectID, metadata)
+			blockedMetadata := map[string]any{}
+			for key, value := range metadata {
+				blockedMetadata[key] = value
+			}
+			blockedMetadata["status"] = "blocked"
+			blockedMetadata["blocker_type"] = "unsupported_operation"
 			blocker := map[string]any{
 				"type":                      "unsupported_operation",
 				"operation":                 operation,
@@ -522,7 +528,9 @@ func (s *Server) unsupportedProjectLifecycleTool(name, description, operation st
 			}
 			if reason := strings.TrimSpace(stringArg(args, "reason")); reason != "" {
 				blocker["reason"] = reason
+				blockedMetadata["reason"] = reason
 			}
+			s.recordGatewayAuditWithMetadata(ctx, principal, operation+"_blocked", "Blocked unsupported "+operation+" for run "+runID+" in project "+projectID, blockedMetadata)
 			payload := map[string]any{
 				"ok":      false,
 				"status":  "blocked",

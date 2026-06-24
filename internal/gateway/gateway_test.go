@@ -358,12 +358,24 @@ func TestGatewayMCPAsyncLifecycleTools(t *testing.T) {
 		"relay_profile_id": "default",
 		"project_id":       "codencer",
 		"run_id":           "run-async-gateway-test",
+		"run_history_id":   startedRunHistoryID,
 	})
 	resumeBody := mustJSON(t, resume)
 	if !strings.Contains(resumeBody, `"type":"unsupported_operation"`) || !strings.Contains(resumeBody, `"operation":"resume_project_run"`) {
 		t.Fatalf("expected structured resume capability blocker, got %s", resumeBody)
 	}
 	assertNoGatewayMCPLeak(t, resumeBody)
+	resumeEvents := mcpToolCall(t, server.URL, session, "codencer.get_gateway_run_events", map[string]any{
+		"run_history_id": startedRunHistoryID,
+		"limit":          20,
+	})
+	resumeEventsBody := mustJSON(t, resumeEvents)
+	for _, want := range []string{`"resume_project_run_requested"`, `"resume_project_run_blocked"`, `"operation":"resume_project_run"`, `"blocker_type":"unsupported_operation"`} {
+		if !strings.Contains(resumeEventsBody, want) {
+			t.Fatalf("resume run events missing %s: %s", want, resumeEventsBody)
+		}
+	}
+	assertNoGatewayMCPLeak(t, resumeEventsBody)
 }
 
 func TestGatewayAuthMetadataAndChallenge(t *testing.T) {
