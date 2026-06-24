@@ -1,11 +1,13 @@
 import { chromium, expect } from "@playwright/test";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import https from "node:https";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(process.cwd(), "../..");
 const binaryDir =
@@ -880,6 +882,7 @@ async function prepareAntigravityInstance(root, repo) {
       "real Antigravity gate instance metadata missing csrf_token",
     );
   }
+  await assertAntigravityWorkspaceMatches(instance, repo);
   const daemonDir = path.join(root, "antigravity-daemon");
   await fs.mkdir(daemonDir, { recursive: true, mode: 0o700 });
   await fs.writeFile(
@@ -898,6 +901,77 @@ async function prepareAntigravityInstance(root, repo) {
     { mode: 0o600 },
   );
   return { daemonDir, pid };
+}
+
+async function assertAntigravityWorkspaceMatches(instance, repo) {
+  const expectedWorkspace = pathToFileURL(repo).href;
+  const info = await callAntigravityInstance(instance, "GetWorkspaceInfos", {});
+  const workspaces = Array.isArray(info?.workspaceInfos)
+    ? info.workspaceInfos
+        .map((item) => item?.workspaceUri)
+        .filter((item) => typeof item === "string")
+    : [];
+  if (!workspaces.includes(expectedWorkspace)) {
+    throw new Error(
+      `real Antigravity gate requires an Antigravity workspace for the isolated verifier repo; workspace_count=${workspaces.length}`,
+    );
+  }
+}
+
+async function callAntigravityInstance(instance, method, payload) {
+  const port = Number(instance.https_port);
+  const token = String(instance.csrf_token ?? "");
+  const body = JSON.stringify(payload ?? {});
+  return await new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        agent: new https.Agent({ rejectUnauthorized: false }),
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+          "x-codeium-csrf-token": token,
+        },
+        hostname: "127.0.0.1",
+        method: "POST",
+        path: `/${"exa.language_server_pb.LanguageServerService"}/${method}`,
+        port,
+        timeout: 5000,
+      },
+      (response) => {
+        let responseBody = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          responseBody += chunk;
+        });
+        response.on("end", () => {
+          if (
+            (response.statusCode ?? 0) < 200 ||
+            (response.statusCode ?? 0) >= 300
+          ) {
+            reject(
+              new Error(
+                `Antigravity ${method} returned HTTP ${response.statusCode}`,
+              ),
+            );
+            return;
+          }
+          try {
+            resolve(responseBody ? JSON.parse(responseBody) : {});
+          } catch {
+            reject(new Error(`Antigravity ${method} returned invalid JSON`));
+          }
+        });
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy(new Error(`Antigravity ${method} timed out`));
+    });
+    req.on("error", (error) => {
+      reject(new Error(`Antigravity ${method} failed: ${error.message}`));
+    });
+    req.write(body);
+    req.end();
+  });
 }
 
 async function readAntigravityInstance() {

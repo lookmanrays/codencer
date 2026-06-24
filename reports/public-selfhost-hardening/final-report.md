@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `ece6e2914b6c6dcf7dc83bab821beb77815dca94`
+Implementation commit hash: `e9d3eb29b1a874a517c956f753194659113f73bb`
 
 Branch: `next-phase`
 
@@ -20,12 +20,22 @@ Branch: `next-phase`
 - Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
 - Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
 - Added isolated Antigravity proof plumbing: `CODENCER_ANTIGRAVITY_DAEMON_DIR` discovery override, preservation of explicit verifier workspace roots, and live-verifier support for `CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON`, `CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE`, and `CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR`.
+- Hardened Antigravity proof handling so the verifier rejects an Antigravity language-server instance unless its actual `GetWorkspaceInfos` output includes the isolated verifier repo.
+- Hardened the direct Antigravity adapter so unsupported or out-of-workspace permission waits become manual-attention results instead of timing out, without exposing the requested local target path or command string.
 - Fixed connector shared-instance discovery so an allowlisted manifest identity is not overwritten by an unrelated daemon that happens to be listening on the manifest URL during tests.
 - Tightened the live Console verifier so the real executor result check targets the Summary heading deterministically.
 
 ## Proofs
 
-- Codex + Claude Code artifact-backed RC subgates passed:
+- Current scoped Codex artifact-backed RC proof passed:
+  - Report: `reports/public-selfhost-rc/20260624T120012Z/summary.md`
+  - Gates: `real_executor_e2e_codex`, `required_real_executor_proofs`
+  - Verdict: `GO` only for the scoped requirement `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex`.
+  - Evidence: live verifier log shows `Adapter Execution: Starting process`, `adapter=codex`, and binary `/Applications/Codex.app/Contents/Resources/codex`; simulation env was forced to `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
+- Default all-real-executor RC proof remains `NO-GO`:
+  - Report: `reports/public-selfhost-rc/20260624T115347Z/summary.md`
+  - Gates passed through `real_executor_e2e_codex`, then `required_real_executor_proofs` failed because Claude Code and Antigravity were missing from that run.
+- Earlier Codex + Claude Code artifact-backed RC subgates passed:
   - Report: `reports/public-selfhost-rc/20260624T105654Z/summary.md`
   - Gates: `real_executor_e2e_codex`, `real_executor_e2e_claude`
   - Required proof log: `reports/public-selfhost-rc/20260624T105654Z/required_real_executor_proofs.log`
@@ -33,7 +43,8 @@ Branch: `next-phase`
   - Overall verdict remains `NO-GO` because Antigravity is missing.
 - Antigravity source-tree live proof was attempted with isolated temp instance metadata generated from the local running Antigravity language server.
   - The verifier bound the candidate instance by PID without writing user Codencer state.
-  - Both reachable local Antigravity LS candidates failed to complete through the Antigravity adapter and fell through to `ide-chat`; the verifier failed instead of accepting fallback behavior.
+  - Current verifier fails early when the candidate Antigravity LS does not expose the isolated verifier repo in `GetWorkspaceInfos`; latest local attempt exited with `real Antigravity gate requires an Antigravity workspace for the isolated verifier repo; workspace_count=0`.
+  - Earlier reachable local Antigravity LS candidates failed to complete through the Antigravity adapter and fell through to `ide-chat`; the verifier failed instead of accepting fallback behavior.
   - No Antigravity real proof is available.
 - Gateway Console visual evidence regenerated:
   - `reports/gateway-console-screenshots/2026-06-24-1202`
@@ -66,17 +77,20 @@ Branch: `next-phase`
 - `make verify-gateway` - passed
 - `make verify-gateway-console` - passed
 - `make verify-gateway-console-live` - passed
+- `go test ./internal/adapters/antigravity` - passed
+- `cd web/gateway-console && npm run format:check && npm run lint -- tests/live/verify-live.mjs` - passed
 - `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing
+- `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - passed with scoped `GO` for Codex-only proof
 - `make verify-public-release` - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed
 - `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex and Claude passed and Antigravity was missing
-- `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; Antigravity did not produce a valid run and fallback was not accepted
+- `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
 - `git diff --check` - passed
 
 ## Remaining Blockers
 
 - Antigravity real executor proof is not proven in the public self-host RC gate.
-- Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not complete Codencer's isolated real-run proof.
+- Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
 - `codencer run resume` is exposed as a structured blocker because the daemon does not yet expose a resume HTTP route.
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`; broader incremental sync policy and external source reconciliation remain incomplete.

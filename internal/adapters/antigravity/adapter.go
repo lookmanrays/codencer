@@ -32,7 +32,9 @@ type Adapter struct {
 	instanceCache map[string]domain.AGInstance
 	// approvedInteractions prevents duplicate approvals if polling observes the same wait twice.
 	approvedInteractions map[string]struct{}
-	mu                   sync.RWMutex
+	// blockedInteractions records human interactions Codencer cannot safely auto-approve.
+	blockedInteractions map[string]string
+	mu                  sync.RWMutex
 }
 
 func NewAdapter(provider InstanceProvider) *Adapter {
@@ -42,6 +44,7 @@ func NewAdapter(provider InstanceProvider) *Adapter {
 		activeCascades:       make(map[string]string),
 		instanceCache:        make(map[string]domain.AGInstance),
 		approvedInteractions: make(map[string]struct{}),
+		blockedInteractions:  make(map[string]string),
 	}
 }
 
@@ -147,15 +150,19 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 
 	switch resp.Status {
 	case StatusRunning:
-		if err := a.approvePendingReadOnlyInteractions(ctx, &inst, cascadeID); err != nil {
+		if blockedReason, err := a.approvePendingReadOnlyInteractions(ctx, attemptID, &inst, cascadeID); err != nil {
 			return false, err
+		} else if blockedReason != "" {
+			return false, nil
 		}
 		return true, nil
 	case StatusCompleted, StatusFailed, StatusAborted:
 		return false, nil
 	case StatusIdle:
-		if hasSteps, err := a.inspectAndApprovePendingInteractions(ctx, &inst, cascadeID); err != nil {
+		if hasSteps, blockedReason, err := a.inspectAndApprovePendingInteractions(ctx, attemptID, &inst, cascadeID); err != nil {
 			return false, err
+		} else if blockedReason != "" {
+			return false, nil
 		} else if !hasSteps {
 			return true, nil
 		}
@@ -165,19 +172,19 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 	}
 }
 
-func (a *Adapter) approvePendingReadOnlyInteractions(ctx context.Context, inst *domain.AGInstance, cascadeID string) error {
-	_, err := a.inspectAndApprovePendingInteractions(ctx, inst, cascadeID)
-	return err
+func (a *Adapter) approvePendingReadOnlyInteractions(ctx context.Context, attemptID string, inst *domain.AGInstance, cascadeID string) (string, error) {
+	_, blockedReason, err := a.inspectAndApprovePendingInteractions(ctx, attemptID, inst, cascadeID)
+	return blockedReason, err
 }
 
-func (a *Adapter) inspectAndApprovePendingInteractions(ctx context.Context, inst *domain.AGInstance, cascadeID string) (bool, error) {
+func (a *Adapter) inspectAndApprovePendingInteractions(ctx context.Context, attemptID string, inst *domain.AGInstance, cascadeID string) (bool, string, error) {
 	req := &GetCascadeTrajectoryStepsRequest{
 		CascadeId:  cascadeID,
 		StepOffset: 0,
 	}
 	var resp GetCascadeTrajectoryStepsResponse
 	if err := a.client.Call(ctx, inst, "GetCascadeTrajectorySteps", req, &resp); err != nil {
-		return false, fmt.Errorf("failed to inspect Antigravity pending interactions: %w", err)
+		return false, "", fmt.Errorf("failed to inspect Antigravity pending interactions: %w", err)
 	}
 
 	for _, step := range resp.Steps {
@@ -186,6 +193,12 @@ func (a *Adapter) inspectAndApprovePendingInteractions(ctx context.Context, inst
 		}
 		approval, ok := a.readOnlyApprovalForStep(inst.WorkspaceRoot, step)
 		if !ok {
+			if blockedReason := unsupportedInteractionReason(inst.WorkspaceRoot, step); blockedReason != "" {
+				a.mu.Lock()
+				a.blockedInteractions[attemptID] = blockedReason
+				a.mu.Unlock()
+				return true, blockedReason, nil
+			}
 			continue
 		}
 
@@ -211,7 +224,7 @@ func (a *Adapter) inspectAndApprovePendingInteractions(ctx context.Context, inst
 			},
 		}
 		if err := a.client.Call(ctx, inst, "HandleCascadeUserInteraction", interactionReq, &struct{}{}); err != nil {
-			return false, fmt.Errorf("failed to approve Antigravity read-only interaction: %w", err)
+			return false, "", fmt.Errorf("failed to approve Antigravity read-only interaction: %w", err)
 		}
 
 		a.mu.Lock()
@@ -219,7 +232,7 @@ func (a *Adapter) inspectAndApprovePendingInteractions(ctx context.Context, inst
 		a.mu.Unlock()
 	}
 
-	return len(resp.Steps) > 0, nil
+	return len(resp.Steps) > 0, "", nil
 }
 
 func (a *Adapter) readOnlyApprovalForStep(workspaceRoot string, step CascadeStep) (map[string]interface{}, bool) {
@@ -251,6 +264,57 @@ func (a *Adapter) readOnlyApprovalForStep(workspaceRoot string, step CascadeStep
 	}
 
 	return nil, false
+}
+
+func unsupportedInteractionReason(workspaceRoot string, step CascadeStep) string {
+	if step.RequestedInteraction != nil && step.RequestedInteraction.Permission != nil && step.RequestedInteraction.Permission.Resource != nil {
+		return unsupportedPermissionReason(workspaceRoot, step.RequestedInteraction.Permission.Resource)
+	}
+
+	if step.Metadata.ToolCall != nil && step.Metadata.ToolCall.Name == "ask_permission" {
+		args := decodeToolArguments(step.Metadata.ToolCall.ArgumentsJSON)
+		return unsupportedPermissionReason(workspaceRoot, &CascadePermissionResource{
+			Action: args.Action,
+			Target: args.Target,
+		})
+	}
+
+	if step.Metadata.ToolCall != nil {
+		return fmt.Sprintf("Antigravity is waiting for a %s interaction that Codencer cannot auto-approve safely.", safePermissionAction(step.Metadata.ToolCall.Name))
+	}
+
+	return "Antigravity is waiting for a human interaction that Codencer cannot auto-approve safely."
+}
+
+func unsupportedPermissionReason(workspaceRoot string, resource *CascadePermissionResource) string {
+	if resource == nil {
+		return ""
+	}
+	action := strings.ToLower(resource.Action)
+	if isReadOnlyPermissionAction(action) {
+		if pathWithinWorkspace(resource.Target, workspaceRoot) {
+			return ""
+		}
+		return "Antigravity requested read-only access outside the execution workspace and needs human approval."
+	}
+	return fmt.Sprintf("Antigravity requested %s permission and needs human approval.", safePermissionAction(action))
+}
+
+func safePermissionAction(action string) string {
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action == "" {
+		return "unknown"
+	}
+	var b strings.Builder
+	for _, r := range action {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
 }
 
 func isReadOnlyPermissionAction(action string) bool {
@@ -373,6 +437,7 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 	a.mu.RLock()
 	cascadeID, exists := a.activeCascades[attemptID]
 	inst, instExists := a.instanceCache[attemptID]
+	blockedReason := a.blockedInteractions[attemptID]
 	a.mu.RUnlock()
 
 	if !exists || !instExists {
@@ -389,7 +454,10 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 
 	state := domain.StepStateCompleted
 	summary := "Antigravity execution completed successfully"
-	if resp.Status == StatusFailed {
+	if blockedReason != "" {
+		state = domain.StepStateNeedsManualAttention
+		summary = blockedReason
+	} else if resp.Status == StatusFailed {
 		state = domain.StepStateFailedTerminal
 		summary = "Antigravity reported execution failure"
 	} else if resp.Status == StatusAborted {
@@ -432,6 +500,7 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 	a.mu.Lock()
 	delete(a.activeCascades, attemptID)
 	delete(a.instanceCache, attemptID)
+	delete(a.blockedInteractions, attemptID)
 	for key := range a.approvedInteractions {
 		if strings.HasPrefix(key, cascadeID+":") {
 			delete(a.approvedInteractions, key)

@@ -263,9 +263,87 @@ func TestAdapter_PollKeepsEmptyIdleCascadePending(t *testing.T) {
 	}
 }
 
+func TestAdapter_PollBlocksUnsupportedCommandPermission(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "GetCascadeTrajectory"):
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(GetCascadeTrajectoryResponse{
+				Status:    StatusRunning,
+				CascadeId: "test-cascade",
+			})
+		case strings.HasSuffix(r.URL.Path, "GetCascadeTrajectorySteps"):
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(GetCascadeTrajectoryStepsResponse{
+				Steps: []CascadeStep{
+					{
+						Type:   "CORTEX_STEP_TYPE_RUN_COMMAND",
+						Status: StepStatusWaiting,
+						Metadata: CascadeStepMetadata{
+							SourceTrajectoryStepInfo: CascadeSourceTrajectoryStepInfo{
+								TrajectoryId: "trajectory-1",
+								StepIndex:    3,
+								CascadeId:    "test-cascade",
+							},
+						},
+						RequestedInteraction: &CascadeRequestedInteraction{
+							Permission: &CascadePermissionInteraction{
+								Resource: &CascadePermissionResource{
+									Action: "command",
+									Target: "mcp list --help",
+								},
+							},
+						},
+					},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "HandleCascadeUserInteraction"):
+			t.Fatalf("unsupported command permission must not be auto-approved")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	portStr := strings.Split(server.Listener.Addr().String(), ":")[1]
+	port, _ := strconv.Atoi(portStr)
+
+	inst := &domain.AGInstance{
+		HTTPSPort:     port,
+		CSRFToken:     "test-token",
+		WorkspaceRoot: "file:///tmp/ws",
+	}
+
+	adapter := NewAdapter(&mockProvider{inst: inst})
+	adapter.activeCascades["attempt-1"] = "test-cascade"
+	adapter.instanceCache["attempt-1"] = *inst
+
+	running, err := adapter.Poll(context.Background(), "attempt-1")
+	if err != nil {
+		t.Fatalf("Poll failed: %v", err)
+	}
+	if running {
+		t.Fatalf("Expected unsupported command permission to stop polling")
+	}
+
+	res, err := adapter.NormalizeResult(context.Background(), "attempt-1", nil)
+	if err != nil {
+		t.Fatalf("NormalizeResult failed: %v", err)
+	}
+	if res.State != domain.StepStateNeedsManualAttention {
+		t.Fatalf("Expected needs_manual_attention, got %s", res.State)
+	}
+	if !strings.Contains(res.Summary, "command permission") {
+		t.Fatalf("Expected command permission summary, got %q", res.Summary)
+	}
+	if strings.Contains(res.Summary, "mcp list") {
+		t.Fatalf("Summary leaked command target: %q", res.Summary)
+	}
+}
+
 func TestAdapter_DoesNotApproveOutsideWorkspace(t *testing.T) {
 	adapter := NewAdapter(&mockProvider{})
-	approval, ok := adapter.readOnlyApprovalForStep("file:///tmp/ws", CascadeStep{
+	step := CascadeStep{
 		Status: StepStatusWaiting,
 		Metadata: CascadeStepMetadata{
 			SourceTrajectoryStepInfo: CascadeSourceTrajectoryStepInfo{
@@ -281,9 +359,17 @@ func TestAdapter_DoesNotApproveOutsideWorkspace(t *testing.T) {
 				},
 			},
 		},
-	})
+	}
+	approval, ok := adapter.readOnlyApprovalForStep("file:///tmp/ws", step)
 	if ok || approval != nil {
 		t.Fatalf("Expected no approval outside workspace, got %#v", approval)
+	}
+	reason := unsupportedInteractionReason("file:///tmp/ws", step)
+	if !strings.Contains(reason, "outside the execution workspace") {
+		t.Fatalf("Expected outside-workspace reason, got %q", reason)
+	}
+	if strings.Contains(reason, "/tmp/other") {
+		t.Fatalf("Reason leaked local path: %q", reason)
 	}
 }
 
