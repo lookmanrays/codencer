@@ -2,7 +2,7 @@
 
 Date: 2026-06-24
 
-Implementation commit hash: `711f700fc4bb159fb4c64d44d9f88b5773069ebb`
+Implementation commit hash: `a4b468ff46f251e5881b6330db5532657d319bef`
 
 Branch: `next-phase`
 
@@ -25,7 +25,7 @@ Branch: `next-phase`
 - Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
 - Improved default human `codencer submit` output with local lifecycle progress lines for the run id, submitted step/profile, task status, terminal result, follow-up `codencer run report <run_id>` guidance for non-terminal tasks, and a safe local report-store hint.
 - Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
-- Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run events`, `run report`, and the structured `run resume` capability blocker.
+- Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run list`, `run get`, `run status`, `run events`, `run cancel`, `run report`, and the structured `run resume` capability blocker.
 - Sanitized setup human output step details, next commands, and secret-key step labels so local config/token paths are hidden in default output while operator Gateway/Relay URLs remain visible.
 - Extended the artifact-backed public self-host release verifier with additional default human CLI redaction gates covering `config profiles list`, `config profiles use`, `config set`, `executor scan`, `executor test`, `executor default`, `setup self-host`, `setup relay`, and `activation self-host`.
 - Strengthened the Gateway smoke used by source-tree and unpacked-artifact self-host verification so it runs with an isolated store-backed Gateway, seeds Relay profiles through the public API, and checks Gateway API outputs for relays, projects, machines, connectors, executors, runs, run detail, run events, audit events, and activation commands for local path, daemon URL, token, and unsafe field leaks.
@@ -113,6 +113,7 @@ Branch: `next-phase`
   - `reports/gateway-console-screenshots/2026-06-24-1953`
   - `reports/gateway-console-screenshots/2026-06-24-1956`
   - `reports/gateway-console-screenshots/2026-06-24-2004`
+  - `reports/gateway-console-screenshots/2026-06-24-2014`
 
 ## Commands Run
 
@@ -307,6 +308,10 @@ Branch: `next-phase`
 - `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after adding local CLI human-interrupt display/redaction proof - passed
 - `make verify-public-release` after adding local CLI human-interrupt display/redaction proof - passed
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local CLI human-interrupt display/redaction proof - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2004`
+- `bash -n scripts/verify_public_selfhost_release.sh` after adding local run list/get/status/cancel human-output proof - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after adding local run list/get/status/cancel human-output proof - passed
+- `make verify-public-release` after adding local run list/get/status/cancel human-output proof - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local run list/get/status/cancel human-output proof - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2014`
 - `git diff --check` - passed
 
 ## Remaining Blockers
@@ -320,6 +325,6 @@ Branch: `next-phase`
 - Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
 - Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
 - Human interrupt lifecycle is still partial: local report/event records, local and project-level daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, explicit `follow_up=resume/cancel/start_new_task` handling, resume/cancel/start-new-task audit, default CLI blocker-run interrupt display proof, and a Console run-detail response panel now exist. Broader planner/executor continuation after arbitrary answer/approval/permission responses remains incomplete.
-- Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, successful submit, blocker submit with human interrupt, run events, run report, run report with human interrupt, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
+- Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, successful submit, blocker submit with human interrupt, run list/get/status/events/cancel, run report, run report with human interrupt, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
 
 Verdict: NO-GO
