@@ -3,7 +3,8 @@
 - Date: 2026-07-04
 - Branch: next-phase
 - Implementation commit: a751fdb26c1ec742c9a05f3e9a3925da247e69e7
-- Verdict: GO for Codex and Claude required public self-host acceptance.
+- Verdict: GO
+- Scope: Codex and Claude required public self-host acceptance.
 - Deferred: Antigravity is optional/deferred and was not counted as a required proof.
 
 ## Root Cause
@@ -89,6 +90,13 @@ Artifact-backed RC verifier:
 
 The RC verifier logs include real-executor simulation preflight with simulation envs set to `0`, and the verifier rejects `is_simulation=true`, simulated summaries/logs, missing real output/artifacts, and adapter/profile mismatches.
 
+## Simulation And Secret Checks
+
+- Simulation marker check: passed for required Codex and Claude real executor gates.
+- Rejected markers: `is_simulation=true`, `Executing Simulated`, `Simulated successful`, and `Simulation Mode`.
+- User-facing output safety: live verifier and Console checks passed without exposing tokens/secrets in UI output.
+- Fake executors were used only for plumbing smoke and were not counted toward required release acceptance.
+
 ## Run History, Detail, And Audit Proof
 
 The live verifier exercised:
@@ -119,4 +127,6 @@ The live verifier exercised:
 
 ## Final Verdict
 
-GO for the current stage with required Codex and Claude real executor acceptance. Antigravity is explicitly deferred and must not be represented as proven.
+Verdict: GO
+
+Required Codex and Claude real executor acceptance is complete. Antigravity is explicitly deferred and must not be represented as proven.
