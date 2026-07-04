@@ -57,6 +57,7 @@ type SubmitOptions struct {
 	SourceName     string
 	Content        []byte
 	Wait           bool
+	Adapter        string
 	Profile        string
 	AdapterProfile string
 	Title          string
@@ -368,7 +369,7 @@ func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionRepo
 	if err != nil {
 		return ExecutionReport{}, err
 	}
-	resolution, err := resolveProfile(resolved.project, opts.Profile, opts.AdapterProfile, "", "")
+	resolution, err := resolveProfile(resolved.project, opts.Profile, opts.AdapterProfile, opts.Adapter, "")
 	if err != nil {
 		return ExecutionReport{}, profileReportError(err)
 	}
@@ -978,7 +979,7 @@ func resolveProfile(p projectpkg.Project, explicitProfile, adapterProfile, adapt
 		profileID = strings.TrimSpace(taskAdapterProfile)
 	}
 	adapter := strings.TrimSpace(adapterOverride)
-	if adapter == "" {
+	if adapter == "" && profileID == "" {
 		adapter = p.DefaultAdapter
 	}
 	return profilepkg.Resolve(profilepkg.ResolveOptions{

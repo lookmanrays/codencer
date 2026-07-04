@@ -62,9 +62,15 @@ describe("Gateway Console architecture guards", () => {
       path.join(packageRoot, "api/runs.ts"),
       "utf8",
     );
+    const taskRunForm = fs.readFileSync(
+      path.join(packageRoot, "components/console/task-run-form.tsx"),
+      "utf8",
+    );
 
     expect(runsAPI).toContain("wait: false");
     expect(runsAPI).not.toContain("wait: true");
+    expect(runsAPI).toContain("adapter: input.executorAdapter");
+    expect(taskRunForm).toContain("executorByID.get(effectiveID)?.adapter");
     expect(runsAPI).toContain("refetchInterval");
     expect(runsAPI).toContain("shouldPollRunReport");
   });

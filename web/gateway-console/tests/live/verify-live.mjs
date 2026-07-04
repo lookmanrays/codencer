@@ -308,6 +308,9 @@ try {
           )}`,
         );
       }
+      console.log(
+        `gateway-console-live: ui_run=${uiRun.run_id} run_history=${uiRun.id} adapter=${executorAdapter} profile=${executorProfile} simulation=false`,
+      );
       assertRealRunHistoryRecord("Gateway Console UI run history", uiRun);
       assertNoSimulationText(stack.daemonProcess.__codencerLog, "daemon log");
     }

@@ -32,6 +32,16 @@ func TestResolveFakeProfileMapsToDaemonAdapter(t *testing.T) {
 	}
 }
 
+func TestResolveExplicitProfileDeterminesAdapter(t *testing.T) {
+	resolved, err := Resolve(ResolveOptions{ProjectDefaultAdapter: "codex", ProjectProfile: "codex-workspace", ProfileID: "claude-default"})
+	if err != nil {
+		t.Fatalf("resolve explicit claude profile with codex project default: %v", err)
+	}
+	if resolved.Adapter != "claude" || resolved.ProfileID != "claude-default" || resolved.DaemonAdapter != "claude" {
+		t.Fatalf("unexpected explicit profile resolution: %+v", resolved)
+	}
+}
+
 func TestResolveExplicitFullProfile(t *testing.T) {
 	resolved, err := Resolve(ResolveOptions{Adapter: "codex", ProfileID: "codex-full"})
 	if err != nil {

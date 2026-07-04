@@ -31,6 +31,64 @@ func TestSubmitDaemonNotRunningBlocker(t *testing.T) {
 	}
 }
 
+func TestSubmitExplicitProfileDeterminesAdapter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+			writeTestJSON(t, w, http.StatusCreated, domain.Run{ID: "run-claude", ProjectID: "proj", State: domain.RunStateRunning})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-claude/steps":
+			var task domain.TaskSpec
+			if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+				t.Fatalf("decode task: %v", err)
+			}
+			if task.AdapterProfile != "claude" {
+				t.Fatalf("adapter profile = %q, want claude", task.AdapterProfile)
+			}
+			writeTestJSON(t, w, http.StatusAccepted, domain.Step{ID: "step-claude", Title: task.Title, State: domain.StepStateRunning, Adapter: task.AdapterProfile})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "codex", "codex-workspace")
+	service := NewService()
+	report, err := service.Submit(context.Background(), SubmitOptions{
+		BaseOptions: base,
+		Goal:        "use claude",
+		Profile:     "claude-default",
+		Wait:        false,
+	})
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if report.Task == nil || report.Task.Adapter != "claude" || report.Task.Profile != "claude-default" || report.Task.AdapterProfile != "claude" {
+		t.Fatalf("unexpected task report: %+v", report.Task)
+	}
+}
+
+func TestSubmitRejectsExplicitAdapterProfileConflict(t *testing.T) {
+	base := setupProject(t, "http://127.0.0.1:1", "codex", "codex-workspace")
+	service := NewService()
+	_, err := service.Submit(context.Background(), SubmitOptions{
+		BaseOptions: base,
+		Adapter:     "codex",
+		Goal:        "conflict",
+		Profile:     "claude-default",
+		Wait:        false,
+	})
+	if err == nil {
+		t.Fatal("expected adapter/profile conflict error")
+	}
+	reportErr, ok := err.(*ReportError)
+	if !ok || reportErr.Code != ExitInvalidInput || reportErr.Blocker == nil || reportErr.Blocker.Type != BlockerInvalidInput {
+		t.Fatalf("expected invalid input report error, got %#v", err)
+	}
+	if got := reportErr.Message; got != `profile "claude-default" is for adapter "claude", not "codex"` {
+		t.Fatalf("unexpected error message %q", got)
+	}
+}
+
 func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 	cancelled := false
 	resumed := false

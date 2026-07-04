@@ -1025,7 +1025,7 @@ func submitProjectTaskRoute(wait bool) func(map[string]any) (string, []byte, *ap
 			return "", nil, apiErr
 		}
 		payload := map[string]any{"wait": wait}
-		copyOptional(payload, args, "run_id", "goal", "prompt", "task", "profile", "adapter_profile", "title", "timeout_seconds")
+		copyOptional(payload, args, "run_id", "goal", "prompt", "task", "adapter", "profile", "adapter_profile", "title", "timeout_seconds")
 		body, apiErr := jsonBody(payload)
 		if apiErr != nil {
 			return "", nil, apiErr

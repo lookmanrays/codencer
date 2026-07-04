@@ -760,6 +760,9 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		t.Fatalf("project detail missing relay profile: %s", mustJSON(t, project))
 	}
 	runResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"adapter":          "claude",
+		"profile":          "claude-default",
+		"adapter_profile":  "claude-default",
 		"relay_profile_id": "default",
 		"machine_id":       "mach-1",
 		"title":            "Gateway Console task",
@@ -769,6 +772,9 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	runResultBody := mustJSON(t, runResult)
 	if !strings.Contains(runResultBody, `"step_id":"step-gateway-test"`) {
 		t.Fatalf("project run endpoint did not submit through relay: %s", runResultBody)
+	}
+	if relay.lastSubmitRequest["adapter"] != "claude" || relay.lastSubmitRequest["profile"] != "claude-default" || relay.lastSubmitRequest["adapter_profile"] != "claude-default" {
+		t.Fatalf("project run endpoint did not forward selected executor metadata: %+v", relay.lastSubmitRequest)
 	}
 	runHistoryID, _ := runResult["run_history_id"].(string)
 	if runHistoryID == "" {
@@ -1181,8 +1187,9 @@ type fakeRelayOptions struct {
 
 type fakeRelay struct {
 	*httptest.Server
-	lastMachineID string
-	lastHostLabel string
+	lastMachineID     string
+	lastHostLabel     string
+	lastSubmitRequest map[string]any
 }
 
 func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
@@ -1422,6 +1429,7 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 		relay.lastHostLabel = r.URL.Query().Get("host_label")
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
+		relay.lastSubmitRequest = req
 		if req["title"] == "Blocked Gateway task" || req["title"] == "Blocked Gateway cancel task" || req["title"] == "Blocked Gateway start task" {
 			runID := "run-blocked"
 			stepID := "step-blocked"

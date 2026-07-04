@@ -12,6 +12,7 @@ export const TaskRunInputSchema = z
     projectId: z.string().min(1),
     relayProfileId: z.string().min(1),
     dangerousExecutorConfirmed: z.boolean().optional(),
+    executorAdapter: z.string().trim().optional(),
     executorProfile: z.string().trim().min(1),
     hostLabel: z.string().optional(),
     machineId: z.string().optional(),

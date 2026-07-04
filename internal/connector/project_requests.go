@@ -125,6 +125,7 @@ type projectSubmitRequest struct {
 	Prompt         string          `json:"prompt"`
 	Task           json.RawMessage `json:"task"`
 	Wait           bool            `json:"wait"`
+	Adapter        string          `json:"adapter"`
 	Profile        string          `json:"profile"`
 	AdapterProfile string          `json:"adapter_profile"`
 	Title          string          `json:"title"`
@@ -143,6 +144,7 @@ func decodeProjectSubmit(base localexec.BaseOptions, body json.RawMessage) (loca
 		RunID:          req.RunID,
 		Goal:           req.Goal,
 		Wait:           req.Wait,
+		Adapter:        req.Adapter,
 		Profile:        req.Profile,
 		AdapterProfile: req.AdapterProfile,
 		Title:          req.Title,

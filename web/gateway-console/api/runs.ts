@@ -41,6 +41,7 @@ export async function submitProjectRun(input: ParsedTaskRunInput) {
   }
   const executorFields = effectiveExecutorProfile
     ? {
+        ...(input.executorAdapter ? { adapter: input.executorAdapter } : {}),
         adapter_profile: effectiveExecutorProfile,
         profile: effectiveExecutorProfile,
       }

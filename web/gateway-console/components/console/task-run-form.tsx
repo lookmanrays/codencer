@@ -230,7 +230,12 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
           className="grid min-w-0 gap-md"
           onSubmit={form.handleSubmit(async (values) => {
             if (executorError) return;
-            await submitRun.mutateAsync(values);
+            const effectiveID =
+              values.manualExecutorProfile?.trim() || values.executorProfile;
+            await submitRun.mutateAsync({
+              ...values,
+              executorAdapter: executorByID.get(effectiveID)?.adapter,
+            });
             await queryClient.invalidateQueries({
               queryKey: queryKeys.auditEvents,
             });

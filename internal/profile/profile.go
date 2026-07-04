@@ -134,7 +134,7 @@ func Resolve(opts ResolveOptions) (Resolution, error) {
 	)
 
 	adapter := strings.TrimSpace(opts.Adapter)
-	if adapter == "" {
+	if adapter == "" && source != "explicit_profile" {
 		adapter = strings.TrimSpace(opts.ProjectDefaultAdapter)
 	}
 
