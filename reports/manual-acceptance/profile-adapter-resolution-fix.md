@@ -56,9 +56,9 @@ Gateway also did not forward an explicit `adapter` field from project task submi
 - `make verify-gateway`
 - `make verify-gateway-console`
 - `make verify-gateway-console-live`
-- `cd web/gateway-console && ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CODENCER_E2E_BIN_DIR=/Users/lookman/Projects/codencer/bin CODENCER_E2E_EXECUTOR_ADAPTER=codex CODENCER_E2E_EXECUTOR_PROFILE=codex-workspace CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Applications/Codex.app/Contents/Resources/codex CODEX_BINARY=/Applications/Codex.app/Contents/Resources/codex node tests/live/verify-live.mjs`
-- `cd web/gateway-console && ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 CODENCER_E2E_BIN_DIR=/Users/lookman/Projects/codencer/bin CODENCER_E2E_EXECUTOR_ADAPTER=claude CODENCER_E2E_EXECUTOR_PROFILE=claude-default CODENCER_E2E_REAL_EXECUTOR_COMMAND=/Users/lookman/.local/bin/claude CLAUDE_BINARY=/Users/lookman/.local/bin/claude node tests/live/verify-live.mjs`
-- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=/Applications/Codex.app/Contents/Resources/codex CODENCER_E2E_CLAUDE_COMMAND=/Users/lookman/.local/bin/claude CODEX_BINARY=/Applications/Codex.app/Contents/Resources/codex CLAUDE_BINARY=/Users/lookman/.local/bin/claude ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 make verify-public-selfhost-rc`
+- `cd web/gateway-console && ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CODENCER_E2E_BIN_DIR=<repo>/bin CODENCER_E2E_EXECUTOR_ADAPTER=codex CODENCER_E2E_EXECUTOR_PROFILE=codex-workspace CODENCER_E2E_REAL_EXECUTOR_COMMAND=<codex-binary> CODEX_BINARY=<codex-binary> node tests/live/verify-live.mjs`
+- `cd web/gateway-console && ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 CODENCER_E2E_BIN_DIR=<repo>/bin CODENCER_E2E_EXECUTOR_ADAPTER=claude CODENCER_E2E_EXECUTOR_PROFILE=claude-default CODENCER_E2E_REAL_EXECUTOR_COMMAND=<claude-binary> CLAUDE_BINARY=<claude-binary> node tests/live/verify-live.mjs`
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> CODEX_BINARY=<codex-binary> CLAUDE_BINARY=<claude-binary> ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0 make verify-public-selfhost-rc`
 - `make verify-public-release`
 - `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host`
 - `git diff --check`
@@ -116,7 +116,7 @@ The live verifier exercised:
 
 ## Non-Final Attempts
 
-- A first direct Codex live verifier attempt failed before execution because `CODENCER_E2E_BIN_DIR` was relative; it was rerun with absolute `/Users/lookman/Projects/codencer/bin`.
+- A first direct Codex live verifier attempt failed before execution because `CODENCER_E2E_BIN_DIR` was relative; it was rerun with `CODENCER_E2E_BIN_DIR` pointing at the repository `bin/` directory.
 - A first RC verifier attempt with only `CODENCER_E2E_REAL_EXECUTOR=codex` returned NO-GO as expected because Claude is now required by default. The successful run used `CODENCER_E2E_REAL_EXECUTORS=codex,claude`.
 
 ## Remaining Limitations
