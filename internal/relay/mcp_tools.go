@@ -527,13 +527,14 @@ func projectSubmitTool(server *mcpServer, name string, wait bool) mcpTool {
 		"goal":            stringSchema("Direct goal text."),
 		"prompt":          stringSchema("Prompt text."),
 		"task":            taskSpecSchema(),
+		"adapter":         stringSchema("Executor adapter id."),
 		"profile":         stringSchema("Planner-facing profile id."),
 		"adapter_profile": stringSchema("Daemon-facing adapter profile override."),
 		"title":           stringSchema("Task title."),
 		"timeout_seconds": intSchema("Optional timeout in seconds."),
 	}), func(projectID string, args map[string]any) (string, []byte, *apiError) {
 		payload := map[string]any{"wait": wait}
-		copyOptional(payload, args, "run_id", "goal", "prompt", "task", "profile", "adapter_profile", "title", "timeout_seconds")
+		copyOptional(payload, args, "run_id", "goal", "prompt", "task", "adapter", "profile", "adapter_profile", "title", "timeout_seconds")
 		body, err := json.Marshal(payload)
 		if err != nil {
 			return "", nil, &apiError{Status: http.StatusBadRequest, Code: "malformed_request", Message: err.Error()}

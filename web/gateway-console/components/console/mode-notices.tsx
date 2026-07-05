@@ -1,11 +1,14 @@
 import { Alert } from "@/components/ui/alert";
 
-export function OfficialGatewayNotice() {
+export function OfficialGatewayNotice({
+  mcpEndpoint,
+}: {
+  mcpEndpoint: string;
+}) {
   return (
     <Alert title="Gateway MCP path" tone="brand">
-      AI clients point to Gateway at <code>http://127.0.0.1:19090/mcp</code>.
-      Gateway routes to the default self-host Relay or to user-added Relay
-      profiles.
+      AI clients point to Gateway at <code>{mcpEndpoint}</code>. Gateway routes
+      to the default self-host Relay or to user-added Relay profiles.
     </Alert>
   );
 }

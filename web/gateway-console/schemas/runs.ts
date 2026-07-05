@@ -53,10 +53,17 @@ export const RunSubmitResponseSchema = z
       projectId: project_id ?? stringValue(payload.project_id),
       raw: payload,
       relayProfileId: stringValue(payload.relay_profile_id),
+      executorAdapter:
+        stringValue(payload.executor_adapter) ||
+        stringValue(payload.adapter) ||
+        stringValue(task.adapter),
       executorProfile:
         stringValue(payload.executor_profile) ||
         stringValue(payload.profile) ||
-        stringValue(payload.adapter_profile),
+        stringValue(payload.adapter_profile) ||
+        stringValue(task.profile) ||
+        stringValue(task.executor_profile) ||
+        stringValue(task.adapter_profile),
       executionMode: executionModeFromPayload(payload),
       runId:
         stringValue(payload.run_id) ||
@@ -74,6 +81,7 @@ export const RunSubmitResultSchema = z.object({
   details: z.string().optional(),
   ok: z.boolean(),
   executionMode: z.enum(["real", "simulation", "unknown"]),
+  executorAdapter: z.string().optional(),
   executorProfile: z.string().optional(),
   projectId: z.string().optional(),
   raw: z.record(z.string(), z.unknown()),

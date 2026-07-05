@@ -188,7 +188,9 @@ try {
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/relays`);
-    await expect(page.getByText("Default Codencer Relay")).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: "Default Codencer Relay" }),
+    ).toBeVisible();
     await page.getByLabel(/profile name/i).fill("test-self-host");
     await page.getByLabel(/relay url/i).fill(stack.relayUrl);
     await page
@@ -196,26 +198,22 @@ try {
       .fill("CODENCER_LIVE_RELAY_TOKEN");
     await page.getByRole("button", { name: /save relay profile/i }).click();
     await expect(
-      page.getByRole("heading", { name: "test-self-host" }),
+      page.getByRole("cell", { name: "test-self-host" }).first(),
     ).toBeVisible();
     await page.reload();
     await expect(
-      page.getByRole("heading", { name: "test-self-host" }),
+      page.getByRole("cell", { name: "test-self-host" }).first(),
     ).toBeVisible();
     await page
       .getByRole("button", { name: /^remove$/i })
       .last()
       .click();
-    await page
-      .getByRole("button", { name: /^remove$/i })
-      .last()
-      .click();
     await expect(
-      page.getByRole("heading", { name: "test-self-host" }),
+      page.getByRole("cell", { name: "test-self-host" }).first(),
     ).toBeHidden();
     await page.reload();
     await expect(
-      page.getByRole("heading", { name: "test-self-host" }),
+      page.getByRole("cell", { name: "test-self-host" }).first(),
     ).toBeHidden();
     await assertNoDemoOrSecretLeak(page);
 
@@ -287,7 +285,9 @@ try {
     await expect(page.getByRole("heading", { name: /full run/i })).toBeVisible({
       timeout: uiSubmitTimeoutMs,
     });
+    const submittedRunDetailPath = new URL(page.url()).pathname;
     await expect(page.getByText(executorProfile).first()).toBeVisible();
+    await expect(page.getByText(executorAdapter).first()).toBeVisible();
     await expect(page.getByText(/Run ID/i).first()).toBeVisible();
     await expect(page.getByText(/Result/i).first()).toBeVisible();
     if (realExecutorGate) {
@@ -323,16 +323,16 @@ try {
     await expect(
       page.getByRole("heading", { name: /run history/i }),
     ).toBeVisible();
+    const runsTable = page.getByRole("table");
     await expect(
-      page
+      runsTable
         .getByText(new RegExp(escapeRegExp(executorDefaults.title), "i"))
         .first(),
     ).toBeVisible();
-    await expect(page.getByText(executorProfile).first()).toBeVisible();
-    await expect(page.getByText(/Run ID/i).first()).toBeVisible();
-    await expect(page.getByText(/Result/i).first()).toBeVisible();
+    await expect(runsTable.getByText(executorProfile).first()).toBeVisible();
+    await expect(runsTable.getByText(/run-/i).first()).toBeVisible();
     if (realExecutorGate) {
-      await expect(page.getByText("Real executor").first()).toBeVisible();
+      await expect(runsTable.getByText("Real executor").first()).toBeVisible();
     }
     await expect(
       page.getByRole("link", { name: /view details/i }).first(),
@@ -340,13 +340,14 @@ try {
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/audit`);
-    await expect(
-      page.getByRole("link", { name: /task_submitted/i }).first(),
-    ).toBeVisible();
-    await page
-      .getByRole("link", { name: /task_submitted/i })
-      .first()
-      .click();
+    await expect(page.getByText(/run lifecycle/i)).toBeVisible();
+    await expect(page.getByText(/task_submitted/i).first()).toBeVisible();
+    const submittedRunAuditLink = page.locator(
+      `a[href="${submittedRunDetailPath}"]`,
+      { hasText: "View run" },
+    );
+    await expect(submittedRunAuditLink.first()).toBeVisible();
+    await submittedRunAuditLink.first().click();
     await expect(
       page.getByRole("heading", { name: /full run/i }),
     ).toBeVisible();
@@ -362,7 +363,7 @@ try {
     await assertNoDemoOrSecretLeak(page);
 
     await page.goto(`${consoleBase}/console/audit`);
-    await expect(page.getByText(/connector\.login/i).first()).toBeVisible();
+    await expect(page.getByText(/run lifecycle/i)).toBeVisible();
     await expect(page.getByText(/task_submitted/i).first()).toBeVisible();
     await expect(page.getByText(/route_resolved/i).first()).toBeVisible();
     await expect(page.getByText(/relay_selected/i).first()).toBeVisible();
@@ -371,6 +372,7 @@ try {
     await expect(page.getByText(/run_started/i).first()).toBeVisible();
     await expect(page.getByText(/run_completed/i).first()).toBeVisible();
     await expect(page.getByText(/report_read/i).first()).toBeVisible();
+    await expect(page.getByText(/other workspace events/i)).toBeVisible();
     await expect(page.getByText("relay.add").first()).toBeVisible();
     await expect(page.getByText("relay.remove").first()).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
@@ -528,6 +530,8 @@ async function runGatewayMCPProof(gatewayBase, token) {
   }
 
   const submit = await tool("codencer.submit_project_task_and_wait", {
+    adapter: executorAdapter,
+    adapter_profile: executorProfile,
     goal:
       executorAdapter === "fake"
         ? "Run fake-safe task through Gateway MCP."
@@ -1083,6 +1087,11 @@ function taskDefaultsForExecutorProfile(profile) {
 
 function assertRealRunHistoryRecord(label, record) {
   assertNoSimulationText(JSON.stringify(record), label);
+  if (record.executor_adapter !== executorAdapter) {
+    throw new Error(
+      `${label} expected executor_adapter=${executorAdapter}, got ${record.executor_adapter}`,
+    );
+  }
   if (record.executor_profile !== executorProfile) {
     throw new Error(
       `${label} expected executor_profile=${executorProfile}, got ${record.executor_profile}`,

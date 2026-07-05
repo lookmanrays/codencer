@@ -27,6 +27,7 @@ export function RunResultPanel({
   const details = run?.resultDetails || result?.details || summary;
   const runHistoryId = run?.id || result?.runHistoryId;
   const runId = run?.runId || result?.runId || "n/a";
+  const adapter = run?.executorAdapter || result?.executorAdapter || "n/a";
   const executor = run?.executorProfile || result?.executorProfile || "n/a";
   const executionMode =
     run?.executionMode || result?.executionMode || "unknown";
@@ -42,7 +43,8 @@ export function RunResultPanel({
           items={[
             { label: "Status", value: status },
             { label: "Run ID", value: runId },
-            { label: "Executor", value: executor },
+            { label: "Adapter", value: adapter },
+            { label: "Executor profile", value: executor },
             {
               label: "Execution",
               value: (

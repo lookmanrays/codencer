@@ -155,6 +155,9 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 		"relay_profile_id": "personal",
 		"project_id":       "codencer",
 		"host_label":       "macbook",
+		"adapter":          "claude",
+		"profile":          "claude-default",
+		"adapter_profile":  "claude-default",
 		"goal":             "Return deterministic evidence.",
 	})
 	submitBody := mustJSON(t, submit)
@@ -164,6 +167,9 @@ func TestGatewayMCPToolsAggregateForwardAndSanitize(t *testing.T) {
 	assertNoGatewayMCPLeak(t, submitBody)
 	if relay.lastHostLabel != "macbook" {
 		t.Fatalf("expected host_label selector to reach relay, got %q", relay.lastHostLabel)
+	}
+	if relay.lastSubmitRequest["adapter"] != "claude" || relay.lastSubmitRequest["profile"] != "claude-default" || relay.lastSubmitRequest["adapter_profile"] != "claude-default" {
+		t.Fatalf("expected selected executor metadata to reach relay, got %+v", relay.lastSubmitRequest)
 	}
 	submitRunID := runIDFromPayload(mcpStructuredContent(t, submit))
 	if submitRunID == "" {
@@ -658,7 +664,7 @@ func TestGatewayConsoleCollectionsSynthesizeRelayLocationMetadata(t *testing.T) 
 }
 
 func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
-	relay := newFakeRelay(t, fakeRelayOptions{allowEnrollment: true})
+	relay := newFakeRelay(t, fakeRelayOptions{allowEnrollment: true, defaultAdapter: "codex", adapterProfile: "codex-workspace"})
 	defer relay.Close()
 	t.Setenv("CODENCER_DEFAULT_RELAY_TOKEN", "relay-secret")
 	t.Setenv("CODENCER_SELFHOST_RELAY_TOKEN", "relay-secret")
@@ -849,10 +855,27 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if !strings.Contains(reportBody, `"status":"completed"`) || !strings.Contains(reportBody, `"run_id":"run-gateway-test"`) {
 		t.Fatalf("project run report endpoint did not fetch report: %s", reportBody)
 	}
+	if !strings.Contains(reportBody, `"adapter":"claude"`) || !strings.Contains(reportBody, `"profile":"claude-default"`) || strings.Contains(reportBody, `"profile":"codex-workspace"`) {
+		t.Fatalf("project run report endpoint did not preserve selected Claude report metadata: %s", reportBody)
+	}
 	if report["run_history_id"] != runHistoryID {
 		t.Fatalf("report endpoint returned run_history_id=%v want %s: %s", report["run_history_id"], runHistoryID, reportBody)
 	}
 	assertNoGatewayMCPLeak(t, reportBody)
+	conflict := apiRaw(t, httpServer.URL+"/api/gateway/v1/projects/codencer/runs", token.AccessToken, map[string]any{
+		"adapter":          "codex",
+		"profile":          "claude-default",
+		"relay_profile_id": "default",
+		"machine_id":       "mach-1",
+		"title":            "Conflicting executor metadata",
+		"goal":             "This should not execute.",
+		"wait":             true,
+	})
+	conflictBody := readBody(t, conflict)
+	conflict.Body.Close()
+	if conflict.StatusCode != http.StatusBadRequest || !strings.Contains(conflictBody, "invalid_input") || strings.Contains(conflictBody, "step-gateway-test") {
+		t.Fatalf("executor adapter/profile conflict should return invalid_input before execution, status=%d body=%s", conflict.StatusCode, conflictBody)
+	}
 	syncResult := apiPost[map[string]any](t, httpServer.URL+"/api/gateway/v1/sync/runs", token.AccessToken, map[string]any{
 		"mode":  "metadata_only",
 		"scope": "local",
@@ -926,7 +949,8 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 		!strings.Contains(runsBody, `"run_id":"run-gateway-test"`) ||
 		!strings.Contains(runsBody, `"title":"Gateway Console task"`) ||
 		!strings.Contains(runsBody, `"goal":"Return deterministic evidence."`) ||
-		!strings.Contains(runsBody, `"executor_profile":"fake-success"`) ||
+		!strings.Contains(runsBody, `"executor_adapter":"claude"`) ||
+		!strings.Contains(runsBody, `"executor_profile":"claude-default"`) ||
 		!strings.Contains(runsBody, `"scope":"gateway_submitted"`) ||
 		!strings.Contains(runsBody, `"relay_profile_id":"default"`) ||
 		!strings.Contains(runsBody, `"connector_id":"connector-1"`) ||
@@ -955,6 +979,8 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	runDetailBody := mustJSON(t, runDetail)
 	if !strings.Contains(runDetailBody, `"run_id":"run-gateway-test"`) ||
 		!strings.Contains(runDetailBody, `"scope":"gateway_submitted"`) ||
+		!strings.Contains(runDetailBody, `"executor_adapter":"claude"`) ||
+		!strings.Contains(runDetailBody, `"executor_profile":"claude-default"`) ||
 		!strings.Contains(runDetailBody, `"report_status":"completed"`) ||
 		!strings.Contains(runDetailBody, `"result_details":"Artifacts: stdout.log"`) {
 		t.Fatalf("run history detail missing expected result metadata: %s", runDetailBody)
@@ -969,6 +995,9 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	}
 	if !strings.Contains(runEventsBody, `"run_history_id":"`+runHistoryID+`"`) {
 		t.Fatalf("run event history missing run metadata: %s", runEventsBody)
+	}
+	if !strings.Contains(runEventsBody, `"executor_adapter":"claude"`) || !strings.Contains(runEventsBody, `"executor_profile":"claude-default"`) || strings.Contains(runEventsBody, `"executor_profile":"codex-workspace"`) {
+		t.Fatalf("run event history did not preserve selected Claude executor metadata: %s", runEventsBody)
 	}
 	if !strings.Contains(runEventsBody, `"groups":`) || !strings.Contains(runEventsBody, `"event_count":8`) || !strings.Contains(runEventsBody, `"pagination":`) {
 		t.Fatalf("run event history missing grouped audit or pagination metadata: %s", runEventsBody)
@@ -1125,6 +1154,9 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 	if !strings.Contains(auditBody, `"run_history_id":"`+runHistoryID+`"`) {
 		t.Fatalf("audit endpoint missing run history metadata: %s", auditBody)
 	}
+	if !strings.Contains(auditBody, `"executor_adapter":"claude"`) || !strings.Contains(auditBody, `"executor_profile":"claude-default"`) {
+		t.Fatalf("audit endpoint did not preserve selected Claude executor metadata: %s", auditBody)
+	}
 	if !strings.Contains(auditBody, `"groups":`) || !strings.Contains(auditBody, `"event_count":8`) || !strings.Contains(auditBody, `"pagination":`) {
 		t.Fatalf("audit endpoint missing grouped audit or pagination metadata: %s", auditBody)
 	}
@@ -1183,6 +1215,8 @@ func TestGatewayStoreDeviceLoginRelayRegistryAndConnectorBinding(t *testing.T) {
 type fakeRelayOptions struct {
 	multipleLocations bool
 	allowEnrollment   bool
+	defaultAdapter    string
+	adapterProfile    string
 }
 
 type fakeRelay struct {
@@ -1222,8 +1256,8 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			"name":            "Codencer",
 			"online":          true,
 			"status":          "available",
-			"default_adapter": "fake",
-			"adapter_profile": "fake-success",
+			"default_adapter": firstNonEmpty(opts.defaultAdapter, "fake"),
+			"adapter_profile": firstNonEmpty(opts.adapterProfile, "fake-success"),
 			"locations":       locations,
 			"repo_root":       "/Users/example/codencer",
 			"token":           "relay-secret",
@@ -1575,7 +1609,11 @@ func newFakeRelay(t *testing.T, opts fakeRelayOptions) *fakeRelay {
 			"report_path": "/Users/example/.codencer-live-test/artifacts/run-plans/run-gateway-test.json",
 			"run":         map[string]any{"id": "run-gateway-test", "state": "running"},
 			"tasks": []map[string]any{{
-				"task_id": "fake",
+				"task_id":          "fake",
+				"adapter":          "claude",
+				"profile":          "claude-default",
+				"adapter_profile":  "claude-default",
+				"executor_profile": "claude-default",
 				"evidence": map[string]any{
 					"logs_ref": "/tmp/codencer/stdout.log",
 					"artifacts": []map[string]any{{

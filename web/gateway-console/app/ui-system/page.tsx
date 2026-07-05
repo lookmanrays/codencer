@@ -344,7 +344,7 @@ export default function UISystemPage() {
           <h2 className="m-0 text-h2 font-bold">Console modules</h2>
           <div className="grid min-w-0 gap-md lg:grid-cols-3">
             <DemoModeNotice />
-            <OfficialGatewayNotice />
+            <OfficialGatewayNotice mcpEndpoint={demoSnapshot.mcpEndpoint} />
             <SelfHostModeNotice />
           </div>
           <RelayProfileCard relay={demoSnapshot.relays[0]!} />

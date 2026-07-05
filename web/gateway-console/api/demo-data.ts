@@ -258,6 +258,22 @@ export const demoSnapshot: DemoSnapshot = {
   ],
   auditEvents: [
     {
+      id: "evt_run_09",
+      type: "report_read",
+      summary: "Read run report run_demo_console for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:18:42Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_console",
+      metadata: {
+        executor_adapter: "codex",
+        run_history_id: "runhist_demo_console",
+        run_id: "run_demo_console",
+        project_id: "codencer",
+        executor_profile: "codex-workspace",
+      },
+    },
+    {
       id: "evt_run_08",
       type: "report_read",
       summary: "Read run report run_demo_console for project codencer",
@@ -266,6 +282,7 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         run_id: "run_demo_console",
         project_id: "codencer",
@@ -281,6 +298,7 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         run_id: "run_demo_console",
         project_id: "codencer",
@@ -296,6 +314,7 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         run_id: "run_demo_console",
         project_id: "codencer",
@@ -311,6 +330,7 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         project_id: "codencer",
         executor_profile: "codex-workspace",
@@ -326,8 +346,10 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         project_id: "codencer",
+        executor_profile: "codex-workspace",
         connector_id: "conn_01",
         machine_id: "mach_mac",
       },
@@ -341,8 +363,10 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         project_id: "codencer",
+        executor_profile: "codex-workspace",
         relay_profile_id: "default",
       },
     },
@@ -355,8 +379,10 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         project_id: "codencer",
+        executor_profile: "codex-workspace",
       },
     },
     {
@@ -368,8 +394,57 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_console",
       metadata: {
+        executor_adapter: "codex",
         run_history_id: "runhist_demo_console",
         project_id: "codencer",
+        executor_profile: "codex-workspace",
+      },
+    },
+    {
+      id: "evt_claude_03",
+      type: "report_read",
+      summary: "Read run report run_demo_claude for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:20:40Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_claude",
+      metadata: {
+        executor_adapter: "claude",
+        run_history_id: "runhist_demo_claude",
+        run_id: "run_demo_claude",
+        project_id: "codencer",
+        executor_profile: "claude-default",
+      },
+    },
+    {
+      id: "evt_claude_02",
+      type: "run_completed",
+      summary: "Run run_demo_claude completed for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:20:35Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_claude",
+      metadata: {
+        executor_adapter: "claude",
+        run_history_id: "runhist_demo_claude",
+        run_id: "run_demo_claude",
+        project_id: "codencer",
+        executor_profile: "claude-default",
+      },
+    },
+    {
+      id: "evt_claude_01",
+      type: "task_submitted",
+      summary: "Submitted simple task for project codencer",
+      actor: "gateway",
+      createdAt: "2026-06-20T12:20:00Z",
+      severity: "info",
+      runHistoryId: "runhist_demo_claude",
+      metadata: {
+        executor_adapter: "claude",
+        run_history_id: "runhist_demo_claude",
+        project_id: "codencer",
+        executor_profile: "claude-default",
       },
     },
     {
@@ -399,6 +474,8 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "warning",
       runHistoryId: "runhist_demo_blocked",
       metadata: {
+        executor_adapter: "codex",
+        executor_profile: "codex-workspace",
         project_id: "codencer",
         run_history_id: "runhist_demo_blocked",
         run_id: "run_demo_blocked",
@@ -413,6 +490,7 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_blocked",
       metadata: {
+        executor_adapter: "codex",
         executor_profile: "codex-workspace",
         project_id: "codencer",
         run_history_id: "runhist_demo_blocked",
@@ -428,8 +506,10 @@ export const demoSnapshot: DemoSnapshot = {
       severity: "info",
       runHistoryId: "runhist_demo_blocked",
       metadata: {
+        executor_adapter: "codex",
         project_id: "codencer",
         run_history_id: "runhist_demo_blocked",
+        executor_profile: "codex-workspace",
       },
     },
     {
@@ -462,6 +542,7 @@ export const demoSnapshot: DemoSnapshot = {
       completedAt: "2026-06-20T12:18:35Z",
       connectorId: "conn_01",
       createdAt: "2026-06-20T12:18:00Z",
+      executorAdapter: "codex",
       executorProfile: "codex-workspace",
       executionMode: "real",
       goal: "Inspect the project README and return a short summary. Do not modify files.",
@@ -474,7 +555,24 @@ export const demoSnapshot: DemoSnapshot = {
       relayProfileId: "default",
       report: {
         status: "completed",
+        task: {
+          adapter: "codex",
+          profile: "codex-workspace",
+          status: "completed",
+          step_id: "step_demo_console",
+          summary:
+            "Codencer bridges planners to coding executors through local and self-host services.",
+        },
         evidence: {
+          artifacts: [
+            {
+              id: "artifact-demo-stdout",
+              name: "stdout.log",
+              type: "stdout",
+              mime_type: "text/plain",
+              size: 220,
+            },
+          ],
           result: {
             adapter: "codex",
             is_simulation: false,
@@ -497,9 +595,66 @@ export const demoSnapshot: DemoSnapshot = {
       updatedAt: "2026-06-20T12:18:40Z",
     },
     {
+      completedAt: "2026-06-20T12:20:35Z",
+      connectorId: "conn_01",
+      createdAt: "2026-06-20T12:20:00Z",
+      executorAdapter: "claude",
+      executorProfile: "claude-default",
+      executionMode: "real",
+      goal: "Inspect the project README and return a short summary. Do not modify files.",
+      hostLabel: "macbook",
+      id: "runhist_demo_claude",
+      machineId: "mach_mac",
+      mode: "task",
+      projectId: "codencer",
+      projectName: "Codencer",
+      relayProfileId: "default",
+      report: {
+        status: "completed",
+        task: {
+          adapter: "claude",
+          profile: "claude-default",
+          status: "completed",
+          step_id: "step_demo_claude",
+          summary:
+            "Claude reported that Codencer is a bridge for approved local/self-host executor runs.",
+        },
+        evidence: {
+          artifacts: [
+            {
+              id: "artifact-demo-claude-stdout",
+              name: "stdout.log",
+              type: "stdout",
+              mime_type: "text/plain",
+              size: 180,
+            },
+          ],
+          result: {
+            adapter: "claude",
+            is_simulation: false,
+            raw_output:
+              "The README presents Codencer as a bridge, not a planner, for local and self-host coding execution.",
+          },
+        },
+      },
+      reportStatus: "completed",
+      resultDetails:
+        "The README presents Codencer as a bridge, not a planner, for local and self-host coding execution.",
+      resultSummary:
+        "Claude reported Codencer as a bridge for approved executor runs.",
+      runId: "run_demo_claude",
+      scope: "gateway_submitted",
+      startedAt: "2026-06-20T12:20:00Z",
+      status: "completed",
+      stepId: "step_demo_claude",
+      title: "Claude CLI smoke task",
+      updatedAt: "2026-06-20T12:20:40Z",
+    },
+    {
       completedAt: undefined,
       connectorId: "conn_01",
       createdAt: "2026-06-20T12:22:00Z",
+      executorAdapter: "codex",
       executorProfile: "codex-workspace",
       executionMode: "unknown",
       goal: "Inspect the project README after operator confirmation.",

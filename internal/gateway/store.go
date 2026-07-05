@@ -135,6 +135,7 @@ type RunRecord struct {
 	Goal            string         `json:"goal,omitempty"`
 	Mode            string         `json:"mode,omitempty"`
 	Scope           string         `json:"scope,omitempty"`
+	ExecutorAdapter string         `json:"executor_adapter,omitempty"`
 	ExecutorProfile string         `json:"executor_profile,omitempty"`
 	Status          string         `json:"status,omitempty"`
 	ReportStatus    string         `json:"report_status,omitempty"`
@@ -322,6 +323,7 @@ func (s *Store) migrate(ctx context.Context) error {
 			goal TEXT NOT NULL DEFAULT '',
 			mode TEXT NOT NULL DEFAULT '',
 			scope TEXT NOT NULL DEFAULT 'gateway_submitted',
+			executor_adapter TEXT NOT NULL DEFAULT '',
 			executor_profile TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT '',
 			report_status TEXT NOT NULL DEFAULT '',
@@ -350,6 +352,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, `ALTER TABLE gateway_run_records ADD COLUMN scope TEXT NOT NULL DEFAULT 'gateway_submitted'`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("migrate gateway run scope: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE gateway_run_records ADD COLUMN executor_adapter TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrate gateway run executor adapter: %w", err)
 	}
 	return nil
 }
@@ -888,9 +893,9 @@ func (s *Store) UpsertRunRecord(ctx context.Context, record RunRecord) (RunRecor
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO gateway_run_records (
 			id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope,
-			executor_profile, status, report_status, result_summary, result_details, relay_profile_id,
+			executor_adapter, executor_profile, status, report_status, result_summary, result_details, relay_profile_id,
 			connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			actor_user_id = excluded.actor_user_id,
 			project_id = excluded.project_id,
@@ -901,6 +906,7 @@ func (s *Store) UpsertRunRecord(ctx context.Context, record RunRecord) (RunRecor
 			goal = excluded.goal,
 			mode = excluded.mode,
 			scope = excluded.scope,
+			executor_adapter = excluded.executor_adapter,
 			executor_profile = excluded.executor_profile,
 			status = excluded.status,
 			report_status = excluded.report_status,
@@ -915,7 +921,7 @@ func (s *Store) UpsertRunRecord(ctx context.Context, record RunRecord) (RunRecor
 			updated_at = excluded.updated_at,
 			report_json = excluded.report_json`,
 		record.ID, record.WorkspaceID, record.ActorUserID, record.ProjectID, record.ProjectName, record.RunID, record.StepID, record.Title, record.Goal, record.Mode, record.Scope,
-		record.ExecutorProfile, record.Status, record.ReportStatus, record.ResultSummary, record.ResultDetails, record.RelayProfileID,
+		record.ExecutorAdapter, record.ExecutorProfile, record.Status, record.ReportStatus, record.ResultSummary, record.ResultDetails, record.RelayProfileID,
 		record.ConnectorID, record.MachineID, record.HostLabel, formatStoreTime(record.StartedAt), formatStoreTime(record.CompletedAt), formatStoreTime(record.CreatedAt), formatStoreTime(record.UpdatedAt), reportJSON)
 	if err != nil {
 		return RunRecord{}, fmt.Errorf("upsert gateway run record: %w", err)
@@ -924,7 +930,7 @@ func (s *Store) UpsertRunRecord(ctx context.Context, record RunRecord) (RunRecor
 }
 
 func (s *Store) FindRunRecord(ctx context.Context, workspaceID, projectID, runID, relayProfileID, machineID, hostLabel string) (RunRecord, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_adapter, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
 		FROM gateway_run_records
 		WHERE workspace_id = ? AND project_id = ? AND run_id = ? AND relay_profile_id = ? AND machine_id = ? AND host_label = ?
 		ORDER BY updated_at DESC LIMIT 1`,
@@ -933,7 +939,7 @@ func (s *Store) FindRunRecord(ctx context.Context, workspaceID, projectID, runID
 }
 
 func (s *Store) FindRunRecordByRunID(ctx context.Context, workspaceID, projectID, runID string) (RunRecord, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_adapter, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
 		FROM gateway_run_records
 		WHERE workspace_id = ? AND project_id = ? AND run_id = ?
 		ORDER BY updated_at DESC LIMIT 1`, workspaceID, projectID, runID)
@@ -941,7 +947,7 @@ func (s *Store) FindRunRecordByRunID(ctx context.Context, workspaceID, projectID
 }
 
 func (s *Store) GetRunRecord(ctx context.Context, workspaceID, id string) (RunRecord, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_adapter, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json
 		FROM gateway_run_records WHERE workspace_id = ? AND id = ?`, workspaceID, id)
 	return scanRunRecord(row)
 }
@@ -955,7 +961,7 @@ func (s *Store) ListRunRecords(ctx context.Context, workspaceID string, filters 
 	if offset < 0 {
 		offset = 0
 	}
-	query := `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json FROM gateway_run_records WHERE workspace_id = ?`
+	query := `SELECT id, workspace_id, actor_user_id, project_id, project_name, run_id, step_id, title, goal, mode, scope, executor_adapter, executor_profile, status, report_status, result_summary, result_details, relay_profile_id, connector_id, machine_id, host_label, started_at, completed_at, created_at, updated_at, report_json FROM gateway_run_records WHERE workspace_id = ?`
 	args := []any{workspaceID}
 	if strings.TrimSpace(filters.ProjectID) != "" {
 		query += ` AND project_id = ?`
@@ -1103,6 +1109,7 @@ func scanRunRecord(row interface{ Scan(dest ...any) error }) (RunRecord, error) 
 		&record.Goal,
 		&record.Mode,
 		&record.Scope,
+		&record.ExecutorAdapter,
 		&record.ExecutorProfile,
 		&record.Status,
 		&record.ReportStatus,

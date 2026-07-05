@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	profilepkg "agent-bridge/internal/profile"
 )
 
 type relayProject struct {
@@ -215,6 +217,7 @@ func (s *Server) projectForwardTool(name, description string, required []string,
 		properties["goal"] = stringSchema("Direct task goal.")
 		properties["prompt"] = stringSchema("Prompt text.")
 		properties["task"] = objectSchema(nil, nil)
+		properties["adapter"] = stringSchema("Executor adapter id.")
 		properties["profile"] = stringSchema("Planner-facing profile id.")
 		properties["adapter_profile"] = stringSchema("Daemon adapter profile.")
 		properties["title"] = stringSchema("Task title.")
@@ -712,6 +715,13 @@ func projectLifecycleAuditMetadata(match relayProjectMatch, args map[string]any)
 			metadata[key] = strings.TrimSpace(value)
 		}
 	}
+	meta := executorMetadataFromArgs(args)
+	if meta.Adapter != "" {
+		metadata["executor_adapter"] = meta.Adapter
+	}
+	if meta.Profile != "" {
+		metadata["executor_profile"] = meta.Profile
+	}
 	return metadata
 }
 
@@ -1024,6 +1034,9 @@ func submitProjectTaskRoute(wait bool) func(map[string]any) (string, []byte, *ap
 		if apiErr != nil {
 			return "", nil, apiErr
 		}
+		if apiErr := validateExplicitExecutorMetadata(args); apiErr != nil {
+			return "", nil, apiErr
+		}
 		payload := map[string]any{"wait": wait}
 		copyOptional(payload, args, "run_id", "goal", "prompt", "task", "adapter", "profile", "adapter_profile", "title", "timeout_seconds")
 		body, apiErr := jsonBody(payload)
@@ -1032,6 +1045,21 @@ func submitProjectTaskRoute(wait bool) func(map[string]any) (string, []byte, *ap
 		}
 		return "/api/v2/projects/" + projectID + "/submit", body, nil
 	}
+}
+
+func validateExplicitExecutorMetadata(args map[string]any) *apiError {
+	meta := executorMetadataFromArgs(args)
+	if meta.Adapter == "" || meta.Profile == "" {
+		return nil
+	}
+	if _, err := profilepkg.Resolve(profilepkg.ResolveOptions{
+		Adapter:              meta.Adapter,
+		ProfileID:            meta.Profile,
+		AllowDangerousBypass: true,
+	}); err != nil {
+		return &apiError{Status: http.StatusBadRequest, Code: "invalid_input", Message: err.Error()}
+	}
+	return nil
 }
 
 func isReadOnlyProjectForwardTool(name string) bool {

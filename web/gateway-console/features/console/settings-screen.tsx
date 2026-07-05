@@ -6,7 +6,6 @@ import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KeyValueList } from "@/components/ui/key-value-list";
 import { LoadingPanel } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { isDemoMode } from "@/api/config";
 import { useWorkspace } from "@/api/workspace";
 import { DemoModeNotice } from "@/components/console/mode-notices";
@@ -19,7 +18,7 @@ export function SettingsScreen() {
         { label: "Console", href: "/console" },
         { label: "Settings" },
       ]}
-      description="Workspace metadata, endpoints, theme, and future token-management placeholders."
+      description="Workspace metadata, runtime endpoints, and local Console preferences."
       kicker="Settings"
       title="Console settings"
     >
@@ -40,7 +39,12 @@ export function SettingsScreen() {
               <KeyValueList
                 items={[
                   { label: "Workspace", value: workspace.data.workspace.name },
+                  { label: "Type", value: workspace.data.workspace.kind },
                   { label: "MCP endpoint", value: workspace.data.mcpEndpoint },
+                  {
+                    label: "Public base",
+                    value: workspace.data.publicBaseURL,
+                  },
                   {
                     label: "Mode",
                     value: workspace.data.workspace.mode,
@@ -60,23 +64,6 @@ export function SettingsScreen() {
               </span>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Token revocation</CardTitle>
-            </CardHeader>
-            <CardContent className="flex items-center justify-between gap-md">
-              <span className="text-body-sm text-ink-secondary">
-                Placeholder only. Production token revocation UI/API is
-                future/private.
-              </span>
-              <Switch disabled />
-            </CardContent>
-          </Card>
-          <Alert title="Future private Cloud features" tone="warning">
-            Billing, team invites, support/admin console, hosted provider login,
-            KMS/Vault, and managed runners are intentionally not implemented
-            here.
-          </Alert>
         </div>
       ) : null}
     </PageShell>

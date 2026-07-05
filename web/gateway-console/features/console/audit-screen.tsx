@@ -28,8 +28,7 @@ const PAGE_SIZE = 50;
 export function AuditScreen() {
   const [filter, setFilter] = useState("all");
   const [offset, setOffset] = useState(0);
-  const eventType = filter === "all" ? undefined : filter;
-  const audit = useAuditEvents({ limit: PAGE_SIZE, offset, type: eventType });
+  const audit = useAuditEvents({ limit: PAGE_SIZE, offset });
   return (
     <PageShell
       actions={
@@ -44,13 +43,13 @@ export function AuditScreen() {
             <SelectValue placeholder="Event type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All events</SelectItem>
-            <SelectItem value="relay.add">Relay changes</SelectItem>
-            <SelectItem value="connector.login">Connector login</SelectItem>
-            <SelectItem value="task_submitted">Task submitted</SelectItem>
-            <SelectItem value="run_completed">Run completed</SelectItem>
-            <SelectItem value="report_read">Report read</SelectItem>
-            <SelectItem value="blocker">Blockers</SelectItem>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="runs">Runs</SelectItem>
+            <SelectItem value="connector">Connector</SelectItem>
+            <SelectItem value="relay">Relay</SelectItem>
+            <SelectItem value="auth">Auth/device</SelectItem>
+            <SelectItem value="errors">Errors only</SelectItem>
+            <SelectItem value="raw">Raw/debug</SelectItem>
           </SelectContent>
         </Select>
       }
@@ -76,6 +75,7 @@ export function AuditScreen() {
           ) : (
             <AuditContent
               events={audit.data.auditEvents}
+              filter={filter}
               groups={audit.data.groups}
             />
           )}
@@ -117,24 +117,52 @@ export function AuditScreen() {
 
 function AuditContent({
   events,
+  filter,
+  groups,
+}: {
+  events: AuditEvent[];
+  filter: string;
+  groups: AuditEventGroup[];
+}) {
+  const filteredEvents = filterAuditEvents(events, filter);
+  if (filter === "raw") {
+    return <AuditEventTimeline events={compactReportReads(filteredEvents)} />;
+  }
+  const runEvents = filteredEvents.filter((event) => event.runHistoryId);
+  const runIDs = new Set(runEvents.map((event) => event.runHistoryId));
+  const visibleGroups =
+    filter === "connector" || filter === "relay" || filter === "auth"
+      ? []
+      : groups.filter((group) => runIDs.has(group.runHistoryId));
+  const otherEvents = filteredEvents.filter((event) => !event.runHistoryId);
+  return (
+    <div className="grid gap-md">
+      {visibleGroups.length > 0 ? (
+        <AuditGroups events={runEvents} groups={visibleGroups} />
+      ) : null}
+      {otherEvents.length > 0 ? (
+        <div className="grid gap-sm">
+          <p className="m-0 text-label font-semibold uppercase text-ink-secondary">
+            Other workspace events
+          </p>
+          <AuditEventTimeline events={compactReportReads(otherEvents)} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AuditGroups({
+  events,
   groups,
 }: {
   events: AuditEvent[];
   groups: AuditEventGroup[];
 }) {
   return (
-    <div className="grid gap-md">
-      {groups.length > 0 ? <AuditGroups groups={groups} /> : null}
-      <AuditEventTimeline events={events} />
-    </div>
-  );
-}
-
-function AuditGroups({ groups }: { groups: AuditEventGroup[] }) {
-  return (
     <div className="grid gap-sm">
       <p className="m-0 text-label font-semibold uppercase text-ink-secondary">
-        Grouped lifecycle
+        Run lifecycle
       </p>
       {groups.map((group) => (
         <Card key={group.id}>
@@ -149,12 +177,24 @@ function AuditGroups({ groups }: { groups: AuditEventGroup[] }) {
           </CardHeader>
           <CardContent className="grid gap-sm">
             <div className="flex min-w-0 flex-wrap gap-xs">
-              {group.types.map((type) => (
-                <Badge key={type} variant="neutral">
-                  {type}
-                </Badge>
-              ))}
+              {summarizeEventTypes(eventsForGroup(events, group)).map(
+                ({ count, type }) => (
+                  <Badge key={type} variant="neutral">
+                    {count > 1 ? `${type} x ${count}` : type}
+                  </Badge>
+                ),
+              )}
             </div>
+            <details className="min-w-0">
+              <summary className="cursor-pointer text-body-sm font-semibold text-ink-primary">
+                Lifecycle events
+              </summary>
+              <div className="mt-sm">
+                <AuditEventTimeline
+                  events={compactReportReads(eventsForGroup(events, group))}
+                />
+              </div>
+            </details>
             <p className="m-0 text-body-sm text-ink-secondary">
               {formatDateTime(group.firstEventAt)} -{" "}
               {formatDateTime(group.lastEventAt)}
@@ -171,4 +211,76 @@ function AuditGroups({ groups }: { groups: AuditEventGroup[] }) {
       ))}
     </div>
   );
+}
+
+function filterAuditEvents(events: AuditEvent[], filter: string) {
+  if (filter === "runs") {
+    return events.filter((event) => Boolean(event.runHistoryId));
+  }
+  if (filter === "connector") {
+    return events.filter((event) => event.type.startsWith("connector"));
+  }
+  if (filter === "relay") {
+    return events.filter((event) => event.type.startsWith("relay"));
+  }
+  if (filter === "auth") {
+    return events.filter(
+      (event) =>
+        event.type.startsWith("device") ||
+        event.type.startsWith("oauth") ||
+        event.type.includes("login"),
+    );
+  }
+  if (filter === "errors") {
+    return events.filter(
+      (event) =>
+        event.severity === "error" ||
+        event.severity === "warning" ||
+        event.type.includes("failed") ||
+        event.type.includes("blocker"),
+    );
+  }
+  return events;
+}
+
+function eventsForGroup(events: AuditEvent[], group: AuditEventGroup) {
+  return events.filter((event) => event.runHistoryId === group.runHistoryId);
+}
+
+function summarizeEventTypes(events: AuditEvent[]) {
+  const counts = new Map<string, number>();
+  for (const event of events) {
+    counts.set(event.type, (counts.get(event.type) ?? 0) + 1);
+  }
+  return Array.from(counts, ([type, count]) => ({ count, type }));
+}
+
+function compactReportReads(events: AuditEvent[]) {
+  const out: AuditEvent[] = [];
+  let reportReads: AuditEvent[] = [];
+  for (const event of events) {
+    if (event.type === "report_read") {
+      reportReads.push(event);
+      continue;
+    }
+    flushReportReads();
+    out.push(event);
+  }
+  flushReportReads();
+  return out;
+
+  function flushReportReads() {
+    if (reportReads.length === 0) return;
+    if (reportReads.length === 1) {
+      out.push(reportReads[0]);
+    } else {
+      const first = reportReads[0];
+      out.push({
+        ...first,
+        id: `${first.id}:collapsed`,
+        summary: `report_read x ${reportReads.length}`,
+      });
+    }
+    reportReads = [];
+  }
 }

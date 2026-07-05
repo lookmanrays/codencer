@@ -70,7 +70,7 @@ export function DashboardScreen() {
       <div className="grid min-w-0 max-w-full gap-lg">
         {isDemoMode() ? <DemoModeNotice /> : null}
         <div className="grid min-w-0 gap-md lg:grid-cols-3">
-          <OfficialGatewayNotice />
+          <OfficialGatewayNotice mcpEndpoint={workspaceData.mcpEndpoint} />
           <SelfHostModeNotice />
           <McpEndpointCard endpoint={workspaceData.mcpEndpoint} />
         </div>

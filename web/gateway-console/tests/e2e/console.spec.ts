@@ -72,9 +72,17 @@ test("project task form submits demo run without unsafe output", async ({
   await expect(page.getByText(/event timeline/i)).toBeVisible();
   await expect(page.getByText(/task_submitted/i)).toBeVisible();
   await page.goto("/console/runs");
-  await expect(page.getByText(/Codex workspace smoke task/i)).toBeVisible();
-  await expect(page.getByText("Real executor").first()).toBeVisible();
-  await expect(page.getByText(/Codencer bridges planners/i)).toBeVisible();
+  const runsTable = page.getByRole("table");
+  await expect(
+    runsTable.getByText(/Codex workspace smoke task/i),
+  ).toBeVisible();
+  await expect(runsTable.getByText(/Claude CLI smoke task/i)).toBeVisible();
+  await expect(runsTable.getByText("claude-default")).toBeVisible();
+  await expect(runsTable.getByText("Real executor").first()).toBeVisible();
+  await expect(runsTable.getByText(/Codencer bridges planners/i)).toBeVisible();
+  await expect(
+    page.getByText(/records structured runs, results, blockers/i),
+  ).toBeHidden();
   const visibleText = await page.locator("body").innerText();
   expect(visibleText).not.toMatch(/\/Users\/|\/tmp\/|\/var\/folders\//);
   expect(visibleText).not.toContain("report_path");
@@ -154,6 +162,28 @@ test("product navigation hides UI System", async ({ page }) => {
   await expect(page.getByText("Runs").first()).toBeVisible();
 });
 
+test("settings and relay pages expose only public self-host operator controls", async ({
+  page,
+}) => {
+  await page.goto("/console/settings");
+  await expect(page.getByText(/Future private Cloud features/i)).toBeHidden();
+  await expect(page.getByText(/Token revocation/i)).toBeHidden();
+  await expect(page.getByText(/MCP endpoint/i)).toBeVisible();
+  await expect(page.getByText(/Console settings/i)).toBeVisible();
+
+  await page.goto("/console/relays");
+  await expect(page.getByText(/Gateway MCP path/i)).toBeVisible();
+  await expect(page.getByText("http://127.0.0.1:19090/mcp")).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "ID" })).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Token reference" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Default self-host Relay" }),
+  ).toBeVisible();
+  await expect(page.getByText("Add self-host Relay profile")).toBeVisible();
+});
+
 test("run history and audit expose pagination and grouped lifecycle", async ({
   page,
 }) => {
@@ -165,16 +195,38 @@ test("run history and audit expose pagination and grouped lifecycle", async ({
   await expect(page.getByRole("button", { name: /^next$/i })).toBeDisabled();
 
   await page.goto("/console/audit");
-  await expect(page.getByText(/grouped lifecycle/i)).toBeVisible();
+  await expect(page.getByText(/run lifecycle/i)).toBeVisible();
   await expect(
     page.getByText(/lifecycle events for run/i).first(),
   ).toBeVisible();
+  await expect(page.getByText(/report_read x 2/i).first()).toBeVisible();
   await expect(
     page.getByRole("link", { name: /view run/i }).first(),
   ).toBeVisible();
   await expect(
     page.getByText(/showing \d+ events from offset 0/i),
   ).toBeVisible();
+});
+
+test("run detail uses compact metadata, attempts, and artifact tables", async ({
+  page,
+}) => {
+  await page.goto("/console/runs/runhist_demo_claude");
+  await expect(page.getByRole("heading", { name: /full run/i })).toBeVisible();
+  await expect(page.getByText("claude").first()).toBeVisible();
+  await expect(page.getByText("claude-default").first()).toBeVisible();
+  await expect(page.getByText("Real executor").first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /^attempts$/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Executor profile" }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /safe artifacts and logs/i }),
+  ).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Name" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "stdout.log" })).toBeVisible();
 });
 
 test("run detail records human interrupt response", async ({ page }) => {

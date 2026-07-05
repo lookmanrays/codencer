@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	profilepkg "agent-bridge/internal/profile"
 	"agent-bridge/internal/security"
 )
 
@@ -22,7 +23,8 @@ func (s *Server) beginRunRecord(ctx context.Context, principal *authPrincipal, p
 		Title:           firstNonEmpty(stringArg(args, "title"), stringArg(args, "manifest_name"), "Untitled run"),
 		Goal:            runGoalFromArgs(args),
 		Mode:            normalizeRunMode(mode),
-		ExecutorProfile: firstNonEmpty(stringArg(args, "profile"), stringArg(args, "adapter_profile")),
+		ExecutorAdapter: executorMetadataFromArgs(args).Adapter,
+		ExecutorProfile: executorMetadataFromArgs(args).Profile,
 		Status:          "submitted",
 		ReportStatus:    "pending",
 		StartedAt:       time.Now().UTC(),
@@ -45,7 +47,7 @@ func (s *Server) applyRouteToRunRecord(ctx context.Context, record RunRecord, pr
 	record.ConnectorID = location.ConnectorID
 	record.MachineID = location.MachineID
 	record.HostLabel = location.HostLabel
-	record.ExecutorProfile = resolvedExecutorLabel(match.Project, args)
+	applyRouteExecutorMetadata(&record, match.Project, args)
 	if record.ActorUserID == "" && principal != nil {
 		record.ActorUserID = principal.UserID
 	}
@@ -92,7 +94,8 @@ func (s *Server) refreshRunRecordFromLifecyclePayload(ctx context.Context, princ
 			RunID:           runID,
 			Title:           firstNonEmpty(stringArg(args, "title"), "Run "+runID),
 			Mode:            normalizeRunMode(stringArg(args, "mode")),
-			ExecutorProfile: resolvedExecutorLabel(match.Project, args),
+			ExecutorAdapter: executorMetadataFromArgs(args).Adapter,
+			ExecutorProfile: executorMetadataFromArgs(args).Profile,
 			ReportStatus:    "pending",
 			StartedAt:       time.Now().UTC(),
 		}
@@ -110,6 +113,7 @@ func applyPayloadToRunRecord(record *RunRecord, payload any, reportStatus string
 	record.Report = obj
 	record.RunID = firstNonEmpty(record.RunID, runIDFromPayload(obj))
 	record.StepID = firstNonEmpty(record.StepID, stringValueFromAny(obj["step_id"]), nestedString(obj, "task", "step_id"))
+	applyPayloadExecutorMetadata(record, obj)
 	record.Status = firstNonEmpty(stringValueFromAny(obj["status"]), nestedString(obj, "task", "status"), record.Status)
 	if record.Status == "" {
 		record.Status = "completed"
@@ -146,6 +150,7 @@ func runAuditMetadata(record RunRecord) map[string]any {
 		"connector_id":     record.ConnectorID,
 		"machine_id":       record.MachineID,
 		"host_label":       record.HostLabel,
+		"executor_adapter": record.ExecutorAdapter,
 		"executor_profile": record.ExecutorProfile,
 	} {
 		if strings.TrimSpace(value) != "" {
@@ -153,6 +158,94 @@ func runAuditMetadata(record RunRecord) map[string]any {
 		}
 	}
 	return metadata
+}
+
+type executorMetadata struct {
+	Adapter string
+	Profile string
+}
+
+func executorMetadataFromArgs(args map[string]any) executorMetadata {
+	if args == nil {
+		return executorMetadata{}
+	}
+	return executorMetadata{
+		Adapter: strings.TrimSpace(stringArg(args, "adapter")),
+		Profile: firstNonEmpty(strings.TrimSpace(stringArg(args, "profile")), strings.TrimSpace(stringArg(args, "adapter_profile"))),
+	}
+}
+
+func applyRouteExecutorMetadata(record *RunRecord, project relayProject, args map[string]any) {
+	explicit := executorMetadataFromArgs(args)
+	if explicit.Adapter != "" {
+		record.ExecutorAdapter = explicit.Adapter
+	}
+	if explicit.Profile != "" {
+		record.ExecutorProfile = explicit.Profile
+	}
+	if record.ExecutorAdapter == "" && record.ExecutorProfile != "" {
+		record.ExecutorAdapter = inferExecutorAdapter(record.ExecutorProfile)
+	}
+	if explicit.Adapter != "" || explicit.Profile != "" {
+		return
+	}
+	if record.ExecutorAdapter != "" || record.ExecutorProfile != "" {
+		return
+	}
+	record.ExecutorAdapter = strings.TrimSpace(project.DefaultAdapter)
+	record.ExecutorProfile = firstNonEmpty(strings.TrimSpace(project.AdapterProfile), strings.TrimSpace(project.DefaultAdapter), "project default")
+}
+
+func applyPayloadExecutorMetadata(record *RunRecord, payload map[string]any) {
+	meta := executorMetadataFromPayload(payload)
+	if meta.Adapter != "" {
+		record.ExecutorAdapter = meta.Adapter
+	}
+	if meta.Profile != "" {
+		record.ExecutorProfile = meta.Profile
+	}
+	if record.ExecutorAdapter == "" && record.ExecutorProfile != "" {
+		record.ExecutorAdapter = inferExecutorAdapter(record.ExecutorProfile)
+	}
+}
+
+func executorMetadataFromPayload(payload map[string]any) executorMetadata {
+	if task, _ := payload["task"].(map[string]any); task != nil {
+		if meta := executorMetadataFromObject(task); meta.Adapter != "" || meta.Profile != "" {
+			return meta
+		}
+	}
+	if tasks, _ := payload["tasks"].([]any); len(tasks) > 0 {
+		if task, _ := tasks[0].(map[string]any); task != nil {
+			if meta := executorMetadataFromObject(task); meta.Adapter != "" || meta.Profile != "" {
+				return meta
+			}
+		}
+	}
+	return executorMetadataFromObject(payload)
+}
+
+func executorMetadataFromObject(obj map[string]any) executorMetadata {
+	return executorMetadata{
+		Adapter: strings.TrimSpace(stringValueFromAny(obj["adapter"])),
+		Profile: firstNonEmpty(
+			strings.TrimSpace(stringValueFromAny(obj["profile"])),
+			strings.TrimSpace(stringValueFromAny(obj["executor_profile"])),
+			strings.TrimSpace(stringValueFromAny(obj["adapter_profile"])),
+		),
+	}
+}
+
+func inferExecutorAdapter(profileID string) string {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return ""
+	}
+	resolved, err := profilepkg.Resolve(profilepkg.ResolveOptions{ProfileID: profileID})
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(resolved.Adapter)
 }
 
 func runGoalFromArgs(args map[string]any) string {
