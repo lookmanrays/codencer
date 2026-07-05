@@ -53,7 +53,8 @@
 - `make verify-gateway`
 - `make verify-gateway-console`
 - `make verify-gateway-console-live`
-- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODEX_BINARY=/Applications/Codex.app/Contents/Resources/codex CLAUDE_BINARY=/Users/lookman/.local/bin/claude make verify-public-selfhost-rc`
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODEX_BINARY=<codex-binary> CLAUDE_BINARY=<claude-binary> make verify-public-selfhost-rc`
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host`
 - `make verify-public-release`
 - `git diff --check`
 - `git diff --cached --check`
@@ -62,8 +63,8 @@ All listed checks passed.
 
 ## Visual Evidence
 
-- Screenshot evidence path: `reports/gateway-console-screenshots/2026-07-06-0201`
-- Visual review: `reports/gateway-console-screenshots/2026-07-06-0201/visual-review.md`
+- Screenshot evidence path: `reports/gateway-console-screenshots/2026-07-06-0217`
+- Visual review: `reports/gateway-console-screenshots/2026-07-06-0217/visual-review.md`
 - Captured expanded and collapsed sidebar states, Projects, Runs, Run Detail, Settings, Relays, Audit, mobile routes, and interaction states.
 - Generated visual review reports no automated screenshot, overflow, or security-gate issues.
 - Mobile PNG width gate passed at exactly `390px` for every mobile capture.
@@ -82,7 +83,7 @@ Codex:
 - UI run: `run-1783292775`
 - Run history: `runhist_3d2451b9d66652c8e7aa9725f3222aef`
 - Proof line: `adapter=codex profile=codex-workspace simulation=false`
-- Binary invocation was logged with `/Applications/Codex.app/Contents/Resources/codex`.
+- Binary invocation was logged with the configured `CODEX_BINARY`.
 
 Claude:
 
