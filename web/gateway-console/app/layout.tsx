@@ -5,6 +5,10 @@ import { Providers } from "@/components/providers";
 export const metadata: Metadata = {
   title: "Codencer Gateway Console",
   description: "Public/self-host Gateway Console for Codencer.",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/icon.svg",
+  },
   robots: { index: false, follow: false },
 };
 

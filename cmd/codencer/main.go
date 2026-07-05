@@ -20,6 +20,7 @@ import (
 	"agent-bridge/internal/activation"
 	"agent-bridge/internal/app"
 	"agent-bridge/internal/buildinfo"
+	"agent-bridge/internal/cliui"
 	"agent-bridge/internal/connector"
 	"agent-bridge/internal/connectorops"
 	gatewaypkg "agent-bridge/internal/gateway"
@@ -126,7 +127,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	case "readiness":
 		return runReadiness(args[1:], stdout)
 	case "setup":
-		return runSetup(args[1:], stdout)
+		return runSetup(args[1:], stdout, stderr)
 	case "activation":
 		return runActivation(args[1:], stdout)
 	case "accept":
@@ -3030,7 +3031,7 @@ func runReadiness(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func runSetup(args []string, stdout io.Writer) error {
+func runSetup(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		return usageError(hasBoolFlag(args, "json"), stdout, "usage: codencer setup <local|relay|gateway|mcp> [flags]")
 	}
@@ -3071,6 +3072,8 @@ func runSetup(args []string, stdout io.Writer) error {
 		if err != nil {
 			return usageError(parsed.bool("json"), stdout, err.Error())
 		}
+		spinner := cliui.NewSpinner(cliui.EnvOptions(parsed.bool("json"), stdout, stderr))
+		spinner.Start("configuring self-host Relay")
 		report, err := setuppkg.Relay(contextBackground(), setuppkg.RelayOptions{
 			BaseURL:                      parsed.value("base-url"),
 			MCPURL:                       parsed.value("mcp-url"),
@@ -3092,6 +3095,7 @@ func runSetup(args []string, stdout io.Writer) error {
 			BinDir:                       parsed.value("bin-dir"),
 			Strict:                       parsed.bool("strict"),
 		})
+		finishSpinner(spinner, err, "self-host Relay setup ready", "self-host Relay setup failed")
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "gateway":
 		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "store", "relay-request-timeout-seconds", "default-relay-url", "default-relay-token-env", "default-relay-token-file", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
@@ -3142,6 +3146,8 @@ func runSetup(args []string, stdout io.Writer) error {
 			return usageError(parsed.bool("json"), stdout, err.Error())
 		}
 		gatewayURL := firstNonEmpty(parsed.value("gateway-url"), parsed.value("base-url"))
+		spinner := cliui.NewSpinner(cliui.EnvOptions(parsed.bool("json"), stdout, stderr))
+		spinner.Start("configuring self-host Gateway")
 		report, err := setuppkg.SelfHost(contextBackground(), setuppkg.SelfHostOptions{
 			GatewayURL:                 gatewayURL,
 			MCPURL:                     parsed.value("mcp-url"),
@@ -3158,6 +3164,7 @@ func runSetup(args []string, stdout io.Writer) error {
 			EnableOAuthDev:             parsed.bool("enable-oauth-dev"),
 			OAuthClientSecret:          parsed.value("oauth-client-secret"),
 		})
+		finishSpinner(spinner, err, "self-host Gateway setup ready", "self-host Gateway setup failed")
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
 		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"client", "relay", "endpoint", "token-env", "token", "name"})
@@ -3376,6 +3383,17 @@ func finishSetupReport(stdout io.Writer, asJSON bool, report setuppkg.Report, er
 		return exitError{code: report.ExitCode, message: "setup failed", printed: true}
 	}
 	return nil
+}
+
+func finishSpinner(spinner *cliui.Spinner, err error, successMessage, failMessage string) {
+	if spinner == nil {
+		return
+	}
+	if err != nil {
+		spinner.Fail(failMessage)
+		return
+	}
+	spinner.Success(successMessage)
 }
 
 func finishActivationReport(stdout io.Writer, asJSON bool, report activation.Report, err error) error {

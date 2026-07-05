@@ -221,6 +221,9 @@ async function captureInteractions(page: Page) {
     "light",
   );
   await capture(page, interaction("theme-toggle-light-state", "/console"));
+  await page.getByRole("button", { name: /toggle sidebar/i }).click();
+  await capture(page, interaction("sidebar-collapsed", "/console"));
+  await page.getByRole("button", { name: /toggle sidebar/i }).click();
   await page.getByRole("button", { name: /switch to dark theme/i }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await capture(page, {

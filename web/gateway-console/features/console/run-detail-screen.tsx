@@ -172,7 +172,7 @@ export function RunDetailScreen({ id }: { id: string }) {
               />
             </CardContent>
           </Card>
-          <RunResultPanel run={run.data.run} />
+          <RunResultPanel mode="detail" run={run.data.run} />
           <HumanInterruptResponsePanel
             events={events.data?.events ?? []}
             run={run.data.run}
@@ -328,7 +328,8 @@ function attemptsFromRun(run: RunRecord): AttemptRow[] {
 
 function artifactsFromRun(run: RunRecord): ArtifactRow[] {
   const artifacts: ArtifactRow[] = [];
-  collectArtifacts(asRecord(run.report), artifacts);
+  const seen = new Set<string>();
+  collectArtifacts(asRecord(run.report), artifacts, seen);
   return artifacts;
 }
 
@@ -345,10 +346,14 @@ function taskRecords(report: Record<string, unknown>) {
   return out;
 }
 
-function collectArtifacts(value: unknown, out: ArtifactRow[]) {
+function collectArtifacts(
+  value: unknown,
+  out: ArtifactRow[],
+  seen: Set<string>,
+) {
   if (!value || typeof value !== "object") return;
   if (Array.isArray(value)) {
-    value.forEach((item) => collectArtifacts(item, out));
+    value.forEach((item) => collectArtifacts(item, out, seen));
     return;
   }
   const record = value as Record<string, unknown>;
@@ -357,25 +362,34 @@ function collectArtifacts(value: unknown, out: ArtifactRow[]) {
       const item = asRecord(artifact);
       const name = safeText(stringValue(item.name) || stringValue(item.id));
       if (!name) return;
+      const type =
+        safeText(
+          stringValue(item.type) ||
+            stringValue(item.mime_type) ||
+            stringValue(item.kind),
+        ) || "artifact";
+      const size = formatSize(item.size);
+      const dedupeKey =
+        stringValue(item.artifact_id) ||
+        stringValue(item.id) ||
+        stringValue(item.hash) ||
+        `${name}:${type}:${size}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
       out.push({
         action: "Reference only",
         created: formatMaybeDate(
           stringValue(item.created_at) || stringValue(item.created),
         ),
         name,
-        size: formatSize(item.size),
-        type:
-          safeText(
-            stringValue(item.type) ||
-              stringValue(item.mime_type) ||
-              stringValue(item.kind),
-          ) || "artifact",
+        size,
+        type,
       });
     });
   }
   Object.entries(record).forEach(([key, item]) => {
     if (key === "path" || key === "report_path" || key === "logs_ref") return;
-    collectArtifacts(item, out);
+    collectArtifacts(item, out, seen);
   });
 }
 

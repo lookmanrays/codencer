@@ -52,7 +52,7 @@ test("project task form submits demo run without unsafe output", async ({
   await expect(page.getByText("Route preview")).toBeVisible();
   await expect(page.locator("dt", { hasText: "Executor" })).toBeVisible();
   await expect(page.getByText("codex-workspace").first()).toBeVisible();
-  await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
+  await expect(page.getByLabel(/timeout/i)).toHaveValue("300");
   await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();
   await page.getByRole("button", { name: /^submit$/i }).click();
   await expect(page.getByText(/^Result$/i)).toBeVisible();
@@ -78,7 +78,7 @@ test("project task form submits demo run without unsafe output", async ({
   ).toBeVisible();
   await expect(runsTable.getByText(/Claude CLI smoke task/i)).toBeVisible();
   await expect(runsTable.getByText("claude-default")).toBeVisible();
-  await expect(runsTable.getByText("Real executor").first()).toBeVisible();
+  await expect(runsTable.getByText("real").first()).toBeVisible();
   await expect(runsTable.getByText(/Codencer bridges planners/i)).toBeVisible();
   await expect(
     page.getByText(/records structured runs, results, blockers/i),
@@ -122,7 +122,7 @@ test("Antigravity executor uses real-executor defaults", async ({ page }) => {
   await expect(page.getByLabel(/title/i)).not.toHaveValue(
     "Gateway Console fake-safe task",
   );
-  await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
+  await expect(page.getByLabel(/timeout/i)).toHaveValue("300");
   await page.getByRole("button", { name: /^advanced$/i }).click();
   await page.getByRole("combobox", { name: /execution mode/i }).click();
   await page.getByRole("option", { name: /manifest \/ run plan/i }).click();
@@ -158,8 +158,16 @@ test("device form validation works", async ({ page }) => {
 test("product navigation hides UI System", async ({ page }) => {
   await page.goto("/console");
   await expect(page.getByTestId("nav-menu")).toBeVisible();
+  await expect(
+    page.locator('link[rel="icon"][href="/favicon.svg"]'),
+  ).toHaveCount(1);
+  const sidebar = page.getByRole("complementary");
+  await expect(sidebar.getByText("codencer")).toBeVisible();
   await expect(page.getByText("UI System")).toBeHidden();
   await expect(page.getByText("Runs").first()).toBeVisible();
+  await page.getByRole("button", { name: /toggle sidebar/i }).click();
+  await expect(sidebar.getByText("codencer")).toBeHidden();
+  await expect(sidebar.getByRole("img", { name: "Codencer" })).toBeVisible();
 });
 
 test("settings and relay pages expose only public self-host operator controls", async ({
@@ -190,6 +198,15 @@ test("run history and audit expose pagination and grouped lifecycle", async ({
   await page.goto("/console/runs");
   await expect(page.getByText(/showing \d+ runs from offset 0/i)).toBeVisible();
   await expect(
+    page.getByRole("columnheader", { name: "Project / Machine" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Connector" }),
+  ).toBeHidden();
+  await expect(
+    page.getByRole("link", { name: /codex workspace smoke task/i }).first(),
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: /^previous$/i }),
   ).toBeDisabled();
   await expect(page.getByRole("button", { name: /^next$/i })).toBeDisabled();
@@ -217,6 +234,18 @@ test("run detail uses compact metadata, attempts, and artifact tables", async ({
   await expect(page.getByText("claude-default").first()).toBeVisible();
   await expect(page.getByText("Real executor").first()).toBeVisible();
   await expect(
+    page.locator("dt", { hasText: /^Adapter$/ }).first(),
+  ).toBeVisible();
+  await expect(
+    page.locator("dt", { hasText: /^Executor profile$/ }).first(),
+  ).toBeVisible();
+  await expect(
+    page.locator("dt", { hasText: /^Run ID$/ }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /^summary$/i }).first(),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: /^attempts$/i }),
   ).toBeVisible();
   await expect(
@@ -227,6 +256,7 @@ test("run detail uses compact metadata, attempts, and artifact tables", async ({
   ).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Name" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "stdout.log" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "stdout.log" })).toHaveCount(1);
 });
 
 test("run detail records human interrupt response", async ({ page }) => {

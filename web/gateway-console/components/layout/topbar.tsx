@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import { CodencerMark } from "@/components/brand/codencer-brand";
 import { authNav, consoleNav } from "@/components/layout/nav";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function Topbar({
   onToggleSidebar,
@@ -57,9 +57,7 @@ export function Topbar({
             </DropdownMenuContent>
           </DropdownMenu>
           <ThemeToggle />
-          <Avatar className="max-[430px]:hidden">
-            <AvatarFallback>CO</AvatarFallback>
-          </Avatar>
+          <CodencerMark className="h-[16px] w-[43px] max-[430px]:hidden" />
         </div>
       </div>
     </header>

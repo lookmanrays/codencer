@@ -628,6 +628,13 @@ export const demoSnapshot: DemoSnapshot = {
               mime_type: "text/plain",
               size: 180,
             },
+            {
+              id: "artifact-demo-claude-stdout",
+              name: "stdout.log",
+              type: "stdout",
+              mime_type: "text/plain",
+              size: 180,
+            },
           ],
           result: {
             adapter: "claude",

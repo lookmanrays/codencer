@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Codencer app icon">
+  <rect width="512" height="512" rx="114" fill="#0F1419"></rect>
+  <g transform="translate(106 199.5) scale(1.376)">
+    <rect x="0" y="0" width="60" height="82" rx="4" fill="#FF6A2C"></rect>
+    <rect x="82" y="0" width="30" height="82" rx="4" fill="#EDEDE6"></rect>
+    <rect x="134" y="0" width="46" height="82" rx="4" fill="#FF6A2C"></rect>
+    <rect x="202" y="0" width="16" height="82" rx="4" fill="#EDEDE6"></rect>
+  </g>
+</svg>

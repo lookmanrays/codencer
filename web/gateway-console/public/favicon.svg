@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Codencer">
+  <g transform="translate(3 21.1) scale(0.266)">
+    <rect x="0" y="0" width="60" height="82" rx="4" fill="#FF5A1F"></rect>
+    <rect x="82" y="0" width="30" height="82" rx="4" fill="#0F1419"></rect>
+    <rect x="134" y="0" width="46" height="82" rx="4" fill="#FF5A1F"></rect>
+    <rect x="202" y="0" width="16" height="82" rx="4" fill="#0F1419"></rect>
+  </g>
+</svg>

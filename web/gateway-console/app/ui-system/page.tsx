@@ -5,7 +5,10 @@ import { notFound } from "next/navigation";
 import { RelayProfileCard } from "@/components/console/relay-profile-card";
 import { RelayProfileForm } from "@/components/console/relay-profile-form";
 import { MachineConnectorTable } from "@/components/console/machine-connector-table";
-import { ProjectLocationsTable } from "@/components/console/project-locations-table";
+import {
+  ProjectLocationsTable,
+  projectLocationRows,
+} from "@/components/console/project-locations-table";
 import { ActivationCommandPanel } from "@/components/console/activation-command-panel";
 import { AuditEventTimeline } from "@/components/console/audit-event-timeline";
 import {
@@ -353,7 +356,9 @@ export default function UISystemPage() {
             connectors={demoSnapshot.connectors}
             machines={demoSnapshot.machines}
           />
-          <ProjectLocationsTable projects={demoSnapshot.projects} />
+          <ProjectLocationsTable
+            rows={projectLocationRows(demoSnapshot.projects)}
+          />
           <ActivationCommandPanel commands={demoSnapshot.activationCommands} />
           <AuditEventTimeline events={demoSnapshot.auditEvents} />
           <Alert title="No color-only status">

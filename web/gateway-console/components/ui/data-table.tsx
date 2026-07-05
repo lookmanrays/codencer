@@ -14,11 +14,13 @@ export function DataTable<TData>({
   data,
   emptyDescription = "No records match this view.",
   emptyTitle = "No records",
+  getRowHref,
 }: {
   columns: ColumnDef<TData>[];
   data: TData[];
   emptyTitle?: string;
   emptyDescription?: string;
+  getRowHref?: (row: TData) => string | undefined;
 }) {
   const table = useReactTable({
     columns,
@@ -34,8 +36,27 @@ export function DataTable<TData>({
       <div className="grid min-w-0 max-w-full gap-sm md:hidden">
         {table.getRowModel().rows.map((row) => (
           <article
-            className="min-w-0 max-w-full rounded-[var(--radius-card)] border border-border bg-paper-strong p-md"
+            className={cn(
+              "min-w-0 max-w-full rounded-[var(--radius-card)] border border-border bg-paper-strong p-md",
+              getRowHref &&
+                "cursor-pointer transition-colors hover:bg-paper-tinted",
+            )}
             key={row.id}
+            onClick={(event) => {
+              const href = getRowHref?.(row.original);
+              if (!href || shouldIgnoreRowClick(event.target)) return;
+              window.location.assign(href);
+            }}
+            onKeyDown={(event) => {
+              const href = getRowHref?.(row.original);
+              if (!href) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                window.location.assign(href);
+              }
+            }}
+            role={getRowHref ? "link" : undefined}
+            tabIndex={getRowHref ? 0 : undefined}
           >
             <dl className="m-0 grid min-w-0 gap-sm">
               {row.getVisibleCells().map((cell) => (
@@ -79,8 +100,27 @@ export function DataTable<TData>({
           <tbody>
             {table.getRowModel().rows.map((row) => (
               <tr
-                className={cn("border-b border-border last:border-b-0")}
+                className={cn(
+                  "border-b border-border last:border-b-0",
+                  getRowHref &&
+                    "cursor-pointer transition-colors hover:bg-paper-tinted",
+                )}
                 key={row.id}
+                onClick={(event) => {
+                  const href = getRowHref?.(row.original);
+                  if (!href || shouldIgnoreRowClick(event.target)) return;
+                  window.location.assign(href);
+                }}
+                onKeyDown={(event) => {
+                  const href = getRowHref?.(row.original);
+                  if (!href) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    window.location.assign(href);
+                  }
+                }}
+                role={getRowHref ? "link" : undefined}
+                tabIndex={getRowHref ? 0 : undefined}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
@@ -101,4 +141,10 @@ export function DataTable<TData>({
 
 function headerText(header: unknown, fallback: string) {
   return typeof header === "string" ? header : fallback;
+}
+
+function shouldIgnoreRowClick(target: EventTarget | null) {
+  return target instanceof Element
+    ? Boolean(target.closest("a,button,input,select,textarea,[role='button']"))
+    : false;
 }

@@ -226,7 +226,7 @@ try {
 
     await page.goto(`${consoleBase}/console/projects`);
     await expect(
-      page.getByRole("cell", { name: "Codencer", exact: true }),
+      page.getByRole("cell", { name: /Codencer\s+codencer/i }),
     ).toBeVisible();
     await expect(
       page.getByRole("row", {
@@ -244,12 +244,12 @@ try {
       await expect(page.getByLabel(/title/i)).not.toHaveValue(
         "Gateway Console fake-safe task",
       );
-      await expect(page.getByLabel(/timeout seconds/i)).toHaveValue("300");
+      await expect(page.getByLabel(/timeout/i)).toHaveValue("300");
     }
     await expect(page.getByText("Route preview")).toBeVisible();
     await expect(page.getByText(executorProfile).first()).toBeVisible();
     await page.getByLabel(/goal/i).fill(executorGoal);
-    await page.getByLabel(/timeout seconds/i).fill(String(taskTimeoutSeconds));
+    await page.getByLabel(/timeout/i).fill(String(taskTimeoutSeconds));
     await page.getByRole("button", { name: /^submit$/i }).click();
     await expect(page.getByText(/^Result$/i)).toBeVisible({
       timeout: uiSubmitTimeoutMs,
@@ -332,10 +332,14 @@ try {
     await expect(runsTable.getByText(executorProfile).first()).toBeVisible();
     await expect(runsTable.getByText(/run-/i).first()).toBeVisible();
     if (realExecutorGate) {
-      await expect(runsTable.getByText("Real executor").first()).toBeVisible();
+      await expect(runsTable.getByText("real").first()).toBeVisible();
     }
     await expect(
-      page.getByRole("link", { name: /view details/i }).first(),
+      page
+        .getByRole("link", {
+          name: new RegExp(`open ${escapeRegExp(executorDefaults.title)}`, "i"),
+        })
+        .first(),
     ).toBeVisible();
     await assertNoDemoOrSecretLeak(page);
 

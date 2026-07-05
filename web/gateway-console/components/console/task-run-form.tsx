@@ -38,7 +38,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-export function TaskRunForm({ projects }: { projects: Project[] }) {
+export function TaskRunForm({
+  projects,
+  selectedLocationId,
+}: {
+  projects: Project[];
+  selectedLocationId?: string;
+}) {
   const queryClient = useQueryClient();
   const executors = useExecutors();
   const submitRun = useSubmitProjectRun();
@@ -59,7 +65,9 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
     () => new Map(executorList.map((executor) => [executor.id, executor])),
     [executorList],
   );
-  const firstLocation = locations[0];
+  const firstLocation =
+    locations.find((location) => location.id === selectedLocationId) ??
+    locations[0];
   const firstProject = projects.find(
     (project) => project.id === firstLocation?.projectId,
   );
@@ -193,7 +201,8 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
   );
 
   useEffect(() => {
-    if (!firstLocation || form.getValues("locationId")) return;
+    if (!firstLocation) return;
+    if (form.getValues("locationId") === firstLocation.id) return;
     applyLocation(firstLocation.id);
   }, [applyLocation, firstLocation, form]);
 
@@ -223,7 +232,7 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Submit task</CardTitle>
+        <CardTitle>Selected route task</CardTitle>
       </CardHeader>
       <CardContent>
         <form
@@ -380,7 +389,7 @@ export function TaskRunForm({ projects }: { projects: Project[] }) {
             <Field
               error={form.formState.errors.timeoutSeconds?.message}
               id="run-timeout"
-              label="Timeout seconds"
+              label="Timeout (sec)"
             >
               <Input
                 id="run-timeout"

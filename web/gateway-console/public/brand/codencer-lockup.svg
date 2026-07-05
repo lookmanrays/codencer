@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="332" height="72" viewBox="0 0 332 72" role="img" aria-labelledby="title desc">
+  <title id="title">codencer</title>
+  <desc id="desc">Codencer mark with lowercase codencer wordmark.</desc>
+  <g aria-hidden="true">
+    <rect x="0" y="18" width="34" height="46" rx="3" fill="#FF5A1F"/>
+    <rect x="46" y="18" width="17" height="46" rx="3" fill="#0F1419"/>
+    <rect x="75" y="18" width="26" height="46" rx="3" fill="#FF5A1F"/>
+    <rect x="113" y="18" width="9" height="46" rx="3" fill="#0F1419"/>
+  </g>
+  <text x="150" y="50" fill="#0F1419" font-family="JetBrains Mono, SF Mono, Menlo, Consolas, Courier New, ui-monospace, monospace" font-size="38" font-weight="600" letter-spacing="0">codencer</text>
+</svg>

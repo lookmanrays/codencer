@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  CodencerLockup,
+  CodencerMark,
+} from "@/components/brand/codencer-brand";
 import { authNav, consoleNav } from "@/components/layout/nav";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -24,15 +28,24 @@ export function Sidebar({
     >
       <div className="sticky top-0 flex min-h-dvh flex-col">
         <div className="border-b border-border p-md">
-          <Link className="text-ink-primary no-underline" href="/console">
-            <span className="block text-h3 font-bold leading-none tracking-[-0.02em]">
-              CODENCER
-            </span>
+          <Link
+            aria-label="Codencer Gateway Console"
+            className={cn(
+              "flex min-w-0 items-center text-ink-primary no-underline",
+              collapsed ? "justify-center" : "justify-start",
+            )}
+            href="/console"
+          >
             {!collapsed ? (
-              <span className="mt-xs block font-mono text-mono tracking-[0.04em] text-ink-muted">
-                Gateway Console
+              <span className="grid min-w-0 gap-xs">
+                <CodencerLockup />
+                <span className="font-mono text-mono tracking-[0.04em] text-ink-muted">
+                  Gateway Console
+                </span>
               </span>
-            ) : null}
+            ) : (
+              <CodencerMark className="h-[22px] w-[58px]" />
+            )}
           </Link>
         </div>
         <nav aria-label="Console" className="flex-1 p-sm">

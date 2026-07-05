@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useState } from "react";
+import { ExternalLink } from "lucide-react";
 import { DemoModeNotice } from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
 import { Alert } from "@/components/ui/alert";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingPanel } from "@/components/ui/skeleton";
-import { Badge, StatusBadge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
 import { isDemoMode } from "@/api/config";
 import { useRuns } from "@/api/run-history";
@@ -23,20 +24,31 @@ export function RunsScreen() {
   const runs = useRuns({ limit: PAGE_SIZE, offset });
   const columns: ColumnDef<RunRecord>[] = [
     {
-      header: "Status",
-      cell: ({ row }) => (
-        <StatusBadge status={row.original.status || "unknown"} />
-      ),
-    },
-    {
-      header: "Title",
+      header: "Run",
       cell: ({ row }) => (
         <div className="min-w-0">
-          <p className="m-0 min-w-0 break-words font-semibold">
-            {row.original.title || row.original.runId || row.original.id}
+          <div className="flex min-w-0 items-center gap-sm">
+            <StatusBadge status={row.original.status || "unknown"} />
+            <span
+              className="min-w-0 truncate font-semibold"
+              title={
+                row.original.title || row.original.runId || row.original.id
+              }
+            >
+              {row.original.title || row.original.runId || row.original.id}
+            </span>
+          </div>
+          <p
+            className="m-0 mt-xs truncate font-mono text-mono text-ink-muted"
+            title={row.original.runId || row.original.id}
+          >
+            {shortID(row.original.runId || row.original.id)}
           </p>
           {row.original.resultSummary ? (
-            <p className="m-0 mt-xs line-clamp-1 min-w-0 break-words text-body-sm text-ink-secondary">
+            <p
+              className="m-0 mt-xs line-clamp-1 min-w-0 break-words text-body-sm text-ink-secondary"
+              title={row.original.resultSummary}
+            >
               {row.original.resultSummary}
             </p>
           ) : null}
@@ -44,50 +56,78 @@ export function RunsScreen() {
       ),
     },
     {
-      header: "Executor profile",
-      cell: ({ row }) => row.original.executorProfile || "n/a",
-    },
-    {
-      header: "Project",
-      cell: ({ row }) => row.original.projectName || row.original.projectId,
-    },
-    {
-      header: "Run ID",
-      cell: ({ row }) => row.original.runId || "n/a",
-    },
-    {
-      header: "Execution",
-      cell: ({ row }) => {
-        const execution = executionModeDisplay(row.original.executionMode);
-        return <Badge variant={execution.variant}>{execution.label}</Badge>;
-      },
-    },
-    {
-      header: "Machine",
-      cell: ({ row }) =>
-        row.original.hostLabel || row.original.machineId || "n/a",
-    },
-    {
-      header: "Connector",
-      cell: ({ row }) => row.original.connectorId || "n/a",
-    },
-    {
-      header: "Started",
-      cell: ({ row }) =>
-        row.original.startedAt ? formatDateTime(row.original.startedAt) : "n/a",
-    },
-    {
-      header: "Completed",
-      cell: ({ row }) =>
-        row.original.completedAt
-          ? `${formatDateTime(row.original.completedAt)}${durationLabel(row.original) ? ` · ${durationLabel(row.original)}` : ""}`
-          : "n/a",
-    },
-    {
-      header: "Actions",
+      header: "Executor",
       cell: ({ row }) => (
-        <Button asChild size="sm" variant="secondary">
-          <Link href={`/console/runs/${row.original.id}`}>View details</Link>
+        <div className="min-w-0">
+          <p
+            className="m-0 truncate font-semibold"
+            title={row.original.executorProfile || "n/a"}
+          >
+            {row.original.executorProfile || "n/a"}
+          </p>
+          <p className="m-0 mt-xs flex min-w-0 items-center gap-xs font-mono text-mono text-ink-muted">
+            <span>{row.original.executorAdapter || "n/a"}</span>
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-[5px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
+              {executionModeLabel(row.original.executionMode)}
+            </span>
+          </p>
+        </div>
+      ),
+    },
+    {
+      header: "Project / Machine",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p
+            className="m-0 truncate"
+            title={row.original.projectName || row.original.projectId}
+          >
+            {row.original.projectName || row.original.projectId}
+          </p>
+          <p
+            className="m-0 mt-xs truncate font-mono text-mono text-ink-muted"
+            title={row.original.machineId || row.original.hostLabel || "n/a"}
+          >
+            {row.original.hostLabel || shortID(row.original.machineId) || "n/a"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      header: "Started / Duration",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p
+            className="m-0 truncate"
+            title={
+              row.original.startedAt
+                ? formatDateTime(row.original.startedAt)
+                : "n/a"
+            }
+          >
+            {compactDate(row.original.startedAt)}
+          </p>
+          <p className="m-0 mt-xs font-mono text-mono text-ink-muted">
+            {durationLabel(row.original) || "n/a"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      header: "",
+      id: "actions",
+      cell: ({ row }) => (
+        <Button
+          asChild
+          aria-label={`Open ${row.original.title || row.original.runId}`}
+          size="icon"
+          variant="quiet"
+        >
+          <Link href={`/console/runs/${row.original.id}`}>
+            <ExternalLink aria-hidden="true" className="h-4 w-4" />
+          </Link>
         </Button>
       ),
     },
@@ -114,7 +154,11 @@ export function RunsScreen() {
               title="No runs yet"
             />
           ) : (
-            <DataTable columns={columns} data={runs.data.runs} />
+            <DataTable
+              columns={columns}
+              data={runs.data.runs}
+              getRowHref={(run) => `/console/runs/${run.id}`}
+            />
           )}
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-sm text-body-sm text-ink-secondary">
             <span>
@@ -150,17 +194,14 @@ export function RunsScreen() {
   );
 }
 
-function executionModeDisplay(mode: "real" | "simulation" | "unknown"): {
-  label: string;
-  variant: "success" | "warning" | "neutral";
-} {
+function executionModeLabel(mode: "real" | "simulation" | "unknown") {
   if (mode === "real") {
-    return { label: "Real executor", variant: "success" };
+    return "real";
   }
   if (mode === "simulation") {
-    return { label: "Simulation", variant: "warning" };
+    return "simulation";
   }
-  return { label: "Unknown", variant: "neutral" };
+  return "unknown";
 }
 
 function durationLabel(run: RunRecord) {
@@ -175,4 +216,23 @@ function durationLabel(run: RunRecord) {
     return "";
   }
   return `${Math.round((completed - started) / 1000)}s`;
+}
+
+function compactDate(value?: string) {
+  if (!value) return "n/a";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "n/a";
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+function shortID(value?: string) {
+  if (!value) return "";
+  return value.length > 18
+    ? `${value.slice(0, 10)}...${value.slice(-5)}`
+    : value;
 }
