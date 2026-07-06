@@ -74,6 +74,24 @@ describe("Gateway Console architecture guards", () => {
     expect(runsAPI).toContain("refetchInterval");
     expect(runsAPI).toContain("shouldPollRunReport");
   });
+
+  it("keeps Codencer mark geometry and resting colors aligned with handoff", () => {
+    const brand = fs.readFileSync(
+      path.join(packageRoot, "components/brand/codencer-brand.tsx"),
+      "utf8",
+    );
+
+    for (const want of [
+      "{ x: 0, width: 60, lit: true }",
+      "{ x: 82, width: 30, lit: false }",
+      "{ x: 134, width: 46, lit: true }",
+      "{ x: 202, width: 16, lit: false }",
+      'onDark ? "#FF6A2C" : "#FF5A1F"',
+      'onDark ? "#EDEDE6" : "var(--color-ink-primary)"',
+    ]) {
+      expect(brand).toContain(want);
+    }
+  });
 });
 
 function scanTextFiles(targets: string[]) {

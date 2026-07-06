@@ -152,8 +152,13 @@ func TestIntroPreviewMachineSafe(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("intro non-tty wrote stderr: %s", stderr)
 	}
-	if !strings.Contains(stdout, "interactive terminal") {
-		t.Fatalf("intro non-tty missing safe fallback: %s", stdout)
+	for _, want := range []string{"█▌▊▎ codencer", "  - 01  read schema", "  - 05  verify"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("intro non-tty fallback missing %q: %s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "\x1b[") {
+		t.Fatalf("intro non-tty fallback emitted ANSI controls: %q", stdout)
 	}
 
 	t.Setenv("CODENCER_NO_ANIMATION", "1")
@@ -163,6 +168,21 @@ func TestIntroPreviewMachineSafe(t *testing.T) {
 	}
 	if stderr != "" {
 		t.Fatalf("intro no-animation wrote stderr: %s", stderr)
+	}
+	if !strings.Contains(stdout, "█▌▊▎ codencer") || strings.Contains(stdout, "\x1b[") {
+		t.Fatalf("intro no-animation fallback wrong: %q", stdout)
+	}
+
+	t.Setenv("NO_COLOR", "1")
+	stdout, stderr, err = runCLI("intro")
+	if err != nil {
+		t.Fatalf("intro NO_COLOR failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("intro NO_COLOR wrote stderr: %s", stderr)
+	}
+	if !strings.Contains(stdout, "█▌▊▎ codencer") || strings.Contains(stdout, "\x1b[") {
+		t.Fatalf("intro NO_COLOR fallback wrong: %q", stdout)
 	}
 }
 

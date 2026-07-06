@@ -165,23 +165,22 @@ func runIntro(args []string, stdout, stderr io.Writer) error {
 			"animation": "disabled",
 			"ok":        true,
 			"preview":   "codencer intro",
+			"steps":     introSteps(),
 		})
 	}
 	opts := cliui.EnvOptions(false, stdout, stderr)
+	indicator := cliui.NewWorkingIndicator(opts, introSteps(), "codencer")
+	indicator.Start()
 	if !cliui.IsInteractive(opts) {
-		fmt.Fprintln(stdout, "Codencer terminal preview requires an interactive terminal.")
 		return nil
 	}
-	spinner := cliui.NewSpinner(opts)
-	spinner.Start("previewing Codencer terminal progress")
-	time.Sleep(850 * time.Millisecond)
-	spinner.Update("checking local bridge")
-	time.Sleep(850 * time.Millisecond)
-	spinner.Update("ready for self-host execution")
-	time.Sleep(850 * time.Millisecond)
-	spinner.Success("Codencer terminal preview complete")
-	fmt.Fprintln(stdout, "Codencer terminal preview complete.")
+	time.Sleep(6 * time.Second)
+	indicator.Stop(true)
 	return nil
+}
+
+func introSteps() []string {
+	return []string{"read schema", "plan diff", "apply patch", "run tests", "verify"}
 }
 
 func runVersion(args []string, stdout io.Writer) error {
@@ -3106,8 +3105,8 @@ func runSetup(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return usageError(parsed.bool("json"), stdout, err.Error())
 		}
-		spinner := cliui.NewSpinner(cliui.EnvOptions(parsed.bool("json"), stdout, stderr))
-		spinner.Start("configuring self-host Relay")
+		indicator := setupIndicator(parsed.bool("json"), stdout, stderr, []string{"write Relay config", "prepare connector config", "configure planner token", "verify setup"})
+		indicator.Start()
 		report, err := setuppkg.Relay(contextBackground(), setuppkg.RelayOptions{
 			BaseURL:                      parsed.value("base-url"),
 			MCPURL:                       parsed.value("mcp-url"),
@@ -3129,7 +3128,7 @@ func runSetup(args []string, stdout, stderr io.Writer) error {
 			BinDir:                       parsed.value("bin-dir"),
 			Strict:                       parsed.bool("strict"),
 		})
-		finishSpinner(spinner, err, "self-host Relay setup ready", "self-host Relay setup failed")
+		finishIndicator(indicator, err)
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "gateway":
 		parsed, err := parseArgs(args[1:], []string{"json", "enable-oauth-dev", "install-services", "start-services", "strict"}, []string{"base-url", "mcp-url", "listen", "auth", "token-env", "token-file", "gateway-config", "store", "relay-request-timeout-seconds", "default-relay-url", "default-relay-token-env", "default-relay-token-file", "oauth-issuer", "oauth-client-id", "oauth-client-secret", "manager", "bin-dir"})
@@ -3180,8 +3179,8 @@ func runSetup(args []string, stdout, stderr io.Writer) error {
 			return usageError(parsed.bool("json"), stdout, err.Error())
 		}
 		gatewayURL := firstNonEmpty(parsed.value("gateway-url"), parsed.value("base-url"))
-		spinner := cliui.NewSpinner(cliui.EnvOptions(parsed.bool("json"), stdout, stderr))
-		spinner.Start("configuring self-host Gateway")
+		indicator := setupIndicator(parsed.bool("json"), stdout, stderr, []string{"write Gateway config", "configure Relay profile", "prepare MCP endpoint", "verify setup"})
+		indicator.Start()
 		report, err := setuppkg.SelfHost(contextBackground(), setuppkg.SelfHostOptions{
 			GatewayURL:                 gatewayURL,
 			MCPURL:                     parsed.value("mcp-url"),
@@ -3198,7 +3197,7 @@ func runSetup(args []string, stdout, stderr io.Writer) error {
 			EnableOAuthDev:             parsed.bool("enable-oauth-dev"),
 			OAuthClientSecret:          parsed.value("oauth-client-secret"),
 		})
-		finishSpinner(spinner, err, "self-host Gateway setup ready", "self-host Gateway setup failed")
+		finishIndicator(indicator, err)
 		return finishSetupReport(stdout, parsed.bool("json"), report, err)
 	case "mcp":
 		parsed, err := parseArgs(args[1:], []string{"json"}, []string{"client", "relay", "endpoint", "token-env", "token", "name"})
@@ -3419,15 +3418,18 @@ func finishSetupReport(stdout io.Writer, asJSON bool, report setuppkg.Report, er
 	return nil
 }
 
-func finishSpinner(spinner *cliui.Spinner, err error, successMessage, failMessage string) {
-	if spinner == nil {
+func setupIndicator(asJSON bool, stdout, stderr io.Writer, steps []string) *cliui.WorkingIndicator {
+	opts := cliui.EnvOptions(asJSON, stdout, stderr)
+	opts.Output = stderr
+	opts.SilentWhenDisabled = true
+	return cliui.NewWorkingIndicator(opts, steps, "codencer")
+}
+
+func finishIndicator(indicator *cliui.WorkingIndicator, err error) {
+	if indicator == nil {
 		return
 	}
-	if err != nil {
-		spinner.Fail(failMessage)
-		return
-	}
-	spinner.Success(successMessage)
+	indicator.Stop(err == nil)
 }
 
 func finishActivationReport(stdout io.Writer, asJSON bool, report activation.Report, err error) error {
