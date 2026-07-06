@@ -41,6 +41,7 @@ Start here for the current open-source local/self-host RC:
 - [Acceptance contract](acceptance/local-production-v0.3.yaml)
 - [Public self-host release acceptance](acceptance/public-self-host-release.md)
 - [Public repo release acceptance](acceptance/public-repo-release.yaml)
+- [Release automation](release-automation.md)
 - [Release checklist](release-checklist.md)
 - [Security policy](../SECURITY.md)
 - [Trademark policy](../TRADEMARKS.md)

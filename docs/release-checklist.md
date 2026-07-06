@@ -1,6 +1,31 @@
 # Release Checklist
 
-Use this for the local/self-host production release-candidate path. It is intentionally non-live by default.
+Use this checklist to review Release Please public releases. The normal release
+path is main-only automation; local release snapshots are emergency/debug proof
+only and are not the normal upload source.
+
+## Normal Release Flow
+
+1. Merge work through PRs with Conventional Commit titles.
+2. Let Release Please open or update the Release PR on `main`.
+3. Review the generated changelog and version.
+4. For the first public release, confirm the Release PR targets `v0.3.0`.
+5. Merge the Release PR.
+6. Confirm the same `Release Please` workflow creates the GitHub Release.
+7. Confirm the workflow uploads:
+   - `codencer_${TAG_NAME}_linux_amd64.tar.gz`
+   - `codencer_${TAG_NAME}_darwin_<host_arch>.tar.gz`
+   - `checksums.txt`
+   - `manifest.json`
+8. Confirm release notes preserve the public self-host scope:
+   - Codex real executor proof: passed;
+   - Claude Code real executor proof: passed;
+   - Antigravity: optional/deferred, not release-proven;
+   - Cloud/official connector: out of scope for this public self-host release.
+
+After `v0.3.0` is released, remove the one-time `release-as: 0.3.0` bootstrap
+setting from `release-please-config.json` so future versions are computed from
+Conventional Commits.
 
 ## Non-Live Verification
 
@@ -21,7 +46,11 @@ make verify-release-artifact-selfhost VERSION=v0.3.0-local-prod-rc.1 TARGETS=hos
 make verify-public-release
 ```
 
-## Release Snapshot
+## Local Release Snapshot Debug Path
+
+The workflow uses this packaging path internally. Running it locally is for
+emergency/debug verification only; do not upload local artifacts for normal
+public releases.
 
 ```bash
 make release-snapshot VERSION=v0.3.0-local-prod-rc.1
@@ -78,7 +107,12 @@ artifacts when `dist/manifest.json` is present.
 ./bin/codencer proof bundle --json
 ```
 
-Attach the acceptance report and proof bundle to release notes. Do not mark live Codex, live Claude, ChatGPT product UI, WSL live, or installed-service smokes as passed unless those exact commands were run and evidence was saved.
+Attach the acceptance report and proof bundle to release notes when using an
+emergency/manual process. In the normal Release Please path, preserve the
+generated release notes and let the workflow append the release asset note. Do
+not mark live Codex, live Claude, ChatGPT product UI, WSL live, or
+installed-service smokes as passed unless those exact commands were run and
+evidence was saved.
 
 ## Non-Goals
 
