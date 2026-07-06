@@ -32,11 +32,20 @@ Release Please reads Conventional Commit messages on `main`:
 The Release PR is the human gate. Merging the Release PR creates the tag and
 GitHub Release.
 
+`version.txt` is owned by Release Please and is used only as release automation
+state for the `simple` strategy. It is not runtime product configuration and
+should not be edited manually outside release automation bootstrap or cleanup
+work.
+
 ## First Public Release Bootstrap
 
 The first automated public release is intentionally forced to `v0.3.0` with
 `release-as: 0.3.0` in `release-please-config.json`. This avoids deriving the
 first public version from older non-conventional branch history.
+
+The repository starts with `version.txt` and `.release-please-manifest.json` at
+`0.2.0`. The first Release PR should update `CHANGELOG.md`, `version.txt`, and
+`.release-please-manifest.json` to `0.3.0`.
 
 After the `v0.3.0` Release PR is merged, remove the one-time `release-as:
 0.3.0` setting in a follow-up PR. Future versions should then be computed from

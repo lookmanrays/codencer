@@ -10,6 +10,8 @@
 - Added a main-only `Release Please` workflow.
 - Added Release Please manifest configuration for a root package using the
   `simple` strategy and explicit v-tagging.
+- Added root `version.txt` with `0.2.0` so the first Release Please run has the
+  expected `simple` strategy version file.
 - Bootstrapped the first public automated release with one-time
   `release-as: 0.3.0`.
 - Added GitHub Release asset build/upload in the same workflow that creates the
@@ -34,6 +36,10 @@
 ## Bootstrap And Future Versions
 
 - The first automated public release is forced to `v0.3.0`.
+- `version.txt` starts at `0.2.0`, is owned by Release Please, and is used only
+  for release automation.
+- The first Release PR should update `CHANGELOG.md`, `version.txt`, and
+  `.release-please-manifest.json`.
 - After `v0.3.0` is released, remove `release-as: 0.3.0`.
 - Future releases are computed from Conventional Commits:
   - `fix:` => patch;
@@ -52,6 +58,7 @@
 
 - `python3 -m json.tool release-please-config.json` - passed.
 - `python3 -m json.tool .release-please-manifest.json` - passed.
+- `test "$(cat version.txt)" = "0.2.0"` - passed.
 - Ruby YAML parse for `.github/workflows/release-please.yml` - passed.
 - Ruby YAML parse for `.github/workflows/semantic-pr-title.yml` - passed.
 - PR title regex sanity check - passed.

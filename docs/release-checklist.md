@@ -8,8 +8,12 @@ only and are not the normal upload source.
 
 1. Merge work through PRs with Conventional Commit titles.
 2. Let Release Please open or update the Release PR on `main`.
-3. Review the generated changelog and version.
-4. For the first public release, confirm the Release PR targets `v0.3.0`.
+3. Review the generated changelog and version. Confirm the Release PR updates:
+   - `CHANGELOG.md`
+   - `version.txt`
+   - `.release-please-manifest.json`
+4. For the first public release, confirm the Release PR targets `v0.3.0` and
+   moves `version.txt` from `0.2.0` to `0.3.0`.
 5. Merge the Release PR.
 6. Confirm the same `Release Please` workflow creates the GitHub Release.
 7. Confirm the workflow uploads:
