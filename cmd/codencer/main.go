@@ -109,7 +109,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	case "run":
 		return runRun(args[1:], stdout)
 	case "submit":
-		return runSubmit(args[1:], stdout)
+		return runSubmit(args[1:], stdout, stderr)
 	case "run-plan":
 		return runRunPlan(args[1:], stdout)
 	case "sync":
@@ -2001,7 +2001,7 @@ func runRun(args []string, stdout io.Writer) error {
 	}
 }
 
-func runSubmit(args []string, stdout io.Writer) error {
+func runSubmit(args []string, stdout, stderr io.Writer) error {
 	parsed, err := parseArgs(args, []string{"json", "wait", "stdin"}, []string{
 		"project", "repo", "config", "run", "goal", "task-file", "prompt-file", "profile", "adapter-profile", "title", "timeout-seconds",
 	})
@@ -2023,6 +2023,16 @@ func runSubmit(args []string, stdout io.Writer) error {
 		}
 	}
 	service := localexec.NewService()
+	indicator := submitIndicator(parsed.bool("json"), parsed.bool("wait"), stdout, stderr, parsed.value("title"), adapterProfile)
+	indicatorStopped := false
+	if indicator != nil {
+		indicator.Start()
+		defer func() {
+			if !indicatorStopped {
+				indicator.Stop(false)
+			}
+		}()
+	}
 	report, err := service.Submit(contextBackground(), localexec.SubmitOptions{
 		BaseOptions: localexec.BaseOptions{
 			ProjectID:  parsed.value("project"),
@@ -2040,6 +2050,10 @@ func runSubmit(args []string, stdout io.Writer) error {
 		Title:          parsed.value("title"),
 		TimeoutSeconds: timeoutSeconds,
 	})
+	if indicator != nil {
+		indicator.Stop(err == nil && report.Blocker == nil)
+		indicatorStopped = true
+	}
 	return finishExecutionReport(stdout, parsed.bool("json"), report, err)
 }
 
@@ -3423,6 +3437,24 @@ func setupIndicator(asJSON bool, stdout, stderr io.Writer, steps []string) *cliu
 	opts.Output = stderr
 	opts.SilentWhenDisabled = true
 	return cliui.NewWorkingIndicator(opts, steps, "codencer")
+}
+
+func submitIndicator(asJSON bool, wait bool, stdout io.Writer, stderr io.Writer, title string, profile string) *cliui.WorkingIndicator {
+	return submitIndicatorWithOptions(asJSON, wait, stdout, stderr, title, profile, cliui.EnvOptions(asJSON, stdout, stderr))
+}
+
+func submitIndicatorWithOptions(asJSON bool, wait bool, stdout io.Writer, stderr io.Writer, title string, profile string, opts cliui.Options) *cliui.WorkingIndicator {
+	_ = title
+	_ = profile
+	if asJSON || !wait {
+		return nil
+	}
+	opts.JSON = asJSON
+	opts.Stdout = stdout
+	opts.Stderr = stderr
+	opts.Output = stderr
+	opts.SilentWhenDisabled = true
+	return cliui.NewWorkingIndicator(opts, []string{"prepare task", "start executor", "wait for result", "collect report", "verify output"}, "codencer")
 }
 
 func finishIndicator(indicator *cliui.WorkingIndicator, err error) {

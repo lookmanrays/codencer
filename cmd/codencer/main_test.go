@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agent-bridge/internal/account"
+	"agent-bridge/internal/cliui"
 	gatewaypkg "agent-bridge/internal/gateway"
 )
 
@@ -183,6 +184,76 @@ func TestIntroPreviewMachineSafe(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "█▌▊▎ codencer") || strings.Contains(stdout, "\x1b[") {
 		t.Fatalf("intro NO_COLOR fallback wrong: %q", stdout)
+	}
+}
+
+func TestSubmitIndicatorGuardsAndTTYOutput(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if got := submitIndicator(false, false, &stdout, &stderr, "title", "codex-workspace"); got != nil {
+		t.Fatalf("submit indicator should be nil when wait=false")
+	}
+	if got := submitIndicator(true, true, &stdout, &stderr, "title", "codex-workspace"); got != nil {
+		t.Fatalf("submit indicator should be nil for JSON output")
+	}
+
+	for _, tt := range []struct {
+		name string
+		opts cliui.Options
+	}{
+		{name: "non tty", opts: cliui.Options{}},
+		{name: "ci", opts: cliui.Options{CI: true, ForceInteractive: true}},
+		{name: "no color", opts: cliui.Options{NoColor: true, ForceInteractive: true}},
+		{name: "no animation", opts: cliui.Options{NoAnimation: true, ForceInteractive: true}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+			indicator := submitIndicatorWithOptions(false, true, &stdout, &stderr, "/private/repo", "codex-workspace", tt.opts)
+			if indicator == nil {
+				t.Fatalf("disabled submit indicator should be silent, not nil")
+			}
+			indicator.Start()
+			indicator.Stop(false)
+			if stderr.String() != "" {
+				t.Fatalf("disabled submit indicator wrote stderr: %q", stderr.String())
+			}
+			if stdout.String() != "" {
+				t.Fatalf("disabled submit indicator wrote stdout: %q", stdout.String())
+			}
+		})
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	indicator := submitIndicatorWithOptions(false, true, &stdout, &stderr, "/private/repo", "codex-workspace", cliui.Options{ForceInteractive: true})
+	if indicator == nil {
+		t.Fatalf("interactive submit indicator should be created")
+	}
+	indicator.Start()
+	indicator.Stop(true)
+	got := stderr.String()
+	for _, want := range []string{
+		"\x1b[?25l",
+		"codencer",
+		"running",
+		"prepare task",
+		"wait for result",
+		"\x1b[7A\x1b[0J",
+		"done",
+		"\x1b[?25h",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("interactive submit indicator missing %q: %q", want, got)
+		}
+	}
+	if stdout.String() != "" {
+		t.Fatalf("interactive submit indicator wrote stdout: %q", stdout.String())
+	}
+	for _, forbidden := range []string{"/private/repo", "codex-workspace"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("interactive submit indicator leaked %q: %q", forbidden, got)
+		}
 	}
 }
 
@@ -498,12 +569,18 @@ func TestExecutionCommandsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit failed: %v stderr=%s stdout=%s", err, stderr, stdout)
 	}
+	if stderr != "" {
+		t.Fatalf("submit --json wrote stderr decoration: %q", stderr)
+	}
 	if !strings.Contains(stdout, `"status": "completed"`) || !strings.Contains(stdout, `"evidence"`) {
 		t.Fatalf("submit output wrong: %s", stdout)
 	}
 	stdout, stderr, err = runCLI("submit", "--project", "proj", "--run", "run-1", "--goal", "do it", "--wait")
 	if err != nil {
 		t.Fatalf("submit human failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if stderr != "" || strings.Contains(stderr, "\x1b[") {
+		t.Fatalf("submit human non-TTY should not write indicator stderr: %q", stderr)
 	}
 	if !strings.Contains(stdout, "summary: done") || !strings.Contains(stdout, "<redacted-local-path>") || !strings.Contains(stdout, "<redacted-local-url>") || !strings.Contains(stdout, "token=<redacted>") {
 		t.Fatalf("submit human output missing sanitized summary: %s", stdout)
