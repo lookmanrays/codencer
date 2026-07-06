@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import { Plus } from "lucide-react";
 import { RelayProfileForm } from "@/components/console/relay-profile-form";
 import {
   DemoModeNotice,
@@ -12,6 +13,13 @@ import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingPanel } from "@/components/ui/skeleton";
 import { isDemoMode } from "@/api/config";
@@ -24,13 +32,26 @@ export function RelaysScreen() {
   const workspace = useWorkspace();
   const deleteRelay = useDeleteRelayProfile();
   const columns: ColumnDef<RelayProfile>[] = [
-    { header: "ID", accessorKey: "id" },
-    { header: "Name", accessorKey: "name" },
+    {
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="block min-w-0 truncate" title={row.original.id}>
+          {row.original.name}
+        </span>
+      ),
+    },
     {
       header: "Type",
       cell: ({ row }) => <Badge>{row.original.type}</Badge>,
     },
-    { header: "URL", accessorKey: "url" },
+    {
+      header: "URL",
+      cell: ({ row }) => (
+        <span className="block max-w-[320px] truncate" title={row.original.url}>
+          {row.original.url}
+        </span>
+      ),
+    },
     {
       header: "Status",
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
@@ -42,7 +63,16 @@ export function RelaysScreen() {
     {
       header: "Token reference",
       cell: ({ row }) =>
-        row.original.tokenConfigured ? row.original.tokenRef : "not configured",
+        row.original.tokenConfigured ? (
+          <span
+            className="block max-w-[240px] truncate"
+            title={row.original.tokenRef}
+          >
+            {row.original.tokenRef}
+          </span>
+        ) : (
+          "not configured"
+        ),
     },
     {
       header: "Actions",
@@ -85,26 +115,57 @@ export function RelaysScreen() {
         <div className="grid min-w-0 max-w-full gap-lg">
           {isDemoMode() ? <DemoModeNotice /> : null}
           <OfficialGatewayNotice mcpEndpoint={workspace.data.mcpEndpoint} />
-          <div className="grid min-w-0 gap-lg xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-w-0">
+          <Card>
+            <CardHeader>
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-md">
+                <CardTitle>Relay profiles</CardTitle>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Plus aria-hidden="true" className="h-4 w-4" />
+                      Add relay profile
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogTitle>Add self-host Relay profile</DialogTitle>
+                    <DialogDescription className="mt-xs block text-body-sm text-ink-secondary">
+                      Store planner token material on the Gateway host. The
+                      Console only sends a token environment variable reference.
+                    </DialogDescription>
+                    <div className="mt-md">
+                      <RelayProfileForm />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
               {relays.data.relays.length === 0 ? (
                 <EmptyState
                   description="Add a backend Relay profile to route projects."
                   title="No Relay profiles"
                 />
               ) : (
-                <DataTable columns={columns} data={relays.data.relays} />
+                <DataTable
+                  columns={columns}
+                  data={relays.data.relays}
+                  density="compact"
+                  minWidth="700px"
+                />
               )}
-            </div>
-            <Card className="self-start">
-              <CardHeader>
-                <CardTitle>Add self-host Relay profile</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <RelayProfileForm />
-              </CardContent>
-            </Card>
-          </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Relay token handling</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="m-0 text-body text-ink-secondary">
+                Token values stay server-side. This page shows only masked token
+                state or token environment variable references.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
     </PageShell>

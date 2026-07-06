@@ -29,6 +29,10 @@ const routes = [
   { path: "/console/relays", heading: "Gateway routing backends" },
   { path: "/console/connectors", heading: "Local execution endpoints" },
   { path: "/console/projects", heading: "Project locations" },
+  {
+    path: "/console/projects/run?project_id=codencer&relay_profile_id=default&machine_id=mach_mac",
+    heading: "Run project task",
+  },
   { path: "/console/runs", heading: "Run history" },
   { path: "/console/runs/runhist_demo_console", heading: "Full run" },
   { path: "/console/activation", heading: "Gateway-first setup" },
@@ -96,6 +100,11 @@ async function captureInteractions(page: Page) {
     "desktop",
     "light",
   );
+  await page.getByRole("button", { name: /add relay profile/i }).click();
+  await expect(
+    page.getByRole("dialog", { name: /add self-host relay profile/i }),
+  ).toBeVisible();
+  await capture(page, interaction("relay-add-dialog", "/console/relays"));
   await page.getByLabel(/profile name/i).focus();
   await capture(page, interaction("relay-form-focused", "/console/relays"));
 
@@ -507,7 +516,14 @@ function assertVisualReviewHasNoPlaceholders() {
 }
 
 function slug(routePath: string) {
-  return routePath.replace(/^\//, "").replaceAll("/", "-") || "root";
+  return (
+    routePath
+      .replace(/^\//, "")
+      .replaceAll("/", "-")
+      .replace(/[^a-z0-9_-]+/gi, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "root"
+  );
 }
 
 function timestamp() {

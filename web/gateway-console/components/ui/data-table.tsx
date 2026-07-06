@@ -12,15 +12,19 @@ import { cn } from "@/lib/cn";
 export function DataTable<TData>({
   columns,
   data,
+  density = "default",
   emptyDescription = "No records match this view.",
   emptyTitle = "No records",
   getRowHref,
+  minWidth = "760px",
 }: {
   columns: ColumnDef<TData>[];
   data: TData[];
+  density?: "default" | "compact";
   emptyTitle?: string;
   emptyDescription?: string;
   getRowHref?: (row: TData) => string | undefined;
+  minWidth?: string;
 }) {
   const table = useReactTable({
     columns,
@@ -61,7 +65,10 @@ export function DataTable<TData>({
             <dl className="m-0 grid min-w-0 gap-sm">
               {row.getVisibleCells().map((cell) => (
                 <div
-                  className="grid min-w-0 gap-xs border-t border-border py-sm first:border-t-0 first:pt-0 last:pb-0"
+                  className={cn(
+                    "grid min-w-0 gap-xs border-t border-border first:border-t-0 first:pt-0 last:pb-0",
+                    density === "compact" ? "py-xs" : "py-sm",
+                  )}
                   key={cell.id}
                 >
                   <dt className="min-w-0 break-words font-mono text-mono uppercase tracking-[0.12em] text-ink-muted">
@@ -77,13 +84,19 @@ export function DataTable<TData>({
         ))}
       </div>
       <div className="hidden min-w-0 max-w-full overflow-x-auto rounded-[var(--radius-card)] border border-border bg-paper-strong md:block">
-        <table className="w-full min-w-[760px] border-collapse text-left">
+        <table
+          className="w-full border-collapse text-left"
+          style={{ minWidth }}
+        >
           <thead className="border-b border-border bg-paper-tinted">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
-                    className="px-md py-sm font-mono text-mono uppercase tracking-[0.12em] text-ink-muted"
+                    className={cn(
+                      "font-mono text-mono uppercase tracking-[0.12em] text-ink-muted",
+                      density === "compact" ? "px-sm py-xs" : "px-md py-sm",
+                    )}
                     key={header.id}
                   >
                     {header.isPlaceholder
@@ -124,7 +137,10 @@ export function DataTable<TData>({
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
-                    className="px-md py-sm align-top text-body-sm"
+                    className={cn(
+                      "align-top text-body-sm",
+                      density === "compact" ? "px-sm py-xs" : "px-md py-sm",
+                    )}
                     key={cell.id}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

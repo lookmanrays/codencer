@@ -55,6 +55,7 @@ func TestVersionPathsAndDoctorJSON(t *testing.T) {
 func TestHelpCommandsExitZeroAndDescribeSelfHost(t *testing.T) {
 	commands := [][]string{
 		{"--help"},
+		{"intro", "--help"},
 		{"project", "--help"},
 		{"project", "init", "--help"},
 		{"project", "get", "--help"},
@@ -128,6 +129,40 @@ func TestHelpCommandsExitZeroAndDescribeSelfHost(t *testing.T) {
 				t.Fatalf("%s help missing %q: %s", command, want, stdout)
 			}
 		}
+	}
+}
+
+func TestIntroPreviewMachineSafe(t *testing.T) {
+	stdout, stderr, err := runCLI("intro", "--json")
+	if err != nil {
+		t.Fatalf("intro --json failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("intro --json wrote stderr: %s", stderr)
+	}
+	assertJSON(t, stdout)
+	if strings.Contains(stdout, "█") {
+		t.Fatalf("intro --json emitted decorative mark: %s", stdout)
+	}
+
+	stdout, stderr, err = runCLI("intro")
+	if err != nil {
+		t.Fatalf("intro failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("intro non-tty wrote stderr: %s", stderr)
+	}
+	if !strings.Contains(stdout, "interactive terminal") {
+		t.Fatalf("intro non-tty missing safe fallback: %s", stdout)
+	}
+
+	t.Setenv("CODENCER_NO_ANIMATION", "1")
+	stdout, stderr, err = runCLI("intro")
+	if err != nil {
+		t.Fatalf("intro no-animation failed: %v stderr=%s stdout=%s", err, stderr, stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("intro no-animation wrote stderr: %s", stderr)
 	}
 }
 

@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { Play } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,44 +73,77 @@ export function projectLocationRows(projects: Project[]): ProjectLocationRow[] {
 }
 
 export function ProjectLocationsTable({
+  getRunHref,
   onRun,
   rows,
   selectedLocationId,
 }: {
+  getRunHref?: (row: ProjectLocationRow) => string;
   onRun?: (row: ProjectLocationRow) => void;
   rows: ProjectLocationRow[];
   selectedLocationId?: string;
 }) {
   const columns = useMemo<ColumnDef<ProjectLocationRow>[]>(() => {
-    if (!onRun) return baseColumns;
+    if (!onRun && !getRunHref) return baseColumns;
     return [
       ...baseColumns,
       {
         header: "Action",
-        cell: ({ row }) => (
-          <Button
-            aria-label={`Run task on ${row.original.projectName} ${row.original.hostLabel || row.original.machineId}`}
-            disabled={row.original.status !== "online"}
-            onClick={() => onRun(row.original)}
-            size="sm"
-            type="button"
-            variant={
-              row.original.id === selectedLocationId ? "primary" : "secondary"
-            }
-          >
-            <Play aria-hidden="true" className="h-4 w-4" />
-            Run
-          </Button>
-        ),
+        cell: ({ row }) => {
+          const label = `Run task on ${row.original.projectName} ${
+            row.original.hostLabel || row.original.machineId
+          }`;
+          const disabled = row.original.status !== "online";
+          const variant =
+            row.original.id === selectedLocationId ? "primary" : "secondary";
+          if (getRunHref && !disabled) {
+            return (
+              <Button asChild size="sm" variant={variant}>
+                <Link aria-label={label} href={getRunHref(row.original)}>
+                  <Play aria-hidden="true" className="h-4 w-4" />
+                  Run
+                </Link>
+              </Button>
+            );
+          }
+          return (
+            <Button
+              aria-label={label}
+              disabled={disabled}
+              onClick={() => onRun?.(row.original)}
+              size="sm"
+              type="button"
+              variant={variant}
+            >
+              <Play aria-hidden="true" className="h-4 w-4" />
+              Run
+            </Button>
+          );
+        },
       },
     ];
-  }, [onRun, selectedLocationId]);
+  }, [getRunHref, onRun, selectedLocationId]);
   return (
     <DataTable
       columns={columns}
       data={rows}
+      density="compact"
       emptyDescription="Share a project through the connector to advertise safe location metadata."
       emptyTitle="No project locations"
+      getRowHref={getRunHref}
+      minWidth="680px"
     />
   );
+}
+
+export function projectRunHref(row: ProjectLocationRow) {
+  const params = new URLSearchParams({
+    machine_id: row.machineId,
+    project_id: row.projectId,
+    relay_profile_id: row.relayProfileId,
+  });
+  if (row.hostLabel) {
+    params.set("host_label", row.hostLabel);
+  }
+  return `/console/projects/run?${params.toString()}`;
 }

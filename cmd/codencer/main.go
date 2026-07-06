@@ -84,6 +84,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runInit(args[1:], stdout)
 	case "login":
 		return runLogin(args[1:], stdout)
+	case "intro":
+		return runIntro(args[1:], stdout, stderr)
 	case "whoami":
 		return runWhoami(args[1:], stdout)
 	case "logout":
@@ -148,6 +150,38 @@ func run(args []string, stdout, stderr io.Writer) error {
 		printUsage(stderr)
 		return exitError{code: exitUsage, message: fmt.Sprintf("unknown command %q", args[0]), printed: true}
 	}
+}
+
+func runIntro(args []string, stdout, stderr io.Writer) error {
+	parsed, err := parseArgs(args, []string{"json"}, nil)
+	if err != nil {
+		return usageError(hasBoolFlag(args, "json"), stdout, err.Error())
+	}
+	if len(parsed.positionals) > 0 {
+		return usageError(parsed.bool("json"), stdout, "intro does not accept positional arguments")
+	}
+	if parsed.bool("json") {
+		return writeJSON(stdout, map[string]any{
+			"animation": "disabled",
+			"ok":        true,
+			"preview":   "codencer intro",
+		})
+	}
+	opts := cliui.EnvOptions(false, stdout, stderr)
+	if !cliui.IsInteractive(opts) {
+		fmt.Fprintln(stdout, "Codencer terminal preview requires an interactive terminal.")
+		return nil
+	}
+	spinner := cliui.NewSpinner(opts)
+	spinner.Start("previewing Codencer terminal progress")
+	time.Sleep(850 * time.Millisecond)
+	spinner.Update("checking local bridge")
+	time.Sleep(850 * time.Millisecond)
+	spinner.Update("ready for self-host execution")
+	time.Sleep(850 * time.Millisecond)
+	spinner.Success("Codencer terminal preview complete")
+	fmt.Fprintln(stdout, "Codencer terminal preview complete.")
+	return nil
 }
 
 func runVersion(args []string, stdout io.Writer) error {
@@ -3472,7 +3506,7 @@ func printCommandHelp(w io.Writer, path []string) {
 	key := strings.Join(path, " ")
 	switch key {
 	case "":
-		printHelpBlock(w, "codencer [command] [flags]", "version, init, login, paths, config, doctor, status, project, machine, connector, gateway, run, submit, sync, executor, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
+		printHelpBlock(w, "codencer [command] [flags]", "version, init, intro, login, paths, config, doctor, status, project, machine, connector, gateway, run, submit, sync, executor, setup, activation", "--json, --config <path>, --repo <path>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --json")
 	case "project":
 		printHelpBlock(w, "codencer project <init|adopt|scan|list|get|use|status|share|unshare|remove> [flags]", "init, adopt, scan, list, get, use, status, share, unshare, remove", "--json, --config <path>, --repo <path>", "codencer project init --repo . --adapter fake --profile fake-success --share-to-relay --json")
 	case "project init":
@@ -3503,6 +3537,8 @@ func printCommandHelp(w io.Writer, path []string) {
 		printHelpBlock(w, "codencer executor <list|scan|test|default> [flags]", "list, scan, test, default", "--json, --repo <path>, --config <path>", "codencer executor default codex-workspace --repo . --json")
 	case "login":
 		printHelpBlock(w, "codencer login [flags]", "none", "--json, --gateway <url>, --device-code <code>", "codencer login --gateway http://127.0.0.1:19090 --json")
+	case "intro":
+		printHelpBlock(w, "codencer intro [flags]", "none", "--json", "codencer intro")
 	case "setup":
 		printHelpBlock(w, "codencer setup <local|relay|gateway|self-host|mcp> [flags]", "local, relay, gateway, self-host, mcp", "--json, --gateway-url <url>, --relay-url <url>, --relay-request-timeout-seconds <seconds>, --proxy-timeout-seconds <seconds>", "codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --relay-request-timeout-seconds 300 --token-env CODENCER_GATEWAY_MCP_TOKEN --json")
 	case "setup self-host":

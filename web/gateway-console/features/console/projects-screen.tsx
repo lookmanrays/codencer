@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ProjectLocationsTable,
   projectLocationRows,
-  type ProjectLocationRow,
+  projectRunHref,
 } from "@/components/console/project-locations-table";
-import { TaskRunForm } from "@/components/console/task-run-form";
 import { DemoModeNotice } from "@/components/console/mode-notices";
 import { PageShell } from "@/components/layout/page-shell";
 import { Alert } from "@/components/ui/alert";
@@ -27,7 +26,6 @@ import { useProjects } from "@/api/projects";
 
 export function ProjectsScreen() {
   const projects = useProjects();
-  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [query, setQuery] = useState("");
   const [machine, setMachine] = useState("all");
   const [relay, setRelay] = useState("all");
@@ -70,14 +68,6 @@ export function ProjectsScreen() {
       }),
     [ambiguity, machine, query, relay, rows, status],
   );
-  const selectedLocation =
-    rows.find((row) => row.id === selectedLocationId) ??
-    rows.find((row) => row.status === "online") ??
-    rows[0];
-  useEffect(() => {
-    if (selectedLocationId || !selectedLocation) return;
-    setSelectedLocationId(selectedLocation.id);
-  }, [selectedLocation, selectedLocationId]);
   const machines = uniqueOptions(
     rows.map((row) => row.hostLabel || row.machineId).filter(Boolean),
   );
@@ -112,88 +102,57 @@ export function ProjectsScreen() {
               title="No projects"
             />
           ) : (
-            <div className="grid min-w-0 gap-lg xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="grid min-w-0 gap-md">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Project and location inventory</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid min-w-0 gap-md">
-                      <div className="grid min-w-0 gap-sm md:grid-cols-[minmax(180px,1fr)_repeat(4,minmax(130px,160px))]">
-                        <Field id="project-search" label="Search">
-                          <Input
-                            id="project-search"
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Project, repo, machine"
-                            value={query}
-                          />
-                        </Field>
-                        <CompactFilter
-                          id="project-machine-filter"
-                          label="Machine"
-                          onChange={setMachine}
-                          options={machines}
-                          value={machine}
-                        />
-                        <CompactFilter
-                          id="project-relay-filter"
-                          label="Relay"
-                          onChange={setRelay}
-                          options={relays}
-                          value={relay}
-                        />
-                        <CompactFilter
-                          id="project-status-filter"
-                          label="Status"
-                          onChange={setStatus}
-                          options={uniqueOptions(rows.map((row) => row.status))}
-                          value={status}
-                        />
-                        <CompactFilter
-                          id="project-ambiguity-filter"
-                          label="Ambiguity"
-                          onChange={setAmbiguity}
-                          options={uniqueOptions(
-                            rows.map((row) => row.ambiguity),
-                          )}
-                          value={ambiguity}
-                        />
-                      </div>
-                      <ProjectLocationsTable
-                        onRun={(row: ProjectLocationRow) =>
-                          setSelectedLocationId(row.id)
-                        }
-                        rows={filteredRows}
-                        selectedLocationId={selectedLocation?.id}
+            <Card>
+              <CardHeader>
+                <CardTitle>Project and location inventory</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid min-w-0 gap-md">
+                  <div className="grid min-w-0 gap-sm md:grid-cols-[minmax(180px,1fr)_repeat(4,minmax(130px,160px))]">
+                    <Field id="project-search" label="Search">
+                      <Input
+                        id="project-search"
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Project, repo, machine"
+                        value={query}
                       />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-              <aside className="min-w-0">
-                <div className="sticky top-[88px] grid min-w-0 gap-md">
-                  {selectedLocation ? (
-                    <TaskRunForm
-                      projects={projects.data.projects}
-                      selectedLocationId={selectedLocation.id}
+                    </Field>
+                    <CompactFilter
+                      id="project-machine-filter"
+                      label="Machine"
+                      onChange={setMachine}
+                      options={machines}
+                      value={machine}
                     />
-                  ) : (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Select a route</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="m-0 text-body-sm text-ink-secondary">
-                          Choose an online project location to open the task
-                          submission panel.
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
+                    <CompactFilter
+                      id="project-relay-filter"
+                      label="Relay"
+                      onChange={setRelay}
+                      options={relays}
+                      value={relay}
+                    />
+                    <CompactFilter
+                      id="project-status-filter"
+                      label="Status"
+                      onChange={setStatus}
+                      options={uniqueOptions(rows.map((row) => row.status))}
+                      value={status}
+                    />
+                    <CompactFilter
+                      id="project-ambiguity-filter"
+                      label="Ambiguity"
+                      onChange={setAmbiguity}
+                      options={uniqueOptions(rows.map((row) => row.ambiguity))}
+                      value={ambiguity}
+                    />
+                  </div>
+                  <ProjectLocationsTable
+                    getRunHref={projectRunHref}
+                    rows={filteredRows}
+                  />
                 </div>
-              </aside>
-            </div>
+              </CardContent>
+            </Card>
           )}
           {projects.data.relayErrors.length > 0 ? (
             <Alert title="Some Relay profiles are unavailable" tone="warning">

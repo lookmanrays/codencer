@@ -191,12 +191,18 @@ try {
     await expect(
       page.getByRole("cell", { name: "Default Codencer Relay" }),
     ).toBeVisible();
+    await page.getByRole("button", { name: /add relay profile/i }).click();
+    await expect(
+      page.getByRole("dialog", { name: /add self-host relay profile/i }),
+    ).toBeVisible();
     await page.getByLabel(/profile name/i).fill("test-self-host");
     await page.getByLabel(/relay url/i).fill(stack.relayUrl);
     await page
       .getByLabel(/token environment variable/i)
       .fill("CODENCER_LIVE_RELAY_TOKEN");
     await page.getByRole("button", { name: /save relay profile/i }).click();
+    await expect(page.getByText(/relay profile saved/i)).toBeVisible();
+    await page.getByRole("button", { name: /close dialog/i }).click();
     await expect(
       page.getByRole("cell", { name: "test-self-host" }).first(),
     ).toBeVisible();
@@ -229,10 +235,17 @@ try {
       page.getByRole("cell", { name: /Codencer\s+codencer/i }),
     ).toBeVisible();
     await expect(
-      page.getByRole("row", {
+      page.getByRole("link", {
         name: /Codencer default live-host repo · [a-f0-9]{16} online none/i,
       }),
     ).toBeVisible();
+    await Promise.all([
+      page.waitForURL(/\/console\/projects\/run\?/),
+      page
+        .getByRole("link", { name: /run task on Codencer live-host/i })
+        .first()
+        .click(),
+    ]);
     await expect(
       page.getByRole("combobox", { name: "Executor" }),
     ).toContainText(executorProfile);

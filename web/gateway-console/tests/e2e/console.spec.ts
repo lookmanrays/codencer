@@ -8,6 +8,10 @@ const routes = [
   ["/console/relays", "Gateway routing backends"],
   ["/console/connectors", "Local execution endpoints"],
   ["/console/projects", "Project locations"],
+  [
+    "/console/projects/run?project_id=codencer&relay_profile_id=default&machine_id=mach_mac",
+    "Run project task",
+  ],
   ["/console/runs", "Run history"],
   ["/console/activation", "Gateway-first setup"],
   ["/console/audit", "Workspace event stream"],
@@ -38,6 +42,17 @@ test("project task form submits demo run without unsafe output", async ({
   page,
 }) => {
   await page.goto("/console/projects");
+  await expect(
+    page.getByRole("heading", { name: /project locations/i }),
+  ).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Executor" })).toBeHidden();
+  await Promise.all([
+    page.waitForURL(/\/console\/projects\/run\?/),
+    page
+      .getByRole("link", { name: /run task on Codencer macbook/i })
+      .first()
+      .click(),
+  ]);
   const executor = page.getByRole("combobox", { name: "Executor" });
   await expect(executor).toContainText("codex-workspace");
   await expect(page.getByLabel(/title/i)).toHaveValue(
@@ -90,7 +105,7 @@ test("project task form submits demo run without unsafe output", async ({
 });
 
 test("project task form validates executor selection", async ({ page }) => {
-  await page.goto("/console/projects");
+  await page.goto(projectRunURL());
   await page.getByRole("button", { name: /^advanced$/i }).click();
   await page
     .getByLabel(/manual executor profile override/i)
@@ -100,7 +115,7 @@ test("project task form validates executor selection", async ({ page }) => {
 });
 
 test("elevated Codex executor requires confirmation", async ({ page }) => {
-  await page.goto("/console/projects");
+  await page.goto(projectRunURL());
   await page.getByRole("combobox", { name: "Executor" }).click();
   await page.getByRole("option", { name: /codex-full/i }).click();
   await expect(
@@ -112,7 +127,7 @@ test("elevated Codex executor requires confirmation", async ({ page }) => {
 });
 
 test("Antigravity executor uses real-executor defaults", async ({ page }) => {
-  await page.goto("/console/projects");
+  await page.goto(projectRunURL());
   await page.getByRole("combobox", { name: "Executor" }).click();
   await page.getByRole("option", { name: /antigravity-default/i }).click();
   await expect(page.getByLabel(/title/i)).toHaveValue("Antigravity smoke task");
@@ -132,7 +147,7 @@ test("Antigravity executor uses real-executor defaults", async ({ page }) => {
 });
 
 test("manifest run plan is advanced and guided", async ({ page }) => {
-  await page.goto("/console/projects");
+  await page.goto(projectRunURL());
   await expect(page.getByLabel(/manifest \/ run plan/i)).toBeHidden();
   await page.getByRole("button", { name: /^advanced$/i }).click();
   await page.getByRole("combobox", { name: /execution mode/i }).click();
@@ -182,14 +197,18 @@ test("settings and relay pages expose only public self-host operator controls", 
   await page.goto("/console/relays");
   await expect(page.getByText(/Gateway MCP path/i)).toBeVisible();
   await expect(page.getByText("http://127.0.0.1:19090/mcp")).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "ID" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Name" })).toBeVisible();
   await expect(
     page.getByRole("columnheader", { name: "Token reference" }),
   ).toBeVisible();
   await expect(
     page.getByRole("cell", { name: "Default self-host Relay" }),
   ).toBeVisible();
-  await expect(page.getByText("Add self-host Relay profile")).toBeVisible();
+  await page.getByRole("button", { name: /add relay profile/i }).click();
+  await expect(
+    page.getByRole("dialog", { name: /add self-host relay profile/i }),
+  ).toBeVisible();
+  await expect(page.getByLabel(/profile name/i)).toBeVisible();
 });
 
 test("run history and audit expose pagination and grouped lifecycle", async ({
@@ -297,3 +316,7 @@ test("keyboard navigation opens dialog and dropdown", async ({ page }) => {
     page.getByRole("menuitem", { name: /copy command/i }),
   ).toBeVisible();
 });
+
+function projectRunURL() {
+  return "/console/projects/run?project_id=codencer&relay_profile_id=default&machine_id=mach_mac";
+}
