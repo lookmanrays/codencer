@@ -89,6 +89,137 @@ func TestSubmitRejectsExplicitAdapterProfileConflict(t *testing.T) {
 	}
 }
 
+func TestSubmitWithMissingSuppliedRunIDFailsBeforeSubmit(t *testing.T) {
+	submitCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/missing-run":
+			http.Error(w, "Not found", http.StatusNotFound)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/missing-run/steps":
+			submitCalled = true
+			t.Fatalf("SubmitTask must not be called for a missing supplied run id")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	report, err := service.Submit(context.Background(), SubmitOptions{
+		BaseOptions: base,
+		RunID:       " missing-run ",
+		Goal:        "do it",
+		Wait:        false,
+	})
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if submitCalled {
+		t.Fatal("SubmitTask was called")
+	}
+	if report.ExitCode != ExitInvalidInput || report.Blocker == nil || report.Blocker.Type != BlockerInvalidInput {
+		t.Fatalf("expected invalid_input report, got %+v", report)
+	}
+	if report.Blocker.Message != "run missing-run not found" {
+		t.Fatalf("unexpected blocker message %q", report.Blocker.Message)
+	}
+	paths, err := local.ResolvePaths(base.RepoRoot, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportPath := filepath.Join(paths.ArtifactsDir, "run-plans", "missing-run.json")
+	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
+		t.Fatalf("missing supplied run must not write run-plan report, stat err=%v", err)
+	}
+}
+
+func TestSubmitWithExistingSuppliedRunIDUsesReturnedRun(t *testing.T) {
+	startRunCalled := false
+	submitCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs":
+			startRunCalled = true
+			t.Fatalf("StartRun must not be called when a supplied run id exists")
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-existing":
+			writeTestJSON(t, w, http.StatusOK, domain.Run{ID: "run-existing", ProjectID: "proj", State: domain.RunStateRunning})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-existing/steps":
+			submitCalled = true
+			var task domain.TaskSpec
+			if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+				t.Fatalf("decode task: %v", err)
+			}
+			if task.RunID != "run-existing" {
+				t.Fatalf("task run id = %q, want run-existing", task.RunID)
+			}
+			writeTestJSON(t, w, http.StatusAccepted, domain.Step{ID: "step-existing", Title: task.Title, State: domain.StepStateRunning, Adapter: task.AdapterProfile})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	report, err := service.Submit(context.Background(), SubmitOptions{
+		BaseOptions: base,
+		RunID:       " run-existing ",
+		Goal:        "do it",
+		Wait:        false,
+	})
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if startRunCalled {
+		t.Fatal("StartRun was called")
+	}
+	if !submitCalled {
+		t.Fatal("SubmitTask was not called")
+	}
+	if !report.OK || report.Run == nil || report.Run.ID != "run-existing" || report.Status != "submitted" {
+		t.Fatalf("unexpected submit report: %+v", report)
+	}
+}
+
+func TestSubmitWithSuppliedRunIDFromAnotherProjectFails(t *testing.T) {
+	submitCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runs/run-other":
+			writeTestJSON(t, w, http.StatusOK, domain.Run{ID: "run-other", ProjectID: "other-project", State: domain.RunStateRunning})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runs/run-other/steps":
+			submitCalled = true
+			t.Fatalf("SubmitTask must not be called for a run from another project")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	base := setupProject(t, server.URL, "fake", "fake-success")
+	service := NewService()
+	report, err := service.Submit(context.Background(), SubmitOptions{
+		BaseOptions: base,
+		RunID:       "run-other",
+		Goal:        "do it",
+		Wait:        false,
+	})
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if submitCalled {
+		t.Fatal("SubmitTask was called")
+	}
+	if report.ExitCode != ExitInvalidInput || report.Blocker == nil || report.Blocker.Type != BlockerInvalidInput {
+		t.Fatalf("expected invalid_input report, got %+v", report)
+	}
+	want := "run run-other belongs to project other-project, not proj"
+	if report.Blocker.Message != want {
+		t.Fatalf("blocker message = %q, want %q", report.Blocker.Message, want)
+	}
+}
+
 func TestRunStartListGetStatusViaHTTP(t *testing.T) {
 	cancelled := false
 	resumed := false

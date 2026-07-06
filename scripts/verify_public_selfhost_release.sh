@@ -214,7 +214,25 @@ JSON
   assert_no_default_output_leak "$TMPDIR_ROOT/run-cancel-human.txt" "codencer run cancel human output"
   grep -q "blocker: bridge_error abort requested for run $events_run_id, but no active execution was registered" "$TMPDIR_ROOT/run-cancel-human.txt" || { cat "$TMPDIR_ROOT/run-cancel-human.txt" >&2; exit 1; }
 
-  run_id="public-redaction-run"
+  set +e
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" submit \
+    --project codencer \
+    --run public-missing-run \
+    --goal "missing run should fail" \
+    --profile fake-success \
+    --wait > "$TMPDIR_ROOT/submit-missing-run-human.txt"
+  local missing_run_code=$?
+  set -e
+  if [[ "$missing_run_code" -eq 0 ]]; then
+    echo "codencer submit unexpectedly succeeded with a nonexistent supplied run id" >&2
+    cat "$TMPDIR_ROOT/submit-missing-run-human.txt" >&2
+    exit 1
+  fi
+  assert_no_default_output_leak "$TMPDIR_ROOT/submit-missing-run-human.txt" "codencer submit missing run human output"
+  grep -q 'blocker: invalid_input run public-missing-run not found' "$TMPDIR_ROOT/submit-missing-run-human.txt" || { cat "$TMPDIR_ROOT/submit-missing-run-human.txt" >&2; exit 1; }
+
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run start --project codencer --json > "$TMPDIR_ROOT/run-start-submit.json"
+  run_id="$(json_get "$TMPDIR_ROOT/run-start-submit.json" "run.id")"
   CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" submit \
     --project codencer \
     --run "$run_id" \
@@ -228,7 +246,9 @@ JSON
   assert_no_default_output_leak "$TMPDIR_ROOT/run-report-human.txt" "codencer run report human output"
   grep -q 'summary:' "$TMPDIR_ROOT/run-report-human.txt" || { cat "$TMPDIR_ROOT/run-report-human.txt" >&2; exit 1; }
 
-  local interrupt_run_id="public-human-interrupt-run"
+  CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" run start --project codencer --json > "$TMPDIR_ROOT/run-start-interrupt.json"
+  local interrupt_run_id
+  interrupt_run_id="$(json_get "$TMPDIR_ROOT/run-start-interrupt.json" "run.id")"
   set +e
   CODENCER_HOME="$exec_home" "$ROOT/bin/codencer" submit \
     --project codencer \

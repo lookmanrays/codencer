@@ -1,0 +1,370 @@
+name: Release Assets
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+      release_sha:
+        required: false
+        default: ""
+        type: string
+      ref:
+        required: false
+        default: ""
+        type: string
+      replace_existing:
+        required: false
+        default: false
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to backfill or publish assets for.
+        required: true
+        default: v0.3.0
+        type: string
+      ref:
+        description: Git ref to build. Leave empty to use tag_name.
+        required: false
+        default: ""
+        type: string
+      release_sha:
+        description: Optional release commit SHA. Leave empty to resolve from tag_name.
+        required: false
+        default: ""
+        type: string
+      replace_existing:
+        description: Delete and replace only the known Codencer release assets.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-assets-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      release_sha: ${{ steps.resolve.outputs.release_sha }}
+      built_at: ${{ steps.resolve.outputs.built_at }}
+
+    steps:
+      - name: Check out repository metadata
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release inputs
+        id: resolve
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_RELEASE_SHA: ${{ inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$ ]]; then
+            echo "Invalid tag_name: $TAG_NAME" >&2
+            exit 1
+          fi
+
+          git fetch --tags --force
+          git rev-parse "$TAG_NAME^{commit}" >/dev/null
+          gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+          ref="${INPUT_REF:-$TAG_NAME}"
+          if [[ -n "$INPUT_RELEASE_SHA" ]]; then
+            git rev-parse "$INPUT_RELEASE_SHA^{commit}" >/dev/null
+            release_sha="$INPUT_RELEASE_SHA"
+          else
+            release_sha="$(git rev-list -n 1 "$TAG_NAME")"
+          fi
+          built_at="$(git show -s --format=%cI "$release_sha" | python3 -c 'from datetime import datetime, timezone; import sys; raw=sys.stdin.read().strip(); value=datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc); print(value.isoformat().replace("+00:00", "Z"))')"
+
+          {
+            echo "tag_name=$TAG_NAME"
+            echo "ref=$ref"
+            echo "release_sha=$release_sha"
+            echo "built_at=$built_at"
+          } >> "$GITHUB_OUTPUT"
+
+  build-linux-amd64:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TAG_NAME: ${{ needs.preflight.outputs.tag_name }}
+
+    steps:
+      - name: Check out release ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Linux build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential
+
+      - name: Build linux/amd64 release snapshot
+        run: make release-snapshot VERSION="${TAG_NAME}" TARGETS=linux/amd64 REQUIRE_TARGETS=linux/amd64
+
+      - name: Verify linux/amd64 self-host artifact
+        run: make verify-release-artifact-selfhost VERSION="${TAG_NAME}" TARGETS=linux/amd64 REQUIRE_TARGETS=linux/amd64
+
+      - name: Upload linux/amd64 workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codencer-linux-amd64
+          path: dist/codencer_${{ env.TAG_NAME }}_linux_amd64.tar.gz
+          if-no-files-found: error
+
+  build-macos-host:
+    needs: preflight
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      TAG_NAME: ${{ needs.preflight.outputs.tag_name }}
+
+    steps:
+      - name: Check out release ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build macOS host release snapshot
+        run: make release-snapshot VERSION="${TAG_NAME}" TARGETS=host REQUIRE_TARGETS=host
+
+      - name: Verify macOS host self-host artifact
+        run: make verify-release-artifact-selfhost VERSION="${TAG_NAME}" TARGETS=host REQUIRE_TARGETS=host
+
+      - name: Upload macOS host workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codencer-macos-host
+          path: dist/codencer_${{ env.TAG_NAME }}_darwin_*.tar.gz
+          if-no-files-found: error
+
+  publish-assets:
+    needs:
+      - preflight
+      - build-linux-amd64
+      - build-macos-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG_NAME: ${{ needs.preflight.outputs.tag_name }}
+      RELEASE_SHA: ${{ needs.preflight.outputs.release_sha }}
+      BUILT_AT: ${{ needs.preflight.outputs.built_at }}
+      REPLACE_EXISTING: ${{ inputs.replace_existing }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Download release workflow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: codencer-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums and manifest
+        run: |
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path("release-assets")
+          tag = os.environ["TAG_NAME"]
+          release_sha = os.environ["RELEASE_SHA"]
+          built_at = os.environ["BUILT_AT"]
+          archives = sorted(root.glob("codencer_*.tar.gz"))
+          linux_name = f"codencer_{tag}_linux_amd64.tar.gz"
+          linux = [path for path in archives if path.name == linux_name]
+          darwin = [
+              path
+              for path in archives
+              if re.fullmatch(rf"codencer_{re.escape(tag)}_darwin_[A-Za-z0-9]+\.tar\.gz", path.name)
+          ]
+
+          if len(linux) != 1:
+              raise SystemExit(f"expected exactly one linux/amd64 archive named {linux_name}, got {len(linux)}")
+          if len(darwin) != 1:
+              raise SystemExit(f"expected exactly one darwin host archive for {tag}, got {len(darwin)}")
+
+          assets = []
+          checksum_lines = []
+          for path in linux + darwin:
+              match = re.fullmatch(rf"codencer_{re.escape(tag)}_(linux|darwin)_([A-Za-z0-9]+)\.tar\.gz", path.name)
+              if not match:
+                  raise SystemExit(f"unexpected archive name: {path.name}")
+              data = path.read_bytes()
+              digest = hashlib.sha256(data).hexdigest()
+              os_name, arch = match.groups()
+              runner = "ubuntu-latest" if os_name == "linux" else "macos-latest"
+              checksum_lines.append(f"{digest}  {path.name}")
+              assets.append({
+                  "filename": path.name,
+                  "sha256": digest,
+                  "os": os_name,
+                  "arch": arch,
+                  "runner": runner,
+              })
+
+          (root / "checksums.txt").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
+          manifest = {
+              "version": tag,
+              "tag_name": tag,
+              "release_sha": release_sha,
+              "built_at": built_at,
+              "assets": assets,
+              "note": "Artifacts were built by GitHub Actions from the Release Assets workflow.",
+          }
+          for key in ("version", "tag_name", "release_sha", "built_at", "assets"):
+              if not manifest.get(key):
+                  raise SystemExit(f"manifest missing {key}")
+          if len(manifest["assets"]) != 2:
+              raise SystemExit("manifest must describe exactly two binary archives")
+          for asset in manifest["assets"]:
+              for key in ("filename", "sha256", "os", "arch", "runner"):
+                  if not asset.get(key):
+                      raise SystemExit(f"manifest asset missing {key}: {asset}")
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Publish missing release assets
+        run: |
+          set -euo pipefail
+
+          mapfile -t archives < <(find release-assets -maxdepth 1 -type f -name 'codencer_*.tar.gz' -printf '%f\n' | sort)
+          linux="codencer_${TAG_NAME}_linux_amd64.tar.gz"
+          mapfile -t darwin_matches < <(printf '%s\n' "${archives[@]}" | grep -E "^codencer_${TAG_NAME}_darwin_[A-Za-z0-9]+\\.tar\\.gz$" || true)
+          if [[ ${#darwin_matches[@]} -ne 1 ]]; then
+            echo "Expected exactly one darwin host archive, got ${#darwin_matches[@]}" >&2
+            exit 1
+          fi
+          darwin="${darwin_matches[0]}"
+          target_names=("$linux" "$darwin" "checksums.txt" "manifest.json")
+
+          release_assets_json="$(gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --json assets)"
+          upload_files=()
+          skipped=()
+          replaced=()
+
+          rm -rf existing-assets
+          mkdir -p existing-assets
+
+          for name in "${target_names[@]}"; do
+            local_path="release-assets/$name"
+            if [[ ! -f "$local_path" ]]; then
+              echo "Expected release asset file missing: $local_path" >&2
+              exit 1
+            fi
+
+            exists="$(printf '%s' "$release_assets_json" | python3 -c 'import json,sys; name=sys.argv[1]; data=json.load(sys.stdin); print("yes" if any(asset.get("name") == name for asset in data.get("assets", [])) else "no")' "$name")"
+            if [[ "$exists" == "yes" ]]; then
+              if [[ "$REPLACE_EXISTING" == "true" ]]; then
+                gh release delete-asset "$TAG_NAME" "$name" --repo "$GITHUB_REPOSITORY" -y
+                upload_files+=("$local_path")
+                replaced+=("$name")
+                continue
+              fi
+
+              rm -rf "existing-assets/$name"
+              if ! gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir existing-assets >/dev/null; then
+                echo "Existing release asset cannot be downloaded for checksum verification: $name" >&2
+                exit 1
+              fi
+              if [[ ! -f "existing-assets/$name" ]]; then
+                echo "Existing release asset was not downloaded for checksum verification: $name" >&2
+                exit 1
+              fi
+              local_sha="$(sha256sum "$local_path" | awk '{print $1}')"
+              existing_sha="$(sha256sum "existing-assets/$name" | awk '{print $1}')"
+              if [[ "$local_sha" != "$existing_sha" ]]; then
+                echo "Release asset already exists with different checksum: $name" >&2
+                exit 1
+              fi
+              skipped+=("$name")
+            else
+              upload_files+=("$local_path")
+            fi
+          done
+
+          if [[ ${#upload_files[@]} -gt 0 ]]; then
+            gh release upload "$TAG_NAME" "${upload_files[@]}" --repo "$GITHUB_REPOSITORY"
+          fi
+
+          {
+            echo "## Release asset publish summary"
+            echo
+            echo "- Tag: \`$TAG_NAME\`"
+            echo "- replace_existing: \`$REPLACE_EXISTING\`"
+            echo "- uploaded: ${#upload_files[@]}"
+            for file in "${upload_files[@]}"; do
+              echo "  - $(basename "$file")"
+            done
+            echo "- skipped_identical: ${#skipped[@]}"
+            for name in "${skipped[@]}"; do
+              echo "  - $name"
+            done
+            echo "- replaced: ${#replaced[@]}"
+            for name in "${replaced[@]}"; do
+              echo "  - $name"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Append release asset note
+        run: |
+          set -euo pipefail
+
+          marker="<!-- codencer-release-assets-note -->"
+          gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --json body -q '.body // ""' > release-body.md
+          if grep -Fq "$marker" release-body.md; then
+            echo "Release asset note already present."
+            exit 0
+          fi
+
+          cat >> release-body.md <<'EOF'
+
+          <!-- codencer-release-assets-note -->
+          ## Codencer self-host release assets
+
+          - Public self-host release.
+          - Installable product artifacts are attached as `codencer_*.tar.gz`.
+          - GitHub source archives are not installable Codencer binary releases.
+          - Codex real executor proof: passed.
+          - Claude Code real executor proof: passed.
+          - Antigravity: optional/deferred, not release-proven.
+          - Cloud/official connector: out of scope for this public self-host release.
+          - Checksums are attached in `checksums.txt`.
+          - Machine-readable artifact metadata is attached in `manifest.json`.
+          EOF
+
+          gh release edit "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --notes-file release-body.md

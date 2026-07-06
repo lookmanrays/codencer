@@ -374,11 +374,26 @@ func (s *Service) Submit(ctx context.Context, opts SubmitOptions) (ExecutionRepo
 		return ExecutionReport{}, profileReportError(err)
 	}
 
-	run := &domain.Run{ID: opts.RunID, ProjectID: resolved.project.ID}
-	if strings.TrimSpace(opts.RunID) == "" {
+	runID := strings.TrimSpace(opts.RunID)
+	run := &domain.Run{ID: runID, ProjectID: resolved.project.ID}
+	if runID == "" {
 		run, err = resolved.client.StartRun(ctx, resolved.project.ID)
 		if err != nil {
 			return resolved.daemonReport(err), nil
+		}
+	} else {
+		run, err = resolved.client.GetRun(ctx, runID)
+		if err != nil {
+			return suppliedRunLookupReport(resolved, runID, err), nil
+		}
+		if run == nil {
+			return suppliedRunInvalidReport(resolved, runID, fmt.Sprintf("run %s not found", runID)), nil
+		}
+		if strings.TrimSpace(run.ID) == "" {
+			run.ID = runID
+		}
+		if run.ProjectID != "" && run.ProjectID != resolved.project.ID {
+			return suppliedRunInvalidReport(resolved, runID, fmt.Sprintf("run %s belongs to project %s, not %s", runID, run.ProjectID, resolved.project.ID)), nil
 		}
 	}
 
@@ -535,6 +550,30 @@ func (s *Service) RunPlan(ctx context.Context, opts RunPlanOptions) (RunPlanRepo
 		return RunPlanReport{}, reportError(ExitInternal, BlockerBridgeError, err.Error())
 	}
 	return report, nil
+}
+
+func suppliedRunLookupReport(resolved *resolvedContext, runID string, err error) ExecutionReport {
+	var daemonErr *DaemonError
+	if errors.As(err, &daemonErr) && daemonErr.StatusCode == http.StatusNotFound {
+		return suppliedRunInvalidReport(resolved, runID, fmt.Sprintf("run %s not found", runID))
+	}
+	return resolved.daemonReport(err)
+}
+
+func suppliedRunInvalidReport(resolved *resolvedContext, runID, message string) ExecutionReport {
+	blocker := &Blocker{
+		Type:                 BlockerInvalidInput,
+		Message:              message,
+		NeedsPlannerDecision: true,
+		Retryable:            false,
+	}
+	return resolved.report(ExecutionReport{
+		OK:       false,
+		Status:   "blocked",
+		Run:      &domain.Run{ID: runID, ProjectID: resolved.project.ID},
+		Blocker:  blocker,
+		ExitCode: ExitInvalidInput,
+	})
 }
 
 func (s *Service) GetRunPlanReport(ctx context.Context, opts RunPlanReportOptions) (RunPlanReport, error) {

@@ -3,9 +3,7 @@
   "release-type": "simple",
   "include-v-in-tag": true,
   "include-component-in-tag": false,
-  "release-as": "0.3.0",
   "pull-request-title-pattern": "chore: release ${version}",
-  "pull-request-footer": "This is the first public Codencer release automation bootstrap. After the v0.3.0 Release PR is merged, remove the one-time `release-as: 0.3.0` setting so future releases are computed from Conventional Commits.",
   "packages": {
     ".": {
       "package-name": "codencer"
