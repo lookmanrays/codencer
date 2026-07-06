@@ -1,6 +1,6 @@
 # Pre-release UI Brand Polish Acceptance
 
-- Implementation commit: `34e70e6ae`
+- Implementation commit: `f4a69eb714a22f10130d6726cda9fd83dc0adf83`
 - Branch: `next-phase`
 - Date: `2026-07-06`
 - Verdict: GO
@@ -55,6 +55,7 @@
 - Added `internal/cliui.WorkingIndicator` with 135ms tick, compact terminal mark `█▌▊▎`, ANSI truecolor orange `38;2;255;90;31`, deterministic mark flicker, braille spinner, task list rendering, cursor hide/restore, and same-block redraw.
 - Updated `codencer intro` to run a 5-step visual preview matching the handoff task rhythm: `read schema`, `plan diff`, `apply patch`, `run tests`, `verify`.
 - Updated interactive `codencer setup self-host` and `codencer setup relay` to use the same working indicator on stderr, while keeping `--json`, CI, non-TTY, `NO_COLOR`, and no-animation paths clean.
+- Updated interactive `codencer submit --wait` to use the same working indicator on stderr while the blocking executor call runs. Existing stdout reports, JSON output, routing, storage, artifacts, and Gateway/Relay/Connector/MCP behavior remain unchanged.
 - Added deterministic Go tests for mark frames, spinner cycle, task rendering, cursor controls, fallback behavior, and setup/intro machine-safety; added a web regression guard for static mark geometry and resting colors.
 
 ## Checks Run
@@ -75,8 +76,22 @@
 - `env -u NO_COLOR <temporary-codencer-binary> intro`
 - `git diff --check`
 - `git diff --cached --check`
+- `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go`
+- `go test ./cmd/codencer ./internal/cliui`
+- `go test ./...`
+- `make verify-public-release`
+- `CODENCER_HOME=<acceptance-home> <artifact-codencer> submit --project codencer --repo <acceptance-test-project> --profile codex-workspace --title "CLI task - Codex README check" --goal "Read README.md and docs/README.md. Return exactly three bullets. Do not modify files." --timeout-seconds 300 --wait`
+- `env -u NO_COLOR CODENCER_HOME=<acceptance-home> <artifact-codencer> submit --project codencer --repo <acceptance-test-project> --profile codex-workspace --title "CLI task - Codex README check" --goal "Read README.md and docs/README.md. Return exactly three bullets. Do not modify files." --timeout-seconds 300 --wait`
 
 All listed checks passed.
+
+## CLI Submit Wait Check
+
+- Disabled-motion safety: with `NO_COLOR=1`, `codencer submit --wait` stayed plain, emitted no decorative animation, and completed run `run-1783343847`.
+- Interactive TTY behavior: with `NO_COLOR` removed, `codencer submit --wait` immediately showed the Codencer compact mark, orange braille spinner, `running` header, task list, same-block redraw, cursor hide/restore, and final `✓ done` line before the normal report.
+- Manual real CLI run: `run-1783343930`, profile `codex-workspace`, status `completed`.
+- The indicator content contains only static safe step labels: `prepare task`, `start executor`, `wait for result`, `collect report`, and `verify output`.
+- The final stdout report remained the existing human report and included the executor result after the indicator stopped.
 
 ## Visual Evidence
 
@@ -120,12 +135,12 @@ Claude:
 - No private Cloud, billing, team/admin, KMS/Vault, managed-runner, or placeholder hosted-service UI was added.
 - UI tests continue to assert that product navigation hides UI System and public self-host Settings/Relay pages do not expose private placeholders.
 - Visual evidence security scan found no raw token, private key, bearer header, or local absolute path leakage.
-- CLI intro/progress output is explicit through `codencer intro`, uses the handoff mark flicker and braille spinner, writes only human-readable output outside JSON mode, and falls back safely for `--json`, CI, non-TTY stdout/stderr, `CODENCER_NO_ANIMATION=1`, and `NO_COLOR`.
+- CLI intro/progress output is explicit through `codencer intro`, setup progress, and `codencer submit --wait`; it uses the handoff mark flicker and braille spinner, writes only human-readable output outside JSON mode, and falls back safely for `--json`, CI, non-TTY stdout/stderr, `CODENCER_NO_ANIMATION=1`, and `NO_COLOR`.
+- `codencer submit --wait` writes the working indicator only to stderr and preserves stdout for the existing final report.
 - Existing JSON and verifier paths remain machine-readable.
 
 ## Deferred
 
-- Applying the working indicator to run/submit executor streaming is deferred; this pass covers `codencer intro`, `setup self-host`, and `setup relay`.
 - Cloud/official connector implementation remains out of scope for this public self-host release pass.
 - Antigravity proof is optional/deferred and was not required for this GO verdict.
 
