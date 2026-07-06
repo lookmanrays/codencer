@@ -1,6 +1,6 @@
 # Pre-release UI Brand Polish Acceptance
 
-- Implementation commit: `6dc1c8302`
+- Implementation commit: `34e70e6ae`
 - Branch: `next-phase`
 - Date: `2026-07-06`
 - Verdict: GO
@@ -36,6 +36,7 @@
 - `web/gateway-console/public/favicon.svg`
 - `web/gateway-console/public/icon.svg`
 - `web/gateway-console/tests/e2e/console.spec.ts`
+- `web/gateway-console/tests/architecture.test.ts`
 - `web/gateway-console/tests/live/verify-live.mjs`
 - `web/gateway-console/tests/visual/visual-evidence.spec.ts`
 
@@ -50,12 +51,15 @@
 - Added DataTable density and table minimum-width options, then applied compact sizing to Projects and Relays to avoid unnecessary horizontal scrolling.
 - Reduced Runs list width by using compact columns, truncated values, compact real/simulation label, and row-level navigation to Run Detail.
 - Cleaned Run Detail by keeping metadata in the top grid, shortening the Result block, and deduping artifacts by stable IDs/hashes/name/type/size fallback.
-- Added `internal/cliui` for safe static CLI brand/progress output only when stdout and stderr are TTYs and JSON/CI/no-animation/no-color guards allow it.
-- Added `codencer intro` as an explicit human-only CLI brand/progress preview command. It is machine-safe for `--json`, CI, non-TTY, `NO_COLOR`, and no-animation environments.
+- Replaced the static `*`-line CLI spinner with a Go port of `design_handoff_codencer_logo/cli/codencer-working.mjs`.
+- Added `internal/cliui.WorkingIndicator` with 135ms tick, compact terminal mark `█▌▊▎`, ANSI truecolor orange `38;2;255;90;31`, deterministic mark flicker, braille spinner, task list rendering, cursor hide/restore, and same-block redraw.
+- Updated `codencer intro` to run a 5-step visual preview matching the handoff task rhythm: `read schema`, `plan diff`, `apply patch`, `run tests`, `verify`.
+- Updated interactive `codencer setup self-host` and `codencer setup relay` to use the same working indicator on stderr, while keeping `--json`, CI, non-TTY, `NO_COLOR`, and no-animation paths clean.
+- Added deterministic Go tests for mark frames, spinner cycle, task rendering, cursor controls, fallback behavior, and setup/intro machine-safety; added a web regression guard for static mark geometry and resting colors.
 
 ## Checks Run
 
-- `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go`
+- `gofmt -w internal/cliui/cliui.go internal/cliui/cliui_test.go cmd/codencer/main.go cmd/codencer/main_test.go`
 - `go test ./...`
 - `go test ./cmd/codencer ./internal/cliui`
 - `cd web/gateway-console && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e`
@@ -67,6 +71,7 @@
 - `make verify-public-release`
 - `<temporary-codencer-binary> intro --json`
 - `<temporary-codencer-binary> intro`
+- `node <handoff>/design_handoff_codencer_logo/cli/codencer-working.mjs` via the exported `createWorking()` demo
 - `env -u NO_COLOR <temporary-codencer-binary> intro`
 - `git diff --check`
 - `git diff --cached --check`
@@ -115,12 +120,12 @@ Claude:
 - No private Cloud, billing, team/admin, KMS/Vault, managed-runner, or placeholder hosted-service UI was added.
 - UI tests continue to assert that product navigation hides UI System and public self-host Settings/Relay pages do not expose private placeholders.
 - Visual evidence security scan found no raw token, private key, bearer header, or local absolute path leakage.
-- CLI intro/progress output is explicit through `codencer intro`, writes only human-readable output outside JSON mode, and is disabled for `--json`, CI, non-TTY stdout/stderr, `CODENCER_NO_ANIMATION=1`, and `NO_COLOR`.
+- CLI intro/progress output is explicit through `codencer intro`, uses the handoff mark flicker and braille spinner, writes only human-readable output outside JSON mode, and falls back safely for `--json`, CI, non-TTY stdout/stderr, `CODENCER_NO_ANIMATION=1`, and `NO_COLOR`.
 - Existing JSON and verifier paths remain machine-readable.
 
 ## Deferred
 
-- Full terminal logo animation is deferred; this pass only adds safe static CLI brand/progress output.
+- Applying the working indicator to run/submit executor streaming is deferred; this pass covers `codencer intro`, `setup self-host`, and `setup relay`.
 - Cloud/official connector implementation remains out of scope for this public self-host release pass.
 - Antigravity proof is optional/deferred and was not required for this GO verdict.
 
