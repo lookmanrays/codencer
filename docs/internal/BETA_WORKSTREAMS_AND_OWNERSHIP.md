@@ -1,5 +1,8 @@
 # Beta Workstreams And Ownership
 
+> [!WARNING]
+> Historical v0.2 beta record. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
+
 This document records the merge-safe work split used for beta finalization. It now serves as a historical ownership record after the Phase 7 beta confirmation pass.
 
 References below to "remaining work" describe the handoff state at the end of that workstream, not current open beta blockers.

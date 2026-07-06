@@ -51,7 +51,7 @@ func TestRunService_LogBenchmark(t *testing.T) {
 		t.Fatalf("failed to open db: %v", err)
 	}
 	defer db.Close()
-	
+
 	sqlite.RunMigrations(db)
 	repo := sqlite.NewBenchmarksRepo(db)
 	rs := &RoutingService{benchmarksRepo: repo}
@@ -59,10 +59,10 @@ func TestRunService_LogBenchmark(t *testing.T) {
 
 	attemptID := "test-attempt"
 	res := &domain.ResultSpec{State: domain.StepStateCompleted, Summary: "OK"}
-	
+
 	// Log real benchmark
 	svc.logBenchmark(context.Background(), "p1", attemptID, "codex", res, 100, false)
-	
+
 	scores, _ := repo.GetScoresByAdapter(context.Background(), "codex")
 	if len(scores) != 1 {
 		t.Fatalf("expected 1 score, got %d", len(scores))

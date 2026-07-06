@@ -30,6 +30,7 @@ type Config struct {
 	HeartbeatIntervalSeconds int                    `json:"heartbeat_interval_seconds,omitempty"`
 	DiscoveryRoots           []string               `json:"discovery_roots,omitempty"`
 	Instances                []SharedInstanceConfig `json:"instances,omitempty"`
+	CodencerHome             string                 `json:"codencer_home,omitempty"`
 	DaemonURL                string                 `json:"daemon_url,omitempty"` // compatibility/default single-instance seed
 	ConfigPath               string                 `json:"-"`
 }

@@ -1,5 +1,11 @@
 # Build artifacts
 bin/
+dist/*.tar.gz
+dist/*.zip
+dist/.work-*/
+dist/manifest.json
+dist/checksums.txt
+cmd/broker/dist/
 node_modules/
 extension/out/
 orchestratorctl
@@ -21,6 +27,8 @@ service.test
 
 # Local data & logs
 .codencer/
+.codencer-user-home/
+reports/public-selfhost-rc/
 codencer.db
 *.log
 

@@ -63,7 +63,9 @@ for part in expr.strip(".").split("."):
     else:
         value = ""
         break
-if value is None:
+if isinstance(value, bool):
+    value = "true" if value else "false"
+elif value is None:
     value = ""
 print(value)
 PY
@@ -101,6 +103,41 @@ PY
   fi
   echo "ERROR: cloud_smoke.sh requires jq or python3 for array JSON parsing." >&2
   exit 1
+}
+
+assert_cloud_step_success() {
+  local wait_file="$1"
+  local result_file="$2"
+  local label="$3"
+  local state terminal timed_out result_state
+  state="$(json_get "$wait_file" '.state')"
+  terminal="$(json_get "$wait_file" '.terminal')"
+  timed_out="$(json_get "$wait_file" '.timed_out')"
+  if [[ "$timed_out" == "true" || "$terminal" != "true" ]]; then
+    echo "ERROR: $label did not reach a terminal state before timeout." >&2
+    cat "$wait_file" >&2
+    exit 1
+  fi
+  case "$state" in
+    completed|completed_with_warnings)
+      ;;
+    *)
+      echo "ERROR: $label reached unsuccessful terminal state $state." >&2
+      cat "$wait_file" >&2
+      exit 1
+      ;;
+  esac
+
+  result_state="$(json_get "$result_file" '.state')"
+  case "$result_state" in
+    completed|completed_with_warnings)
+      ;;
+    *)
+      echo "ERROR: $label result state is $result_state." >&2
+      cat "$result_file" >&2
+      exit 1
+      ;;
+  esac
 }
 
 wait_for_health() {
@@ -254,7 +291,21 @@ cat > "$CLOUD_CONFIG" <<EOF
   "host": "$CLOUD_HOST",
   "port": $CLOUD_PORT,
   "db_path": "$CLOUD_DB",
-  "master_key": "$CLOUD_MASTER_KEY"
+  "master_key": "$CLOUD_MASTER_KEY",
+  "public_base_url": "$CLOUD_URL",
+  "allowed_origins": ["$CLOUD_MCP_ORIGIN"],
+  "oauth_authorization_servers": ["https://auth.example.invalid"],
+  "oauth_scopes_supported": [
+    "runtime_instances:read",
+    "runs:read",
+    "runs:write",
+    "steps:read",
+    "steps:write",
+    "artifacts:read",
+    "gates:read",
+    "gates:write"
+  ],
+  "oauth_resource_documentation": "https://example.invalid/codencer/cloud-mcp"
 }
 EOF
 
@@ -375,11 +426,16 @@ RUNTIME_INSTANCES_JSON="$TMP_DIR/runtime-instances.json"
 RUNTIME_RUN_JSON="$TMP_DIR/runtime-run.json"
 RUNTIME_RUN_GET_JSON="$TMP_DIR/runtime-run-get.json"
 RUNTIME_STEP_JSON="$TMP_DIR/runtime-step.json"
+RUNTIME_STEP_WAIT_JSON="$TMP_DIR/runtime-step-wait.json"
+RUNTIME_STEP_RESULT_JSON="$TMP_DIR/runtime-step-result.json"
 MCP_INIT_HEADERS="$TMP_DIR/cloud-mcp-init.headers"
 MCP_INIT_JSON="$TMP_DIR/cloud-mcp-init.json"
 MCP_TOOLS_JSON="$TMP_DIR/cloud-mcp-tools.json"
 MCP_LIST_JSON="$TMP_DIR/cloud-mcp-list.json"
 MCP_SDK_JSON="$TMP_DIR/cloud-mcp-sdk.json"
+MCP_AUTH_METADATA_JSON="$TMP_DIR/cloud-mcp-auth-metadata.json"
+MCP_AUTH_CHALLENGE_HEADERS="$TMP_DIR/cloud-mcp-auth-challenge.headers"
+MCP_AUTH_CHALLENGE_JSON="$TMP_DIR/cloud-mcp-auth-challenge.json"
 WORKER_LOG="$TMP_DIR/cloud-worker.log"
 
 "$BIN_DIR/codencer-cloudctl" status --cloud-url "$CLOUD_URL" --token "$BOOTSTRAP_TOKEN" --json > "$STATUS_JSON"
@@ -415,6 +471,28 @@ fi
 if ! grep -q "$BOOTSTRAP_TOKEN_ID" "$TOKENS_JSON"; then
   echo "ERROR: token listing did not include the bootstrap token record." >&2
   cat "$TOKENS_JSON" >&2
+  exit 1
+fi
+
+curl -fsS "$CLOUD_URL/.well-known/oauth-protected-resource/api/cloud/v1/mcp" > "$MCP_AUTH_METADATA_JSON"
+if ! grep -q "\"resource\":\"$CLOUD_URL/api/cloud/v1/mcp\"" "$MCP_AUTH_METADATA_JSON"; then
+  echo "ERROR: cloud MCP OAuth protected-resource metadata did not identify $CLOUD_URL/api/cloud/v1/mcp." >&2
+  cat "$MCP_AUTH_METADATA_JSON" >&2
+  exit 1
+fi
+set +e
+cloud_mcp_auth_status="$(curl -sS -D "$MCP_AUTH_CHALLENGE_HEADERS" -o "$MCP_AUTH_CHALLENGE_JSON" -w "%{http_code}" -X POST "$CLOUD_URL/api/cloud/v1/mcp" \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":"auth-1","method":"initialize","params":{"protocolVersion":"2025-11-25"}}')"
+set -e
+if [[ "$cloud_mcp_auth_status" != "401" ]]; then
+  echo "ERROR: unauthenticated cloud MCP call should return 401, got $cloud_mcp_auth_status." >&2
+  cat "$MCP_AUTH_CHALLENGE_JSON" >&2 || true
+  exit 1
+fi
+if ! grep -qi 'www-authenticate: Bearer .*resource_metadata=".*\.well-known/oauth-protected-resource/api/cloud/v1/mcp"' "$MCP_AUTH_CHALLENGE_HEADERS"; then
+  echo "ERROR: cloud MCP 401 did not include OAuth protected-resource challenge." >&2
+  cat "$MCP_AUTH_CHALLENGE_HEADERS" >&2
   exit 1
 fi
 
@@ -566,6 +644,17 @@ if [[ -n "$RELAY_CONFIG" && -n "$CLOUD_RUNTIME_CONNECTOR_ID" ]]; then
     exit 1
   fi
 
+  CLOUD_RUNTIME_STEP_ID="$(json_get "$RUNTIME_STEP_JSON" '.id')"
+  if [[ -z "$CLOUD_RUNTIME_STEP_ID" ]]; then
+    echo "ERROR: cloud runtime submit_task proxy did not expose a step id field." >&2
+    cat "$RUNTIME_STEP_JSON" >&2
+    exit 1
+  fi
+
+  curl_json POST "$CLOUD_URL/api/cloud/v1/runtime/instances/$CLOUD_INSTANCE_ID/steps/$CLOUD_RUNTIME_STEP_ID/wait" "$RUNTIME_STEP_WAIT_JSON" "$BOOTSTRAP_TOKEN" '{"timeout_ms":10000,"interval_ms":100}'
+  curl_json GET "$CLOUD_URL/api/cloud/v1/runtime/instances/$CLOUD_INSTANCE_ID/steps/$CLOUD_RUNTIME_STEP_ID/result" "$RUNTIME_STEP_RESULT_JSON" "$BOOTSTRAP_TOKEN"
+  assert_cloud_step_success "$RUNTIME_STEP_WAIT_JSON" "$RUNTIME_STEP_RESULT_JSON" "cloud runtime HTTP step"
+
   if [[ "$CLOUD_SMOKE_MCP" == "1" ]]; then
     curl -fsS -D "$MCP_INIT_HEADERS" -X POST "$CLOUD_URL/api/cloud/v1/mcp" \
       -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
@@ -656,9 +745,15 @@ fi
 if [[ -s "$RUNTIME_RUN_JSON" ]]; then
   echo "  runtime_run_json: $RUNTIME_RUN_JSON"
 fi
+if [[ -s "$RUNTIME_STEP_RESULT_JSON" ]]; then
+  echo "  runtime_step_result_json: $RUNTIME_STEP_RESULT_JSON"
+fi
 if [[ -s "$MCP_LIST_JSON" ]]; then
   echo "  cloud_mcp_list_json: $MCP_LIST_JSON"
 fi
 if [[ -s "$MCP_SDK_JSON" ]]; then
   echo "  cloud_mcp_sdk_json: $MCP_SDK_JSON"
+fi
+if [[ -s "$MCP_AUTH_METADATA_JSON" ]]; then
+  echo "  cloud_mcp_auth_metadata_json: $MCP_AUTH_METADATA_JSON"
 fi

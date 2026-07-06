@@ -1,13 +1,13 @@
 package state
 
 import (
-	"testing"
 	"agent-bridge/internal/domain"
+	"testing"
 )
 
 func TestRunTransitions(t *testing.T) {
 	// Valid transitions
-	validPairs := []struct{from, to domain.RunState}{
+	validPairs := []struct{ from, to domain.RunState }{
 		{domain.RunStateCreated, domain.RunStateRunning},
 		{domain.RunStateRunning, domain.RunStateCompleted},
 		{domain.RunStatePausedForGate, domain.RunStateRunning},
@@ -20,9 +20,9 @@ func TestRunTransitions(t *testing.T) {
 	}
 
 	// Invalid transitions
-	invalidPairs := []struct{from, to domain.RunState}{
-		{domain.RunStateCreated, domain.RunStateCompleted}, // Cannot skip running
-		{domain.RunStateCompleted, domain.RunStateRunning}, // Terminal
+	invalidPairs := []struct{ from, to domain.RunState }{
+		{domain.RunStateCreated, domain.RunStateCompleted},     // Cannot skip running
+		{domain.RunStateCompleted, domain.RunStateRunning},     // Terminal
 		{domain.RunStatePausedForGate, domain.RunStateCreated}, // Cannot go back
 	}
 

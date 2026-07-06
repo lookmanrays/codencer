@@ -2,8 +2,8 @@
   "name": "codencer-cloud",
   "type": "http",
   "url": "https://cloud.example.com/api/cloud/v1/mcp",
-  "headers": {
-    "Authorization": "Bearer <cloud-token>"
-  },
+  "oauth_metadata": "https://cloud.example.com/.well-known/oauth-protected-resource/api/cloud/v1/mcp",
+  "auth_mode": "oauth-protected-resource-front-door",
+  "note": "Value reference only. Claude Desktop/claude.ai remote connector product setup may require OAuth settings rather than raw static headers.",
   "tool_prefix": "codencer."
 }

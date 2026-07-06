@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"agent-bridge/internal/domain"
@@ -21,6 +22,7 @@ type ExecutionOptions struct {
 	Timeout      time.Duration
 	Workspace    string
 	ArtifactRoot string
+	Stdin        string
 }
 
 // InvokeLocal manages the lifecycle of a local adapter process.
@@ -56,7 +58,10 @@ func InvokeLocal(ctx context.Context, step *domain.Step, attempt *domain.Attempt
 	// 3. Prepare Command
 	cmd := exec.CommandContext(ctx, binaryPath, opts.Args...)
 	cmd.Dir = opts.Workspace
-	
+	if opts.Stdin != "" {
+		cmd.Stdin = strings.NewReader(opts.Stdin)
+	}
+
 	outFd, err := os.Create(stdoutPath)
 	if err != nil {
 		return fmt.Errorf("failed to create stdout log file: %w", err)

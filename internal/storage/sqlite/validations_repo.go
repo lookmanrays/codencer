@@ -60,10 +60,16 @@ func (r *ValidationsRepo) ListByStep(ctx context.Context, stepID string) (map[st
 			return nil, err
 		}
 		res.State = domain.ValidationState(s) // Changed res.Status to res.State and used 's'
-		if stdout.Valid { res.StdoutRef = stdout.String }
-		if stderr.Valid { res.StderrRef = stderr.String }
-		if errorMsg.Valid { res.Error = errorMsg.String }
-		
+		if stdout.Valid {
+			res.StdoutRef = stdout.String
+		}
+		if stderr.Valid {
+			res.StderrRef = stderr.String
+		}
+		if errorMsg.Valid {
+			res.Error = errorMsg.String
+		}
+
 		results[attemptID] = append(results[attemptID], &res)
 	}
 	return results, rows.Err()
@@ -93,9 +99,15 @@ func (r *ValidationsRepo) ListByAttempt(ctx context.Context, attemptID string) (
 			return nil, err
 		}
 		vr.State = domain.ValidationState(s) // Changed vr.Status to vr.State and used 's'
-		if stdout.Valid { vr.StdoutRef = stdout.String }
-		if stderr.Valid { vr.StderrRef = stderr.String }
-		if errorMsg.Valid { vr.Error = errorMsg.String }
+		if stdout.Valid {
+			vr.StdoutRef = stdout.String
+		}
+		if stderr.Valid {
+			vr.StderrRef = stderr.String
+		}
+		if errorMsg.Valid {
+			vr.Error = errorMsg.String
+		}
 		results = append(results, &vr)
 	}
 	return results, rows.Err()

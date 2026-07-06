@@ -3,5 +3,10 @@
   "port": 8190,
   "db_path": "/var/lib/codencer/cloud/cloud.db",
   "master_key": "",
-  "relay_config_path": "/etc/codencer/relay/config.json"
+  "relay_config_path": "/etc/codencer/relay/config.json",
+  "public_base_url": "",
+  "allowed_origins": [],
+  "oauth_authorization_servers": [],
+  "oauth_scopes_supported": [],
+  "oauth_resource_documentation": ""
 }

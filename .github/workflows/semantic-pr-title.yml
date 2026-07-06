@@ -1,0 +1,47 @@
+name: Semantic PR Title
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate Conventional Commit PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 <<'PY'
+          import os
+          import re
+          import sys
+
+          title = os.environ.get("PR_TITLE", "").strip()
+          conventional = re.compile(
+              r"^(feat|fix|docs|test|ci|chore|refactor|perf|build|release|revert)"
+              r"(\([A-Za-z0-9._/-]+\))?(!)?: .+"
+          )
+          release_please = re.compile(r"^chore(\([^)]+\))?: release .+")
+
+          if conventional.match(title) or release_please.match(title):
+              print(f"PR title accepted: {title}")
+              return_code = 0
+          else:
+              print("PR title must use Conventional Commit format.")
+              print("Allowed prefixes: feat, fix, docs, test, ci, chore, refactor, perf, build, release, revert.")
+              print("Examples: 'fix: keep submit status truthful', 'feat(console): add run filters'.")
+              print(f"Received: {title}")
+              return_code = 1
+
+          sys.exit(return_code)
+          PY

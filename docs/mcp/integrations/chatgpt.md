@@ -1,318 +1,82 @@
-# ChatGPT — Codencer Beta Walkthrough
+# ChatGPT Custom MCP Integration Notes
 
-This walkthrough is frozen to the Codencer `v0.2.0-beta` Wave 2 contract and the OpenAI docs linked here as checked on 2026-04-24.
+ChatGPT product proof is manual and workspace-gated. This repository can prepare
+Gateway OAuth dev metadata, activation packages, tool lists, and test prompts,
+but it must not claim ChatGPT product UI proof until an operator actually
+exercises ChatGPT and saves evidence.
 
-Use this page together with [Beta Testing](../../BETA_TESTING.md) and [Planner / Client Integration Notes](../integrations.md).
+Use this page with:
 
-## Status
+- [ChatGPT custom MCP app setup](../chatgpt-app-setup.md)
+- [ChatGPT OAuth dev mode](../chatgpt-oauth-dev.md)
+- [Self-host MCP proof](../self-host-mcp-proof.md)
+- [MCP integrations](../integrations.md)
 
-Codencer status for the ChatGPT path is `compatibility-only`.
+## Current Supported Surface
 
-What that means in practice:
+ChatGPT must target an operator-owned public HTTPS self-host Gateway endpoint:
 
-- Codencer proves the relay/cloud MCP protocol surfaces directly.
-- Codencer does not claim repo-executed proof of the ChatGPT product UI or deployment flow.
-- ChatGPT must target the remote relay `/mcp` surface or the remote cloud `/api/cloud/v1/mcp` surface.
-- Do not point ChatGPT at the daemon-local `/mcp/call` endpoint.
+```text
+https://gateway.example.com/mcp
+```
+
+Do not point ChatGPT at:
+
+- the local daemon;
+- `http://127.0.0.1`;
+- WSL-only loopback URLs;
+- old cloud-control-plane MCP examples;
+- a self-host Relay `/mcp` endpoint unless you are deliberately running
+  advanced/direct/debug mode.
 
 ## Prerequisites
 
-Before you open ChatGPT, have all of the following ready:
+- A public HTTPS Gateway endpoint.
+- Gateway bearer-dev auth or Gateway OAuth dev mode for single-user testing.
+- A backend self-host Relay profile in Gateway.
+- A local connector bound with `codencer connector login`.
+- At least one explicitly shared project.
+- An eligible ChatGPT workspace with custom MCP/developer mode access.
 
-- A running self-host relay or a running self-host cloud control plane in composed runtime mode.
-- A remote MCP URL:
-  - relay: `https://<your-relay-host>/mcp`
-  - cloud: `https://<your-cloud-host>/api/cloud/v1/mcp`
-- A Codencer token for that surface:
-  - relay: planner token
-  - cloud: cloud token
-- At least one reachable shared runtime instance:
-  - relay path: shared through the connector and visible from relay `/mcp`
-  - cloud path: claimed into org/workspace/project scope and visible from cloud `/api/cloud/v1/mcp`
-- For cloud, token scopes that cover runtime discovery and run execution. `codencer.list_instances` requires `runtime_instances:read`.
-- A ChatGPT web account where developer mode is available to your user/workspace.
+Generate setup materials:
 
-OpenAI plan availability wording is not fully identical across the two current docs:
-
-- the developer guide says developer mode is available in beta on ChatGPT web for Pro, Plus, Business, Enterprise, and Education accounts
-- the Help Center article says apps, full MCP support, and developer mode are available for Business and Enterprise/Edu
-
-Verify current eligibility before rollout in the live OpenAI docs:
-
-- [ChatGPT Developer mode](https://developers.openai.com/api/docs/guides/developer-mode)
-- [Developer mode, and MCP apps in ChatGPT [beta]](https://help.openai.com/en/articles/12584461)
-
-## Step 1 Choose the Codencer surface
-
-Pick one public MCP surface and stay on it for the whole setup:
-
-- Relay self-host path: [Self-Host Relay / Runtime Reference](../../SELF_HOST_REFERENCE.md) and [Relay MCP Tools](../relay_tools.md)
-- Cloud self-host path: [Self-Host Cloud Control Plane Guide](../../CLOUD_SELF_HOST.md) and [Cloud MCP Tools](../cloud_tools.md)
-
-Do not use:
-
-- daemon-local `/mcp/call`
-- `http://127.0.0.1:8085/...`
-- a localhost-only relay or cloud URL that ChatGPT cannot reach remotely
-
-## Step 2 Enable developer mode in ChatGPT
-
-Use the current OpenAI UI path for your plan and verify it against the live docs before rollout.
-
-Current OpenAI guidance checked on 2026-04-24:
-
-- Admin workspace enablement path in the Help Center:
-  - `Workspace Settings -> Permissions & Roles -> Connected Data Developer mode / Create custom MCP connectors`
-- User-level toggle path in the developer guide:
-  - `Settings -> Apps -> Advanced settings -> Developer mode`
-- Enterprise/Edu user path in the Help Center:
-  - `Settings -> Apps -> Advanced Settings -> Developer mode`
-- Create-app entry point after developer mode is enabled:
-  - `Settings -> Apps -> Create`
-  - or workspace-admin path `Workspace Settings -> Apps -> Create`
-
-OpenAI’s current references:
-
-- [ChatGPT Developer mode](https://developers.openai.com/api/docs/guides/developer-mode)
-- [Developer mode, and MCP apps in ChatGPT [beta]](https://help.openai.com/en/articles/12584461)
-
-Keep the claim narrow: OpenAI currently documents ChatGPT as a remote MCP client surface. This Codencer walkthrough does not imply local daemon support in ChatGPT.
-
-## Step 3 Create the ChatGPT app entry
-
-In the ChatGPT create flow, use the Codencer remote MCP endpoint for the surface you chose in Step 1.
-
-Operator inputs:
-
-- relay endpoint: `https://<your-relay-host>/mcp`
-- cloud endpoint: `https://<your-cloud-host>/api/cloud/v1/mcp`
-- relay token: `<your-planner-token>`
-- cloud token: `<your-cloud-token>`
-
-The checked-in example files are operator value references only:
-
-- [chatgpt-relay.mcp.json](../examples/chatgpt-relay.mcp.json)
-- [chatgpt-cloud.mcp.json](../examples/chatgpt-cloud.mcp.json)
-
-They are not direct ChatGPT imports. ChatGPT developer mode currently asks you to enter the endpoint and auth/metadata through its own UI. Use the files as copy-pasteable reference values, then verify the exact current ChatGPT auth fields in the OpenAI docs above before rollout.
-
-## Step 4 Run the first tool call from ChatGPT
-
-Start with discovery, not execution.
-
-Ask ChatGPT to call this exact tool first:
-
-- `codencer.list_instances`
-
-Tool arguments:
-
-```json
-{}
+```bash
+codencer login --gateway https://gateway.example.com
+codencer connector login --gateway https://gateway.example.com --relay personal --json
+codencer gateway relay add --gateway https://gateway.example.com --name personal --url https://relay.example.com --token-env CODENCER_RELAY_PERSONAL_TOKEN --json
+codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
 ```
 
-Recommended prompt:
+## Narrow Product Smoke
 
-```text
-Use only the Codencer app for this turn. Call codencer.list_instances with {} and show me the JSON response.
-```
+Only mark ChatGPT proof passed when all of this evidence exists:
 
-Expected JSON shape:
+1. The ChatGPT workspace has custom MCP/developer mode enabled.
+2. The Codencer MCP app/connector is configured against the public Gateway URL.
+3. ChatGPT initializes the MCP session successfully.
+4. ChatGPT calls `codencer.list_projects`.
+5. If execution proof is claimed, ChatGPT calls an execution tool against a
+   shared fake/local project and Codencer returns a structured result or blocker.
+6. Evidence is saved with timestamps and the exact Gateway endpoint used.
 
-```json
-[
-  {
-    "instance_id": "inst-<opaque>"
-  }
-]
-```
+Until then, ChatGPT proof is pending/manual, not passed.
 
-Treat that as the minimum contract you should rely on from ChatGPT.
+## Expected Tools
 
-Additional fields differ by surface:
+Gateway exposes project-aware `codencer.*` tools. See
+[Self-host MCP proof](../self-host-mcp-proof.md) for the exact Gateway tool list
+and selector behavior.
 
-- relay commonly returns fields such as `connector_id`, `repo_root`, `base_url`, `online`, `status`, `last_seen_at`, and nested `instance`
-- cloud commonly returns tenant-scoped runtime instance fields such as `org_id`, `workspace_id`, `project_id`, `runtime_connector_installation_id`, `repo_root`, `status`, `enabled`, `health`, and `shared`
-
-For the walkthrough, you only need one returned object with a non-empty `instance_id`.
-
-## Step 5 Start a run
-
-After you have a target `instance_id`, ask ChatGPT to call `codencer.start_run`.
-
-Tool arguments:
-
-```json
-{
-  "instance_id": "<instance-id>",
-  "payload": {
-    "id": "chatgpt-smoke-001",
-    "project_id": "chatgpt-smoke"
-  }
-}
-```
-
-Recommended prompt:
-
-```text
-Use only the Codencer app. Call codencer.start_run with the selected instance_id and payload {"id":"chatgpt-smoke-001","project_id":"chatgpt-smoke"}.
-```
-
-`codencer.start_run` is the correct Codencer MCP tool name. There is no ChatGPT-specific alias in this repo.
-
-## Step 6 Submit the task
-
-Use the real Codencer `TaskSpec` shape through `codencer.submit_task`.
-
-For a repeatable compatibility smoke, prefer a simulation task so you can validate the ChatGPT-to-Codencer wiring without depending on a live adapter binary:
-
-```json
-{
-  "instance_id": "<instance-id>",
-  "run_id": "chatgpt-smoke-001",
-  "task": {
-    "version": "v1",
-    "goal": "Compatibility smoke only. Return the repository root in the final summary. Do not edit files.",
-    "is_simulation": true
-  }
-}
-```
-
-Recommended prompt:
-
-```text
-Use only the Codencer app. Call codencer.submit_task with the selected instance_id, run_id "chatgpt-smoke-001", and the simulation task payload. Then show me the returned step JSON.
-```
-
-Expected response shape is a step object. In current repo proof, the minimum fields you should rely on are:
-
-```json
-{
-  "id": "step-<opaque>",
-  "state": "queued"
-}
-```
-
-Record the returned `id` as `step_id`.
-
-If you want a live execution attempt instead of a compatibility smoke, remove `is_simulation` and add the appropriate `adapter_profile`. That is a separate operator decision and is not required for this walkthrough.
-
-## Step 7 Wait for completion and inspect the result
-
-Use the real Codencer polling/result tools:
-
-1. `codencer.wait_step`
-2. `codencer.get_step_result`
-
-There is no separate `get_result` tool in this repo. The actual result tool name is `codencer.get_step_result`.
-
-Suggested `codencer.wait_step` arguments:
-
-```json
-{
-  "step_id": "<step-id>",
-  "timeout_ms": 5000,
-  "interval_ms": 100
-}
-```
-
-Suggested `codencer.get_step_result` arguments:
-
-```json
-{
-  "step_id": "<step-id>"
-}
-```
-
-Recommended prompt:
-
-```text
-Use only the Codencer app. Call codencer.wait_step for the returned step_id with timeout_ms 5000 and interval_ms 100. When it becomes terminal, call codencer.get_step_result for the same step_id and show me the JSON result.
-```
-
-Expected `wait_step` shape:
-
-```json
-{
-  "step_id": "step-<opaque>",
-  "state": "completed",
-  "terminal": true,
-  "timed_out": false
-}
-```
-
-Expected `get_step_result` shape:
-
-```json
-{
-  "version": "v1",
-  "run_id": "chatgpt-smoke-001",
-  "step_id": "step-<opaque>",
-  "state": "completed",
-  "summary": "..."
-}
-```
-
-If you need deeper evidence after that, keep using the Codencer MCP tools already frozen in this repo:
-
-- `codencer.get_step_validations`
-- `codencer.get_step_logs`
-- `codencer.list_step_artifacts`
-- `codencer.list_run_gates`
-
-## Verification smoke
-
-Use this as the repeatable operator smoke for the ChatGPT surface:
-
-1. In ChatGPT, select only the Codencer app for the conversation.
-2. Call `codencer.list_instances` with `{}`.
-3. Confirm the response includes at least one object with a non-empty `instance_id`.
-4. Call `codencer.start_run` with a unique run id such as `chatgpt-smoke-001`.
-5. Call `codencer.submit_task` with the simulation task shown above.
-6. Confirm the submit response returns a non-empty `step_id` in the step object’s `id` field.
-7. Call `codencer.wait_step` until `terminal` is `true`.
-8. Call `codencer.get_step_result`.
-9. Confirm the final result includes a terminal state and a non-empty `summary`.
-
-This smoke proves the ChatGPT remote MCP wiring narrowly. It does not upgrade the Codencer status on this surface beyond `compatibility-only`.
-
-For the repo-level beta proof boundaries, keep using [Beta Testing](../../BETA_TESTING.md) and [Planner / Client Integration Notes](../integrations.md).
-
-## Known Limitations on this surface
-
-- This is a compatibility-only Codencer path, not direct ChatGPT product proof.
-- ChatGPT is documented here only as a remote MCP client. Do not infer local daemon support.
-- OpenAI’s plan-availability wording differs between the two current docs as of 2026-04-24. Verify current eligibility before rollout.
-- OpenAI owns the ChatGPT UI, tool approval UX, draft/publish flow, and any product-side restrictions.
-- The example `.mcp.json` files in this repo are value-reference templates only, not direct ChatGPT imports.
-- Cloud mode requires composed runtime mode plus a claimed runtime instance. A relay planner token does not replace a cloud token, and a cloud token does not replace relay planner auth.
-- Write-style tools in ChatGPT may require explicit confirmation. Plan for operator review when using mutating Codencer tools.
+Project listings include `locations[]`. If more than one online machine
+advertises the same `project_id`, ChatGPT must provide `machine_id` or
+`host_label`; otherwise Codencer returns structured blocker
+`ambiguous_project_location`.
 
 ## Troubleshooting
 
-If the app does not appear in ChatGPT:
-
-- Re-check the exact developer mode path in the OpenAI docs.
-- Confirm developer mode is enabled for the current user, not only at the workspace level.
-- Refresh the app entry from ChatGPT app settings after tool metadata changes.
-
-If `codencer.list_instances` returns an empty array:
-
-- relay path: confirm the connector is enrolled, running, and the instance is explicitly shared
-- cloud path: confirm the runtime connector is claimed and the instance is tenant-visible
-- confirm you targeted the relay `/mcp` or cloud `/api/cloud/v1/mcp` endpoint, not the daemon-local surface
-
-If ChatGPT can connect but tool calls fail with auth or scope errors:
-
-- relay path: verify the planner token and the relay scopes required for the tool
-- cloud path: verify the cloud token and runtime scopes, including `runtime_instances:read` for discovery
-
-If `codencer.wait_step` times out:
-
-- call `codencer.get_step_result` and `codencer.get_step_logs` directly for more evidence
-- increase `timeout_ms` for slow environments
-- if you removed `is_simulation`, confirm the target adapter is actually installed and usable on the daemon host
-
-If you accidentally pointed ChatGPT at a local-only URL:
-
-- stop and move the configuration to a remotely reachable relay or cloud host
-- do not expose the daemon-local `/mcp/call` bridge as the public ChatGPT target
+- If ChatGPT cannot reach the MCP server, confirm the Gateway URL is public
+  HTTPS.
+- If auth fails, confirm Gateway OAuth dev metadata or bearer-dev token setup.
+- If no projects appear, confirm `codencer connector login`, `codencer project
+  share`, and the selected Gateway relay profile.
+- If execution is ambiguous, pass `machine_id` or `host_label`.

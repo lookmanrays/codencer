@@ -32,7 +32,7 @@ func (a *Adapter) Capabilities() []string {
 	return a.capabilities
 }
 
-// Start performs a proxy-mediated handoff by writing the attempt payload to a shared file buffer. 
+// Start performs a proxy-mediated handoff by writing the attempt payload to a shared file buffer.
 // A companion VS Code Extension must watch this file to facilitate ingestion into the active IDE chat.
 func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, attemptArtifactRoot string) error {
 	slog.Info("IDE Adapter: Starting chat bridge handoff", "attemptID", attempt.ID)
@@ -75,11 +75,11 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID, attemptArtifa
 	slog.Info("IDE Adapter: Collecting artifacts", "attemptID", attemptID)
 
 	var artifacts []*domain.Artifact
-	
+
 	// Create simulate result if in test mode
 	if os.Getenv("IDE_SIMULATION_MODE") == "1" {
 		simulatedResult := map[string]interface{}{
-			"status": "completed",
+			"status":  "completed",
 			"summary": "IDE Chat simulation success",
 		}
 		data, _ := json.Marshal(simulatedResult)

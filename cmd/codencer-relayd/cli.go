@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 
+	"agent-bridge/internal/mcpconfig"
 	"agent-bridge/internal/relay"
 )
 
@@ -39,6 +40,8 @@ func run(args []string) error {
 		return runEnrollmentToken(args[1:])
 	case "planner-token":
 		return runPlannerToken(args[1:])
+	case "mcp-config":
+		return runMCPConfig(args[1:])
 	case "connector":
 		return runConnectorAdmin(args[1:])
 	default:
@@ -179,8 +182,10 @@ func runPlannerToken(args []string) error {
 	entropyBytes := fs.Int("entropy-bytes", 32, "Random entropy bytes before base64url encoding")
 	var scopes multiFlag
 	var instanceIDs multiFlag
+	var projectIDs multiFlag
 	fs.Var(&scopes, "scope", "Planner scope; repeat to add more")
 	fs.Var(&instanceIDs, "instance", "Planner-scoped instance ID; repeat to add more")
+	fs.Var(&projectIDs, "project", "Planner-scoped project ID; repeat to add more")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -201,6 +206,7 @@ func runPlannerToken(args []string) error {
 		Token:       token,
 		Scopes:      append([]string(nil), scopes...),
 		InstanceIDs: append([]string(nil), instanceIDs...),
+		ProjectIDs:  append([]string(nil), projectIDs...),
 	}
 
 	if *writeConfig {
@@ -230,12 +236,37 @@ func runPlannerToken(args []string) error {
 		"token":            entry.Token,
 		"scopes":           entry.Scopes,
 		"instance_ids":     entry.InstanceIDs,
+		"project_ids":      entry.ProjectIDs,
 		"config_entry":     entry,
 		"config_path":      *configPath,
 		"write_config":     *writeConfig,
 		"restart_required": true,
 	}
 	return printOutput(output, *asJSON)
+}
+
+func runMCPConfig(args []string) error {
+	fs := flag.NewFlagSet("mcp-config", flag.ContinueOnError)
+	client := fs.String("client", "codex", "Client snippet to generate: codex, claude-code, or chatgpt")
+	endpoint := fs.String("endpoint", "https://relay.example.com/mcp", "Public relay MCP endpoint")
+	tokenEnv := fs.String("token-env", "CODENCER_PLANNER_TOKEN", "Environment variable containing the planner bearer token")
+	token := fs.String("token", "", "Literal bearer token to include in examples")
+	name := fs.String("name", "codencer", "MCP server name")
+	asJSON := fs.Bool("json", false, "Print JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	payload, err := mcpconfig.Generate(mcpconfig.Options{
+		Client:   *client,
+		Endpoint: *endpoint,
+		TokenEnv: *tokenEnv,
+		Token:    *token,
+		Name:     *name,
+	})
+	if err != nil {
+		return err
+	}
+	return printOutput(payload, *asJSON)
 }
 
 func runConnectorAdmin(args []string) error {
@@ -425,4 +456,16 @@ func printOutput(payload any, asJSON bool) error {
 	}
 	fmt.Println(string(data))
 	return nil
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if strings.IndexFunc(value, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\'' || r == '"' || r == '$' || r == '\\'
+	}) < 0 {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }

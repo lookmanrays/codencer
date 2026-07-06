@@ -36,6 +36,26 @@ func TestRunAuditUsesLimitQuery(t *testing.T) {
 	}
 }
 
+func TestRunMCPConfigGeneratesCodexAndClaudeSnippets(t *testing.T) {
+	codex := captureStdout(t, func() {
+		if err := run([]string{"mcp-config", "--client", "codex", "--endpoint", "https://relay.example.com/mcp", "--token-env", "CODENCER_TOKEN", "--json"}); err != nil {
+			t.Fatalf("run codex mcp-config: %v", err)
+		}
+	})
+	if !strings.Contains(codex, "codex mcp add") || !strings.Contains(codex, "bearer-token-env-var") {
+		t.Fatalf("expected codex snippet, got %s", codex)
+	}
+
+	claude := captureStdout(t, func() {
+		if err := run([]string{"mcp-config", "--client", "claude-code", "--endpoint", "https://relay.example.com/mcp", "--token", "secret", "--json"}); err != nil {
+			t.Fatalf("run claude mcp-config: %v", err)
+		}
+	})
+	if !strings.Contains(claude, "claude mcp add") || !strings.Contains(claude, "Authorization: Bearer secret") {
+		t.Fatalf("expected claude snippet, got %s", claude)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	original := os.Stdout

@@ -1,6 +1,9 @@
 {
   "label": "codencer-cloud",
   "endpoint": "https://<your-cloud-host>/api/cloud/v1/mcp",
-  "token": "<your-cloud-token>",
-  "usage": "value-reference-only"
+  "oauth_metadata": "https://<your-cloud-host>/.well-known/oauth-protected-resource/api/cloud/v1/mcp",
+  "auth_mode": "oauth-front-door",
+  "authorization_server": "https://<your-oauth-issuer-or-gateway>",
+  "upstream_token": "<cloud-token-held-by-front-door>",
+  "usage": "value-reference-only-for-chatgpt-custom-connector-ui"
 }

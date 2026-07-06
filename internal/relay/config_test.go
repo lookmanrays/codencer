@@ -63,3 +63,18 @@ func TestSaveConfigPersistsPlannerTokens(t *testing.T) {
 		t.Fatalf("unexpected planner tokens after save/load: %+v", loaded.PlannerTokens)
 	}
 }
+
+func TestValidateRequiresTLSCertAndKeyTogether(t *testing.T) {
+	cfg := relay.DefaultConfig()
+	cfg.DBPath = filepath.Join(t.TempDir(), "relay.db")
+	cfg.PlannerTokens = []relay.PlannerTokenConfig{{Token: "planner-token"}}
+	cfg.TLSCertFile = "relay.crt"
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected missing TLS key to fail")
+	}
+	cfg.TLSKeyFile = "relay.key"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected paired TLS cert/key to validate: %v", err)
+	}
+}

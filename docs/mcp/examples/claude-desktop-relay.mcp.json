@@ -2,8 +2,8 @@
   "name": "codencer-relay",
   "type": "http",
   "url": "https://relay.example.com/mcp",
-  "headers": {
-    "Authorization": "Bearer <planner-token>"
-  },
+  "oauth_metadata": "https://relay.example.com/.well-known/oauth-protected-resource/mcp",
+  "auth_mode": "oauth-protected-resource-front-door",
+  "note": "Value reference only. Claude Desktop/claude.ai remote connector product setup may require OAuth settings rather than raw static headers.",
   "tool_prefix": "codencer."
 }

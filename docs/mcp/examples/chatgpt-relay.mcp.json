@@ -1,6 +1,9 @@
 {
   "label": "codencer-relay",
   "endpoint": "https://<your-relay-host>/mcp",
-  "token": "<your-planner-token>",
-  "usage": "value-reference-only"
+  "oauth_metadata": "https://<your-relay-host>/.well-known/oauth-protected-resource/mcp",
+  "auth_mode": "oauth-dev-or-front-door",
+  "authorization_server": "https://<your-relay-host>/.well-known/oauth-authorization-server",
+  "upstream_token": "<none-for-oauth-dev-or-relay-planner-token-held-by-front-door>",
+  "usage": "value-reference-only-for-chatgpt-custom-connector-ui"
 }

@@ -37,13 +37,13 @@ func TestBrokerAdapter_Start(t *testing.T) {
 
 func TestBrokerAdapter_PollMapping(t *testing.T) {
 	tests := []struct {
-		brokerState   string
+		brokerState     string
 		expectedRunning bool
 	}{
-		{"running",   true},
+		{"running", true},
 		{"completed", false},
-		{"failed",    false},
-		{"error",     false},
+		{"failed", false},
+		{"error", false},
 	}
 
 	for _, tt := range tests {
@@ -51,10 +51,10 @@ func TestBrokerAdapter_PollMapping(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"state": tt.brokerState})
 		}))
-		
+
 		adapter := NewBrokerAdapter(server.URL, "/repo")
 		adapter.taskCache["att-1"] = "task-1"
-		
+
 		running, err := adapter.Poll(context.Background(), "att-1")
 		if err != nil {
 			t.Errorf("Poll failed for %s: %v", tt.brokerState, err)

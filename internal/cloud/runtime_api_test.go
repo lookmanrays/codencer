@@ -390,6 +390,64 @@ func TestCloudRuntimeHTTPProxyStartRunAndSubmitTask(t *testing.T) {
 	}
 }
 
+func TestCloudRuntimeHTTPProxyStepWaitRetryAndGateActions(t *testing.T) {
+	h := startCloudMCPHarness(t)
+	instanceID := "inst-1"
+
+	waitReq, err := http.NewRequest(http.MethodPost, h.cloudHTTP.URL+"/api/cloud/v1/runtime/instances/"+instanceID+"/steps/step-1/wait", jsonBody(t, map[string]any{
+		"timeout_ms":  500,
+		"interval_ms": 50,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitReq.Header.Set("Authorization", h.auth)
+	waitReq.Header.Set("Content-Type", "application/json")
+	waitResp, err := http.DefaultClient.Do(waitReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer waitResp.Body.Close()
+	if waitResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected wait ok, got %d", waitResp.StatusCode)
+	}
+	var waitBody map[string]any
+	if err := json.NewDecoder(waitResp.Body).Decode(&waitBody); err != nil {
+		t.Fatal(err)
+	}
+	if waitBody["terminal"] != true {
+		t.Fatalf("expected terminal wait body, got %+v", waitBody)
+	}
+
+	retryReq, err := http.NewRequest(http.MethodPost, h.cloudHTTP.URL+"/api/cloud/v1/runtime/instances/"+instanceID+"/steps/step-1/retry", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryReq.Header.Set("Authorization", h.auth)
+	retryResp, err := http.DefaultClient.Do(retryReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer retryResp.Body.Close()
+	if retryResp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected retry accepted, got %d", retryResp.StatusCode)
+	}
+
+	gateReq, err := http.NewRequest(http.MethodPost, h.cloudHTTP.URL+"/api/cloud/v1/runtime/instances/"+instanceID+"/gates/gate-1/approve", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateReq.Header.Set("Authorization", h.auth)
+	gateResp, err := http.DefaultClient.Do(gateReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gateResp.Body.Close()
+	if gateResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected gate approve ok, got %d", gateResp.StatusCode)
+	}
+}
+
 func newRuntimeCloudHarness(t *testing.T) (*Store, *RelayRuntime, string, *Org, *Workspace, *Project) {
 	t.Helper()
 	cloudStore, err := OpenStore(filepath.Join(t.TempDir(), "cloud.db"), "cloud-master-key")

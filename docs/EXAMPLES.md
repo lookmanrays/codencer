@@ -1,12 +1,26 @@
 # Codencer Snippet Library
 
-This document provides specialized configuration and command snippets for advanced Codencer usage. For the primary "Day 0" flow, see the **[Operator Runbook](OPERATOR_RUNBOOK.md)**.
+This document provides specialized and legacy configuration snippets for advanced Codencer usage. For the current v0.3 local/self-host RC flow, start with [Local Quickstart](quickstart-local.md), [Self-Host Relay Quickstart](quickstart-self-host-relay.md), and [MCP Integrations](mcp/integrations.md).
 
 ---
 
 ## 🏗 Workspace Provisioning (`workspace.json`)
 
 Configure how isolated worktrees are prepared before an agent executes.
+
+Codencer is Grove-compatible. Codencer can read a safe subset of `grove.yaml`
+and `.groverc.json`. It uses those files only when native
+`.codencer/workspace.json` is absent or incomplete. Native
+`.codencer/workspace.json` has precedence. Codencer does not depend on the Grove
+CLI. Codencer does not write Grove state files.
+
+The native file lives at `.codencer/workspace.json` and is opt-in; `codencer
+project init` still creates only `.codencer/project.json` by default. Grove
+compatibility is read-only fallback mapping for provisioning fields:
+
+- `grove.yaml`: `workspace.setup.copy`, `workspace.setup.symlinks`, and
+  `workspace.hooks.post_create`.
+- `.groverc.json`: `symlink` and `afterCreate`.
 
 ### Node.js / TypeScript
 Efficiently share `node_modules` avoiding costly file copies.
@@ -60,7 +74,7 @@ Targeting a specific adapter for a task saved in a markdown file.
   --title "Auth Refactor" \
   --adapter codex \
   --timeout 300 \
-  --validation "make test-auth" \
+  --validation "go test ./internal/service" \
   --acceptance "Login still works" \
   --wait --json
 ```
@@ -94,7 +108,7 @@ For Claude attempts, the standard evidence set includes:
 - `stderr.log`
 - `result.json`
 
-### OpenClaw ACPX (Experimental / Alpha)
+### OpenClaw ACPX (Experimental)
 Relay tasks to an OpenClaw-compatible executor via the standardized ACP bridge. Use `--wait --json` for synchronous machine-safe handoffs.
 ```bash
 ./bin/orchestratorctl submit my-run \

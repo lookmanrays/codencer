@@ -51,7 +51,7 @@ The relay and connector preserve remote safety by:
 - relay resource routing for `step`, `gate`, and `artifact` ids depends on authorized online shared instances being reachable; the relay now probes for missing route hints and persists successful matches, but it still fails closed on offline or ambiguous matches
 - large artifact transfer is intentionally bounded
 - abort remains best-effort unless the adapter actually stops
-- current self-host auth model is alpha-grade, not enterprise IAM
+- current self-host auth model is minimal, not enterprise IAM
 
 ## Operator Guidance
 

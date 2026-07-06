@@ -199,7 +199,7 @@ Verified gaps in the current repo:
 
 | Area | Verified current repo reality | Blocker |
 | --- | --- | --- |
-| Planner auth | Relay uses static bearer tokens with scopes and optional instance restrictions. | Honest alpha-grade self-host auth; no rotation or enterprise IAM. |
+| Planner auth | Relay uses static bearer tokens with scopes and optional instance restrictions. | Minimal self-host auth; no rotation or enterprise IAM. |
 | Connector auth | Enrollment uses one-time tokens or legacy bootstrap secret, plus signed challenge/response for websocket sessions. | Revocation/disable flows are still operator-light. |
 | Presence/discovery | Relay persists advertised instances and tracks heartbeat-driven session presence. | Offline routing still depends on current relay state and TTL expiry. |
 | Instance descriptor | Relay stores `instance_id`, `connector_id`, `repo_root`, `base_url`, raw compatibility JSON, `last_seen_at`. | Planner-facing normalization is still lightweight. |
@@ -793,7 +793,7 @@ Reason:
 ## 8. Unresolved Risks
 
 - Relay routing for `step`, `artifact`, and `gate` IDs now probes authorized online shared instances when stored route hints are missing, but still fails closed when no match is online or multiple matches exist.
-- Connector presence now uses signed challenge/response plus heartbeat-driven session state, but relay status is still alpha-grade operational metadata rather than enterprise fleet management.
+- Connector presence now uses signed challenge/response plus heartbeat-driven session state, but relay status is still limited operational metadata rather than enterprise fleet management.
 - Gate action responses can be routed directly through the local gate read surface, but richer planner-facing gate summaries are still lightweight.
 - Artifact lookup now has a local metadata-by-ID surface, but artifact transfer remains intentionally bounded and not designed for bulk binary delivery.
 - Local and relay MCP shims are still JSON-RPC-like compatibility layers, not a standard MCP server transport.

@@ -31,7 +31,7 @@ var ValidStepTransitions = map[domain.StepState][]domain.StepState{
 	domain.StepStateValidating:          {domain.StepStateCompleted, domain.StepStateCompletedWithWarnings, domain.StepStateNeedsApproval, domain.StepStateFailedValidation, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateFailedAdapter, domain.StepStateFailedBridge, domain.StepStateCancelled, domain.StepStateTimeout, domain.StepStateNeedsManualAttention},
 	domain.StepStateNeedsApproval:       {domain.StepStateCompleted, domain.StepStateCompletedWithWarnings, domain.StepStateFailedValidation, domain.StepStateFailedRetryable, domain.StepStateFailedTerminal, domain.StepStateFailedAdapter, domain.StepStateFailedBridge, domain.StepStateCancelled},
 	domain.StepStateFailedRetryable:     {domain.StepStateDispatching, domain.StepStateCancelled},
-	
+
 	// Terminal/Sink states
 	domain.StepStateCompleted:             {},
 	domain.StepStateCompletedWithWarnings: {},

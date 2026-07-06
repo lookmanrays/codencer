@@ -7,9 +7,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: public-testability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
@@ -20,13 +25,55 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/gateway-console/package-lock.json
+
       - name: Install CGO build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential
 
-      - name: Build supported beta-track binaries
+      - name: Install Gateway Console browser
+        working-directory: web/gateway-console
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build supported public binaries
         run: make build-supported
 
-      - name: Run supported public verification
-        run: ./scripts/verify_beta.sh
+      - name: Run full Go test suite
+        timeout-minutes: 15
+        run: go test ./...
+
+      - name: Create public self-host release snapshot
+        timeout-minutes: 10
+        run: make release-snapshot VERSION=v0.3.0-selfhost-verify TARGETS=host REQUIRE_TARGETS=host
+
+      - name: Verify release artifact self-host proof
+        timeout-minutes: 20
+        run: make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host
+
+      - name: Verify public self-host config and client artifacts
+        timeout-minutes: 10
+        run: ./scripts/verify_public_selfhost_release.sh
+
+      - name: Verify Gateway MCP and routing
+        timeout-minutes: 15
+        run: make verify-gateway
+
+      - name: Verify Gateway Console
+        timeout-minutes: 25
+        run: make verify-gateway-console
+
+      - name: Verify Gateway Console live path
+        timeout-minutes: 20
+        run: make verify-gateway-console-live
+
+      - name: Verify public release boundary
+        timeout-minutes: 10
+        run: make verify-public-release

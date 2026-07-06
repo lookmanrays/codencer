@@ -1,5 +1,8 @@
 # Beta Verification Matrix
 
+> [!WARNING]
+> Historical v0.2 beta record. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
+
 This matrix records the historical phase-by-phase evidence plus the final Phase 7 confirmation pass that locked beta on 2026-04-23.
 
 ## Executed In Phase 0
@@ -26,8 +29,8 @@ This matrix records the historical phase-by-phase evidence plus the final Phase 
 | Cloud control-plane and scope regression suite | `go test ./internal/cloud/... -count=1` | Pass | Direct Phase 1 run | Covers token revoke scope, event/audit filtering, runtime proxy scope, cloud MCP parity, and cloud SDK interop tests. |
 | Cloud MCP SDK helper compile | `go test ./cmd/mcp-sdk-smoke -count=1` | Pass | Direct Phase 1 run | Confirms the helper binary still builds cleanly after the cloud proof updates. |
 | Baseline cloud smoke | `make cloud-smoke` | Pass | Direct Phase 1 run | Proves bootstrap, status, install, webhook ingest, events, audit, and worker-once behavior. |
-| Composed cloud runtime HTTP + MCP + SDK smoke | `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=... CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1 ./scripts/cloud_smoke.sh` | Pass | Direct Phase 1 run | Proves claimed runtime visibility, run create/get, submit-task, cloud MCP initialize/list/call, and official Go SDK interoperability in one composed flow. |
-| Docker compose cloud stack smoke | `make cloud-stack-smoke` | Blocked | Direct Phase 1 run | Docker CLI was present, but the local Docker daemon/socket was unavailable (`/Users/lookman/.docker/run/docker.sock`). |
+| Composed cloud runtime HTTP + MCP + SDK smoke | `CLOUD_RELAY_CONFIG=... CLOUD_RUNTIME_DAEMON_URL=... CLOUD_SMOKE_MCP=1 CLOUD_SMOKE_SDK=1 ./scripts/cloud_smoke.sh` | Pass | Direct Phase 1 run | Proves claimed runtime visibility, run create/get, submit-task, wait/result success, cloud MCP initialize/list/call, and official Go SDK interoperability in one composed flow. |
+| Docker compose cloud stack smoke | `make cloud-stack-smoke` | Blocked | Direct Phase 1 run | Docker CLI was present, but the local Docker daemon/socket was unavailable (`<docker-socket>`). |
 | Docker compose config validation | `make cloud-stack-config` | Pass | Direct Phase 1 run | Compose baseline still renders cleanly even though the local Docker daemon was unavailable. |
 
 ## Executed In Phase 2 (WS-R1 Relay / Runtime)
@@ -110,6 +113,19 @@ This matrix records the historical phase-by-phase evidence plus the final Phase 
 | Cloud MCP streamable contract + call alias | `internal/cloud/mcp_server_test.go` | Strong | Includes initialize/list/call/stream/delete, origin handling, token-bound sessions, and revoked-token denial. |
 | Cloud official Go SDK interop | `internal/cloud/mcp_server_test.go`, `cmd/mcp-sdk-smoke` | Strong | Repo tests plus composed smoke now prove official Go SDK access to `/api/cloud/v1/mcp`. |
 | Provider connector mocks + routed provider proof | `internal/cloud/connectors/*_test.go`, `internal/cloud/worker_test.go`, `internal/cloud/router_test.go`, `internal/cloud/store_test.go` | Medium | Stronger than Phase 0 because routed install/webhook/action/history coverage now exists, but still mock/provider-fixture proof rather than live vendor-account proof. |
+
+## Post-Beta Flagship Planner Loop Proof
+
+| Scenario | Command / method | Result | Proof type | Notes |
+| --- | --- | --- | --- | --- |
+| Codex adapter `codex exec` fake-binary proof | `go test ./internal/adapters/codex -count=1` | Pass in post-beta implementation run | Direct repo test | Proves non-simulation CLI invocation, stdin prompt delivery, legacy opt-in args, result synthesis when Codex writes only a final message, failure on missing evidence, and rejection of unsupported result states. |
+| Connector wait returns at gate decision | `go test ./internal/connector -count=1` | Pass in post-beta implementation run | Direct repo test | `wait_step` now returns with `needs_decision=true` when the local step reaches `needs_approval`. |
+| Cloud HTTP runtime wait/retry/gate parity | `go test ./internal/cloud -run TestCloudRuntimeHTTPProxyStepWaitRetryAndGateActions -count=1` | Pass in post-beta implementation run | Direct repo test | Closes cloud HTTP parity gaps found during the flagship loop audit. MCP remained the primary planner surface. |
+| Relay/cloud MCP OAuth protected-resource metadata | `go test ./internal/relay ./internal/cloud -run 'Test.*OAuthProtectedResource' -count=1` plus smoke metadata probes | Pass in post-beta implementation run | Direct repo tests + smoke | Proves relay/cloud metadata endpoints, 401 `WWW-Authenticate` bearer challenges, public-base URL handling, relay lowercase bearer parsing, and configured CORS origin support with exposed `WWW-Authenticate`. |
+| Relay/cloud MCP product hardening | `go test ./internal/relay ./internal/cloud -count=1` | Pass in post-beta hardening run | Direct repo tests | Proves relay token-bound sessions, cloud token-bound sessions, POST-only compatibility aliases, and SSE stream survival past server write timeouts. |
+| Official Go SDK multi-step phase-loop capability | `go test ./cmd/mcp-sdk-smoke -count=1` plus helper build/use | Pass in post-beta implementation run | Direct repo build/test + flagship smoke | `mcp-sdk-smoke` now supports `--step-count`, rejects unsuccessful terminal states by default, and emits `tool_names` in JSON output. |
+| Product-path docs and examples | `python3 -m json.tool docs/mcp/examples/*.json docs/mcp/examples/*.mcp.json` plus markdown review | Pass in post-beta hardening run | Docs/config validation | Freezes ChatGPT Business/Enterprise/Edu custom MCP connector packaging, Claude Code commands, Anthropic Messages API request shape, and OAuth front-door deployment contract. |
+| Flagship relay loop smoke | `make flagship-planner-smoke` | Pass in post-beta implementation run | Scripted smoke | Proves single-step, phase-loop, strict gate, multi-instance, reconnect, MCP auth metadata/challenge, MCP, SDK, and evidence retrieval through the relay path. Default proof uses simulation while targeting `codex`; live Codex remains an operator-environment proof path. |
 
 ## Remaining Beta-Gate Work
 

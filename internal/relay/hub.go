@@ -15,6 +15,7 @@ type session struct {
 	connectorID string
 	machineID   string
 	instanceIDs map[string]struct{}
+	projectIDs  map[string]struct{}
 	lastSeenAt  time.Time
 	writeMu     sync.Mutex
 	pendingMu   sync.Mutex

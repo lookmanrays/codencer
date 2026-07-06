@@ -1,5 +1,8 @@
 # Beta Finalization Plan
 
+> [!WARNING]
+> Historical v0.2 beta record. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
+
 Status: Beta-confirmed final audited record
 
 Last audited: 2026-04-23

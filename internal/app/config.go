@@ -9,21 +9,21 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	LogLevel     string `json:"log_level"`
-	DBPath       string `json:"db_path"`
-	ArtifactRoot  string `json:"artifact_root"`
-	WorkspaceRoot string `json:"workspace_root"`
-	RepoRoot      string `json:"repo_root"`
-	Host                  string `json:"host"`
-	Port                  int    `json:"port"`
-	AntigravityBrokerURL  string `json:"antigravity_broker_url"`
+	LogLevel             string `json:"log_level"`
+	DBPath               string `json:"db_path"`
+	ArtifactRoot         string `json:"artifact_root"`
+	WorkspaceRoot        string `json:"workspace_root"`
+	RepoRoot             string `json:"repo_root"`
+	Host                 string `json:"host"`
+	Port                 int    `json:"port"`
+	AntigravityBrokerURL string `json:"antigravity_broker_url"`
 }
 
 // DefaultConfig defines default values for the daemon configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		LogLevel:     "info",
-		DBPath:       ".codencer/codencer.db",
+		LogLevel:      "info",
+		DBPath:        ".codencer/codencer.db",
 		ArtifactRoot:  ".codencer/artifacts",
 		WorkspaceRoot: ".codencer/workspace",
 		Host:          "127.0.0.1",

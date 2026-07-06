@@ -1,4 +1,7 @@
-# Codencer Self-Host Cloud Control Plane Guide
+# Codencer Cloud Control Plane Guide
+
+> [!WARNING]
+> This document covers existing experimental cloud-control-plane code. It is not the current open-source release path and it is not hosted Codencer Gateway/Cloud availability. For current OSS remote operation, use [Self-Host Relay Quickstart](quickstart-self-host-relay.md).
 
 This guide covers the practical self-host bootstrap path for Codencer Cloud.
 
@@ -7,7 +10,7 @@ Use this page when cloud tenancy is the public control plane.
 - Use [SELF_HOST_REFERENCE.md](SELF_HOST_REFERENCE.md) when you want the raw relay/runtime self-host path instead of cloud tenancy.
 - Use [CLOUD.md](CLOUD.md) for the cloud route/scope reference.
 - Use [CLOUD_CONNECTORS.md](CLOUD_CONNECTORS.md) for per-provider install/test depth and limitations.
-- Use [mcp/integrations.md](mcp/integrations.md) for the planner/client compatibility matrix.
+- Use [mcp/integrations.md](mcp/integrations.md) for the current OSS Relay planner/client path.
 
 ## Recommended Topology
 
@@ -29,7 +32,7 @@ The repo now includes a practical Docker baseline under `deploy/cloud/`:
 - `deploy/cloud/config/relay.json`
 - `deploy/cloud/smoke.sh`
 
-This stack is beta-track, SQLite-backed, and meant to be a serious self-host baseline rather than a production-ready managed deployment recipe.
+This stack is SQLite-backed and meant to be a serious self-host baseline rather than a production-ready managed deployment recipe.
 
 ## Compose Reality
 
@@ -52,7 +55,7 @@ Proof boundary:
 Build the cloud binaries with:
 
 ```bash
-make build-cloud
+make build-self-host-cloud
 ```
 
 This produces:
@@ -60,6 +63,8 @@ This produces:
 - `bin/codencer-cloudctl`
 - `bin/codencer-cloudd`
 - `bin/codencer-cloudworkerd`
+
+`make build-cloud` remains the low-level alias used by smoke targets.
 
 ## Docker Compose Quickstart
 
@@ -141,6 +146,9 @@ If you want the scripted composed proof from a local checkout instead of the Doc
 
 ```bash
 make build-cloud build-mcp-sdk-smoke
+# In composed cloud runtime mode, the relay config used by cloud should advertise
+# the public cloud origin as its public_base_url so connectors enroll back through
+# cloud ingress (`/ws/connectors`), not a separate relay admin port.
 CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
 CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8085 \
 CLOUD_SMOKE_MCP=1 \
@@ -158,7 +166,12 @@ Create a cloud config file such as `.codencer/cloud/config.json`:
   "port": 8190,
   "db_path": ".codencer/cloud/cloud.db",
   "master_key": "replace-with-a-long-random-secret",
-  "relay_config_path": ".codencer/relay/config.json"
+  "relay_config_path": ".codencer/relay/config.json",
+  "public_base_url": "https://cloud.example.com",
+  "allowed_origins": ["https://planner.example.com"],
+  "oauth_authorization_servers": ["https://auth.example.com"],
+  "oauth_scopes_supported": ["runtime_instances:read", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "gates:read", "gates:write"],
+  "oauth_resource_documentation": "https://docs.example.com/codencer-cloud-mcp"
 }
 ```
 
@@ -166,7 +179,10 @@ Notes:
 
 - `master_key` is required if you want encrypted installation secrets.
 - `relay_config_path` is optional and only needed if you want `codencer-cloudd` to own cloud-scoped runtime control through an internal relay bridge.
-- If you use the environment variables `CODENCER_CLOUD_DB_PATH`, `CODENCER_CLOUD_HOST`, `CODENCER_CLOUD_PORT`, `CODENCER_CLOUD_MASTER_KEY`, or `CODENCER_CLOUD_RELAY_CONFIG`, they override the file values.
+- In composed runtime mode, set the relay config `public_base_url` to the public cloud origin when connectors enroll through cloud. If it points at a separate relay daemon, the connector can appear in storage while cloud cannot proxy live runtime calls through its in-process bridge.
+- `public_base_url`, `allowed_origins`, and the `oauth_*` fields are useful for public product-facing remote MCP deployments.
+- Codencer exposes OAuth protected-resource metadata and bearer challenges, but token issuance still belongs to your OAuth issuer/front door.
+- If you use the environment variables `CODENCER_CLOUD_DB_PATH`, `CODENCER_CLOUD_HOST`, `CODENCER_CLOUD_PORT`, `CODENCER_CLOUD_MASTER_KEY`, `CODENCER_CLOUD_RELAY_CONFIG`, `CODENCER_CLOUD_PUBLIC_BASE_URL`, `CODENCER_CLOUD_ALLOWED_ORIGINS`, `CODENCER_CLOUD_OAUTH_AUTHORIZATION_SERVERS`, `CODENCER_CLOUD_OAUTH_SCOPES_SUPPORTED`, or `CODENCER_CLOUD_OAUTH_RESOURCE_DOCUMENTATION`, they override the file values.
 
 ## Bootstrap Order
 
@@ -211,10 +227,11 @@ Cloud-scoped MCP is also available in composed mode:
 
 - canonical cloud MCP endpoint: `/api/cloud/v1/mcp`
 - compatibility alias: `/api/cloud/v1/mcp/call`
+- OAuth metadata endpoint: `/.well-known/oauth-protected-resource/api/cloud/v1/mcp`
 
 Use relay `/mcp` only when you are operating the self-host relay directly without cloud tenancy.
 
-For the frozen planner/client compatibility matrix, generic client examples, and cloud-vs-relay boundary, see [mcp/integrations.md](mcp/integrations.md) and [mcp/cloud_tools.md](mcp/cloud_tools.md).
+For the current OSS Relay planner/client path, see [mcp/integrations.md](mcp/integrations.md). For this experimental cloud-control-plane MCP surface, see [mcp/cloud_tools.md](mcp/cloud_tools.md).
 
 ## Operator Commands
 
@@ -344,7 +361,7 @@ docker compose --env-file deploy/cloud/.env -f deploy/cloud/docker-compose.yml r
 
 ## Worker
 
-`codencer-cloudworkerd` is the background worker for connector maintenance. In the current beta track:
+`codencer-cloudworkerd` is the background worker for connector maintenance. In the current experimental provider path:
 
 - GitHub, GitLab, Linear, and Slack remain webhook-first
 - Jira is polling-first
@@ -401,6 +418,8 @@ Example composed-mode proof:
 
 ```bash
 make build-cloud build-mcp-sdk-smoke
+# The relay config's public_base_url should match the public cloud origin used
+# by CLOUD_URL for this composed proof.
 CLOUD_RELAY_CONFIG=.codencer/relay/config.json \
 CLOUD_RUNTIME_DAEMON_URL=http://127.0.0.1:8080 \
 CLOUD_SMOKE_MCP=1 \

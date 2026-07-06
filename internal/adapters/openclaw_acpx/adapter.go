@@ -170,11 +170,11 @@ func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
 		if binary == "" {
 			binary = a.binaryName
 		}
-		
+
 		// Run acpx stop with short timeout
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stopCancel()
-		
+
 		cmd := exec.CommandContext(stopCtx, binary, "stop", "--session", attemptID)
 		if err := cmd.Run(); err != nil {
 			slog.Warn("OpenClaw: Explicit acpx stop failed", "error", err, "attemptID", attemptID)
@@ -199,7 +199,7 @@ func (a *Adapter) CollectArtifacts(ctx context.Context, attemptID string, attemp
 	}
 
 	// 2. Opportunistic artifact collection from the task's artifact root.
-	// Standard ACP evidence (status.json, result.json, session.log) is only captured 
+	// Standard ACP evidence (status.json, result.json, session.log) is only captured
 	// if the acpx process has been configured to write/redirect outputs to this directory.
 	evidenceNames := []string{"acp-status.json", "result.json", "session.log"}
 	for _, name := range evidenceNames {

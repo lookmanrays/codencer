@@ -1,0 +1,16 @@
+version: codencer.io/v1alpha1
+kind: RunManifest
+metadata:
+  name: fake-blocker
+project:
+  id: codencer
+execution:
+  adapter: fake
+  profile: fake-blocker
+policy:
+  stop_on_blocker: true
+  stop_on_failure: true
+tasks:
+  - id: fake-blocker
+    title: Fake blocker
+    goal: Return a deterministic structured blocker.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,20 +25,26 @@ type InstanceProvider interface {
 type Adapter struct {
 	client           *Client
 	instanceProvider InstanceProvider
-	
+
 	// activeCascades maps attemptID -> cascadeID
 	activeCascades map[string]string
 	// instanceCache maps attemptID -> AGInstance (pinned for the attempt)
 	instanceCache map[string]domain.AGInstance
-	mu            sync.RWMutex
+	// approvedInteractions prevents duplicate approvals if polling observes the same wait twice.
+	approvedInteractions map[string]struct{}
+	// blockedInteractions records human interactions Codencer cannot safely auto-approve.
+	blockedInteractions map[string]string
+	mu                  sync.RWMutex
 }
 
 func NewAdapter(provider InstanceProvider) *Adapter {
 	return &Adapter{
-		client:           NewClient(),
-		instanceProvider: provider,
-		activeCascades:   make(map[string]string),
-		instanceCache:    make(map[string]domain.AGInstance),
+		client:               NewClient(),
+		instanceProvider:     provider,
+		activeCascades:       make(map[string]string),
+		instanceCache:        make(map[string]domain.AGInstance),
+		approvedInteractions: make(map[string]struct{}),
+		blockedInteractions:  make(map[string]string),
 	}
 }
 
@@ -58,14 +65,17 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 		return fmt.Errorf("no Antigravity instance bound to this repository. Use 'orchestratorctl antigravity bind' first")
 	}
 
+	workspaceURI := inst.WorkspaceRoot
+	if workspaceRoot != "" {
+		workspaceURI = fmt.Sprintf("file://%s", workspaceRoot)
+	} else if workspaceURI == "" {
+		return fmt.Errorf("workspace root is required for Antigravity execution")
+	}
+
 	req := &StartCascadeRequest{
 		UserPrompt:                 step.Goal,
-		WorkspaceFolderAbsoluteUri: func() string {
-			if inst.WorkspaceRoot != "" {
-				return inst.WorkspaceRoot
-			}
-			return fmt.Sprintf("file://%s", workspaceRoot)
-		}(),
+		WorkspaceFolderAbsoluteUri: workspaceURI,
+		Source:                     CortexTrajectorySourceCascadeClient,
 		Metadata: CascadeMetadata{
 			FileAccessGranted: true,
 		},
@@ -73,6 +83,9 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 			PlannerConfig: PlannerConfig{
 				PlannerTypeConfig: PlannerTypeConfig{
 					Planning: struct{}{},
+				},
+				RequestedModel: RequestedModel{
+					Model: DefaultRequestedModelGoogleGemini25Flash,
 				},
 			},
 		},
@@ -87,10 +100,28 @@ func (a *Adapter) Start(ctx context.Context, step *domain.Step, attempt *domain.
 		return fmt.Errorf("Antigravity returned an empty cascadeId")
 	}
 
+	inst.WorkspaceRoot = workspaceURI
+
 	a.mu.Lock()
 	a.activeCascades[attempt.ID] = resp.CascadeId
 	a.instanceCache[attempt.ID] = *inst
 	a.mu.Unlock()
+
+	sendReq := &SendUserCascadeMessageRequest{
+		CascadeId: resp.CascadeId,
+		Items: []CascadeMessageItem{
+			{Text: step.Goal},
+		},
+		CascadeConfig:       req.CascadeConfig,
+		WaitForLSClientInit: false,
+	}
+	if err := a.client.Call(ctx, inst, "SendUserCascadeMessage", sendReq, &struct{}{}); err != nil {
+		a.mu.Lock()
+		delete(a.activeCascades, attempt.ID)
+		delete(a.instanceCache, attempt.ID)
+		a.mu.Unlock()
+		return fmt.Errorf("failed to send cascade message: %w", err)
+	}
 
 	return nil
 }
@@ -118,11 +149,225 @@ func (a *Adapter) Poll(ctx context.Context, attemptID string) (bool, error) {
 	}
 
 	switch resp.Status {
+	case StatusRunning:
+		if blockedReason, err := a.approvePendingReadOnlyInteractions(ctx, attemptID, &inst, cascadeID); err != nil {
+			return false, err
+		} else if blockedReason != "" {
+			return false, nil
+		}
+		return true, nil
 	case StatusCompleted, StatusFailed, StatusAborted:
 		return false, nil
+	case StatusIdle:
+		if hasSteps, blockedReason, err := a.inspectAndApprovePendingInteractions(ctx, attemptID, &inst, cascadeID); err != nil {
+			return false, err
+		} else if blockedReason != "" {
+			return false, nil
+		} else if !hasSteps {
+			return true, nil
+		}
+		return false, nil
 	default:
-		return true, nil
+		return false, nil
 	}
+}
+
+func (a *Adapter) approvePendingReadOnlyInteractions(ctx context.Context, attemptID string, inst *domain.AGInstance, cascadeID string) (string, error) {
+	_, blockedReason, err := a.inspectAndApprovePendingInteractions(ctx, attemptID, inst, cascadeID)
+	return blockedReason, err
+}
+
+func (a *Adapter) inspectAndApprovePendingInteractions(ctx context.Context, attemptID string, inst *domain.AGInstance, cascadeID string) (bool, string, error) {
+	req := &GetCascadeTrajectoryStepsRequest{
+		CascadeId:  cascadeID,
+		StepOffset: 0,
+	}
+	var resp GetCascadeTrajectoryStepsResponse
+	if err := a.client.Call(ctx, inst, "GetCascadeTrajectorySteps", req, &resp); err != nil {
+		return false, "", fmt.Errorf("failed to inspect Antigravity pending interactions: %w", err)
+	}
+
+	for _, step := range resp.Steps {
+		if step.Status != StepStatusWaiting {
+			continue
+		}
+		approval, ok := a.readOnlyApprovalForStep(inst.WorkspaceRoot, step)
+		if !ok {
+			if blockedReason := unsupportedInteractionReason(inst.WorkspaceRoot, step); blockedReason != "" {
+				a.mu.Lock()
+				a.blockedInteractions[attemptID] = blockedReason
+				a.mu.Unlock()
+				return true, blockedReason, nil
+			}
+			continue
+		}
+
+		info := step.Metadata.SourceTrajectoryStepInfo
+		if info.TrajectoryId == "" {
+			continue
+		}
+		key := fmt.Sprintf("%s:%s:%d", cascadeID, info.TrajectoryId, info.StepIndex)
+
+		a.mu.RLock()
+		_, seen := a.approvedInteractions[key]
+		a.mu.RUnlock()
+		if seen {
+			continue
+		}
+
+		interactionReq := &HandleCascadeUserInteractionRequest{
+			CascadeId: cascadeID,
+			Interaction: CascadeUserInteraction{
+				TrajectoryId: info.TrajectoryId,
+				StepIndex:    info.StepIndex,
+				Interaction:  approval,
+			},
+		}
+		if err := a.client.Call(ctx, inst, "HandleCascadeUserInteraction", interactionReq, &struct{}{}); err != nil {
+			return false, "", fmt.Errorf("failed to approve Antigravity read-only interaction: %w", err)
+		}
+
+		a.mu.Lock()
+		a.approvedInteractions[key] = struct{}{}
+		a.mu.Unlock()
+	}
+
+	return len(resp.Steps) > 0, "", nil
+}
+
+func (a *Adapter) readOnlyApprovalForStep(workspaceRoot string, step CascadeStep) (map[string]interface{}, bool) {
+	info := step.Metadata.SourceTrajectoryStepInfo
+	if info.TrajectoryId == "" {
+		return nil, false
+	}
+
+	if step.RequestedInteraction != nil && step.RequestedInteraction.Permission != nil && step.RequestedInteraction.Permission.Resource != nil {
+		resource := step.RequestedInteraction.Permission.Resource
+		if isReadOnlyPermissionAction(resource.Action) && pathWithinWorkspace(resource.Target, workspaceRoot) {
+			return map[string]interface{}{
+				"permission": map[string]interface{}{
+					"allow": true,
+				},
+			}, true
+		}
+	}
+
+	if step.Metadata.ToolCall != nil && step.Metadata.ToolCall.Name == "ask_permission" {
+		args := decodeToolArguments(step.Metadata.ToolCall.ArgumentsJSON)
+		if isReadOnlyPermissionAction(args.Action) && pathWithinWorkspace(args.Target, workspaceRoot) {
+			return map[string]interface{}{
+				"approvalInteraction": map[string]interface{}{
+					"confirm": true,
+				},
+			}, true
+		}
+	}
+
+	return nil, false
+}
+
+func unsupportedInteractionReason(workspaceRoot string, step CascadeStep) string {
+	if step.RequestedInteraction != nil && step.RequestedInteraction.Permission != nil && step.RequestedInteraction.Permission.Resource != nil {
+		return unsupportedPermissionReason(workspaceRoot, step.RequestedInteraction.Permission.Resource)
+	}
+
+	if step.Metadata.ToolCall != nil && step.Metadata.ToolCall.Name == "ask_permission" {
+		args := decodeToolArguments(step.Metadata.ToolCall.ArgumentsJSON)
+		return unsupportedPermissionReason(workspaceRoot, &CascadePermissionResource{
+			Action: args.Action,
+			Target: args.Target,
+		})
+	}
+
+	if step.Metadata.ToolCall != nil {
+		return fmt.Sprintf("Antigravity is waiting for a %s interaction that Codencer cannot auto-approve safely.", safePermissionAction(step.Metadata.ToolCall.Name))
+	}
+
+	return "Antigravity is waiting for a human interaction that Codencer cannot auto-approve safely."
+}
+
+func unsupportedPermissionReason(workspaceRoot string, resource *CascadePermissionResource) string {
+	if resource == nil {
+		return ""
+	}
+	action := strings.ToLower(resource.Action)
+	if isReadOnlyPermissionAction(action) {
+		if pathWithinWorkspace(resource.Target, workspaceRoot) {
+			return ""
+		}
+		return "Antigravity requested read-only access outside the execution workspace and needs human approval."
+	}
+	return fmt.Sprintf("Antigravity requested %s permission and needs human approval.", safePermissionAction(action))
+}
+
+func safePermissionAction(action string) string {
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action == "" {
+		return "unknown"
+	}
+	var b strings.Builder
+	for _, r := range action {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
+}
+
+func isReadOnlyPermissionAction(action string) bool {
+	switch strings.ToLower(action) {
+	case "read_file", "list_directory", "read_directory":
+		return true
+	default:
+		return false
+	}
+}
+
+func pathWithinWorkspace(target, workspaceRoot string) bool {
+	if target == "" || workspaceRoot == "" {
+		return false
+	}
+
+	rootPath, err := fileURIPath(workspaceRoot)
+	if err != nil {
+		return false
+	}
+	targetPath := target
+	if strings.HasPrefix(target, "file://") {
+		targetPath, err = fileURIPath(target)
+		if err != nil {
+			return false
+		}
+	}
+
+	rootPath, err = filepath.Abs(rootPath)
+	if err != nil {
+		return false
+	}
+	targetPath, err = filepath.Abs(targetPath)
+	if err != nil {
+		return false
+	}
+
+	rel, err := filepath.Rel(rootPath, targetPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func fileURIPath(uri string) (string, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme != "file" {
+		return "", fmt.Errorf("unsupported URI scheme %q", parsed.Scheme)
+	}
+	return parsed.Path, nil
 }
 
 func (a *Adapter) Cancel(ctx context.Context, attemptID string) error {
@@ -192,6 +437,7 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 	a.mu.RLock()
 	cascadeID, exists := a.activeCascades[attemptID]
 	inst, instExists := a.instanceCache[attemptID]
+	blockedReason := a.blockedInteractions[attemptID]
 	a.mu.RUnlock()
 
 	if !exists || !instExists {
@@ -208,7 +454,10 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 
 	state := domain.StepStateCompleted
 	summary := "Antigravity execution completed successfully"
-	if resp.Status == StatusFailed {
+	if blockedReason != "" {
+		state = domain.StepStateNeedsManualAttention
+		summary = blockedReason
+	} else if resp.Status == StatusFailed {
 		state = domain.StepStateFailedTerminal
 		summary = "Antigravity reported execution failure"
 	} else if resp.Status == StatusAborted {
@@ -251,6 +500,12 @@ func (a *Adapter) NormalizeResult(ctx context.Context, attemptID string, artifac
 	a.mu.Lock()
 	delete(a.activeCascades, attemptID)
 	delete(a.instanceCache, attemptID)
+	delete(a.blockedInteractions, attemptID)
+	for key := range a.approvedInteractions {
+		if strings.HasPrefix(key, cascadeID+":") {
+			delete(a.approvedInteractions, key)
+		}
+	}
 	a.mu.Unlock()
 
 	return &domain.ResultSpec{

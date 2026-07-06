@@ -58,7 +58,7 @@ func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 		FROM steps WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
-	
+
 	var step domain.Step
 	var stateStr string
 	var valJSON, snapshotJSON, provJSON sql.NullString
@@ -84,7 +84,7 @@ func (r *StepsRepo) Get(ctx context.Context, id string) (*domain.Step, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get step: %w", err)
 	}
-	
+
 	step.State = domain.StepState(stateStr)
 	if valJSON.Valid && valJSON.String != "" {
 		_ = json.Unmarshal([]byte(valJSON.String), &step.Validations)
@@ -121,7 +121,7 @@ func (r *StepsRepo) ListByPhase(ctx context.Context, phaseID string) ([]*domain.
 		return nil, fmt.Errorf("failed to list steps: %w", err)
 	}
 	defer rows.Close()
- 
+
 	var steps []*domain.Step
 	for rows.Next() {
 		var step domain.Step
@@ -165,7 +165,7 @@ func (r *StepsRepo) ListByRun(ctx context.Context, runID string) ([]*domain.Step
 		return nil, fmt.Errorf("failed to list steps for run: %w", err)
 	}
 	defer rows.Close()
- 
+
 	var steps []*domain.Step
 	for rows.Next() {
 		var step domain.Step

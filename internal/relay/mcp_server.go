@@ -21,6 +21,8 @@ const (
 
 	mcpDefaultProtocolVersion = "2025-03-26"
 	mcpLatestProtocolVersion  = "2025-11-25"
+	mcpSessionIdleTTL         = 30 * time.Minute
+	mcpInstructions           = "Codencer is a bridge, not a planner. Use codencer.list_projects first. Use codencer.run_project_manifest for approved multi-step work. Use codencer.submit_project_task_and_wait for one approved task. If a blocker has planner_decision_required, stop and return blocker details. Do not infer next action from logs."
 )
 
 var supportedMCPProtocolVersions = []string{
@@ -37,12 +39,13 @@ type mcpServer struct {
 }
 
 type mcpSession struct {
-	ID              string
-	ProtocolVersion string
-	CreatedAt       time.Time
-	LastSeenAt      time.Time
-	done            chan struct{}
-	closeOnce       sync.Once
+	ID               string
+	PlannerTokenHash string
+	ProtocolVersion  string
+	CreatedAt        time.Time
+	LastSeenAt       time.Time
+	done             chan struct{}
+	closeOnce        sync.Once
 }
 
 type mcpRequest struct {
@@ -104,12 +107,13 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 
 	principal, err := s.relay.authenticatePlanner(r, "", "")
 	if err != nil {
+		s.relay.addPlannerAuthChallenge(w, r, "")
 		writeAPIError(w, err.Status, err.Code, err.Message)
 		return
 	}
 	r = r.WithContext(context.WithValue(r.Context(), plannerPrincipalKey{}, principal))
 
-	session, apiErr := s.sessionFromRequest(r)
+	session, apiErr := s.sessionFromRequest(r, principal)
 	if apiErr != nil {
 		writeAPIError(w, apiErr.Status, apiErr.Code, apiErr.Message)
 		return
@@ -123,6 +127,14 @@ func (s *mcpServer) Handle(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.handlePost(w, r, session)
 	}
+}
+
+func (s *mcpServer) HandleCallAlias(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodOptions {
+		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	s.Handle(w, r)
 }
 
 func (s *mcpServer) handleStream(w http.ResponseWriter, r *http.Request, session *mcpSession) {
@@ -145,6 +157,7 @@ func (s *mcpServer) handleStream(w http.ResponseWriter, r *http.Request, session
 		return
 	}
 
+	clearMCPStreamWriteDeadline(w)
 	s.applySessionHeaders(w, session, protocolVersion)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -218,7 +231,7 @@ func (s *mcpServer) handlePost(w http.ResponseWriter, r *http.Request, session *
 
 	switch req.Method {
 	case "initialize":
-		s.handleInitialize(w, req, session, headerProtocolVersion)
+		s.handleInitialize(w, r, req, session, headerProtocolVersion)
 	case "notifications/initialized":
 		protocolVersion, apiErr := s.resolveProtocolVersion(r, session)
 		if apiErr != nil {
@@ -264,14 +277,14 @@ func (s *mcpServer) handlePost(w http.ResponseWriter, r *http.Request, session *
 	}
 }
 
-func (s *mcpServer) handleInitialize(w http.ResponseWriter, req mcpRequest, session *mcpSession, headerProtocolVersion string) {
+func (s *mcpServer) handleInitialize(w http.ResponseWriter, r *http.Request, req mcpRequest, session *mcpSession, headerProtocolVersion string) {
 	var params struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
 	_ = json.Unmarshal(req.Params, &params)
 
 	protocolVersion := negotiateProtocolVersion(params.ProtocolVersion, headerProtocolVersion)
-	session = s.ensureSession(session, protocolVersion)
+	session = s.ensureSession(session, plannerFromContext(r.Context()), protocolVersion)
 	s.writeRPC(w, mcpResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -284,6 +297,7 @@ func (s *mcpServer) handleInitialize(w http.ResponseWriter, req mcpRequest, sess
 				"name":    "codencer-relay",
 				"version": "v2",
 			},
+			"instructions": mcpInstructions,
 		},
 	}, session, protocolVersion)
 }
@@ -329,7 +343,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 		s.writeRPC(w, mcpResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
-			Result:  errorToolResult(err.Code, err.Message),
+			Result:  apiErrorToolResult(err),
 		}, session, protocolVersion)
 		return
 	}
@@ -339,7 +353,7 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 		s.writeRPC(w, mcpResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
-			Result:  errorToolResult(apiErr.Code, apiErr.Message),
+			Result:  apiErrorToolResult(apiErr),
 		}, session, protocolVersion)
 		return
 	}
@@ -353,11 +367,20 @@ func (s *mcpServer) handleToolCall(w http.ResponseWriter, r *http.Request, req m
 func (s *mcpServer) listTools() []map[string]any {
 	tools := make([]map[string]any, 0, len(s.tools))
 	for _, tool := range toolOrder(s.tools) {
-		tools = append(tools, map[string]any{
+		payload := map[string]any{
 			"name":        tool.Name,
 			"description": tool.Description,
 			"inputSchema": tool.InputSchema,
-		})
+		}
+		if len(tool.Annotations) > 0 {
+			payload["annotations"] = tool.Annotations
+		}
+		if tool.Scope != "" {
+			payload["_meta"] = map[string]any{
+				"codencer/securityScopes": []string{tool.Scope},
+			}
+		}
+		tools = append(tools, payload)
 	}
 	return tools
 }
@@ -374,7 +397,7 @@ func (s *mcpServer) applyOriginHeaders(w http.ResponseWriter, r *http.Request) *
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, "+mcpHeaderProtocolVersion+", "+mcpHeaderSessionID+", Last-Event-ID")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Expose-Headers", mcpHeaderProtocolVersion+", "+mcpHeaderSessionID)
+	w.Header().Set("Access-Control-Expose-Headers", mcpHeaderProtocolVersion+", "+mcpHeaderSessionID+", WWW-Authenticate")
 	return nil
 }
 
@@ -407,29 +430,50 @@ func (s *mcpServer) originAllowed(origin, requestHost string) bool {
 	return isLoopbackHost(originHost) && (isLoopbackHost(requestHost) || isLoopbackHost(cfgHost))
 }
 
-func (s *mcpServer) sessionFromRequest(r *http.Request) (*mcpSession, *apiError) {
+func (s *mcpServer) sessionFromRequest(r *http.Request, principal *plannerPrincipal) (*mcpSession, *apiError) {
 	sessionID := strings.TrimSpace(r.Header.Get(mcpHeaderSessionID))
 	if sessionID == "" {
 		return nil, nil
 	}
+	plannerTokenHash := ""
+	if principal != nil {
+		plannerTokenHash = principal.TokenHash
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pruneExpiredSessionsLocked(time.Now().UTC())
 	session, ok := s.sessions[sessionID]
 	if !ok {
+		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
+	}
+	if plannerTokenHash != "" && session.PlannerTokenHash != "" && session.PlannerTokenHash != plannerTokenHash {
 		return nil, &apiError{Status: http.StatusNotFound, Code: "session_not_found", Message: "unknown MCP session"}
 	}
 	session.LastSeenAt = time.Now().UTC()
 	return session, nil
 }
 
-func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) *mcpSession {
+func (s *mcpServer) ensureSession(existing *mcpSession, principal *plannerPrincipal, protocolVersion string) *mcpSession {
 	now := time.Now().UTC()
+	plannerTokenHash := ""
+	if principal != nil {
+		plannerTokenHash = principal.TokenHash
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pruneExpiredSessionsLocked(now)
 	if existing != nil {
 		session := s.sessions[existing.ID]
 		if session == nil {
-			session = &mcpSession{ID: existing.ID, CreatedAt: existing.CreatedAt, done: make(chan struct{})}
+			session = &mcpSession{
+				ID:               existing.ID,
+				PlannerTokenHash: existing.PlannerTokenHash,
+				CreatedAt:        existing.CreatedAt,
+				done:             make(chan struct{}),
+			}
+		}
+		if session.PlannerTokenHash == "" {
+			session.PlannerTokenHash = plannerTokenHash
 		}
 		session.ProtocolVersion = protocolVersion
 		if session.CreatedAt.IsZero() {
@@ -443,11 +487,12 @@ func (s *mcpServer) ensureSession(existing *mcpSession, protocolVersion string) 
 		return session
 	}
 	session := &mcpSession{
-		ID:              newMCPSessionID(),
-		ProtocolVersion: protocolVersion,
-		CreatedAt:       now,
-		LastSeenAt:      now,
-		done:            make(chan struct{}),
+		ID:               newMCPSessionID(),
+		PlannerTokenHash: plannerTokenHash,
+		ProtocolVersion:  protocolVersion,
+		CreatedAt:        now,
+		LastSeenAt:       now,
+		done:             make(chan struct{}),
 	}
 	s.sessions[session.ID] = session
 	return session
@@ -468,6 +513,24 @@ func (s *mcpServer) deleteSession(sessionID string) {
 			}
 		})
 	}
+}
+
+func (s *mcpServer) pruneExpiredSessionsLocked(now time.Time) {
+	for id, session := range s.sessions {
+		if session == nil || session.LastSeenAt.IsZero() || now.Sub(session.LastSeenAt) <= mcpSessionIdleTTL {
+			continue
+		}
+		delete(s.sessions, id)
+		session.closeOnce.Do(func() {
+			if session.done != nil {
+				close(session.done)
+			}
+		})
+	}
+}
+
+func clearMCPStreamWriteDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 }
 
 func (s *mcpServer) resolveProtocolVersion(r *http.Request, session *mcpSession) (string, *apiError) {
@@ -499,18 +562,37 @@ func (s *mcpServer) writeRPC(w http.ResponseWriter, response mcpResponse, sessio
 }
 
 func errorToolResult(code, message string) mcpToolResult {
+	return apiErrorToolResult(&apiError{Code: code, Message: message})
+}
+
+func apiErrorToolResult(err *apiError) mcpToolResult {
+	if err == nil {
+		err = &apiError{Code: "relay_internal_error", Message: "unknown relay error"}
+	}
+	structured := any(map[string]any{
+		"error": map[string]any{
+			"code":    err.Code,
+			"message": err.Message,
+		},
+	})
+	if len(err.Blocker) > 0 {
+		blocker := map[string]any{}
+		for key, value := range err.Blocker {
+			blocker[key] = value
+		}
+		blocker["error"] = map[string]any{
+			"code":    err.Code,
+			"message": err.Message,
+		}
+		structured = blocker
+	}
 	return mcpToolResult{
 		IsError: true,
 		Content: []map[string]string{{
 			"type": "text",
-			"text": message,
+			"text": err.Message,
 		}},
-		StructuredContent: map[string]any{
-			"error": map[string]any{
-				"code":    code,
-				"message": message,
-			},
-		},
+		StructuredContent: structured,
 	}
 }
 
@@ -521,6 +603,14 @@ func successToolResult(summary string, payload any) mcpToolResult {
 			"type": "text",
 			"text": summary,
 		}}
+	}
+	if payload != nil {
+		if data, err := json.Marshal(payload); err == nil {
+			result.Content = append(result.Content, map[string]string{
+				"type": "text",
+				"text": string(data),
+			})
+		}
 	}
 	return result
 }
@@ -555,9 +645,13 @@ func clonePlannerPrincipal(principal *plannerPrincipal) *plannerPrincipal {
 		Name:        principal.Name,
 		Scopes:      append([]string(nil), principal.Scopes...),
 		InstanceIDs: make(map[string]struct{}, len(principal.InstanceIDs)),
+		ProjectIDs:  make(map[string]struct{}, len(principal.ProjectIDs)),
 	}
 	for instanceID := range principal.InstanceIDs {
 		clone.InstanceIDs[instanceID] = struct{}{}
+	}
+	for projectID := range principal.ProjectIDs {
+		clone.ProjectIDs[projectID] = struct{}{}
 	}
 	return clone
 }
@@ -565,12 +659,13 @@ func clonePlannerPrincipal(principal *plannerPrincipal) *plannerPrincipal {
 func decodeAPIError(status int, body []byte) *apiError {
 	var payload struct {
 		Error struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
+			Code    string         `json:"code"`
+			Message string         `json:"message"`
+			Blocker map[string]any `json:"blocker"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil && payload.Error.Code != "" {
-		return &apiError{Status: status, Code: payload.Error.Code, Message: payload.Error.Message}
+		return &apiError{Status: status, Code: payload.Error.Code, Message: payload.Error.Message, Blocker: payload.Error.Blocker}
 	}
 	return &apiError{Status: status, Code: "upstream_error", Message: strings.TrimSpace(string(body))}
 }

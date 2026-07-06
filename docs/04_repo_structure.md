@@ -22,7 +22,7 @@ agent-bridge/
     07_security_ops.md
     08_market_research.md
     09_ai_rules.md
-    10_implementation_prompts.md
+    archive/historical-scenarios/10_implementation_prompts.md
     11_review_checklists.md
     references.md
 

@@ -9,12 +9,9 @@ import (
 	"syscall"
 
 	"agent-bridge/internal/app"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	_ = godotenv.Load(".env") // Load env config before bootstrapping
-	
 	configPath := flag.String("config", "", "Path to configuration file")
 	repoRoot := flag.String("repo-root", "", "Explicit path to the repository root (overrides CWD)")
 	flag.Parse()

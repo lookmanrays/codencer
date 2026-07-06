@@ -213,7 +213,7 @@ func (s *InstanceService) adapterRuntimeState(ctx context.Context, id string, en
 
 	switch id {
 	case "codex":
-		return binaryRuntimeState("CODEX_BINARY", "codex-agent")
+		return binaryRuntimeState("CODEX_BINARY", "codex")
 	case "claude":
 		return binaryRuntimeState("CLAUDE_BINARY", "claude")
 	case "qwen":

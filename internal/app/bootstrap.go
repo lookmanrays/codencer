@@ -14,6 +14,7 @@ import (
 	"agent-bridge/internal/adapters/antigravity"
 	"agent-bridge/internal/adapters/claude"
 	"agent-bridge/internal/adapters/codex"
+	"agent-bridge/internal/adapters/fake"
 	"agent-bridge/internal/adapters/ide"
 	"agent-bridge/internal/adapters/openclaw_acpx"
 	"agent-bridge/internal/adapters/qwen"
@@ -154,6 +155,10 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 		"openclaw-acpx":      openclaw_acpx.NewAdapter(),
 		"antigravity":        antigravity.NewAdapter(agSvc),
 		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, repoRoot),
+		fake.Success:         fake.New(fake.Success),
+		fake.Failure:         fake.New(fake.Failure),
+		fake.Blocker:         fake.New(fake.Blocker),
+		fake.Timeout:         fake.New(fake.Timeout),
 	}
 
 	routingSvc := service.NewRoutingService(benchmarksRepo, adapters)
@@ -209,10 +214,11 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 	}
 
 	apiHandler := &APIHandler{
-		RunSvc:  runSvc,
-		GateSvc: gateSvc,
-		AGSvc:   agSvc,
-		AppCtx:  appCtx,
+		RunSvc:      runSvc,
+		GateSvc:     gateSvc,
+		AGSvc:       agSvc,
+		RecoverySvc: recoverySvc,
+		AppCtx:      appCtx,
 	}
 	apiHandler.RegisterRoutes(mux)
 	if manifestPath, err := instanceSvc.WriteManifest(ctx); err != nil {

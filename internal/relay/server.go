@@ -23,6 +23,7 @@ type Server struct {
 	enrollment *EnrollmentService
 	auditor    *Auditor
 	mcp        *mcpServer
+	oauthDev   *oauthDevService
 }
 
 func NewServer(cfg *Config, store *Store) *Server {
@@ -41,6 +42,7 @@ func NewServer(cfg *Config, store *Store) *Server {
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
+	s.oauthDev = newOAuthDevService(cfg)
 	s.mcp = newMCPServer(s)
 
 	mux := http.NewServeMux()
@@ -51,28 +53,54 @@ func NewServer(cfg *Config, store *Store) *Server {
 	mux.HandleFunc("/api/v2/connectors", s.withPlannerScope("admin:read", nil, s.handleConnectors))
 	mux.HandleFunc("/api/v2/connectors/", s.withPlannerScope("", nil, s.handleConnectorScoped))
 	mux.HandleFunc("/api/v2/audit", s.withPlannerScope("admin:read", nil, s.handleAudit))
+	mux.HandleFunc("/api/v2/projects", s.withPlannerScope("projects:read", nil, s.handleProjects))
+	mux.HandleFunc("/api/v2/projects/", s.withPlannerScope("", nil, s.handleProjectScoped))
 	mux.HandleFunc("/api/v2/instances", s.withPlannerScope("instances:read", nil, s.handleInstances))
 	mux.HandleFunc("/api/v2/instances/", s.withPlannerScope("", relayInstanceIDFromRequest, s.handleInstanceScoped))
 	mux.HandleFunc("/api/v2/steps/", s.withPlannerScope("", nil, s.handleStepScoped))
 	mux.HandleFunc("/api/v2/artifacts/", s.withPlannerScope("artifacts:read", nil, s.handleArtifactScoped))
 	mux.HandleFunc("/api/v2/gates/", s.withPlannerScope("gates:write", nil, s.handleGateScoped))
 	mux.HandleFunc("/ws/connectors", s.handleConnectorWebSocket)
+	mux.HandleFunc("/.well-known/oauth-protected-resource", s.handleOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-protected-resource/", s.handleOAuthProtectedResource)
+	mux.HandleFunc("/.well-known/oauth-authorization-server", s.handleOAuthAuthorizationServer)
+	mux.HandleFunc("/.well-known/openid-configuration", s.handleOpenIDConfiguration)
+	mux.HandleFunc("/oauth/authorize", s.handleOAuthAuthorize)
+	mux.HandleFunc("/oauth/token", s.handleOAuthToken)
 	mux.HandleFunc("/mcp", s.mcp.Handle)
-	mux.HandleFunc("/mcp/call", s.mcp.Handle)
+	mux.HandleFunc("/mcp/call", s.mcp.HandleCallAlias)
 
 	s.server = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: relayWriteTimeout(cfg),
 	}
 	return s
+}
+
+func relayWriteTimeout(cfg *Config) time.Duration {
+	const transportGrace = 30 * time.Second
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	timeout := time.Duration(cfg.ProxyTimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = time.Duration(DefaultConfig().ProxyTimeoutSeconds) * time.Second
+	}
+	return timeout + transportGrace
 }
 
 func (s *Server) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.cfg.TLSCertFile != "" && s.cfg.TLSKeyFile != "" {
+			err = s.server.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+		} else {
+			err = s.server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
@@ -118,8 +146,8 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.Relay = relayproto.RelayMetadata{
-		RelayURL:                 relayBaseURL(r),
-		WebsocketURL:             websocketURL(r, "/ws/connectors"),
+		RelayURL:                 s.relayBaseURL(r),
+		WebsocketURL:             s.websocketURL(r, "/ws/connectors"),
 		HeartbeatIntervalSeconds: s.cfg.HeartbeatIntervalSeconds,
 	}
 	s.auditor.Record(r.Context(), AuditEvent{
@@ -152,8 +180,8 @@ func (s *Server) handleChallenge(w http.ResponseWriter, r *http.Request) {
 		ChallengeID: challenge.ChallengeID,
 		Nonce:       challenge.Nonce,
 		Relay: relayproto.RelayMetadata{
-			RelayURL:                 relayBaseURL(r),
-			WebsocketURL:             websocketURL(r, "/ws/connectors"),
+			RelayURL:                 s.relayBaseURL(r),
+			WebsocketURL:             s.websocketURL(r, "/ws/connectors"),
 			HeartbeatIntervalSeconds: s.cfg.HeartbeatIntervalSeconds,
 		},
 	})
@@ -195,6 +223,7 @@ func (s *Server) handleConnectorWebSocket(w http.ResponseWriter, r *http.Request
 		connectorID: hello.ConnectorID,
 		machineID:   hello.MachineID,
 		instanceIDs: make(map[string]struct{}),
+		projectIDs:  make(map[string]struct{}),
 		pending:     make(map[string]chan relayproto.CommandResponse),
 		lastSeenAt:  time.Now().UTC(),
 	}
@@ -250,8 +279,11 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 	}
 	s.hub.Touch(session)
 	now := time.Now().UTC()
+	connectorRecord, _ := s.store.GetConnector(ctx, session.connectorID)
 	records := make([]InstanceRecord, 0, len(advertise.Instances))
+	projectRecords := make([]ProjectRecord, 0, len(advertise.Projects))
 	next := make(map[string]struct{})
+	nextProjects := make(map[string]struct{})
 	for _, advertised := range advertise.Instances {
 		var info domain.InstanceInfo
 		if err := json.Unmarshal(advertised.Instance, &info); err != nil {
@@ -271,8 +303,56 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 		s.hub.Register(info.ID, session)
 		next[info.ID] = struct{}{}
 	}
+	for _, advertised := range advertise.Projects {
+		var project struct {
+			ID             string `json:"id"`
+			Name           string `json:"name"`
+			RepoRoot       string `json:"repo_root"`
+			DefaultAdapter string `json:"default_adapter"`
+			AdapterProfile string `json:"adapter_profile"`
+			MachineID      string `json:"machine_id"`
+			HostLabel      string `json:"host_label"`
+			Hostname       string `json:"hostname"`
+		}
+		if err := json.Unmarshal(advertised.Project, &project); err != nil {
+			return err
+		}
+		projectID := advertised.ProjectID
+		if projectID == "" {
+			projectID = project.ID
+		}
+		if projectID == "" {
+			return fmt.Errorf("advertised project is missing id")
+		}
+		if advertised.InstanceID == "" {
+			return fmt.Errorf("advertised project %s is missing instance_id", projectID)
+		}
+		machineID := firstNonEmpty(advertised.MachineID, project.MachineID, session.machineID)
+		hostLabel := firstNonEmpty(advertised.HostLabel, project.HostLabel)
+		if hostLabel == "" && connectorRecord != nil {
+			hostLabel = connectorRecord.Label
+		}
+		hostname := firstNonEmpty(advertised.Hostname, project.Hostname)
+		projectRecords = append(projectRecords, ProjectRecord{
+			ProjectID:      projectID,
+			ConnectorID:    session.connectorID,
+			InstanceID:     advertised.InstanceID,
+			MachineID:      machineID,
+			HostLabel:      hostLabel,
+			Hostname:       hostname,
+			RepoRoot:       project.RepoRoot,
+			DefaultAdapter: project.DefaultAdapter,
+			AdapterProfile: project.AdapterProfile,
+			ProjectJSON:    string(advertised.Project),
+			LastSeenAt:     now,
+		})
+		nextProjects[projectID] = struct{}{}
+	}
 	pruned, err := s.store.ReplaceConnectorInstances(ctx, session.connectorID, records)
 	if err != nil {
+		return err
+	}
+	if _, err := s.store.ReplaceConnectorProjects(ctx, session.connectorID, projectRecords); err != nil {
 		return err
 	}
 	if len(pruned) > 0 {
@@ -284,6 +364,7 @@ func (s *Server) handleAdvertise(ctx context.Context, session *session, message 
 		}
 	}
 	session.instanceIDs = next
+	session.projectIDs = nextProjects
 	return nil
 }
 

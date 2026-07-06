@@ -1,0 +1,416 @@
+version: 1
+name: local-production-v0.3
+goal: hands-off autonomous production without commercial Codencer Cloud
+principles:
+  - Codencer surfaces structured state and evidence; the planner decides next actions.
+  - Execution remains local unless a project is explicitly shared through self-host Relay/MCP.
+  - Live checks must be reported truthfully as passed, pending, skipped, warning, or failed.
+  - No gate may emit suggested_next_action.
+profiles:
+  required_deterministic:
+    status: implemented
+    gates:
+      - id: build_and_doctor
+        status: passed_when_verified
+        commands:
+          - make build-codencer
+          - ./bin/codencer version --json
+          - ./bin/codencer doctor --json
+          - ./bin/codencer doctor toolchain --json
+      - id: setup_local
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer setup local --json
+          - ./bin/codencer setup local --project-id codencer --repo . --adapter codex --profile codex-workspace --json
+      - id: project_registry
+        status: implemented
+        commands:
+          - ./bin/codencer project init --id codencer --repo . --adapter codex --profile codex-workspace --json
+          - ./bin/codencer project list --json
+          - ./bin/codencer project get codencer --json
+      - id: project_local_config_and_machine_routing
+        status: sprint_7_2_implemented
+        commands:
+          - make verify-project-config
+          - ./bin/codencer project scan --repo . --json
+          - ./bin/codencer project adopt --repo . --json
+          - ./bin/codencer machine show --json
+          - ./bin/codencer machine set-label macbook --json
+        notes: project init creates only repo/.codencer/project.json by default; machine identity and absolute paths stay in CODENCER_HOME. Relay/MCP project tools expose locations and return ambiguous_project_location when multiple online machines share a project_id without a selector.
+      - id: local_cli_manifest_execution
+        status: implemented
+        commands:
+          - make verify-local-execution
+          - ./bin/codencer demo local --json --bin-dir ./bin
+      - id: fake_blocker_and_validation
+        status: implemented
+        commands:
+          - ./bin/codencer demo local --json --bin-dir ./bin
+      - id: relay_mcp_fake_execution
+        status: implemented
+        commands:
+          - make verify-local-relay-mcp
+          - CODENCER_LIVE_RELAY_MCP=1 ./bin/codencer live relay-mcp --json --bin-dir ./bin --repo .
+      - id: service_supervisor_deterministic
+        status: implemented
+        commands:
+          - make verify-runtime-recovery
+          - ./bin/codencer service install --all --dry-run --json
+      - id: watchdog_recover_dry_run
+        status: sprint_6_1_corrected
+        commands:
+          - ./bin/codencer watchdog once --json
+          - ./bin/codencer recover --dry-run --json
+        notes: Acceptance splits command execution from health/safety. watchdog_command_runs and recover_dry_run_command_runs prove the commands executed; watchdog_health_ok and recover_dry_run_safe fail or block when reports contain runtime blockers.
+      - id: readiness_and_live_matrix
+        status: implemented
+        commands:
+          - ./bin/codencer readiness --json
+          - ./bin/codencer live matrix --json
+      - id: acceptance_report
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer accept local-production --json --bin-dir ./bin --repo .
+          - ./bin/codencer accept reports --json
+      - id: proof_bundle
+        status: sprint_6_implemented
+        commands:
+          - ./bin/codencer proof bundle --json
+      - id: setup_mcp_snippets
+        status: sprint_8_gateway_updated
+        commands:
+          - ./bin/codencer setup mcp --client codex --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer setup mcp --client claude-code --endpoint http://127.0.0.1:19090/mcp --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+          - ./bin/codencer setup mcp --client chatgpt --endpoint http://127.0.0.1:19090/mcp --json
+        notes: Direct Relay MCP snippets remain available only for advanced/direct/debug mode.
+      - id: activation_package_and_preflight
+        status: sprint_7_implemented
+        commands:
+          - make activation-preflight
+          - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+          - ./bin/codencer activation check --json
+        notes: Default activation preflight is deterministic and does not claim product-client proof.
+      - id: connector_enrollment_documented
+        status: sprint_7_1_implemented
+        commands:
+          - test -f docs/activation-local-connector.md
+          - test -f docs/activation-vps-relay.md
+        notes: Operator docs prefer codencer connector enroll/run/status/config show and keep codencer-connectord as the low-level fallback.
+      - id: activation_package_contains_connector_enrollment
+        status: sprint_7_1_implemented
+        commands:
+          - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+        notes: Package must include connector-enrollment.sh plus README, curl smoke, Codex config, Claude Code command, ChatGPT setup, and activation-package.json.
+      - id: claude_code_command_order_valid
+        status: sprint_7_1_implemented
+        commands:
+          - go test ./internal/mcpconfig ./internal/activation ./cmd/codencer
+        notes: Gateway canonical order is claude mcp add --transport http --header "Authorization: Bearer $CODENCER_GATEWAY_MCP_TOKEN" codencer http://127.0.0.1:19090/mcp for local proof. Direct Relay remains advanced/debug only.
+      - id: chatgpt_setup_sheet_complete
+        status: sprint_8_gateway_updated
+        commands:
+          - ./bin/codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --auth oauth --json
+        notes: JSON setup sheet includes Gateway endpoint, auth mode, client id, local token file paths, OAuth endpoints/metadata, scopes, expected tools, UI steps, test prompts, relay profile guidance, and evidence checklist.
+      - id: curl_smoke_real_mcp_flow
+        status: sprint_7_1_implemented
+        commands:
+          - ./bin/codencer activation package --relay https://relay.example.com --project codencer --token-env CODENCER_MCP_TOKEN --json
+        notes: curl-smoke.sh initializes MCP, captures/reuses MCP-Session-Id, lists tools, calls codencer.list_projects, and has an opt-in fake manifest call.
+      - id: public_self_host_release_docs_present
+        status: sprint_10_implemented
+        commands:
+          - test -f docs/deployment/self-host-production.md
+          - test -f docs/mcp/self-host-mcp-proof.md
+          - test -f docs/acceptance/public-self-host-release.md
+        notes: Public docs describe the self-host Gateway/Relay/MCP path. Website implementation work is outside this repository.
+      - id: public_repo_release_manifest_present
+        status: sprint_10_implemented
+        commands:
+          - test -f docs/acceptance/public-repo-release.yaml
+          - make verify-public-release
+        notes: Public repository release readiness has a separate acceptance manifest covering public/private boundary, legal files, secret/config safety, release artifact safety, and self-host-vs-future-managed positioning.
+      - id: security_policy_present
+        status: sprint_10_implemented
+        commands:
+          - test -f SECURITY.md
+        notes: SECURITY documents private vulnerability reporting and public secret/config boundaries.
+      - id: public_private_boundary_docs_present
+        status: sprint_10_implemented
+        commands:
+          - test -f docs/architecture/public-private-boundary.md
+          - test -f docs/architecture/official-vs-self-host.md
+        notes: Boundary docs classify public core, public self-host Gateway/Relay/MCP, public community cloud-control-plane, private managed-service candidates, and unsafe public surfaces.
+      - id: mcp_gateway_model_doc_present
+        status: sprint_7_1_implemented
+        commands:
+          - test -f docs/architecture/mcp-gateway-model.md
+        notes: Documents the official Gateway MCP surface, Relay profiles, direct Relay debug mode, routing selectors, and no separate ChatGPT/Claude/Codex agents.
+      - id: official_gateway_binary_present
+        status: sprint_8_implemented
+        commands:
+          - make build-gateway
+          - test -x bin/codencer-gatewayd
+        notes: `codencer-gatewayd` is a release/build artifact for the official Gateway MCP endpoint.
+      - id: gateway_config_valid
+        status: sprint_8_implemented
+        commands:
+          - go test ./internal/gateway ./internal/setup ./cmd/codencer
+        notes: Gateway config validates URLs, bearer-dev auth, OAuth dev metadata, Relay profiles, token env/file references, and redacted output.
+      - id: gateway_mcp_initialize
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Deterministic verifier initializes Gateway `/mcp` with isolated temp services and random free ports.
+      - id: gateway_list_relays
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Gateway lists relay profiles without exposing backend Relay tokens.
+      - id: gateway_list_projects
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Gateway aggregates projects across relay profiles and verifies no obvious absolute local path or token leakage.
+      - id: gateway_forward_manifest
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Gateway forwards fake manifest execution through selected Relay/machine and retrieves the run report.
+      - id: gateway_ambiguous_relay_blocker
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Multiple matching Relay profiles without `relay_profile_id` return `ambiguous_relay_profile`.
+      - id: gateway_ambiguous_location_blocker
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Multiple online project locations in a selected Relay without `machine_id` or `host_label` return `ambiguous_project_location`.
+      - id: gateway_relay_unavailable_blocker
+        status: sprint_8_implemented
+        commands:
+          - make verify-gateway
+        notes: Backend Relay outage returns structured blocker `relay_unavailable`.
+      - id: gateway_auth_metadata
+        status: sprint_8_implemented
+        commands:
+          - go test ./internal/gateway
+          - make verify-gateway
+        notes: Gateway exposes protected-resource metadata and OAuth dev authorization-server metadata for product-facing MCP setup.
+      - id: official_connector_self_service_flow
+        status: sprint_9_implemented
+        commands:
+          - make verify-official-connector
+        notes: Verifies `codencer login`, default personal workspace, default self-host Relay profile, `codencer connector login`, user-added self-host Relay profile, Gateway MCP tools, default/self-host routing, ambiguity blockers, relay-down blocker, token redaction, and no absolute local path leakage in isolated temp services with random ports.
+      - id: gateway_account_device_login
+        status: sprint_9_implemented
+        commands:
+          - go test ./internal/gateway ./cmd/codencer
+        notes: Device login stores workspace-bound Gateway session in `$CODENCER_HOME/session.json`; CLI JSON output does not print the access token.
+      - id: gateway_relay_registry_persistent
+        status: sprint_9_implemented
+        commands:
+          - go test ./internal/gateway ./cmd/codencer
+        notes: Relay profiles are stored in the Gateway persistent workspace store. Local config-file relay commands remain available for operator/debug compatibility.
+      - id: gateway_activation_package
+        status: sprint_9_implemented
+        commands:
+          - go test ./internal/activation ./cmd/codencer
+          - ./bin/codencer activation self-host --gateway https://gateway.example.com --relay https://relay.example.com --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json
+        notes: Activation package contains Gateway curl smoke, Codex config, Claude Code command, ChatGPT setup, relay profile setup, connector login instructions, and evidence checklist.
+      - id: public_connector_docs_use_gateway_url
+        status: sprint_8_implemented
+        commands:
+          - rg "127.0.0.1:19090/mcp|gateway.example.com/mcp" README.md docs
+        notes: Primary client docs use operator-owned self-host Gateway URLs as the public connector examples.
+      - id: self_host_direct_marked_advanced
+        status: sprint_8_implemented
+        commands:
+          - rg "advanced/direct/debug" README.md docs
+        notes: Direct self-host Relay `/mcp` remains supported but is documented as advanced/direct/debug mode.
+      - id: readme_current_version
+        status: sprint_7_3_implemented
+        commands:
+          - rg "v0.3.0-local-prod-rc.1" README.md
+        notes: README is the primary OSS entry point and presents the current local/self-host RC as release truth.
+      - id: license_apache_2_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f LICENSE
+          - rg "Apache License" LICENSE
+        notes: Codencer Core is licensed under Apache-2.0.
+      - id: notice_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f NOTICE
+        notes: NOTICE includes owner/contributor copyright, prior-version note, and trademark/service identity boundary.
+      - id: trademark_policy_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f TRADEMARKS.md
+        notes: Trademark policy separates Apache-2.0 software rights from Codencer marks, logos, domains, official service identities, Gateway/Cloud, and hosted services.
+      - id: contributing_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f CONTRIBUTING.md
+          - rg "Go 1.25" CONTRIBUTING.md
+          - rg "Apache-2.0" CONTRIBUTING.md
+        notes: CONTRIBUTING uses current toolchain and contribution licensing guidance without requiring a CLA.
+      - id: docs_map_present
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/README.md
+        notes: Docs index points external users to current local, self-host Relay, MCP, activation, project config, troubleshooting, and acceptance docs.
+      - id: project_config_doc_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/project-config.md
+          - rg "project.json" docs/project-config.md
+        notes: Project config doc covers committed repo config, no-secret policy, local machine identity, and machine-aware routing.
+      - id: self_host_activation_docs_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/quickstart-self-host-relay.md
+          - test -f docs/activation-vps-relay.md
+          - test -f docs/activation-local-connector.md
+        notes: Self-host docs keep Relay/connector as backend and direct-debug paths while public client activation uses Gateway.
+      - id: mcp_client_docs_current
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/mcp/chatgpt-app-setup.md
+          - test -f docs/mcp/codex-mcp-live.md
+          - test -f docs/mcp/claude-code-mcp-live.md
+          - test -f docs/mcp/relay_tools.md
+        notes: MCP client docs distinguish setup/preflight artifacts from live product proof.
+      - id: legacy_docs_archived_or_bannered
+        status: sprint_7_3_implemented
+        commands:
+          - test -d docs/archive/legacy-local-track
+          - rg "Legacy" docs/archive/legacy-local-track
+        notes: Public legacy setup and release-track docs are archived; internal historical docs carry legacy warnings.
+      - id: no_stale_primary_v0_2_claims
+        status: sprint_7_3_implemented
+        commands:
+          - test -f docs/README.md
+        notes: Primary current docs present v0.3 local/self-host RC; old release-track references are limited to archived or historical contexts.
+      - id: no_mit_primary_claims
+        status: sprint_7_3_implemented
+        commands:
+          - test -f LICENSE
+          - test -f NOTICE
+        notes: Primary license docs use Apache-2.0; prior MIT references are historical only.
+      - id: live_claims_not_faked
+        status: sprint_7_3_implemented
+        commands:
+          - test -f README.md
+          - test -f docs/live-execution-matrix.md
+        notes: Live ChatGPT/Codex/Claude product proof remains pending unless actual product evidence is saved.
+      - id: relay_oauth_dev_endpoints
+        status: sprint_7_implemented
+        commands:
+          - ./bin/codencer setup relay --base-url https://relay.example.com --proxy-timeout-seconds 300 --generate-planner-token --enable-chatgpt-oauth-dev --json
+        notes: OAuth dev mode is single-user self-host testing with hashed client/operator secrets and opaque in-memory access tokens; it is not enterprise IAM.
+      - id: security_hardening_checks
+        status: sprint_6_implemented
+        notes: Acceptance includes checks for explicit project sharing, remote path sanitization, relay auth, dangerous bypass guardrails, log path control, uninstall purge safety, and report redaction.
+      - id: install_upgrade_uninstall_dry_run
+        status: sprint_6_implemented
+        commands:
+          - scripts/install.sh --dry-run
+          - scripts/uninstall.sh --dry-run
+          - scripts/upgrade.sh --dry-run
+      - id: release_snapshot
+        status: sprint_6_1_corrected
+        commands:
+          - make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+        notes: Default required targets are darwin/arm64, darwin/amd64, and linux/amd64. Missing required targets make the release report fail unless ALLOW_PARTIAL=1 is explicit. Windows-native daemon binaries are not claimed; Windows production path is WSL2/Linux.
+      - id: release_artifacts_present
+        status: sprint_6_1_implemented
+        commands:
+          - test -f dist/manifest.json
+          - test -f dist/checksums.txt
+          - make verify-release
+        notes: Every manifest artifact with status built must exist on disk and match checksums.txt. Source ZIPs are not release artifacts.
+      - id: install_upgrade_truthfulness
+        status: sprint_6_1_corrected
+        commands:
+          - rm -rf bin
+          - scripts/install.sh --dry-run --json
+          - scripts/upgrade.sh --dry-run --json
+        notes: Missing required binaries must return ok false, include missing_binaries, and exit nonzero unless --allow-missing is explicit.
+  optional_live:
+    status: opt_in
+    gates:
+      - id: relay_mcp_live_fake_executor
+        status: implemented_opt_in
+        commands:
+          - CODENCER_LIVE_RELAY_MCP=1 make live-relay-mcp-smoke
+      - id: restart_reconnect_live_fake
+        status: implemented_opt_in
+        commands:
+          - CODENCER_LIVE_SERVICE_RESTART=1 make live-restart-reconnect-smoke
+      - id: live_codex_executor
+        status: pending_unless_run
+        commands:
+          - CODENCER_LIVE_CODEX=1 make live-codex-smoke
+      - id: live_claude_executor
+        status: pending_unless_run
+        commands:
+          - CODENCER_LIVE_CLAUDE=1 make live-claude-smoke
+      - id: wsl_live_path
+        status: pending_unless_run_inside_wsl
+        commands:
+          - CODENCER_LIVE_WSL=1 make live-wsl-smoke
+        notes: WSL production uses the linux/amd64 artifact or a Linux/WSL source build; Windows-native daemon support is not claimed.
+      - id: live_installed_services
+        status: pending_unless_run
+        commands:
+          - CODENCER_LIVE_SERVICE_SMOKE=1 make live-service-macos-smoke
+          - CODENCER_LIVE_SERVICE_SMOKE=1 make live-service-linux-smoke
+  manual_product_client_proof:
+    status: pending_manual
+    gates:
+      - id: chatgpt_product_ui_proof
+        status: pending_manual
+        notes: Requires public HTTPS, OAuth dev mode or an OAuth front door, eligible workspace developer mode, real tool call, and saved evidence.
+      - id: codex_mcp_product_client_proof
+        status: pending_manual
+        notes: Activation emits Codex snippets and prompts, but Codex must actually connect and call a tool before this passes.
+      - id: claude_code_mcp_product_client_proof
+        status: pending_manual
+        notes: Activation emits Claude Code command/.mcp.json snippets, but Claude Code must actually connect and call a tool before this passes.
+      - id: claude_desktop_or_claude_ai_remote_connector
+        status: pending_manual
+        notes: Claude Code HTTP MCP snippets are generated; product UI proof is separate.
+      - id: signed_notarized_macos_release
+        status: not_claimed
+      - id: windows_native_daemon_production
+        status: not_claimed_wsl2_is_documented_path
+release_gates:
+  required_for_final_go:
+    - id: full_required_release_targets_built
+      status: required
+      targets:
+        - darwin/arm64
+        - darwin/amd64
+        - linux/amd64
+      notes: A Darwin-only snapshot is partial and must not be labeled a final multi-platform production release.
+    - id: release_artifacts_present
+      status: required
+      notes: Built artifacts must be present outside source ZIPs and checksum-verified.
+verification:
+  non_live_release_candidate:
+    - go test ./...
+    - make build-codencer
+    - make verify-project-config
+    - make verify-local-execution
+    - make verify-local-relay-mcp
+    - make verify-runtime-recovery
+    - make verify-live-matrix
+    - make activation-preflight
+    - make acceptance-local-production
+    - make verify-release
+    - make verify-local-prod
+    - make verify-public-release
+    - make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+    - make release-snapshot VERSION=v0.3.0-local-prod-rc.1 ALLOW_PARTIAL=1

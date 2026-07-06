@@ -1,5 +1,8 @@
 # Beta Support Classification
 
+> [!WARNING]
+> Historical v0.2 beta classification. This is not the current v0.3 local/self-host RC release contract. Use [README](../../README.md), [Local Quickstart](../quickstart-local.md), and [Self-Host Relay Quickstart](../quickstart-self-host-relay.md) for current guidance.
+
 This matrix separates current repo truth from the frozen beta contract.
 
 This is a final audited classification snapshot after Phase 7 beta confirmation. The beta contract labels below are frozen release truth, not forward-looking intent.
@@ -30,7 +33,7 @@ Phase 7 note:
 | Task/result schemas | `canonical` | `canonical` | Repo tests + runtime use | Main task/result contracts are real. |
 | `/api/v1/compatibility` | `compatibility` | `compatibility` | Repo tests + runtime use | Diagnostic surface for runtime availability/binding state, not a beta-support certificate. |
 | Policy schema + policy runtime contract | `partial` | `partial` | Code + drift audit | Schema/runtime drift still exists. |
-| `codex` adapter | `partial` | `supported-beta target` | Phase 3 local smoke + conformance tests | Primary intended local beta adapter, but current repo proof is still simulation-heavy and not live-binary proven. |
+| `codex` adapter | `partial` | `supported-beta target` | Phase 3 local smoke + conformance tests + post-beta fake-binary `codex exec` proof + stricter flagship live-smoke checks | Primary intended local beta adapter. The default runtime path now targets `codex exec`; repo proof is stronger than simulation-only, but live authenticated Codex service execution is still operator-environment proof. |
 | `claude` adapter | `partial` | `supported-beta target` | Fake-binary tests | Good wrapper proof, no live authenticated proof. |
 | `qwen` adapter | `partial` | `secondary` | Conformance tests | Kept, not primary beta promise, and still simulation-only in checked-in proof. |
 | `ide-chat` adapter | `experimental` | `deferred` | Code only/manual proxy model | Not a stable local execution contract. |
@@ -52,14 +55,17 @@ Phase 7 note:
 | Surface | Current label | Beta contract label | WS-P1 proof status | Notes |
 | --- | --- | --- | --- | --- |
 | Generic relay HTTP client path | `partial` | `supported-beta target` | `proven` | Narrow bearer-token HTTP planner flow is re-proven by relay integration tests and the current self-host smoke path. |
-| Generic relay MCP client path | `partial` | `supported-beta target` | `proven` | Canonical endpoint is `/mcp`; Phase 2 and Phase 4 both re-proved initialize/list/call, SSE bootstrap, aliasing, and scoped routing. |
+| Generic relay MCP client path | `partial` | `supported-beta target` | `proven` | Canonical endpoint is `/mcp`; current proof covers initialize/list/call, SSE bootstrap past server write timeout, POST-only aliasing, relay token-bound sessions, CORS-readable auth challenge, and scoped routing. |
 | Official Go SDK path to relay MCP | `partial` | `supported-beta target` | `proven` | Explicitly proven for relay MCP only, not for relay REST HTTP. |
 | Generic cloud HTTP client path | `partial` | `supported-beta target` | `proven` | Composed cloud smoke and runtime tests now cover tenant-scoped run create/get plus submit-task over cloud HTTP. |
-| Generic cloud MCP client path | `partial` | `supported-beta target` | `proven` | Canonical endpoint is `/api/cloud/v1/mcp`; cloud-side initialize/list/call, stream/delete, aliasing, and token-bound session behavior are directly proven. |
+| Generic cloud MCP client path | `partial` | `supported-beta target` | `proven` | Canonical endpoint is `/api/cloud/v1/mcp`; cloud-side initialize/list/call, stream/delete past server write timeout, POST-only aliasing, CORS-readable auth challenge, and token-bound session behavior are directly proven. |
 | Official Go SDK path to cloud MCP | `partial` | `supported-beta target` | `proven` | Explicitly proven for cloud MCP only, not for cloud REST HTTP. |
 | Generic MCP clients beyond the manual JSON-RPC callers and official Go SDK helper | `compatibility` | `compatibility` | `expected-only` | Codencer's MCP protocol surface is proven, but product-specific desktop/client interoperability is not claimed universally. |
-| ChatGPT-style planner path via relay/cloud | `compatibility` | `compatibility` | `compatibility-only` | Remote MCP pattern only. Public docs now point to the canonical relay/cloud MCP endpoints without claiming repo-executed ChatGPT setup. |
-| Claude-style planner path via relay/cloud | `compatibility` | `compatibility` | `compatibility-only` | Remote MCP pattern only and explicitly separate from the local `claude` execution adapter proof. |
+| ChatGPT custom MCP connector path via relay/cloud | `partial` | `compatibility` | `operator-packaged` | Post-beta product docs, OAuth front-door contract, smoke, bearer-token proof, and OAuth protected-resource metadata/challenge support make the Codencer-side remote MCP loop concrete for Business/Enterprise/Edu write-capable operator use. No universal ChatGPT product support is claimed. |
+| OpenAI Responses API remote MCP path via relay/cloud | `partial` | `compatibility` | `operator-packaged expected` | Codencer-side MCP is proven and endpoint/auth examples are documented, but the repo does not call OpenAI's API. |
+| Claude Code remote HTTP MCP path via relay/cloud | `partial` | `compatibility` | `operator-packaged` | Checked-in HTTP MCP configs plus concrete `claude mcp add` commands and flagship loop proof make the bearer-header Claude Code lane concrete for operator use. This is separate from the local `claude` executor adapter. |
+| Anthropic Messages API MCP connector path via relay/cloud | `partial` | `compatibility` | `operator-packaged expected` | Current `mcp-client-2025-11-20` examples are packaged, but the repo does not call Anthropic's API. |
+| Claude Desktop / `claude.ai` remote connector path via relay/cloud | `compatibility` | `compatibility` | `compatibility-only until operator-exercised` | Codencer-side OAuth protected-resource metadata is proven, but product-side remote connector auth/setup remains outside repo proof and separate from the local `claude` execution adapter proof. |
 | Daemon-local `/mcp/call` | `compatibility` | `compatibility` | `compatibility-only` | Local compatibility/admin bridge, not the public remote planner MCP contract. |
 | Relay `/mcp/call` alias | `compatibility` | `compatibility` | `compatibility-only` | Repo-tested POST alias, but `/mcp` remains the canonical session path. |
 | Cloud `/api/cloud/v1/mcp/call` alias | `compatibility` | `compatibility` | `compatibility-only` | Repo-tested POST alias, but `/api/cloud/v1/mcp` remains the canonical session path. |

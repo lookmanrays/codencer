@@ -28,7 +28,7 @@ Always verify the daemon's identity to ensure you are targeting the correct repo
 **Expected JSON Response:**
 ```json
 {
-  "version": "v0.2.0-beta",
+  "version": "v0.3.0-local-prod-rc.1",
   "repo_root": "/home/user/my-project",
   "execution_mode": "REAL",
   "port": 8085
@@ -43,6 +43,7 @@ Use `submit --wait --json` for a synchronous hand-off. This simplifies your cont
 
 Runtime note:
 - In real mode, Codencer expects the installed agent CLIs to be reachable through their configured binaries.
+- For Codex, the bridge runs `codex exec`, sends the submitted prompt on `stdin`, and executes from the isolated attempt workspace.
 - For Claude specifically, the bridge runs `claude -p --output-format json`, sends the submitted prompt on `stdin`, and executes from the isolated attempt workspace.
 - Claude evidence is file-backed: review `prompt.txt`, `stdout.log`, `stderr.log`, and the synthesized `result.json` through normal artifact inspection.
 
@@ -104,9 +105,9 @@ Analyze the JSON payload from `submit` to decide your next move.
 
 ## 🧪 Experimental Path: OpenClaw (ACPX)
 
-Codencer provides experimental (Alpha) support for the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to any ACP-compliant agent in the OpenClaw ecosystem. 
+Codencer provides experimental support for the **Agent Client Protocol (ACP)**. This allows you to delegate tactical work to any ACP-compliant agent in the OpenClaw ecosystem.
 
-### Pattern: OpenClaw Submission (Alpha)
+### Pattern: OpenClaw Submission
 ```bash
 ./bin/orchestratorctl submit my-run-id \
   --goal "Fix broken test case in auth_test.go" \
@@ -145,7 +146,7 @@ Follow this sequence for every tactical mission:
 
 1.  **Use ID Namespacing**: Use clear `RunID` prefixes (e.g., `feature-fix-auth`) to group related steps.
 2.  **Narrow Scopes**: Avoid "Fix everything" prompts. Break work into small, verifiable goals.
-3.  **Mandatory Validations**: Always include at least one `--validation` command (e.g., `make test` or `go build`) to ensure the agent didn't break the build.
+3.  **Mandatory Validations**: Always include at least one validation command appropriate for the change, such as `go test ./...`, `make verify-local-prod`, or a focused package test, so the agent does not claim success without evidence.
 4.  **Audit the Diff**: Use `./bin/orchestratorctl step artifacts <UUID>` to verify the exact changes before finalizing.
 
 ---

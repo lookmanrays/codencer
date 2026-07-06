@@ -4,6 +4,7 @@ import relaystore "agent-bridge/internal/relay/store"
 
 type Store = relaystore.Store
 type InstanceRecord = relaystore.InstanceRecord
+type ProjectRecord = relaystore.ProjectRecord
 type ConnectorRecord = relaystore.ConnectorRecord
 type EnrollmentTokenRecord = relaystore.EnrollmentTokenRecord
 type ChallengeRecord = relaystore.ChallengeRecord

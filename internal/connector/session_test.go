@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"agent-bridge/internal/domain"
+	"agent-bridge/internal/local"
+	projectpkg "agent-bridge/internal/project"
 	"agent-bridge/internal/relayproto"
 	"github.com/gorilla/websocket"
 )
@@ -161,6 +164,127 @@ func TestClientRun_HandshakeAdvertiseAndProxy(t *testing.T) {
 	}
 	if status.LastConnectAt == "" || status.LastHeartbeatAt == "" || len(status.SharedInstances) != 1 || status.SharedInstances[0] != "inst-1" {
 		t.Fatalf("unexpected status after connect: %+v", status)
+	}
+}
+
+func TestClientHandleProjectRequestStartsRunThroughLocalexec(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := local.ResolvePathsForHome("", "", home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := local.EnsureHome(paths, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	var daemon *httptest.Server
+	var cancelled atomic.Bool
+	var resumed atomic.Bool
+	daemon = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/instance":
+			_ = json.NewEncoder(w).Encode(domain.InstanceInfo{ID: "inst-1", BaseURL: daemon.URL, RepoRoot: repo})
+		case "/api/v1/runs":
+			if r.Method != http.MethodPost {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning})
+		case "/api/v1/runs/run-1":
+			switch r.Method {
+			case http.MethodPatch:
+				var req struct {
+					Action string `json:"action"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Fatalf("decode daemon patch action: %v", err)
+				}
+				switch req.Action {
+				case "abort":
+					cancelled.Store(true)
+					_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
+				case "resume":
+					resumed.Store(true)
+					_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateRunning, RecoveryNotes: "Resume requested by operator."})
+				default:
+					t.Fatalf("unexpected daemon patch action %q", req.Action)
+				}
+			case http.MethodGet:
+				_ = json.NewEncoder(w).Encode(domain.Run{ID: "run-1", ProjectID: "proj", State: domain.RunStateCancelled})
+			default:
+				http.NotFound(w, r)
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer daemon.Close()
+
+	registry := projectpkg.EmptyRegistry()
+	project, _, err := projectpkg.NewProject(projectpkg.ProjectOptions{
+		ID:             "proj",
+		RepoRoot:       repo,
+		DefaultAdapter: "fake",
+		AdapterProfile: "fake-success",
+		DaemonURL:      daemon.URL,
+		SharedToRelay:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := projectpkg.UpsertProject(registry, project, false, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := projectpkg.SaveRegistry(paths.ProjectsFile, registry); err != nil {
+		t.Fatal(err)
+	}
+
+	client := NewClient(&Config{CodencerHome: home})
+	response := client.handleRequest(context.Background(), relayproto.CommandRequest{
+		RequestID: "req-project",
+		Method:    http.MethodPost,
+		Path:      "/codencer/v1/projects/proj/runs",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected ok response, got %+v", response)
+	}
+	if !strings.Contains(string(response.Body), `"run-1"`) || !strings.Contains(string(response.Body), `"started"`) {
+		t.Fatalf("unexpected project response: %s", string(response.Body))
+	}
+
+	response = client.handleRequest(context.Background(), relayproto.CommandRequest{
+		RequestID: "req-project-cancel",
+		Method:    http.MethodPost,
+		Path:      "/codencer/v1/projects/proj/runs/run-1/cancel",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected ok cancel response, got %+v", response)
+	}
+	if !cancelled.Load() {
+		t.Fatal("expected project cancel request to reach daemon run cancel endpoint")
+	}
+	if !strings.Contains(string(response.Body), `"run-1"`) || !strings.Contains(string(response.Body), `"cancelled"`) {
+		t.Fatalf("unexpected project cancel response: %s", string(response.Body))
+	}
+
+	response = client.handleRequest(context.Background(), relayproto.CommandRequest{
+		RequestID: "req-project-resume",
+		Method:    http.MethodPost,
+		Path:      "/codencer/v1/projects/proj/runs/run-1/resume",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("expected ok resume response, got %+v", response)
+	}
+	if !resumed.Load() {
+		t.Fatal("expected project resume request to reach daemon run resume endpoint")
+	}
+	if !strings.Contains(string(response.Body), `"run_resumed"`) || !strings.Contains(string(response.Body), `"running"`) {
+		t.Fatalf("unexpected project resume response: %s", string(response.Body))
 	}
 }
 

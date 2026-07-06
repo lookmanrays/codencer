@@ -1,0 +1,20 @@
+{
+  "resource": "https://relay.example.com/mcp",
+  "authorization_servers": ["https://auth.example.com"],
+  "upstream": {
+    "url": "http://127.0.0.1:8090/mcp",
+    "authorization": "Bearer <codencer-planner-token>"
+  },
+  "scope_mapping": {
+    "codencer-planner": [
+      "instances:read",
+      "runs:read",
+      "runs:write",
+      "steps:read",
+      "steps:write",
+      "artifacts:read",
+      "gates:read",
+      "gates:write"
+    ]
+  }
+}

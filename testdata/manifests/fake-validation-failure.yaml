@@ -1,0 +1,20 @@
+version: codencer.io/v1alpha1
+kind: RunManifest
+metadata:
+  name: fake-validation-failure
+project:
+  id: codencer
+execution:
+  adapter: fake
+  profile: fake-success
+policy:
+  stop_on_blocker: true
+  stop_on_failure: true
+tasks:
+  - id: fake-validation-failure
+    title: Fake validation failure
+    goal: Complete adapter execution, then fail validation.
+    validations:
+      - name: fail-validation
+        command: "echo validation failed >&2; exit 7"
+        timeout_seconds: 5

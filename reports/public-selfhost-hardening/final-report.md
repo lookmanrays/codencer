@@ -1,0 +1,315 @@
+# Public Self-host Hardening Final Report
+
+Date: 2026-06-24
+
+Implementation commit hash: `f27d79fb7575650c2aa4b34880388cf0536eb3c1`
+
+Branch: `next-phase`
+
+## Implementation Summary
+
+- Added the public self-host release spec files under `docs/specs/` and the acceptance gate at `docs/acceptance/public-selfhost-release-gate.yaml`.
+- Created the pre-change implementation audit at `reports/public-selfhost-hardening/implementation-audit.md`.
+- Hardened the public self-host RC verifier so it emits only `GO` or `NO-GO`, rejects real-executor simulation env values, runs configured real executor gates by adapter, and fails the release gate when required real proofs are missing.
+- Updated the public self-host release scope so Codex and Claude Code are required real executor proofs while Antigravity is optional/deferred unless explicitly added to `CODENCER_E2E_REQUIRED_REAL_EXECUTORS`.
+- Removed stale active public-doc wording that said missing real executor proof reports `PARTIAL`; active RC docs now say missing/skipped/simulated/failed required real executor proof is `NO-GO`, and the public boundary checker rejects stale `reports PARTIAL` claims plus malformed hardening-report final verdict lines.
+- Confirmed the real Codex path invokes the configured Codex binary with `ALL_ADAPTERS_SIMULATION_MODE=0` and `CODEX_SIMULATION_MODE=0`.
+- Hardened simulation result handling so the shared simulation runner writes `is_simulation=true`, and Codex/Claude normalizers preserve or infer simulation status from deterministic simulation artifacts instead of relabeling them as real when normalization runs with simulation env disabled.
+- Added `codencer run events`, `codencer run report`, `codencer run cancel`, and structured `codencer run resume` blocker behavior.
+- Exposed daemon-backed local `codencer run resume` for states already supported by `RecoveryService.ResumeRun` (`created` and `paused_for_gate`), with explicit `run_resumed` CLI events and structured `run_resume_blocked` output when the selected run is not resumable.
+- Added Gateway MCP async lifecycle tools: `codencer.start_project_run`, `codencer.submit_project_task`, `codencer.list_project_runs`, `codencer.get_project_run`, `codencer.get_project_run_status`, `codencer.get_gateway_run_events`, true project-scoped `codencer.cancel_project_run`, and a structured `codencer.resume_project_run` capability blocker.
+- Preserved `codencer.submit_project_task_and_wait` as a compatibility tool while adding non-blocking submit/start paths for planners that should not hold one long HTTP/MCP request open.
+- Updated Gateway Console simple-task submit to send `wait=false`, poll the run report until terminal status, display `pending` while waiting, and emit the terminal audit event once when report refresh observes completion.
+- Wired project run cancellation through Gateway HTTP, Gateway MCP, Relay HTTP, Relay MCP, Connector project proxy, and local daemon-backed cancellation, with Gateway run history/audit events for `cancel_project_run_requested` and terminal `run_cancelled`.
+- Added `codencer sync status`, `codencer sync preview`, and `codencer sync publish` as explicit metadata-only sync controls. Raw artifacts/logs are blocked, and confirmed publish ingests only sanitized metadata into Gateway run history with `scope=synced`.
+- Added Gateway test coverage proving metadata-only `codencer sync publish` emits sanitized aggregate `sync.publish` and per-run `sync.run_published` audit events.
+- Redacted local absolute repo/report paths, daemon URLs, token-like text, and unsafe executor summaries from default human CLI project/status/submit/run output while preserving explicit `--json` operator detail.
+- Improved default human `codencer submit` output with local lifecycle progress lines for the run id, submitted step/profile, task status, terminal result, follow-up `codencer run report <run_id>` guidance for non-terminal tasks, and a safe local report-store hint.
+- Redacted default human `codencer init` and `codencer config show` output so local home/config/project/machine file paths and daemon URLs stay available through explicit JSON/path commands but are not printed by default.
+- Extended the artifact-backed public self-host release verifier with default CLI redaction gates covering `init`, `config show`, `project init`, `project status`, `project scan`, `executor list`, `sync preview`, plus an isolated daemon-backed local run proof for `submit`, `run list`, `run get`, `run status`, `run events`, `run cancel`, `run report`, and the structured `run resume` capability blocker.
+- Sanitized setup human output step details, next commands, and secret-key step labels so local config/token paths are hidden in default output while operator Gateway/Relay URLs remain visible.
+- Extended the artifact-backed public self-host release verifier with additional default human CLI redaction gates covering `config profiles list`, `config profiles use`, `config set`, `executor scan`, `executor test`, `executor default`, `setup self-host`, `setup relay`, and `activation self-host`.
+- Strengthened the Gateway smoke used by source-tree and unpacked-artifact self-host verification so it runs with an isolated store-backed Gateway, seeds Relay profiles through the public API, and checks Gateway API outputs for relays, projects, machines, connectors, executors, runs, run detail, run events, audit events, and activation commands for local path, daemon URL, token, and unsafe field leaks.
+- Added Gateway run-history `scope` metadata and exposed it through the API and Console run list/detail views.
+- Added Gateway-observed run/audit `limit`/`offset` pagination, server-side filters, grouped lifecycle summaries, and Console previous/next controls for Runs and Audit.
+- Added first-class local `human_interrupts` records and `human_interrupt_created` Gateway audit events for blocker/question/approval/permission/system-action outcomes.
+- Extended the artifact-backed public self-host release verifier with a deterministic fake-blocker local run so default `codencer submit` and `codencer run report` human output must show `human_interrupt`, prompt, allowed responses, and blocker type while still redacting local paths, daemon URLs, and token-like material.
+- Added Gateway HTTP and MCP operator-response recording for Gateway-observed human interrupts, with sanitized `human_interrupt_responded` audit metadata and explicit next actions that keep automatic continuation separated from resume routing.
+- Added explicit `follow_up=resume` behavior for Gateway-observed human interrupt responses. The response is recorded first, then Gateway uses the stored safe route metadata to attempt `resume_project_run`, returning either a resumed run payload or a structured blocker while auditing `resume_project_run_requested`, `run_resumed`, or `resume_project_run_blocked`.
+- Added explicit `follow_up=cancel` behavior for Gateway-observed human interrupt responses. The response is recorded first, then Gateway uses the stored safe route metadata to attempt `cancel_project_run`, returning either a cancelled run payload or a structured blocker while auditing `cancel_project_run_requested`, `run_cancelled`, or `cancel_project_run_blocked`.
+- Added explicit `follow_up=start_new_task` behavior for Gateway-observed human interrupt responses. The response is recorded first, then Gateway requires a separate `new_task_goal`, uses the stored safe route metadata to submit the replacement task with `wait=false`, and returns either the submitted follow-up run or a structured `new_task_goal_required` blocker while auditing `start_new_task_requested` or `start_new_task_blocked`.
+- Wired project run resume through Gateway HTTP, Gateway MCP, Relay HTTP, Relay MCP, Connector project proxy, and local daemon-backed resume. Successful daemon-resumable states produce `run_resumed`; completed or otherwise non-resumable runs still return structured `run_resume_blocked` / `resume_project_run_blocked` blockers with sanitized audit metadata.
+- Updated Gateway Console manifest/run-plan submissions to use the async `wait=false` path, so both simple task mode and advanced manifest mode return after submission and rely on report polling for terminal evidence.
+- Added Gateway API regression coverage proving manifest-mode project run creation forwards `wait=false`, returns a submitted run, preserves `run_history_id`, and later resolves the terminal report through the report endpoint.
+- Fixed daemon resume recovery for missing run IDs so the daemon returns an error instead of panicking; local CLI resume now preserves the structured `unsupported_operation` blocker in that missing-run/non-resumable path.
+- Hardened Gateway Console e2e navigation from submit result to run detail by waiting for the run-detail URL transition, removing a release-verifier race around the `View full run` link.
+- Added a Gateway Console run-detail human interrupt response panel that appears for blocked/waiting runs, records sanitized operator responses through the Gateway API, refreshes run/audit data, and keeps resume framed as a separate capability check rather than automatic restart.
+- Added Antigravity executor profiles so executor discovery exposes Antigravity as a real profile family.
+- Added isolated Antigravity proof plumbing: `CODENCER_ANTIGRAVITY_DAEMON_DIR` discovery override, preservation of explicit verifier workspace roots, and live-verifier support for `CODENCER_E2E_ANTIGRAVITY_INSTANCE_JSON`, `CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE`, and `CODENCER_E2E_ANTIGRAVITY_DAEMON_DIR`.
+- Hardened Antigravity proof handling so the verifier rejects an Antigravity language-server instance unless its actual `GetWorkspaceInfos` output includes the isolated verifier repo.
+- Hardened the direct Antigravity adapter so unsupported or out-of-workspace permission waits become manual-attention results instead of timing out, without exposing the requested local target path or command string.
+- Fixed connector shared-instance discovery so an allowlisted manifest identity is not overwritten by an unrelated daemon that happens to be listening on the manifest URL during tests.
+- Tightened the live Console verifier so the real executor result check targets the Summary heading deterministically.
+- Updated active self-host cloud deploy defaults from stale `v0.2.0-beta` to `v0.3.0-local-prod-rc.1`.
+- Extended the public boundary checker so active `deploy/` files are scanned for stale release labels and source/deploy/script/web paths with obvious private managed-service categories such as billing, metering, KMS/Vault, managed runners, support/admin consoles, marketplace submission material, or official connector credentials are rejected.
+
+## Proofs
+
+- Current artifact-backed public self-host RC proof passed for the required Codex + Claude Code release scope:
+  - Report: `reports/public-selfhost-rc/20260624T202037Z/summary.md`
+  - Verdict: `GO`
+  - Gates: `build_release_snapshot`, `select_unpack_artifact`, `docs_public_release`, `standard_setup_contract`, `gateway_artifact_smoke`, `gateway_console_live_artifact`, `real_executor_e2e_codex`, `real_executor_e2e_claude`, and `required_real_executor_proofs` all passed.
+  - Required proof log: `reports/public-selfhost-rc/20260624T202037Z/required_real_executor_proofs.log` shows `default_required=codex,claude`, `optional_deferred=antigravity`, `codex=passed`, and `claude=passed`.
+  - Codex evidence: `real_executor_e2e_codex.log` prints `ALL_ADAPTERS_SIMULATION_MODE=0 CODEX_SIMULATION_MODE=0` and daemon `Adapter Execution: Starting process` entries with `adapter=codex` and the configured Codex binary.
+  - Claude Code evidence: `real_executor_e2e_claude.log` prints `ALL_ADAPTERS_SIMULATION_MODE=0 CLAUDE_SIMULATION_MODE=0` and daemon routing with `primary=claude`.
+- Historical `NO-GO` RC runs remain in `reports/public-selfhost-rc/` and are retained as evidence of earlier missing-proof and external-limit failures. They no longer define the current release verdict after the Antigravity deferral contract changed.
+- Antigravity remains implemented as an executor/profile family and optional verifier path, but its real executor proof is deferred. Antigravity must not be claimed as proven unless its explicit gate is configured and passes.
+- Gateway Console visual evidence regenerated:
+  - `reports/gateway-console-screenshots/2026-06-24-1202`
+  - `reports/gateway-console-screenshots/2026-06-24-1213`
+  - `reports/gateway-console-screenshots/2026-06-24-1238`
+  - `reports/gateway-console-screenshots/2026-06-24-1243`
+  - `reports/gateway-console-screenshots/2026-06-24-1247`
+  - `reports/gateway-console-screenshots/2026-06-24-1259`
+  - `reports/gateway-console-screenshots/2026-06-24-1323`
+  - `reports/gateway-console-screenshots/2026-06-24-1403`
+  - `reports/gateway-console-screenshots/2026-06-24-1553`
+  - `reports/gateway-console-screenshots/2026-06-24-1556`
+  - `reports/gateway-console-screenshots/2026-06-24-1616`
+  - `reports/gateway-console-screenshots/2026-06-24-1626`
+  - `reports/gateway-console-screenshots/2026-06-24-1631`
+  - `reports/gateway-console-screenshots/2026-06-24-1643`
+  - `reports/gateway-console-screenshots/2026-06-24-1656`
+  - `reports/gateway-console-screenshots/2026-06-24-1708`
+  - `reports/gateway-console-screenshots/2026-06-24-1724`
+  - `reports/gateway-console-screenshots/2026-06-24-1732`
+  - `reports/gateway-console-screenshots/2026-06-24-1742`
+  - `reports/gateway-console-screenshots/2026-06-24-1828`
+  - `reports/gateway-console-screenshots/2026-06-24-1845`
+  - `reports/gateway-console-screenshots/2026-06-24-1858`
+  - `reports/gateway-console-screenshots/2026-06-24-1909`
+  - `reports/gateway-console-screenshots/2026-06-24-1912`
+  - `reports/gateway-console-screenshots/2026-06-24-1923`
+  - `reports/gateway-console-screenshots/2026-06-24-1938`
+  - `reports/gateway-console-screenshots/2026-06-24-1942`
+  - `reports/gateway-console-screenshots/2026-06-24-1953`
+  - `reports/gateway-console-screenshots/2026-06-24-1956`
+  - `reports/gateway-console-screenshots/2026-06-24-2004`
+  - `reports/gateway-console-screenshots/2026-06-24-2014`
+  - `reports/gateway-console-screenshots/2026-06-24-2328`
+
+## Commands Run
+
+- `bash -n scripts/verify_public_selfhost_rc.sh` - passed
+- `go test ./cmd/codencer` - passed
+- `go test ./cmd/codencer ./internal/security` - passed
+- `go test ./internal/localexec` - passed
+- `go test ./internal/profile ./internal/adapters/codex` - passed
+- `go test ./internal/connector -count=1` - passed
+- `go test ./internal/gateway` - passed
+- `go test ./internal/gateway` after adding Gateway MCP async lifecycle tools - passed
+- `go test ./internal/localexec` after adding async report refresh - passed
+- `go test ./internal/localexec ./internal/gateway ./cmd/codencer` - passed
+- `go test ./...` - passed
+- `go test ./...` after adding Gateway MCP async lifecycle tools - passed
+- `go test ./...` after adding Gateway Console async submit/report polling - passed
+- `go test ./internal/connector ./internal/gateway ./internal/relay ./internal/localexec` after adding project-scoped cancel routing - passed
+- `go test ./...` after adding project-scoped cancel routing - passed
+- `bash -n scripts/verify_public_selfhost_release.sh` after adding default CLI redaction checks - passed
+- `go test ./cmd/codencer -run 'TestInitHumanOutputDoesNotLeakLocalPaths|TestConfigProfilesAndSelfHostDefaultsJSON'` - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` - passed
+- `go test ./...` after default init/config redaction - passed
+- `cd web/gateway-console && npm run format:check` - passed
+- `cd web/gateway-console && npm run lint` - passed
+- `cd web/gateway-console && npm run typecheck` - passed
+- `cd web/gateway-console && npm run test` - passed
+- `cd web/gateway-console && npm run test -- --run tests/schemas.test.ts` - passed
+- `cd web/gateway-console && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:e2e -- --grep "project task form submits demo run"` - passed
+- `cd web/gateway-console && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:e2e` - passed
+- `cd web/gateway-console && npm run build` - passed
+- `cd web/gateway-console && npm run test:e2e` - passed
+- `make verify-gateway` - passed
+- `make verify-gateway` after adding Gateway MCP async lifecycle tools - passed
+- `make verify-gateway` after adding Gateway Console async submit/report polling - passed
+- `make verify-gateway` after adding project-scoped cancel routing - passed
+- `make verify-gateway-console` - passed
+- `make verify-gateway-console` after stabilizing run-detail navigation e2e and regenerating evidence - passed
+- `make verify-gateway-console-live` - passed
+- `make verify-gateway-console-live` after adding terminal audit-on-report refresh - passed
+- `go test ./internal/adapters/antigravity` - passed
+- `cd web/gateway-console && npm run format:check && npm run lint -- tests/live/verify-live.mjs` - passed
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed by design with `NO-GO` after Codex passed and remaining required proofs were missing; report `reports/public-selfhost-rc/20260624T122313Z/summary.md`
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - failed with `NO-GO` due to external Codex usage limit after invoking the real Codex binary with simulation disabled; report `reports/public-selfhost-rc/20260624T125824Z/summary.md`
+- `CODENCER_E2E_REQUIRED_REAL_EXECUTORS=codex CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` - passed with scoped `GO` for Codex-only proof
+- `make verify-public-release` - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` - passed after project-scoped cancel routing and console e2e stabilization
+- `make verify-public-release` after default CLI redaction checks - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after default CLI redaction checks - passed
+- `go test ./internal/gateway` after adding Gateway human interrupt responses - passed
+- `go test ./...` after adding Gateway human interrupt responses - passed
+- `make verify-gateway` after adding Gateway human interrupt responses - passed
+- `make verify-public-release` after adding Gateway human interrupt responses - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding Gateway human interrupt responses - passed
+- `cd web/gateway-console && npm run format:check` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run lint` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run typecheck` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run test` after adding Console human interrupt response panel - passed
+- `cd web/gateway-console && npm run build` after adding Console human interrupt response panel - failed once when run concurrently with `npm run test:e2e` because both wrote `.next`; passed when rerun sequentially
+- `cd web/gateway-console && npm run test:e2e` after adding Console human interrupt response panel - passed
+- `make verify-gateway-console` after adding Console human interrupt response panel - passed
+- `make verify-gateway-console-live` after adding Console human interrupt response panel - passed
+- `make verify-public-release` after adding Console human interrupt response panel - passed
+- `python3 -m py_compile scripts/check_public_boundary.py` after adding RC verdict-language boundary checks - passed
+- `python3 scripts/check_docs_links.py` after aligning RC verdict docs with NO-GO policy - passed
+- `python3 scripts/check_public_boundary.py` after aligning RC verdict docs with NO-GO policy - passed
+- `make verify-public-release` after aligning RC verdict docs with NO-GO policy - passed
+- `go test ./internal/adapters/common ./internal/adapters/codex ./internal/adapters/claude` after preventing simulation artifacts from passing as real - passed
+- `go test ./...` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run format:check` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run lint` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run typecheck` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run test` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run build` after preventing simulation artifacts from passing as real - passed
+- `cd web/gateway-console && npm run test:e2e` after preventing simulation artifacts from passing as real - passed
+- `make verify-gateway` after preventing simulation artifacts from passing as real - passed
+- `make verify-gateway-console` after preventing simulation artifacts from passing as real - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1724`
+- `make verify-gateway-console-live` after preventing simulation artifacts from passing as real - passed
+- `CODENCER_E2E_REAL_EXECUTOR=codex CODENCER_E2E_REAL_EXECUTOR_COMMAND=<configured-codex-binary> make verify-public-selfhost-rc` after preventing simulation artifacts from passing as real - failed by design with `NO-GO` after `real_executor_e2e_codex` passed and Claude/Antigravity required proofs were missing; report `reports/public-selfhost-rc/20260624T142643Z/summary.md`
+- `make verify-public-release` after preventing simulation artifacts from passing as real - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after preventing simulation artifacts from passing as real - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1732`
+- `bash -n scripts/verify_public_selfhost_release.sh` after adding isolated local run CLI redaction checks - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after adding isolated local run CLI redaction checks - failed once because daemon-backed `run events` does not resolve a local explicit submit run ID; the gate was corrected to use a daemon-created `run start` ID for events and a local submit ID for report/resume.
+- `./scripts/verify_public_selfhost_release.sh` after correcting the local run events proof - passed
+- `make verify-public-release` after adding isolated local run CLI redaction checks - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding isolated local run CLI redaction checks - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1742`
+- `go test ./internal/gateway` after asserting sync publish audit records - passed
+- `make verify-gateway` after asserting sync publish audit records - passed
+- `make verify-public-release` after asserting sync publish audit records - passed
+- `go test ./internal/gateway` after adding unsupported resume blocker audit evidence - passed
+- `go test ./...` after adding unsupported resume blocker audit evidence - passed
+- `make verify-gateway` after adding unsupported resume blocker audit evidence - passed
+- `python3 scripts/check_public_boundary.py` after adding unsupported resume blocker audit evidence - passed
+- `make verify-public-release` after adding unsupported resume blocker audit evidence - passed
+- `bash -n scripts/verify_gateway.sh` after adding store-backed Gateway API redaction sweep - passed
+- `make verify-gateway` after adding store-backed Gateway API redaction sweep - passed
+- `make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host` after adding store-backed Gateway API redaction sweep - passed
+- `make verify-public-release` after adding store-backed Gateway API redaction sweep - passed
+- `git diff --check` after adding store-backed Gateway API redaction sweep - passed
+- `go test ./internal/localexec ./internal/app ./internal/service ./cmd/codencer` after exposing local run resume - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after exposing local run resume - passed
+- `go test ./...` after exposing local run resume - passed
+- `make verify-gateway` after exposing local run resume - passed
+- `make verify-public-release` after exposing local run resume - passed
+- `git diff --check` after exposing local run resume - passed
+- `go test ./internal/gateway ./internal/relay ./internal/connector ./internal/localexec ./internal/app` after routing Gateway/Relay/Connector project resume - passed
+- `bash -n scripts/verify_gateway.sh` after adding the project resume MCP probe - passed
+- `make verify-gateway` after routing Gateway/Relay/Connector project resume - passed
+- `go test ./...` after routing Gateway/Relay/Connector project resume - passed
+- `make verify-release-artifact-selfhost VERSION=v0.3.0-selfhost-artifact-verify TARGETS=host REQUIRE_TARGETS=host` after routing Gateway/Relay/Connector project resume - passed
+- `make verify-public-release` after routing Gateway/Relay/Connector project resume - passed
+- `git diff --check` after routing Gateway/Relay/Connector project resume - passed
+- `cd web/gateway-console && npm run format:check` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run test -- --run tests/architecture.test.ts` after making Console manifest submit async - passed
+- `go test ./internal/gateway` after adding async manifest Gateway API regression coverage - passed
+- `cd web/gateway-console && npm run lint` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run typecheck` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run test` after making Console manifest submit async - passed
+- `cd web/gateway-console && npm run build` after making Console manifest submit async - passed
+- `make verify-gateway` after making Console manifest submit async - passed
+- `make verify-public-release` after making Console manifest submit async - passed
+- `make verify-gateway-console` after making Console manifest submit async - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1828`
+- `go test ./...` after making Console manifest submit async - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` initially failed after making Console manifest submit async because the local resume redaction proof exposed a daemon panic on missing-run resume and the Console e2e submit-detail navigation assertion was race-prone under the full verifier.
+- Isolated temp local resume reproducer after adding the daemon missing-run guard - passed with structured `unsupported_operation` and no daemon panic.
+- `go test ./internal/service ./internal/localexec ./cmd/codencer` after adding the daemon missing-run guard - passed
+- `cd web/gateway-console && npm run test:e2e` after hardening run-detail navigation - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after the daemon missing-run guard and e2e navigation hardening - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1845`
+- `git diff --check` after the daemon missing-run guard and e2e navigation hardening - passed
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<claude-binary> make verify-public-selfhost-rc` - failed earlier under the old required-executor contract after Codex and Claude passed and Antigravity was missing
+- `cd web/gateway-console && CODENCER_E2E_BIN_DIR=../../bin CODENCER_E2E_EXECUTOR_ADAPTER=antigravity CODENCER_E2E_EXECUTOR_PROFILE=antigravity-default CODENCER_E2E_ANTIGRAVITY_INSTANCE_FILE=<temp-file> node tests/live/verify-live.mjs` - failed correctly; the provided Antigravity LS did not expose the isolated verifier repo workspace
+- `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go` after broadening default human CLI redaction checks - passed
+- `bash -n scripts/verify_public_selfhost_release.sh` after broadening default human CLI redaction checks - passed
+- `go test ./cmd/codencer` after broadening default human CLI redaction checks - passed
+- `make build-codencer` after broadening default human CLI redaction checks - passed
+- `./scripts/verify_public_selfhost_release.sh` after broadening default human CLI redaction checks - passed
+- `go test ./...` after broadening default human CLI redaction checks - passed
+- `make verify-public-release` after broadening default human CLI redaction checks - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after broadening default human CLI redaction checks - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1858`
+- `go test ./internal/gateway` after adding explicit human-interrupt follow-up resume - passed
+- `cd web/gateway-console && npm run format:check` after adding explicit human-interrupt follow-up resume - passed
+- `cd web/gateway-console && npm run lint` after adding explicit human-interrupt follow-up resume - passed
+- `cd web/gateway-console && npm run typecheck` after adding explicit human-interrupt follow-up resume - passed
+- `cd web/gateway-console && npm run test` after adding explicit human-interrupt follow-up resume - passed
+- `cd web/gateway-console && npm run test:e2e` after adding explicit human-interrupt follow-up resume - passed
+- `cd web/gateway-console && npm run build` after adding explicit human-interrupt follow-up resume - passed when rerun sequentially; an earlier parallel run with `npm run test:e2e` failed due to both commands sharing `.next`
+- `go test ./...` after adding explicit human-interrupt follow-up resume - passed
+- `make verify-gateway` after adding explicit human-interrupt follow-up resume - passed
+- `make verify-gateway-console` after adding explicit human-interrupt follow-up resume - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1909`
+- `make verify-gateway-console-live` after adding explicit human-interrupt follow-up resume - passed
+- `make verify-public-release` after adding explicit human-interrupt follow-up resume - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding explicit human-interrupt follow-up resume - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1912`
+- `python3 -m py_compile scripts/check_public_boundary.py` after adding active deploy release-label scans - passed
+- `python3 scripts/check_public_boundary.py` after adding active deploy release-label scans - passed
+- `rg -n "v0\\.2\\.0-beta|v0\\.2|verify-beta|verify_beta|beta-track" deploy scripts/check_public_boundary.py -S` after updating deploy defaults - passed with only the checker regex itself matching
+- `make verify-public-release` after adding active deploy release-label scans - passed
+- `gofmt -w cmd/codencer/main.go cmd/codencer/main_test.go` after adding local submit progress output - passed
+- `go test ./cmd/codencer` after adding local submit progress output - passed
+- `make build-codencer` after adding local submit progress output - passed
+- `./scripts/verify_public_selfhost_release.sh` after adding local submit progress output - passed
+- `go test ./...` after adding local submit progress output - passed
+- `make verify-public-release` after adding local submit progress output - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local submit progress output - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1923`
+- `gofmt -w internal/gateway/api.go internal/gateway/tools.go internal/gateway/gateway_test.go` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npx prettier --write api/run-history.ts features/console/run-detail-screen.tsx` after adding explicit human-interrupt follow-up cancel - passed
+- `go test ./internal/gateway` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run format:check` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run lint` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run typecheck` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run test` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run test:e2e` after adding explicit human-interrupt follow-up cancel - passed
+- `cd web/gateway-console && npm run build` after adding explicit human-interrupt follow-up cancel - failed once when run concurrently with `npm run test:e2e` because both commands shared `.next`; passed when rerun sequentially
+- `go test ./...` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-gateway` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-gateway-console` after adding explicit human-interrupt follow-up cancel - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1938`
+- `make verify-gateway-console-live` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-public-release` after adding explicit human-interrupt follow-up cancel - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding explicit human-interrupt follow-up cancel - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1942`
+- `gofmt -w internal/gateway/api.go internal/gateway/tools.go internal/gateway/gateway_test.go` after adding explicit human-interrupt follow-up start_new_task - passed
+- `go test ./internal/gateway` after adding explicit human-interrupt follow-up start_new_task - passed
+- `cd web/gateway-console && npx prettier --write api/run-history.ts features/console/run-detail-screen.tsx` after adding explicit human-interrupt follow-up start_new_task - passed
+- `cd web/gateway-console && npm run format:check` after adding explicit human-interrupt follow-up start_new_task - passed
+- `cd web/gateway-console && npm run lint` after adding explicit human-interrupt follow-up start_new_task - passed
+- `cd web/gateway-console && npm run typecheck` after adding explicit human-interrupt follow-up start_new_task - passed
+- `cd web/gateway-console && npm run test` after adding explicit human-interrupt follow-up start_new_task - passed
+- `cd web/gateway-console && npm run build && npm run test:e2e` after adding explicit human-interrupt follow-up start_new_task - passed
+- `go test ./...` after adding explicit human-interrupt follow-up start_new_task - passed
+- `make verify-gateway` after adding explicit human-interrupt follow-up start_new_task - passed
+- `make verify-gateway-console` after adding explicit human-interrupt follow-up start_new_task - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1953`
+- `make verify-public-release` after adding explicit human-interrupt follow-up start_new_task - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding explicit human-interrupt follow-up start_new_task - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-1956`
+- `bash -n scripts/verify_public_selfhost_release.sh` after adding local CLI human-interrupt display/redaction proof - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after adding local CLI human-interrupt display/redaction proof - passed
+- `make verify-public-release` after adding local CLI human-interrupt display/redaction proof - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local CLI human-interrupt display/redaction proof - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2004`
+- `bash -n scripts/verify_public_selfhost_release.sh` after adding local run list/get/status/cancel human-output proof - passed
+- `make build-codencer && ./scripts/verify_public_selfhost_release.sh` after adding local run list/get/status/cancel human-output proof - passed
+- `make verify-public-release` after adding local run list/get/status/cancel human-output proof - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after adding local run list/get/status/cancel human-output proof - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2014`
+- `bash -n scripts/verify_public_selfhost_rc.sh` after deferring Antigravity from the default required executor set - passed
+- `CODENCER_E2E_REAL_EXECUTORS=codex,claude CODENCER_E2E_CODEX_COMMAND=<configured-codex-binary> CODENCER_E2E_CLAUDE_COMMAND=<configured-claude-binary> make verify-public-selfhost-rc` after deferring Antigravity from the default required executor set - passed with `GO`; report `reports/public-selfhost-rc/20260624T202037Z/summary.md`
+- `make verify-public-release` after final GO report cleanup - passed
+- `make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host` after final GO report cleanup - passed; visual evidence `reports/gateway-console-screenshots/2026-06-24-2328`
+- `git diff --check` - passed
+
+## Remaining Known Limitations
+
+- Antigravity real executor proof is optional/deferred for this release and is not claimed as proven. Current local Antigravity app processes expose reachable RPC endpoints, but the available candidates do not expose the isolated verifier repo workspace through `GetWorkspaceInfos`, so the verifier refuses to bind them for public release proof.
+- Local `codencer run resume` and project-level Gateway/Relay/Connector resume now route to daemon-backed `RecoveryService.ResumeRun` for states supported by the daemon (`created` and `paused_for_gate`). Completed/non-resumable runs still return structured `run_resume_blocked` or `resume_project_run_blocked` capability blockers with sanitized audit correlation.
+- Missing-run resume now returns a structured local `unsupported_operation` blocker instead of causing a daemon panic; public self-host release verification includes this path through the local run redaction proof.
+- Project-scoped cancel now routes through Gateway, Relay, Connector, and local daemon cancellation; whether the underlying executor stops immediately remains bounded by daemon/executor cancellation semantics.
+- Raw log/artifact upload remains unsupported by design. `codencer sync publish --confirm` ingests metadata-only run/project summaries into Gateway history; it does not upload local reports, logs, artifacts, daemon URLs, or filesystem paths.
+- Run history/audit synced-scope transport now exists for explicit metadata-only `codencer sync publish`, including sanitized aggregate and per-run sync audit events; broader incremental sync policy and external source reconciliation remain incomplete.
+- Human interrupt lifecycle is still partial: local report/event records, local and project-level daemon-backed resume for resumable states, Gateway blocker audit, sanitized Gateway HTTP/MCP operator-response audit, explicit `follow_up=resume/cancel/start_new_task` handling, resume/cancel/start-new-task audit, default CLI blocker-run interrupt display proof, and a Console run-detail response panel now exist. Broader planner/executor continuation after arbitrary answer/approval/permission responses remains incomplete.
+- Broader explicit JSON/debug/path surface policy proof remains incomplete. Default local human CLI output now covers init, config show, config profile/set commands, project init/status/scan, executor list/scan/test/default, setup self-host/relay, activation self-host, sync preview, successful submit, blocker submit with human interrupt, run list/get/status/events/cancel, run report, run report with human interrupt, and run resume blocker output, and the source/artifact Gateway verifier now covers public Gateway API and MCP leak checks for core list/run/audit/activation surfaces.
+
+Verdict: GO

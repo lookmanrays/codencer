@@ -12,7 +12,12 @@ PROJECT_ID="${PROJECT_ID:-smoke-project}"
 KEEP_SMOKE_STATE="${KEEP_SMOKE_STATE:-0}"
 SMOKE_SCENARIOS="${SMOKE_SCENARIOS:-status,audit}"
 GATE_ACTION="${GATE_ACTION:-approve}"
+WAIT_TIMEOUT_MS="${WAIT_TIMEOUT_MS:-300000}"
+WAIT_INTERVAL_MS="${WAIT_INTERVAL_MS:-1000}"
 MCP_SDK_SMOKE_BIN="${MCP_SDK_SMOKE_BIN:-./bin/mcp-sdk-smoke}"
+MCP_SDK_STEP_COUNT="${MCP_SDK_STEP_COUNT:-1}"
+MCP_SDK_WAIT_TIMEOUT_MS="${MCP_SDK_WAIT_TIMEOUT_MS:-300000}"
+MCP_SDK_WAIT_INTERVAL_MS="${MCP_SDK_WAIT_INTERVAL_MS:-1000}"
 SECOND_DAEMON_PORT="${SECOND_DAEMON_PORT:-8086}"
 SECOND_DAEMON_URL="${SECOND_DAEMON_URL:-http://127.0.0.1:${SECOND_DAEMON_PORT}}"
 SECOND_WORKTREE=""
@@ -48,7 +53,9 @@ for part in expr.strip(".").split("."):
     else:
         value = ""
         break
-if value is None:
+if isinstance(value, bool):
+    value = "true" if value else "false"
+elif value is None:
     value = ""
 print(value)
 PY
@@ -127,6 +134,17 @@ scenario_enabled() {
   esac
 }
 
+scenario_explicitly_enabled() {
+  case ",$SMOKE_SCENARIOS," in
+    *,"$1",*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 relay_target_args() {
   local args=()
   if [[ -n "$RELAY_CONFIG" ]]; then
@@ -186,11 +204,14 @@ start_secondary_daemon() {
   git worktree add --detach "$SECOND_WORKTREE" HEAD >/dev/null
   SECOND_DAEMON_PID_FILE="$TMP_DIR/daemon-secondary.pid"
   SECOND_DAEMON_LOG="$TMP_DIR/daemon-secondary.log"
-  nohup env ALL_ADAPTERS_SIMULATION_MODE="${ALL_ADAPTERS_SIMULATION_MODE:-1}" PORT="$SECOND_DAEMON_PORT" ./bin/orchestratord --repo-root "$SECOND_WORKTREE" > "$SECOND_DAEMON_LOG" 2>&1 &
+  nohup env ALL_ADAPTERS_SIMULATION_MODE="${ALL_ADAPTERS_SIMULATION_MODE:-1}" CODEX_SIMULATION_MODE="${CODEX_SIMULATION_MODE:-}" PORT="$SECOND_DAEMON_PORT" ./bin/orchestratord --repo-root "$SECOND_WORKTREE" > "$SECOND_DAEMON_LOG" 2>&1 &
   SECOND_DAEMON_PID="$!"
   echo "$SECOND_DAEMON_PID" > "$SECOND_DAEMON_PID_FILE"
   for _ in $(seq 1 20); do
     if curl -fsS "$SECOND_DAEMON_URL/api/v1/instance" >/dev/null 2>&1; then
+      if [[ "${REQUIRE_LIVE_CODEX:-0}" == "1" ]]; then
+        assert_daemon_codex_live "$SECOND_DAEMON_URL" "$TMP_DIR/secondary-compatibility.json"
+      fi
       return 0
     fi
     sleep 1
@@ -222,6 +243,164 @@ curl_best_effort() {
     curl_args+=(-H 'Content-Type: application/json' -d "$data")
   fi
   curl "${curl_args[@]}"
+}
+
+assert_wait_success() {
+  local file="$1"
+  local label="$2"
+  local state terminal timed_out
+  state="$(json_get "$file" '.state')"
+  terminal="$(json_get "$file" '.terminal')"
+  timed_out="$(json_get "$file" '.timed_out')"
+  if [[ "$timed_out" == "true" ]]; then
+    echo "ERROR: $label timed out" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  if [[ "$terminal" != "true" ]]; then
+    echo "ERROR: $label did not reach a successful terminal state" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+  case "$state" in
+    completed|completed_with_warnings)
+      ;;
+    *)
+      echo "ERROR: $label reached unsuccessful terminal state $state" >&2
+      cat "$file" >&2
+      exit 1
+      ;;
+  esac
+}
+
+assert_wait_success_or_gate() {
+  local file="$1"
+  local label="$2"
+  local state needs_decision
+  state="$(json_get "$file" '.state')"
+  needs_decision="$(json_get "$file" '.needs_decision')"
+  if [[ "$state" == "needs_approval" && "$needs_decision" == "true" ]]; then
+    return 0
+  fi
+  assert_wait_success "$file" "$label"
+}
+
+assert_result_success() {
+  local file="$1"
+  local label="$2"
+  local state
+  state="$(json_get "$file" '.state')"
+  case "$state" in
+    completed|completed_with_warnings)
+      ;;
+    *)
+      echo "ERROR: $label result state is $state" >&2
+      cat "$file" >&2
+      exit 1
+      ;;
+  esac
+}
+
+assert_result_success_or_gate() {
+  local file="$1"
+  local label="$2"
+  local state needs_decision
+  state="$(json_get "$file" '.state')"
+  needs_decision="$(json_get "$file" '.needs_human_decision')"
+  if [[ "$state" == "needs_approval" && "$needs_decision" == "true" ]]; then
+    return 0
+  fi
+  assert_result_success "$file" "$label"
+}
+
+assert_mcp_tool_ok() {
+  local file="$1"
+  local label="$2"
+  if have_cmd python3; then
+    python3 - "$file" "$label" <<'PY'
+import json
+import sys
+
+path, label = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+if payload.get("error"):
+    raise SystemExit(f"ERROR: {label} returned JSON-RPC error: {payload['error']}")
+result = payload.get("result")
+if not isinstance(result, dict):
+    raise SystemExit(f"ERROR: {label} missing result object: {payload}")
+if result.get("isError") is True:
+    raise SystemExit(f"ERROR: {label} returned MCP tool error: {result}")
+PY
+    return
+  fi
+  if grep -q '"isError"[[:space:]]*:[[:space:]]*true' "$file"; then
+    echo "ERROR: $label returned MCP tool error" >&2
+    cat "$file" >&2
+    exit 1
+  fi
+}
+
+assert_daemon_codex_live() {
+  local url="$1"
+  local outfile="$2"
+  curl -fsS "$url/api/v1/compatibility" > "$outfile"
+  if have_cmd python3; then
+    python3 - "$outfile" "$url" <<'PY'
+import json
+import sys
+
+path, url = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+for adapter in payload.get("adapters", []):
+    if adapter.get("id") == "codex":
+        if adapter.get("mode") == "simulation":
+            raise SystemExit(f"ERROR: {url} reports codex adapter in simulation mode")
+        if adapter.get("available") is not True:
+            raise SystemExit(f"ERROR: {url} reports codex adapter unavailable: {adapter}")
+        raise SystemExit(0)
+raise SystemExit(f"ERROR: {url} compatibility payload did not include codex adapter")
+PY
+  else
+    if grep -q '"id"[[:space:]]*:[[:space:]]*"codex"' "$outfile" && ! grep -q '"mode"[[:space:]]*:[[:space:]]*"simulation"' "$outfile"; then
+      return 0
+    fi
+    echo "ERROR: unable to verify live codex adapter for $url without python3" >&2
+    cat "$outfile" >&2
+    exit 1
+  fi
+}
+
+start_connector() {
+  ./bin/codencer-connectord run --config "$CONNECTOR_CONFIG" >"$TMP_DIR/connector.log" 2>&1 &
+  CONNECTOR_PID="$!"
+}
+
+stop_connector() {
+  if [[ -n "$CONNECTOR_PID" ]] && kill -0 "$CONNECTOR_PID" >/dev/null 2>&1; then
+    kill "$CONNECTOR_PID" >/dev/null 2>&1 || true
+    wait "$CONNECTOR_PID" 2>/dev/null || true
+  fi
+  CONNECTOR_PID=""
+}
+
+wait_for_run_create_status() {
+  local instance_id="$1"
+  local expected_status="$2"
+  local outfile="$3"
+  local run_prefix="$4"
+  local status=""
+  for attempt in $(seq 1 30); do
+    status="$(curl_best_effort POST "$RELAY_URL/api/v2/instances/$instance_id/runs" "$outfile" "{\"id\":\"${run_prefix}-${attempt}\",\"project_id\":\"$PROJECT_ID\"}")"
+    if [[ "$status" == "$expected_status" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: timed out waiting for run create on $instance_id to return $expected_status; last status was $status" >&2
+  cat "$outfile" >&2 || true
+  exit 1
 }
 
 if [[ -z "$PLANNER_TOKEN" && -n "$RELAY_CONFIG" ]]; then
@@ -269,6 +448,9 @@ if [[ -z "$INSTANCE_ID" ]]; then
   exit 1
 fi
 echo "Local instance: $INSTANCE_ID"
+if [[ "${REQUIRE_LIVE_CODEX:-0}" == "1" ]]; then
+  assert_daemon_codex_live "$DAEMON_URL" "$TMP_DIR/compatibility.json"
+fi
 
 if scenario_enabled status; then
   relay_cli status --json > "$TMP_DIR/relay-status-before.json"
@@ -292,8 +474,7 @@ fi
 
 ./bin/codencer-connectord list --config "$CONNECTOR_CONFIG" > "$TMP_DIR/connector-list.txt"
 ./bin/codencer-connectord config --config "$CONNECTOR_CONFIG" > "$TMP_DIR/connector-config.txt"
-./bin/codencer-connectord run --config "$CONNECTOR_CONFIG" >"$TMP_DIR/connector.log" 2>&1 &
-CONNECTOR_PID="$!"
+start_connector
 
 INSTANCES_JSON="$TMP_DIR/instances.json"
 for _ in $(seq 1 20); do
@@ -311,6 +492,14 @@ if ! grep -q "\"instance_id\":\"$INSTANCE_ID\"" "$INSTANCES_JSON"; then
 fi
 
 ./bin/codencer-connectord status --config "$CONNECTOR_CONFIG" --json > "$TMP_DIR/connector-status.json"
+
+if scenario_enabled reconnect; then
+  stop_connector
+  wait_for_run_create_status "$INSTANCE_ID" "503" "$TMP_DIR/reconnect-offline.json" "${RUN_ID}-reconnect-offline"
+  start_connector
+  wait_for_relay_instance_state "$INSTANCE_ID" present "$TMP_DIR/relay-instances-reconnected.json"
+  wait_for_run_create_status "$INSTANCE_ID" "201" "$TMP_DIR/reconnect-restored.json" "${RUN_ID}-reconnect-restored"
+fi
 
 if scenario_enabled status; then
   relay_cli connectors --json > "$TMP_DIR/relay-connectors.json"
@@ -359,7 +548,8 @@ if scenario_enabled multi-instance; then
     cat "$SECOND_STEP_JSON" >&2
     exit 1
   fi
-  curl_json POST "$RELAY_URL/api/v2/steps/$SECOND_STEP_ID/wait" "$TMP_DIR/second-wait.json" '{"timeout_ms":300000,"interval_ms":1000,"include_result":false}'
+  curl_json POST "$RELAY_URL/api/v2/steps/$SECOND_STEP_ID/wait" "$TMP_DIR/second-wait.json" "{\"timeout_ms\":$WAIT_TIMEOUT_MS,\"interval_ms\":$WAIT_INTERVAL_MS,\"include_result\":false}"
+  assert_wait_success "$TMP_DIR/second-wait.json" "multi-instance step"
   curl_json GET "$RELAY_URL/api/v2/instances/$SECOND_INSTANCE_ID/runs/$SECOND_RUN_ID" "$TMP_DIR/second-run-readback.json"
 
   PRIMARY_MULTI_LOOKUP="$TMP_DIR/primary-multi-lookup.txt"
@@ -383,8 +573,37 @@ if scenario_enabled mcp-sdk; then
     --run-id "${RUN_ID}-sdk" \
     --project-id "${PROJECT_ID}-sdk" \
     --adapter-profile "$CONNECTOR_ADAPTER" \
-    --wait-timeout-ms 10000 \
+    --wait-timeout-ms "$MCP_SDK_WAIT_TIMEOUT_MS" \
+    --wait-interval-ms "$MCP_SDK_WAIT_INTERVAL_MS" \
+    --step-count "$MCP_SDK_STEP_COUNT" \
     --json > "$TMP_DIR/mcp-sdk.json"
+fi
+
+if scenario_enabled mcp-auth-metadata; then
+  MCP_AUTH_METADATA_JSON="$TMP_DIR/mcp-auth-metadata.json"
+  MCP_AUTH_CHALLENGE_HEADERS="$TMP_DIR/mcp-auth-challenge.headers"
+  MCP_AUTH_CHALLENGE_JSON="$TMP_DIR/mcp-auth-challenge.json"
+  curl -fsS "$RELAY_URL/.well-known/oauth-protected-resource/mcp" > "$MCP_AUTH_METADATA_JSON"
+  if ! grep -q "\"resource\":\"$RELAY_URL/mcp\"" "$MCP_AUTH_METADATA_JSON"; then
+    echo "ERROR: relay MCP OAuth protected-resource metadata did not identify $RELAY_URL/mcp." >&2
+    cat "$MCP_AUTH_METADATA_JSON" >&2
+    exit 1
+  fi
+  set +e
+  mcp_auth_status="$(curl -sS -D "$MCP_AUTH_CHALLENGE_HEADERS" -o "$MCP_AUTH_CHALLENGE_JSON" -w "%{http_code}" -X POST "$RELAY_URL/mcp" \
+    -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":"auth-1","method":"initialize","params":{"protocolVersion":"2025-11-25"}}')"
+  set -e
+  if [[ "$mcp_auth_status" != "401" ]]; then
+    echo "ERROR: unauthenticated relay MCP call should return 401, got $mcp_auth_status." >&2
+    cat "$MCP_AUTH_CHALLENGE_JSON" >&2 || true
+    exit 1
+  fi
+  if ! grep -qi 'www-authenticate: Bearer .*resource_metadata=".*\.well-known/oauth-protected-resource/mcp"' "$MCP_AUTH_CHALLENGE_HEADERS"; then
+    echo "ERROR: relay MCP 401 did not include OAuth protected-resource challenge." >&2
+    cat "$MCP_AUTH_CHALLENGE_HEADERS" >&2
+    exit 1
+  fi
 fi
 
 RUN_JSON="$TMP_DIR/run.json"
@@ -400,10 +619,20 @@ if [[ -z "$STEP_ID" ]]; then
 fi
 
 WAIT_JSON="$TMP_DIR/wait.json"
-curl_json POST "$RELAY_URL/api/v2/steps/$STEP_ID/wait" "$WAIT_JSON" '{"timeout_ms":300000,"interval_ms":1000,"include_result":false}'
+curl_json POST "$RELAY_URL/api/v2/steps/$STEP_ID/wait" "$WAIT_JSON" "{\"timeout_ms\":$WAIT_TIMEOUT_MS,\"interval_ms\":$WAIT_INTERVAL_MS,\"include_result\":false}"
+if scenario_explicitly_enabled gate-strict; then
+  assert_wait_success_or_gate "$WAIT_JSON" "primary step"
+else
+  assert_wait_success "$WAIT_JSON" "primary step"
+fi
 
 RESULT_JSON="$TMP_DIR/result.json"
 curl_json GET "$RELAY_URL/api/v2/steps/$STEP_ID/result" "$RESULT_JSON"
+if scenario_explicitly_enabled gate-strict; then
+  assert_result_success_or_gate "$RESULT_JSON" "primary step"
+else
+  assert_result_success "$RESULT_JSON" "primary step"
+fi
 
 VALIDATIONS_JSON="$TMP_DIR/validations.json"
 curl_json GET "$RELAY_URL/api/v2/steps/$STEP_ID/validations" "$VALIDATIONS_JSON"
@@ -420,6 +649,27 @@ curl_json GET "$RELAY_URL/api/v2/instances/$INSTANCE_ID/runs/$RUN_ID/gates" "$GA
 FIRST_ARTIFACT_ID="$(json_first_field "$ARTIFACTS_JSON" 'id')"
 if [[ -n "$FIRST_ARTIFACT_ID" ]]; then
   curl_json GET "$RELAY_URL/api/v2/artifacts/$FIRST_ARTIFACT_ID/content" "$TMP_DIR/artifact-content.bin"
+fi
+
+if scenario_enabled phase-loop; then
+  PHASE_STEP_JSON="$TMP_DIR/phase-step.json"
+  PHASE_STEP_ID="phase-loop-step-$(date +%s)"
+  curl_json POST "$RELAY_URL/api/v2/instances/$INSTANCE_ID/runs/$RUN_ID/steps" "$PHASE_STEP_JSON" "{\"version\":\"v1\",\"step_id\":\"$PHASE_STEP_ID\",\"goal\":\"Continue the same phase after inspecting the previous result\",\"adapter_profile\":\"$CONNECTOR_ADAPTER\"}"
+  PHASE_STEP_CREATED_ID="$(json_get "$PHASE_STEP_JSON" '.id')"
+  if [[ "$PHASE_STEP_CREATED_ID" != "$PHASE_STEP_ID" ]]; then
+    echo "ERROR: phase-loop step id mismatch; expected $PHASE_STEP_ID got $PHASE_STEP_CREATED_ID" >&2
+    cat "$PHASE_STEP_JSON" >&2
+    exit 1
+  fi
+  curl_json POST "$RELAY_URL/api/v2/steps/$PHASE_STEP_ID/wait" "$TMP_DIR/phase-wait.json" "{\"timeout_ms\":$WAIT_TIMEOUT_MS,\"interval_ms\":$WAIT_INTERVAL_MS,\"include_result\":true}"
+  assert_wait_success "$TMP_DIR/phase-wait.json" "phase-loop step"
+  curl_json GET "$RELAY_URL/api/v2/steps/$PHASE_STEP_ID/result" "$TMP_DIR/phase-result.json"
+  assert_result_success "$TMP_DIR/phase-result.json" "phase-loop step"
+  if [[ "$(json_get "$TMP_DIR/phase-wait.json" '.terminal')" != "true" ]]; then
+    echo "ERROR: phase-loop step did not reach a terminal state" >&2
+    cat "$TMP_DIR/phase-wait.json" >&2
+    exit 1
+  fi
 fi
 
 if scenario_enabled mcp; then
@@ -468,6 +718,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d '{"jsonrpc":"2.0","id":"compat-1","method":"tools/call","params":{"name":"codencer.list_instances","arguments":{}}}' \
       > "$TMP_DIR/mcp-compat-call.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-compat-call.json" "MCP compatibility list_instances"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -475,6 +726,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.list_instances\",\"arguments\":{}}}" \
       > "$TMP_DIR/mcp-list-instances.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-list-instances.json" "MCP list_instances"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -482,6 +734,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-2\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.get_step_result\",\"arguments\":{\"step_id\":\"$STEP_ID\"}}}" \
       > "$TMP_DIR/mcp-step-result.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-step-result.json" "MCP get_step_result"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -489,6 +742,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-3\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.list_run_gates\",\"arguments\":{\"instance_id\":\"$INSTANCE_ID\",\"run_id\":\"$RUN_ID\"}}}" \
       > "$TMP_DIR/mcp-run-gates.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-run-gates.json" "MCP list_run_gates"
   curl -fsS -X POST "$RELAY_URL/mcp" \
       -H "Authorization: Bearer $PLANNER_TOKEN" \
       -H 'Content-Type: application/json' \
@@ -496,6 +750,7 @@ if scenario_enabled mcp; then
       -H 'MCP-Protocol-Version: 2025-11-25' \
       -d "{\"jsonrpc\":\"2.0\",\"id\":\"call-4\",\"method\":\"tools/call\",\"params\":{\"name\":\"codencer.get_step_logs\",\"arguments\":{\"step_id\":\"$STEP_ID\"}}}" \
       > "$TMP_DIR/mcp-step-logs.json"
+  assert_mcp_tool_ok "$TMP_DIR/mcp-step-logs.json" "MCP get_step_logs"
   curl -fsS -X DELETE "$RELAY_URL/mcp" \
     -H "Authorization: Bearer $PLANNER_TOKEN" \
     -H "MCP-Session-Id: $MCP_SESSION_ID" \
@@ -510,13 +765,24 @@ if scenario_enabled retry; then
   echo "Retry scenario status: $retry_status"
 fi
 
-if scenario_enabled gate; then
+if scenario_enabled gate || scenario_explicitly_enabled gate-strict; then
   GATE_ID="$(json_first_field "$GATES_JSON" 'id')"
   if [[ -n "$GATE_ID" ]]; then
     GATE_JSON="$TMP_DIR/gate-action.json"
     gate_status="$(curl_best_effort POST "$RELAY_URL/api/v2/gates/$GATE_ID/$GATE_ACTION" "$GATE_JSON")"
     echo "Gate scenario status: $gate_status ($GATE_ACTION $GATE_ID)"
+    if [[ "$gate_status" != "200" ]]; then
+      echo "ERROR: gate $GATE_ACTION failed with status $gate_status" >&2
+      cat "$GATE_JSON" >&2 || true
+      exit 1
+    fi
+    curl_json GET "$RELAY_URL/api/v2/instances/$INSTANCE_ID/runs/$RUN_ID/gates" "$TMP_DIR/gates-after-action.json"
   else
+    if scenario_explicitly_enabled gate-strict; then
+      echo "ERROR: strict gate scenario expected a gate for $RUN_ID, but none was produced" >&2
+      cat "$GATES_JSON" >&2 || true
+      exit 1
+    fi
     echo "Gate scenario skipped: no gates were produced for $RUN_ID"
   fi
 fi
@@ -559,9 +825,18 @@ fi
 if scenario_enabled share-control; then
   echo "Share:       $TMP_DIR/connector-discover-before.json"
 fi
+if scenario_enabled reconnect; then
+  echo "Reconnect:   $TMP_DIR/reconnect-restored.json"
+fi
 if scenario_enabled multi-instance; then
   echo "Multi:       $TMP_DIR/secondary-instance.json"
 fi
+if scenario_enabled phase-loop; then
+  echo "Phase loop:  $TMP_DIR/phase-result.json"
+fi
 if scenario_enabled mcp-sdk; then
   echo "MCP SDK:     $TMP_DIR/mcp-sdk.json"
+fi
+if scenario_enabled mcp-auth-metadata; then
+  echo "MCP auth:    $TMP_DIR/mcp-auth-metadata.json"
 fi

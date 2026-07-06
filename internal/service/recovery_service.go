@@ -26,6 +26,15 @@ type RecoveryService struct {
 	repoRoot      string
 }
 
+type RunRecoveryReport struct {
+	OK       bool     `json:"ok"`
+	DryRun   bool     `json:"dry_run"`
+	RunID    string   `json:"run_id"`
+	Status   string   `json:"status"`
+	Actions  []string `json:"actions,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
+}
+
 func NewRecoveryService(
 	runsRepo *sqlite.RunsRepo,
 	stepsRepo *sqlite.StepsRepo,
@@ -85,6 +94,65 @@ func (s *RecoveryService) SweepStaleRuns(ctx context.Context) error {
 	s.cleanupOrphans(ctx)
 
 	return nil
+}
+
+func (s *RecoveryService) RecoverRun(ctx context.Context, runID string, dryRun bool) (RunRecoveryReport, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return RunRecoveryReport{}, fmt.Errorf("run id is required")
+	}
+	run, err := s.runsRepo.Get(ctx, runID)
+	if err != nil {
+		return RunRecoveryReport{}, err
+	}
+	if run == nil {
+		return RunRecoveryReport{}, fmt.Errorf("run not found: %s", runID)
+	}
+	report := RunRecoveryReport{OK: true, DryRun: dryRun, RunID: runID, Status: string(run.State)}
+	if run.State.IsTerminal() {
+		report.Actions = append(report.Actions, "inspect_terminal_run")
+		return report, nil
+	}
+	steps, err := s.stepsRepo.ListByRun(ctx, runID)
+	if err != nil {
+		return RunRecoveryReport{}, err
+	}
+	active := 0
+	for _, step := range steps {
+		if !step.State.IsTerminal() && step.State != domain.StepStateNeedsApproval && step.State != domain.StepStateNeedsManualAttention {
+			active++
+		}
+	}
+	if active == 0 {
+		report.Actions = append(report.Actions, "reconcile_run_state")
+		if !dryRun {
+			run.State = deriveRunState(steps)
+			run.UpdatedAt = time.Now().UTC()
+			run.RecoveryNotes = "Recovered run state from existing step states."
+			if err := s.runsRepo.UpdateState(ctx, run); err != nil {
+				return RunRecoveryReport{}, err
+			}
+			report.Status = string(run.State)
+		}
+		return report, nil
+	}
+	report.Actions = append(report.Actions, "mark_active_steps_needs_manual_attention")
+	if !dryRun {
+		notes := s.reconcileRunSteps(ctx, run)
+		run.RecoveryNotes = notes
+		steps, err = s.stepsRepo.ListByRun(ctx, runID)
+		if err != nil {
+			return RunRecoveryReport{}, err
+		}
+		run.State = deriveRunState(steps)
+		run.UpdatedAt = time.Now().UTC()
+		if err := s.runsRepo.UpdateState(ctx, run); err != nil {
+			return RunRecoveryReport{}, err
+		}
+		report.Status = string(run.State)
+		report.Warnings = append(report.Warnings, notes)
+	}
+	return report, nil
 }
 
 func (s *RecoveryService) reconcileRunSteps(ctx context.Context, run *domain.Run) string {
@@ -255,6 +323,9 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 	if err != nil {
 		return err
 	}
+	if run == nil {
+		return fmt.Errorf("run not found: %s", runID)
+	}
 
 	if run.State != domain.RunStatePausedForGate && run.State != domain.RunStateCreated {
 		return fmt.Errorf("run %s is not in a resumable state (must be paused_for_gate or created)", runID)
@@ -269,6 +340,7 @@ func (s *RecoveryService) ResumeRun(ctx context.Context, runID string) error {
 	slog.Info("Resuming run", "runID", runID)
 
 	run.State = domain.RunStateRunning
+	run.RecoveryNotes = "Resume requested by operator."
 	run.UpdatedAt = time.Now().UTC()
 	return s.runsRepo.UpdateState(ctx, run)
 }

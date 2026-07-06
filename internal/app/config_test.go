@@ -26,7 +26,7 @@ func TestLoadConfigCustom(t *testing.T) {
 		"artifact_root": "/tmp/art",
 		"port": 9090
 	}`
-	
+
 	tmpFile := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
 		t.Fatal(err)

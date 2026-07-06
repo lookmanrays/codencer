@@ -54,19 +54,31 @@ type waitRecord struct {
 }
 
 type smokeOutput struct {
-	SessionID       string `json:"session_id"`
-	ProtocolVersion string `json:"protocol_version"`
-	InstanceID      string `json:"instance_id"`
-	RunID           string `json:"run_id"`
+	SessionID       string       `json:"session_id"`
+	ProtocolVersion string       `json:"protocol_version"`
+	InstanceID      string       `json:"instance_id"`
+	RunID           string       `json:"run_id"`
+	StepID          string       `json:"step_id"`
+	StepState       string       `json:"step_state"`
+	ToolNames       []string     `json:"tool_names"`
+	Steps           []stepOutput `json:"steps,omitempty"`
+	Result          any          `json:"result,omitempty"`
+	Validations     any          `json:"validations,omitempty"`
+	Logs            any          `json:"logs,omitempty"`
+	RunGates        any          `json:"run_gates,omitempty"`
+	Artifacts       any          `json:"artifacts,omitempty"`
+	ArtifactContent any          `json:"artifact_content,omitempty"`
+}
+
+type stepOutput struct {
 	StepID          string `json:"step_id"`
 	StepState       string `json:"step_state"`
-	ToolNames       []string
-	Result          any `json:"result,omitempty"`
-	Validations     any `json:"validations,omitempty"`
-	Logs            any `json:"logs,omitempty"`
-	RunGates        any `json:"run_gates,omitempty"`
-	Artifacts       any `json:"artifacts,omitempty"`
-	ArtifactContent any `json:"artifact_content,omitempty"`
+	Result          any    `json:"result,omitempty"`
+	Validations     any    `json:"validations,omitempty"`
+	Logs            any    `json:"logs,omitempty"`
+	RunGates        any    `json:"run_gates,omitempty"`
+	Artifacts       any    `json:"artifacts,omitempty"`
+	ArtifactContent any    `json:"artifact_content,omitempty"`
 }
 
 func main() {
@@ -88,8 +100,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	goal := fs.String("goal", "Verify official Go SDK interoperability", "Task goal for submit_task")
 	adapterProfile := fs.String("adapter-profile", "", "Optional adapter profile for submit_task")
 	validationCommand := fs.String("validation-command", "go build ./...", "Optional validation command to attach; set empty to disable")
-	waitTimeoutMS := fs.Int("wait-timeout-ms", 5000, "wait_step timeout in milliseconds")
-	waitIntervalMS := fs.Int("wait-interval-ms", 50, "wait_step poll interval in milliseconds")
+	waitTimeoutMS := fs.Int("wait-timeout-ms", 300000, "wait_step timeout in milliseconds")
+	waitIntervalMS := fs.Int("wait-interval-ms", 1000, "wait_step poll interval in milliseconds")
+	stepCount := fs.Int("step-count", 1, "Number of sequential submit_task/wait/result steps to run in one Codencer run")
+	allowFailedTerminal := fs.Bool("allow-failed-terminal", false, "Allow terminal states other than completed or completed_with_warnings")
 	jsonOutput := fs.Bool("json", true, "Print JSON output")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -151,108 +165,39 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	task := map[string]any{
-		"version": "v1",
-		"goal":    *goal,
-	}
-	if strings.TrimSpace(*adapterProfile) != "" {
-		task["adapter_profile"] = strings.TrimSpace(*adapterProfile)
-	}
-	if strings.TrimSpace(*validationCommand) != "" {
-		task["validations"] = []map[string]any{{
-			"name":    "bridge-build",
-			"command": strings.TrimSpace(*validationCommand),
-		}}
-	}
-	submitted, err := callTool(ctx, session, "codencer.submit_task", map[string]any{
-		"instance_id": *instanceID,
-		"run_id":      *runID,
-		"task":        task,
-	})
-	if err != nil {
-		return err
-	}
-	var step stepRecord
-	if err := decodeStructured(submitted.StructuredContent, &step); err != nil {
-		return fmt.Errorf("decode submit_task response: %w", err)
-	}
-	if strings.TrimSpace(step.ID) == "" {
-		return errors.New("submit_task did not return a step id")
+	if *stepCount <= 0 {
+		return errors.New("--step-count must be greater than zero")
 	}
 
-	waited, err := callTool(ctx, session, "codencer.wait_step", map[string]any{
-		"instance_id": *instanceID,
-		"step_id":     step.ID,
-		"timeout_ms":  *waitTimeoutMS,
-		"interval_ms": *waitIntervalMS,
-	})
-	if err != nil {
-		return err
+	stepOutputs := make([]stepOutput, 0, *stepCount)
+	for i := 1; i <= *stepCount; i++ {
+		stepGoal := *goal
+		if *stepCount > 1 {
+			stepGoal = fmt.Sprintf("%s (phase step %d of %d)", *goal, i, *stepCount)
+		}
+		stepResult, err := runPlannerStep(ctx, session, *instanceID, *runID, stepGoal, *adapterProfile, *validationCommand, *waitTimeoutMS, *waitIntervalMS, *allowFailedTerminal)
+		if err != nil {
+			return err
+		}
+		stepOutputs = append(stepOutputs, stepResult)
 	}
-	var waitInfo waitRecord
-	if err := decodeStructured(waited.StructuredContent, &waitInfo); err != nil {
-		return fmt.Errorf("decode wait_step response: %w", err)
-	}
-	if !waitInfo.Terminal {
-		return fmt.Errorf("wait_step did not reach a terminal state: %+v", waitInfo)
-	}
-
-	result, err := callTool(ctx, session, "codencer.get_step_result", map[string]any{
-		"instance_id": *instanceID,
-		"step_id":     step.ID,
-	})
-	if err != nil {
-		return err
-	}
-	validations, err := callTool(ctx, session, "codencer.get_step_validations", map[string]any{
-		"instance_id": *instanceID,
-		"step_id":     step.ID,
-	})
-	if err != nil {
-		return err
-	}
-	logs, err := callTool(ctx, session, "codencer.get_step_logs", map[string]any{
-		"instance_id": *instanceID,
-		"step_id":     step.ID,
-	})
-	runGates, err := callTool(ctx, session, "codencer.list_run_gates", map[string]any{
-		"instance_id": *instanceID,
-		"run_id":      *runID,
-	})
-	if err != nil {
-		return err
-	}
-	artifacts, err := callTool(ctx, session, "codencer.list_step_artifacts", map[string]any{
-		"instance_id": *instanceID,
-		"step_id":     step.ID,
-	})
-	if err != nil {
-		return err
-	}
+	lastStep := stepOutputs[len(stepOutputs)-1]
 
 	output := smokeOutput{
 		SessionID:       session.ID(),
 		ProtocolVersion: session.InitializeResult().ProtocolVersion,
 		InstanceID:      *instanceID,
 		RunID:           *runID,
-		StepID:          step.ID,
-		StepState:       waitInfo.State,
+		StepID:          lastStep.StepID,
+		StepState:       lastStep.StepState,
 		ToolNames:       toolNames,
-		Result:          result.StructuredContent,
-		Validations:     validations.StructuredContent,
-		Logs:            toolContentOrSkip(logs, err),
-		RunGates:        runGates.StructuredContent,
-		Artifacts:       artifacts.StructuredContent,
-	}
-
-	var artifactList []map[string]any
-	if err := decodeStructured(artifacts.StructuredContent, &artifactList); err == nil && len(artifactList) > 0 {
-		if artifactID, _ := artifactList[0]["id"].(string); artifactID != "" {
-			artifactContent, err := callTool(ctx, session, "codencer.get_artifact_content", map[string]any{
-				"artifact_id": artifactID,
-			})
-			output.ArtifactContent = toolContentOrSkip(artifactContent, err)
-		}
+		Steps:           stepOutputs,
+		Result:          lastStep.Result,
+		Validations:     lastStep.Validations,
+		Logs:            lastStep.Logs,
+		RunGates:        lastStep.RunGates,
+		Artifacts:       lastStep.Artifacts,
+		ArtifactContent: lastStep.ArtifactContent,
 	}
 
 	if *jsonOutput {
@@ -267,6 +212,110 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		output.StepState,
 	)
 	return err
+}
+
+func runPlannerStep(ctx context.Context, session *mcp.ClientSession, instanceID, runID, goal, adapterProfile, validationCommand string, waitTimeoutMS, waitIntervalMS int, allowFailedTerminal bool) (stepOutput, error) {
+	task := map[string]any{
+		"version": "v1",
+		"goal":    goal,
+	}
+	if strings.TrimSpace(adapterProfile) != "" {
+		task["adapter_profile"] = strings.TrimSpace(adapterProfile)
+	}
+	if strings.TrimSpace(validationCommand) != "" {
+		task["validations"] = []map[string]any{{
+			"name":    "bridge-build",
+			"command": strings.TrimSpace(validationCommand),
+		}}
+	}
+	submitted, err := callTool(ctx, session, "codencer.submit_task", map[string]any{
+		"instance_id": instanceID,
+		"run_id":      runID,
+		"task":        task,
+	})
+	if err != nil {
+		return stepOutput{}, err
+	}
+	var step stepRecord
+	if err := decodeStructured(submitted.StructuredContent, &step); err != nil {
+		return stepOutput{}, fmt.Errorf("decode submit_task response: %w", err)
+	}
+	if strings.TrimSpace(step.ID) == "" {
+		return stepOutput{}, errors.New("submit_task did not return a step id")
+	}
+
+	waited, err := callTool(ctx, session, "codencer.wait_step", map[string]any{
+		"instance_id": instanceID,
+		"step_id":     step.ID,
+		"timeout_ms":  waitTimeoutMS,
+		"interval_ms": waitIntervalMS,
+	})
+	if err != nil {
+		return stepOutput{}, err
+	}
+	var waitInfo waitRecord
+	if err := decodeStructured(waited.StructuredContent, &waitInfo); err != nil {
+		return stepOutput{}, fmt.Errorf("decode wait_step response: %w", err)
+	}
+	if !waitInfo.Terminal {
+		return stepOutput{}, fmt.Errorf("wait_step did not reach a terminal state: %+v", waitInfo)
+	}
+	if !allowFailedTerminal && waitInfo.State != "completed" && waitInfo.State != "completed_with_warnings" {
+		return stepOutput{}, fmt.Errorf("wait_step reached unsuccessful terminal state %q", waitInfo.State)
+	}
+
+	result, err := callTool(ctx, session, "codencer.get_step_result", map[string]any{
+		"instance_id": instanceID,
+		"step_id":     step.ID,
+	})
+	if err != nil {
+		return stepOutput{}, err
+	}
+	validations, err := callTool(ctx, session, "codencer.get_step_validations", map[string]any{
+		"instance_id": instanceID,
+		"step_id":     step.ID,
+	})
+	if err != nil {
+		return stepOutput{}, err
+	}
+	logs, logsErr := callTool(ctx, session, "codencer.get_step_logs", map[string]any{
+		"instance_id": instanceID,
+		"step_id":     step.ID,
+	})
+	runGates, err := callTool(ctx, session, "codencer.list_run_gates", map[string]any{
+		"instance_id": instanceID,
+		"run_id":      runID,
+	})
+	if err != nil {
+		return stepOutput{}, err
+	}
+	artifacts, err := callTool(ctx, session, "codencer.list_step_artifacts", map[string]any{
+		"instance_id": instanceID,
+		"step_id":     step.ID,
+	})
+	if err != nil {
+		return stepOutput{}, err
+	}
+
+	output := stepOutput{
+		StepID:      step.ID,
+		StepState:   waitInfo.State,
+		Result:      result.StructuredContent,
+		Validations: validations.StructuredContent,
+		Logs:        toolContentOrSkip(logs, logsErr),
+		RunGates:    runGates.StructuredContent,
+		Artifacts:   artifacts.StructuredContent,
+	}
+	var artifactList []map[string]any
+	if err := decodeStructured(artifacts.StructuredContent, &artifactList); err == nil && len(artifactList) > 0 {
+		if artifactID, _ := artifactList[0]["id"].(string); artifactID != "" {
+			artifactContent, err := callTool(ctx, session, "codencer.get_artifact_content", map[string]any{
+				"artifact_id": artifactID,
+			})
+			output.ArtifactContent = toolContentOrSkip(artifactContent, err)
+		}
+	}
+	return output, nil
 }
 
 func callTool(ctx context.Context, session *mcp.ClientSession, name string, args any) (*mcp.CallToolResult, error) {

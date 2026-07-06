@@ -57,6 +57,7 @@ func runEnroll(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	enrollmentToken := fs.String("enrollment-token", "", "Relay enrollment token")
 	configPath := fs.String("config", defaultConnectorConfigPath, "Connector config path")
 	label := fs.String("label", "", "Optional connector label")
+	codencerHome := fs.String("codencer-home", "", "User-level CODENCER_HOME for project sharing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -64,6 +65,12 @@ func runEnroll(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	cfg, err := connector.Enroll(ctx, *relayURL, *daemonURL, *enrollmentToken, *label, *configPath)
 	if err != nil {
 		return err
+	}
+	if *codencerHome != "" {
+		cfg.CodencerHome = *codencerHome
+		if err := connector.SaveConfig(*configPath, cfg); err != nil {
+			return err
+		}
 	}
 	_, err = fmt.Fprintf(stdout, "Connector enrolled: %s machine=%s\n", cfg.ConnectorID, cfg.MachineID)
 	return err
@@ -137,6 +144,9 @@ func runStatus(args []string, stdout, stderr io.Writer) error {
 	if _, err := fmt.Fprintf(stdout, "shared_now=%s\n", formatList(status.SharedInstances)); err != nil {
 		return err
 	}
+	if _, err := fmt.Fprintf(stdout, "shared_projects=%s\n", formatList(status.SharedProjects)); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(stdout, "configured_instances=%d shared_config=%d unshared_config=%d\n",
 		len(entries),
 		countInstances(entries, true),
@@ -146,6 +156,11 @@ func runStatus(args []string, stdout, stderr io.Writer) error {
 	}
 	if status.LastError != "" {
 		if _, err := fmt.Fprintf(stdout, "last_error=%s\n", status.LastError); err != nil {
+			return err
+		}
+	}
+	for _, warning := range status.ProjectWarnings {
+		if _, err := fmt.Fprintf(stdout, "project_warning=%s\n", warning); err != nil {
 			return err
 		}
 	}
@@ -331,6 +346,11 @@ func runConfig(args []string, stdout, stderr io.Writer) error {
 	}
 	if _, err := fmt.Fprintf(stdout, "discovery_roots=%s\n", formatList(safeCfg.DiscoveryRoots)); err != nil {
 		return err
+	}
+	if safeCfg.CodencerHome != "" {
+		if _, err := fmt.Fprintf(stdout, "codencer_home=%s\n", safeCfg.CodencerHome); err != nil {
+			return err
+		}
 	}
 	for _, entry := range connector.EffectiveSharedInstances(safeCfg) {
 		if _, err := fmt.Fprintln(stdout, formatInstanceLine(entry)); err != nil {

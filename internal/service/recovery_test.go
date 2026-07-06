@@ -174,3 +174,32 @@ func TestRecovery_StaleAttempt_PendingGatePreserved(t *testing.T) {
 		t.Fatalf("expected run state paused_for_gate, got %s", run.State)
 	}
 }
+
+func TestRecovery_ResumeMissingRunReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, _ := sql.Open("sqlite3", dbPath)
+	sqlite.RunMigrations(db)
+
+	artifactRoot := filepath.Join(tmpDir, "artifacts")
+	workspaceRoot := filepath.Join(tmpDir, "workspace")
+	os.MkdirAll(artifactRoot, 0755)
+	os.MkdirAll(workspaceRoot, 0755)
+
+	recoverySvc := service.NewRecoveryService(
+		sqlite.NewRunsRepo(db),
+		sqlite.NewStepsRepo(db),
+		sqlite.NewAttemptsRepo(db),
+		sqlite.NewGatesRepo(db),
+		artifactRoot,
+		workspaceRoot,
+	)
+
+	err := recoverySvc.ResumeRun(context.Background(), "missing-run")
+	if err == nil {
+		t.Fatal("expected missing run resume to return an error")
+	}
+	if got := err.Error(); got != "run not found: missing-run" {
+		t.Fatalf("expected missing run error, got %q", got)
+	}
+}

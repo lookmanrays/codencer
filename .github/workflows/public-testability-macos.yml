@@ -7,9 +7,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: public-testability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify-macos:
     runs-on: macos-latest
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -19,6 +24,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/gateway-console/package-lock.json
 
       - name: Cache Go build and module directories
         uses: actions/cache@v4
@@ -31,15 +43,16 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Install macOS verification prerequisites
-        run: |
-          brew update
-          brew install jq docker docker-compose
-          mkdir -p ~/.docker/cli-plugins
-          ln -sf "$(brew --prefix docker-compose)/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
-          docker compose version
+        run: brew install jq
 
-      - name: Build supported beta-track binaries
+      - name: Install Gateway Console browser
+        working-directory: web/gateway-console
+        run: |
+          npm ci
+          npx playwright install chromium
+
+      - name: Build supported public binaries
         run: make build-supported
 
       - name: Run supported public verification
-        run: make verify-beta
+        run: make verify-public-selfhost-release TARGETS=host REQUIRE_TARGETS=host

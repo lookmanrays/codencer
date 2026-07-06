@@ -33,7 +33,7 @@ func (r *AttemptsRepo) Create(ctx context.Context, attempt *domain.Attempt) erro
 	var isSim, retryable bool
 	var version string
 	var artifactsJSON, provisioningJSON []byte
-	
+
 	if attempt.Result != nil {
 		state = string(attempt.Result.State)
 		summary = attempt.Result.Summary
@@ -86,7 +86,7 @@ func (r *AttemptsRepo) Get(ctx context.Context, id string) (*domain.Attempt, err
 		FROM attempts WHERE id = ?
 	`
 	row := r.db.QueryRowContext(ctx, q, id)
-	
+
 	var attempt domain.Attempt
 	var stateStr string
 	var resSummary string
@@ -265,7 +265,7 @@ func (r *AttemptsRepo) GetLatestByStep(ctx context.Context, stepID string) (*dom
 		FROM attempts WHERE step_id = ? ORDER BY number DESC LIMIT 1
 	`
 	row := r.db.QueryRowContext(ctx, q, stepID)
-	
+
 	var attempt domain.Attempt
 	var stateStr string
 	var resSummary string

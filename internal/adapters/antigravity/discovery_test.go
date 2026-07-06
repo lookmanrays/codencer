@@ -94,21 +94,36 @@ func TestDiscovery_Override(t *testing.T) {
 	data, _ := json.Marshal(inst)
 	os.WriteFile(filepath.Join(tmpDir, "ls_999.json"), data, 0644)
 
-	// Set override env
-	os.Setenv("CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR", tmpDir)
-	defer os.Unsetenv("CODENCER_ANTIGRAVITY_WINDOWS_DAEMON_DIR")
+	t.Setenv(daemonDirOverride, tmpDir)
 
-	// We also need to Mock WSL detection or just test getDaemonDirs
-	// Since getDaemonDirs checks /proc/sys/kernel/osrelease, we can't easily mock it without filesystem changes.
-	// However, we can test that IF it reaches the block, it uses the env.
-	
+	d := NewDiscovery()
+	dirs, err := d.getDaemonDirs()
+	if err != nil {
+		t.Fatalf("getDaemonDirs failed: %v", err)
+	}
+	if len(dirs) != 1 || dirs[0] != tmpDir {
+		t.Fatalf("expected generic override dir %s, got %v", tmpDir, dirs)
+	}
+}
+
+func TestDiscovery_WindowsOverrideOnWSL(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "ag-windows-override")
+	defer os.RemoveAll(tmpDir)
+
+	os.MkdirAll(tmpDir, 0755)
+	inst := domain.AGInstance{PID: 999, HTTPSPort: 8888, CSRFToken: "abc"}
+	data, _ := json.Marshal(inst)
+	os.WriteFile(filepath.Join(tmpDir, "ls_999.json"), data, 0644)
+
+	t.Setenv(windowsDirOverride, tmpDir)
+
 	d := NewDiscovery()
 	dirs, err := d.getDaemonDirs()
 	if err != nil {
 		t.Fatalf("getDaemonDirs failed: %v", err)
 	}
 
-	// In a non-WSL environment (like CI), the overide might not be added 
+	// In a non-WSL environment (like CI), the overide might not be added
 	// because getDaemonDirs only checks the env if it detects Microsoft/WSL.
 	// We'll trust the logic for now or skip the check if not in WSL.
 	found := false
@@ -118,7 +133,7 @@ func TestDiscovery_Override(t *testing.T) {
 			break
 		}
 	}
-	
+
 	// If we are in WSL, it MUST be found.
 	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
 		if strings.Contains(strings.ToLower(string(content)), "microsoft") {
@@ -126,5 +141,32 @@ func TestDiscovery_Override(t *testing.T) {
 				t.Errorf("Expected override dir %s to be in discovery list, but wasn't", tmpDir)
 			}
 		}
+	}
+}
+
+func TestDiscovery_PreservesExplicitWorkspaceRoot(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "ag-workspace")
+	defer os.RemoveAll(tmpDir)
+
+	workspaceRoot := filepath.Join(tmpDir, "repo")
+	inst := domain.AGInstance{
+		PID:           321,
+		HTTPSPort:     4321,
+		CSRFToken:     "token",
+		WorkspaceRoot: workspaceRoot,
+	}
+	data, _ := json.Marshal(inst)
+	os.WriteFile(filepath.Join(tmpDir, "ls_321.json"), data, 0644)
+
+	d := NewDiscovery()
+	instances, err := d.scanDirs(context.Background(), []string{tmpDir})
+	if err != nil {
+		t.Fatalf("scanDirs failed: %v", err)
+	}
+	if len(instances) != 1 {
+		t.Fatalf("expected one instance, got %d", len(instances))
+	}
+	if instances[0].WorkspaceRoot != workspaceRoot {
+		t.Fatalf("expected explicit workspace root to be preserved, got %q", instances[0].WorkspaceRoot)
 	}
 }

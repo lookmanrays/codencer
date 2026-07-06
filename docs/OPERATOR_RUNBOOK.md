@@ -24,7 +24,7 @@ cd ~/projects/my-awesome-app
 # Start in Simulation Mode (Default for initial testing)
 make start-sim
 
-# OR Start in Real Mode (Requires agent binaries like codex-agent)
+# OR Start in Real Mode (Requires agent binaries like codex)
 make start
 ```
 
@@ -67,7 +67,7 @@ Best for quick, one-off instructions.
 ```bash
 ./bin/orchestratorctl submit my-run --goal "Refactor Auth" --adapter codex --wait --json
 
-# Or for OpenClaw agents (Experimental / Alpha):
+# Or for OpenClaw agents (Experimental):
 ./bin/orchestratorctl submit my-run --goal "Refactor Auth" --adapter openclaw-acpx --wait --json
 ```
 
