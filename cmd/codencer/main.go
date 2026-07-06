@@ -2023,7 +2023,7 @@ func runSubmit(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	service := localexec.NewService()
-	indicator := submitIndicator(parsed.bool("json"), parsed.bool("wait"), stdout, stderr, parsed.value("title"), adapterProfile)
+	indicator := submitStatusIndicator(parsed.bool("json"), parsed.bool("wait"), stdout, stderr, parsed.value("project"), parsed.value("title"), adapterProfile)
 	indicatorStopped := false
 	if indicator != nil {
 		indicator.Start()
@@ -3439,13 +3439,11 @@ func setupIndicator(asJSON bool, stdout, stderr io.Writer, steps []string) *cliu
 	return cliui.NewWorkingIndicator(opts, steps, "codencer")
 }
 
-func submitIndicator(asJSON bool, wait bool, stdout io.Writer, stderr io.Writer, title string, profile string) *cliui.WorkingIndicator {
-	return submitIndicatorWithOptions(asJSON, wait, stdout, stderr, title, profile, cliui.EnvOptions(asJSON, stdout, stderr))
+func submitStatusIndicator(asJSON bool, wait bool, stdout io.Writer, stderr io.Writer, projectID string, title string, profile string) *cliui.StatusIndicator {
+	return submitStatusIndicatorWithOptions(asJSON, wait, stdout, stderr, projectID, title, profile, cliui.EnvOptions(asJSON, stdout, stderr))
 }
 
-func submitIndicatorWithOptions(asJSON bool, wait bool, stdout io.Writer, stderr io.Writer, title string, profile string, opts cliui.Options) *cliui.WorkingIndicator {
-	_ = title
-	_ = profile
+func submitStatusIndicatorWithOptions(asJSON bool, wait bool, stdout io.Writer, stderr io.Writer, projectID string, title string, profile string, opts cliui.Options) *cliui.StatusIndicator {
 	if asJSON || !wait {
 		return nil
 	}
@@ -3454,7 +3452,13 @@ func submitIndicatorWithOptions(asJSON bool, wait bool, stdout io.Writer, stderr
 	opts.Stderr = stderr
 	opts.Output = stderr
 	opts.SilentWhenDisabled = true
-	return cliui.NewWorkingIndicator(opts, []string{"prepare task", "start executor", "wait for result", "collect report", "verify output"}, "codencer")
+	lines := []cliui.StatusLine{
+		{Label: "task", Value: safeSubmitStatusText(title, 80)},
+		{Label: "executor", Value: safeSubmitStatusText(profile, 48)},
+		{Label: "project", Value: safeSubmitStatusText(projectID, 48)},
+		{Label: "state", Value: "waiting for executor result"},
+	}
+	return cliui.NewStatusIndicator(opts, "codencer", lines)
 }
 
 func finishIndicator(indicator *cliui.WorkingIndicator, err error) {
@@ -3462,6 +3466,28 @@ func finishIndicator(indicator *cliui.WorkingIndicator, err error) {
 		return
 	}
 	indicator.Stop(err == nil)
+}
+
+func safeSubmitStatusText(value string, maxRunes int) string {
+	value = safeCLIText(value)
+	value = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, value)
+	value = strings.Join(strings.Fields(value), " ")
+	if value == "" || maxRunes <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	if maxRunes <= 3 {
+		return string(runes[:maxRunes])
+	}
+	return string(runes[:maxRunes-3]) + "..."
 }
 
 func finishActivationReport(stdout io.Writer, asJSON bool, report activation.Report, err error) error {

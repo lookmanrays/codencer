@@ -187,13 +187,13 @@ func TestIntroPreviewMachineSafe(t *testing.T) {
 	}
 }
 
-func TestSubmitIndicatorGuardsAndTTYOutput(t *testing.T) {
+func TestSubmitStatusIndicatorGuardsAndTTYOutput(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if got := submitIndicator(false, false, &stdout, &stderr, "title", "codex-workspace"); got != nil {
+	if got := submitStatusIndicator(false, false, &stdout, &stderr, "codencer", "title", "codex-workspace"); got != nil {
 		t.Fatalf("submit indicator should be nil when wait=false")
 	}
-	if got := submitIndicator(true, true, &stdout, &stderr, "title", "codex-workspace"); got != nil {
+	if got := submitStatusIndicator(true, true, &stdout, &stderr, "codencer", "title", "codex-workspace"); got != nil {
 		t.Fatalf("submit indicator should be nil for JSON output")
 	}
 
@@ -209,7 +209,7 @@ func TestSubmitIndicatorGuardsAndTTYOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
-			indicator := submitIndicatorWithOptions(false, true, &stdout, &stderr, "/private/repo", "codex-workspace", tt.opts)
+			indicator := submitStatusIndicatorWithOptions(false, true, &stdout, &stderr, "codencer", "/Users/example/repo", "codex-workspace", tt.opts)
 			if indicator == nil {
 				t.Fatalf("disabled submit indicator should be silent, not nil")
 			}
@@ -226,7 +226,7 @@ func TestSubmitIndicatorGuardsAndTTYOutput(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	indicator := submitIndicatorWithOptions(false, true, &stdout, &stderr, "/private/repo", "codex-workspace", cliui.Options{ForceInteractive: true})
+	indicator := submitStatusIndicatorWithOptions(false, true, &stdout, &stderr, "codencer", "CLI task - Codex README check /Users/example/repo token=secret-value", "codex-workspace", cliui.Options{ForceInteractive: true})
 	if indicator == nil {
 		t.Fatalf("interactive submit indicator should be created")
 	}
@@ -237,8 +237,11 @@ func TestSubmitIndicatorGuardsAndTTYOutput(t *testing.T) {
 		"\x1b[?25l",
 		"codencer",
 		"running",
-		"prepare task",
-		"wait for result",
+		"task: CLI task - Codex README check",
+		"executor: codex-workspace",
+		"project: codencer",
+		"state: waiting for executor result",
+		"elapsed: 00:00",
 		"\x1b[7A\x1b[0J",
 		"done",
 		"\x1b[?25h",
@@ -250,7 +253,17 @@ func TestSubmitIndicatorGuardsAndTTYOutput(t *testing.T) {
 	if stdout.String() != "" {
 		t.Fatalf("interactive submit indicator wrote stdout: %q", stdout.String())
 	}
-	for _, forbidden := range []string{"/private/repo", "codex-workspace"} {
+	for _, forbidden := range []string{
+		"prepare task",
+		"start executor",
+		"collect report",
+		"verify output",
+		"  01",
+		"✓ 01",
+		"/Users/example",
+		"secret-value",
+		"Read README.md and docs/README.md",
+	} {
 		if strings.Contains(got, forbidden) {
 			t.Fatalf("interactive submit indicator leaked %q: %q", forbidden, got)
 		}

@@ -84,6 +84,45 @@ func TestRenderWorkingFrameTasks(t *testing.T) {
 	}
 }
 
+func TestRenderStatusFrame(t *testing.T) {
+	rows := RenderStatusFrame(2, 74*time.Second, "codencer", []StatusLine{
+		{Label: "task", Value: "CLI task - Codex README check"},
+		{Label: "executor", Value: "codex-workspace"},
+		{Label: "state", Value: "waiting for executor result"},
+	}, false)
+	joined := strings.Join(rows, "\n")
+	for _, want := range []string{
+		"codencer   ⠹ running",
+		"task: CLI task - Codex README check",
+		"executor: codex-workspace",
+		"state: waiting for executor result",
+		"elapsed: 01:14",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("rendered status frame missing %q:\n%s", want, joined)
+		}
+	}
+	for _, forbidden := range []string{"✓ 01", "· 01", "prepare task", "collect report"} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("status frame rendered checklist content %q:\n%s", forbidden, joined)
+		}
+	}
+}
+
+func TestFormatElapsed(t *testing.T) {
+	tests := map[time.Duration]string{
+		-1 * time.Second: "00:00",
+		0:                "00:00",
+		74 * time.Second: "01:14",
+		(2*time.Hour + 3*time.Minute + 4*time.Second): "02:03:04",
+	}
+	for input, want := range tests {
+		if got := FormatElapsed(input); got != want {
+			t.Fatalf("FormatElapsed(%s) = %q want %q", input, got, want)
+		}
+	}
+}
+
 func TestWorkingIndicatorTTYUsesCursorControls(t *testing.T) {
 	var out bytes.Buffer
 	indicator := NewWorkingIndicator(Options{
