@@ -20,13 +20,19 @@ only and are not the normal upload source.
 7. Confirm the release has installable binary assets, not only GitHub source
    archives:
    - `codencer_${TAG_NAME}_linux_amd64.tar.gz`
-   - `codencer_${TAG_NAME}_darwin_<host_arch>.tar.gz`
+   - `codencer_${TAG_NAME}_darwin_arm64.tar.gz`
+   - `codencer_${TAG_NAME}_darwin_amd64.tar.gz`
    - `checksums.txt`
    - `manifest.json`
 8. Confirm `manifest.json` is deterministic for the same tag, release SHA, and
    binary assets so a retry with `replace_existing=false` can skip identical
    already-published assets.
-9. Confirm release notes preserve the public self-host scope:
+9. Confirm the one-command installer uses GitHub Release assets by default:
+   - `curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh`
+   - pinned: `curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version v0.3.1`
+   - piped install reports `mode=release-bootstrap`;
+   - piped install never uses caller-cwd `./bin`.
+10. Confirm release notes preserve the public self-host scope:
    - Codex real executor proof: passed;
    - Claude Code real executor proof: passed;
    - Antigravity: optional/deferred, not release-proven;
@@ -49,7 +55,8 @@ Before merging the `v0.3.1` Release PR, backfill binary assets for the existing
    - `replace_existing`: `false`
 3. Verify the `v0.3.0` release has:
    - `codencer_v0.3.0_linux_amd64.tar.gz`
-   - `codencer_v0.3.0_darwin_<host_arch>.tar.gz`
+   - `codencer_v0.3.0_darwin_arm64.tar.gz`
+   - `codencer_v0.3.0_darwin_amd64.tar.gz`
    - `checksums.txt`
    - `manifest.json`
 

@@ -390,6 +390,9 @@ def check_release_workflows(failures: list[str]) -> None:
         "gh release view \"$TAG_NAME\" --repo \"$GITHUB_REPOSITORY\"",
         "gh release upload \"$TAG_NAME\"",
         "codencer_${TAG_NAME}_linux_amd64.tar.gz",
+        "codencer_${TAG_NAME}_darwin_arm64.tar.gz",
+        "codencer_${TAG_NAME}_darwin_amd64.tar.gz",
+        "darwin/arm64,darwin/amd64",
         "manifest.json",
         "checksums.txt",
         "built_at: ${{ steps.resolve.outputs.built_at }}",
@@ -402,6 +405,10 @@ def check_release_workflows(failures: list[str]) -> None:
         fail("release-assets workflow must not silently clobber release assets", failures)
     if "datetime.now" in release_assets:
         fail("release-assets manifest generation must not use retry-variant wall-clock timestamps", failures)
+    if "expected exactly one darwin" in release_assets.lower():
+        fail("release-assets workflow must not publish only one darwin host artifact", failures)
+    if "make verify-release\n" in release_assets or "make verify-release " in release_assets:
+        fail("release-assets workflow must not run make verify-release after building tag artifacts because it rewrites dist", failures)
 
     if "uses: ./.github/workflows/release-assets.yml" not in release_please:
         fail("release-please workflow must call the reusable release-assets workflow", failures)
@@ -417,6 +424,26 @@ def check_release_workflows(failures: list[str]) -> None:
         return
     if "release-as" in config:
         fail("release-please-config.json must not keep one-time release-as after v0.3.0", failures)
+
+
+def check_install_script(failures: list[str]) -> None:
+    install_script = read_text(ROOT / "scripts/install.sh") or ""
+    required_needles = [
+        "MODE=\"release-bootstrap\"",
+        "https://github.com/$REPO/releases/download/$VERSION",
+        "checksums.txt",
+        "manifest.json",
+        "verify_manifest",
+        "sha256sum or shasum",
+        "Windows-native Codencer artifacts are not published yet. Use WSL2/Linux artifact for now.",
+    ]
+    for needle in required_needles:
+        if needle not in install_script:
+            fail(f"install.sh missing required release-bootstrap marker: {needle}", failures)
+    if 'BIN_DIR="bin"' in install_script:
+        fail("install.sh must not use caller-cwd bin as an implicit default", failures)
+    if "gh release" in install_script:
+        fail("install.sh must not require the gh CLI for one-command installs", failures)
 
 
 def archive_members(path: Path) -> list[tuple[str, bytes]]:
@@ -499,6 +526,7 @@ def main() -> int:
     check_hardening_final_report(failures)
     check_self_host_default_files(failures)
     check_release_workflows(failures)
+    check_install_script(failures)
     scan_source_tree(failures)
     scan_release_artifacts(failures)
     if failures:

@@ -28,7 +28,7 @@
 - Merging the Release PR creates the GitHub Release.
 - If `release_created=true`, the same workflow builds:
   - `linux/amd64` on `ubuntu-latest`;
-  - one macOS host artifact on `macos-latest`.
+  - `darwin/arm64` and `darwin/amd64` on `macos-latest`.
 - The publish job generates `checksums.txt` and a truthful `manifest.json`.
 - Release asset upload uses `gh release upload` without `--clobber`; existing
   assets fail the workflow.

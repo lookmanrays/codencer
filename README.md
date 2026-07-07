@@ -105,6 +105,25 @@ Prerequisites:
 - SQLite-capable local environment
 - macOS, Linux, or WSL2
 
+Install the latest GitHub Release artifact:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh
+```
+
+Pin a release version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version v0.3.1
+```
+
+The one-command installer always downloads installable GitHub Release assets,
+verifies `checksums.txt` and `manifest.json`, extracts the archive in a temp
+directory, installs binaries into `${CODENCER_INSTALL_DIR:-$HOME/.local/bin}`,
+and initializes `${CODENCER_HOME:-$HOME/.codencer}`. It does not use caller-cwd
+`./bin`, does not require `gh`, does not use `sudo`, and does not edit shell
+profiles.
+
 Build and initialize:
 
 ```bash

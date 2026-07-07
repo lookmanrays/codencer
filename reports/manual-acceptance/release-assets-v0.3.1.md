@@ -134,7 +134,8 @@ replace_existing: false
 Expected assets:
 
 - `codencer_v0.3.0_linux_amd64.tar.gz`
-- `codencer_v0.3.0_darwin_<host_arch>.tar.gz`
+- `codencer_v0.3.0_darwin_arm64.tar.gz`
+- `codencer_v0.3.0_darwin_amd64.tar.gz`
 - `checksums.txt`
 - `manifest.json`
 

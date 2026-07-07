@@ -15,8 +15,8 @@ upload or manual version input.
 7. The Release Please workflow calls `.github/workflows/release-assets.yml` to
    build release artifacts, generate `checksums.txt` and `manifest.json`, and
    upload them.
-8. Verify the GitHub Release page has the Linux artifact, one macOS host
-   artifact, checksums, and manifest.
+8. Verify the GitHub Release page has the Linux artifact, both macOS
+   architecture artifacts, checksums, and manifest.
 
 The asset build/upload is a reusable workflow called by Release Please because
 GitHub resources created with `GITHUB_TOKEN` do not reliably trigger separate
@@ -68,7 +68,8 @@ GitHub:
 5. Run the workflow.
 6. Verify the `v0.3.0` release now has:
    - `codencer_v0.3.0_linux_amd64.tar.gz`
-   - `codencer_v0.3.0_darwin_<host_arch>.tar.gz`
+   - `codencer_v0.3.0_darwin_arm64.tar.gz`
+   - `codencer_v0.3.0_darwin_amd64.tar.gz`
    - `checksums.txt`
    - `manifest.json`
 
@@ -80,12 +81,14 @@ emergency release procedure explicitly approves it.
 The Release Assets workflow builds and uploads:
 
 - `codencer_${TAG_NAME}_linux_amd64.tar.gz`
-- `codencer_${TAG_NAME}_darwin_<host_arch>.tar.gz`
+- `codencer_${TAG_NAME}_darwin_arm64.tar.gz`
+- `codencer_${TAG_NAME}_darwin_amd64.tar.gz`
 - `checksums.txt`
 - `manifest.json`
 
-The macOS artifact is a host build from `macos-latest`. Do not claim both
-`darwin/amd64` and `darwin/arm64` unless both are actually built.
+The macOS job builds both Darwin architectures that the public installer can
+select. Do not remove one Darwin artifact without also changing installer
+platform detection and this documentation.
 
 Installable public Codencer releases are the attached `codencer_*.tar.gz`
 binary archives. The GitHub-generated source ZIP/TAR links are source snapshots
@@ -112,6 +115,33 @@ never deleted.
 Release Please creates non-draft releases today. If asset upload or verification
 fails, the Release Assets job fails loudly so the release cannot be mistaken for
 a complete binary release.
+
+## GitHub One-Command Installer
+
+The canonical public install command is GitHub-only:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh
+```
+
+Pinned release install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version v0.3.1
+```
+
+When `install.sh` is piped through `sh`, it runs in release-bootstrap mode. It
+detects the platform, resolves the latest release unless `--version` is set,
+downloads `codencer_<version>_<platform>.tar.gz`, `checksums.txt`, and
+`manifest.json`, verifies the archive checksum and manifest entry, extracts the
+archive in a temp directory, installs the release binaries, and initializes
+`CODENCER_HOME`.
+
+Piped install must never use caller-cwd `./bin`. Package-local installs remain
+available only when `--bin-dir` is explicit or the script path proves it is
+inside an unpacked release package with a local `bin/` directory. The installer
+does not require `gh`, does not run `sudo`, does not edit shell profiles, does
+not kill processes, and does not execute downloaded scripts.
 
 ## Local Snapshot Use
 
