@@ -137,7 +137,7 @@ jobs:
           path: dist/codencer_${{ env.TAG_NAME }}_linux_amd64.tar.gz
           if-no-files-found: error
 
-  build-macos-host:
+  build-macos:
     needs: preflight
     runs-on: macos-latest
     timeout-minutes: 45
@@ -156,16 +156,58 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build macOS host release snapshot
-        run: make release-snapshot VERSION="${TAG_NAME}" TARGETS=host REQUIRE_TARGETS=host
+      - name: Build macOS release snapshots
+        run: make release-snapshot VERSION="${TAG_NAME}" TARGETS=darwin/arm64,darwin/amd64 REQUIRE_TARGETS=darwin/arm64,darwin/amd64
+
+      - name: Verify macOS release metadata
+        run: |
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("dist")
+          tag = os.environ["TAG_NAME"]
+          expected = {
+              f"codencer_{tag}_darwin_arm64.tar.gz": "arm64",
+              f"codencer_{tag}_darwin_amd64.tar.gz": "amd64",
+          }
+          manifest_path = root / "manifest.json"
+          checksums_path = root / "checksums.txt"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          checksums = {}
+          for line in checksums_path.read_text(encoding="utf-8").splitlines():
+              parts = line.split()
+              if len(parts) >= 2:
+                  checksums[parts[1]] = parts[0]
+          artifacts = {
+              item.get("name") or item.get("filename"): item
+              for item in manifest.get("artifacts", []) + manifest.get("assets", [])
+          }
+          for name, arch in expected.items():
+              archive = root / name
+              if not archive.is_file():
+                  raise SystemExit(f"missing macOS release archive: {name}")
+              digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+              if checksums.get(name) != digest:
+                  raise SystemExit(f"checksum mismatch for {name}")
+              artifact = artifacts.get(name)
+              if not artifact:
+                  raise SystemExit(f"manifest missing {name}")
+              if artifact.get("os") != "darwin" or artifact.get("arch") != arch:
+                  raise SystemExit(f"manifest platform mismatch for {name}: {artifact}")
+              if artifact.get("sha256") and artifact.get("sha256") != digest:
+                  raise SystemExit(f"manifest sha256 mismatch for {name}")
+          PY
 
       - name: Verify macOS host self-host artifact
-        run: make verify-release-artifact-selfhost VERSION="${TAG_NAME}" TARGETS=host REQUIRE_TARGETS=host
+        run: SKIP_RELEASE_SNAPSHOT=1 make verify-release-artifact-selfhost VERSION="${TAG_NAME}" TARGETS=host REQUIRE_TARGETS=host
 
-      - name: Upload macOS host workflow artifact
+      - name: Upload macOS workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: codencer-macos-host
+          name: codencer-macos
           path: dist/codencer_${{ env.TAG_NAME }}_darwin_*.tar.gz
           if-no-files-found: error
 
@@ -173,7 +215,7 @@ jobs:
     needs:
       - preflight
       - build-linux-amd64
-      - build-macos-host
+      - build-macos
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -197,7 +239,6 @@ jobs:
           import hashlib
           import json
           import os
-          import re
           from pathlib import Path
 
           root = Path("release-assets")
@@ -206,27 +247,26 @@ jobs:
           built_at = os.environ["BUILT_AT"]
           archives = sorted(root.glob("codencer_*.tar.gz"))
           linux_name = f"codencer_{tag}_linux_amd64.tar.gz"
+          darwin_names = {
+              f"codencer_{tag}_darwin_arm64.tar.gz",
+              f"codencer_{tag}_darwin_amd64.tar.gz",
+          }
           linux = [path for path in archives if path.name == linux_name]
-          darwin = [
-              path
-              for path in archives
-              if re.fullmatch(rf"codencer_{re.escape(tag)}_darwin_[A-Za-z0-9]+\.tar\.gz", path.name)
-          ]
+          darwin = [path for path in archives if path.name in darwin_names]
 
           if len(linux) != 1:
               raise SystemExit(f"expected exactly one linux/amd64 archive named {linux_name}, got {len(linux)}")
-          if len(darwin) != 1:
-              raise SystemExit(f"expected exactly one darwin host archive for {tag}, got {len(darwin)}")
+          missing_darwin = sorted(darwin_names - {path.name for path in darwin})
+          if missing_darwin:
+              raise SystemExit(f"missing required darwin archives for {tag}: {', '.join(missing_darwin)}")
 
           assets = []
           checksum_lines = []
           for path in linux + darwin:
-              match = re.fullmatch(rf"codencer_{re.escape(tag)}_(linux|darwin)_([A-Za-z0-9]+)\.tar\.gz", path.name)
-              if not match:
-                  raise SystemExit(f"unexpected archive name: {path.name}")
               data = path.read_bytes()
               digest = hashlib.sha256(data).hexdigest()
-              os_name, arch = match.groups()
+              stem = path.name.removeprefix(f"codencer_{tag}_").removesuffix(".tar.gz")
+              os_name, arch = stem.split("_", 1)
               runner = "ubuntu-latest" if os_name == "linux" else "macos-latest"
               checksum_lines.append(f"{digest}  {path.name}")
               assets.append({
@@ -249,8 +289,8 @@ jobs:
           for key in ("version", "tag_name", "release_sha", "built_at", "assets"):
               if not manifest.get(key):
                   raise SystemExit(f"manifest missing {key}")
-          if len(manifest["assets"]) != 2:
-              raise SystemExit("manifest must describe exactly two binary archives")
+          if len(manifest["assets"]) != 3:
+              raise SystemExit("manifest must describe exactly three binary archives")
           for asset in manifest["assets"]:
               for key in ("filename", "sha256", "os", "arch", "runner"):
                   if not asset.get(key):
@@ -262,15 +302,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          mapfile -t archives < <(find release-assets -maxdepth 1 -type f -name 'codencer_*.tar.gz' -printf '%f\n' | sort)
           linux="codencer_${TAG_NAME}_linux_amd64.tar.gz"
-          mapfile -t darwin_matches < <(printf '%s\n' "${archives[@]}" | grep -E "^codencer_${TAG_NAME}_darwin_[A-Za-z0-9]+\\.tar\\.gz$" || true)
-          if [[ ${#darwin_matches[@]} -ne 1 ]]; then
-            echo "Expected exactly one darwin host archive, got ${#darwin_matches[@]}" >&2
-            exit 1
-          fi
-          darwin="${darwin_matches[0]}"
-          target_names=("$linux" "$darwin" "checksums.txt" "manifest.json")
+          darwin_arm64="codencer_${TAG_NAME}_darwin_arm64.tar.gz"
+          darwin_amd64="codencer_${TAG_NAME}_darwin_amd64.tar.gz"
+          target_names=("$linux" "$darwin_arm64" "$darwin_amd64" "checksums.txt" "manifest.json")
 
           release_assets_json="$(gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --json assets)"
           upload_files=()
