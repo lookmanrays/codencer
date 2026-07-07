@@ -46,8 +46,8 @@ work.
 The first automated public release bootstrap is complete. `v0.3.0` has already
 been released, and `release-please-config.json` must not keep
 `release-as: 0.3.0`. Future versions are computed from Conventional Commits.
-The patch that introduced the release asset workflow is expected to produce a
-`v0.3.1` Release PR because it is a `fix:` change.
+The release asset workflow has already shipped. Future installer polish fixes
+are expected to produce normal patch Release PRs from Conventional Commits.
 
 `version.txt` and `.release-please-manifest.json` are then advanced by Release
 Please PRs only.
@@ -127,7 +127,7 @@ curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/i
 Pinned release install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version v0.3.1
+curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version "$TAG_NAME"
 ```
 
 When `install.sh` is piped through `sh`, it runs in release-bootstrap mode. It
@@ -142,6 +142,28 @@ available only when `--bin-dir` is explicit or the script path proves it is
 inside an unpacked release package with a local `bin/` directory. The installer
 does not require `gh`, does not run `sudo`, does not edit shell profiles, does
 not kill processes, and does not execute downloaded scripts.
+
+`install.sh --dry-run` is non-mutating. It reports the intended mode, platform,
+install directory, Codencer home, and planned assets without resolving latest
+over the network, downloading assets, extracting archives, creating install
+directories, copying binaries, or initializing `CODENCER_HOME`. Without
+`--version`, dry-run reports the version as unresolved `latest`.
+
+Manifest verification uses POSIX shell tools only. The installer verifies the
+archive against `checksums.txt` and checks that the generated `manifest.json`
+contains the selected artifact, SHA256, OS, and architecture. Python is not used
+or required for one-command install.
+
+The three install paths are intentionally separate:
+
+- one-command GitHub installer: primary user path, downloads GitHub Release
+  assets;
+- unpacked `codencer_*.tar.gz` plus `scripts/install.sh`: package-local
+  fallback/debug path that uses the archive's own `bin/`;
+- source checkout plus `make build-codencer`: developer path only.
+
+GitHub-generated source ZIP/TAR downloads do not contain release binaries and
+are not installable Codencer binary releases.
 
 ## Local Snapshot Use
 

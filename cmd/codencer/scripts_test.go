@@ -69,6 +69,16 @@ func TestInstallScriptPipedModeUsesReleaseBootstrapNotCallerBin(t *testing.T) {
 	downloadDir, _, _ := createInstallReleaseFixture(t, repo, version, platform)
 	installDir := t.TempDir()
 	home := t.TempDir()
+	callerCWD := t.TempDir()
+	callerBin := filepath.Join(callerCWD, "bin")
+	if err := os.MkdirAll(callerBin, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"codencer", "orchestratord", "codencer-relayd", "codencer-gatewayd", "codencer-connectord"} {
+		if err := os.WriteFile(filepath.Join(callerBin, name), []byte("#!/bin/sh\necho caller-cwd-"+name+"\n"), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -84,13 +94,13 @@ func TestInstallScriptPipedModeUsesReleaseBootstrapNotCallerBin(t *testing.T) {
 		"--codencer-home", home,
 		"--json",
 	)
-	cmd.Dir = repo
+	cmd.Dir = callerCWD
 	cmd.Stdin = strings.NewReader(string(script))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("piped install should use release-bootstrap fixture: %v\n%s", err, out)
 	}
-	if strings.Contains(string(out), "install:bin/codencer") {
+	if strings.Contains(string(out), "install:bin/codencer") || strings.Contains(string(out), callerBin) {
 		t.Fatalf("piped install leaked caller cwd bin behavior: %s", out)
 	}
 
@@ -106,6 +116,57 @@ func TestInstallScriptPipedModeUsesReleaseBootstrapNotCallerBin(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(installDir, "codencer")); err != nil {
 		t.Fatalf("installed codencer missing from install dir: %v", err)
+	}
+	installed, err := os.ReadFile(filepath.Join(installDir, "codencer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(installed), "caller-cwd") {
+		t.Fatalf("installed binary came from caller cwd bin: %s", installed)
+	}
+}
+
+func TestInstallScriptPackageLocalExplicitBinDirWorksWithoutNetwork(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	binDir := t.TempDir()
+	for _, name := range []string{"codencer", "orchestratord", "codencer-relayd", "codencer-gatewayd", "codencer-connectord"} {
+		body := "#!/bin/sh\nif [ \"$1\" = \"init\" ]; then exit 0; fi\necho explicit-" + name + "\n"
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakeBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBin, "curl"), []byte("#!/bin/sh\necho network forbidden >&2\nexit 99\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	installDir := t.TempDir()
+	cmd := exec.Command("sh", filepath.Join(repo, "scripts", "install.sh"),
+		"--bin-dir", binDir,
+		"--install-dir", installDir,
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Env = append(os.Environ(), "PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("explicit package-local install should not need network: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), "network forbidden") {
+		t.Fatalf("package-local install used network: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install output is not JSON: %v\n%s", err, out)
+	}
+	if payload["mode"] != "package-local" {
+		t.Fatalf("expected package-local mode, got %+v", payload)
+	}
+	installed, err := os.ReadFile(filepath.Join(installDir, "codencer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installed), "explicit-codencer") {
+		t.Fatalf("installed binary did not come from explicit bin dir: %s", installed)
 	}
 }
 
@@ -136,6 +197,61 @@ func TestInstallScriptPackageLocalUsesScriptPathNotCallerCWD(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(installDir, "codencer")); err != nil {
 		t.Fatalf("installed codencer missing from install dir: %v", err)
+	}
+}
+
+func TestInstallScriptReleaseDryRunDoesNotDownloadExtractOrCreateDirs(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	downloadDir := filepath.Join(root, "downloads")
+	installDir := filepath.Join(root, "install")
+	home := filepath.Join(root, "home")
+	fakeBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBin, "curl"), []byte("#!/bin/sh\necho dry-run network forbidden >&2\nexit 99\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fakeBin, "tar"), []byte("#!/bin/sh\necho dry-run extraction forbidden >&2\nexit 99\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--platform", "darwin_arm64",
+		"--download-dir", downloadDir,
+		"--install-dir", installDir,
+		"--codencer-home", home,
+		"--dry-run",
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	cmd.Env = append(os.Environ(), "PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("dry-run should not require network or extraction: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), "forbidden") {
+		t.Fatalf("dry-run used network or extraction: %s", out)
+	}
+	for _, path := range []string{downloadDir, installDir, home} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("dry-run should not create %s, stat err=%v", path, err)
+		}
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("dry-run output is not JSON: %v\n%s", err, out)
+	}
+	if payload["mode"] != "release-bootstrap" || payload["version"] != "latest" {
+		t.Fatalf("unexpected dry-run payload: %+v", payload)
+	}
+	if payload["artifact"] != "codencer_latest_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected dry-run artifact: %+v", payload)
+	}
+	planned, _ := payload["planned_assets"].([]any)
+	if len(planned) != 3 || planned[0] != "codencer_latest_darwin_arm64.tar.gz" || planned[1] != "checksums.txt" || planned[2] != "manifest.json" {
+		t.Fatalf("unexpected dry-run planned assets: %+v", payload)
 	}
 }
 
@@ -335,6 +451,766 @@ func TestInstallScriptManifestVerificationFailureReturnsJSON(t *testing.T) {
 	}
 	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
 		t.Fatalf("unexpected manifest failure error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationRejectsMalformedJSON(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+`, version, version, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", t.TempDir(),
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("malformed manifest JSON should fail: %s", out)
+	}
+	if strings.Contains(string(out), "manifest JSON is invalid") {
+		t.Fatalf("raw manifest verifier stderr leaked into JSON output: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install malformed manifest failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected malformed manifest error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationRejectsUnescapedControlCharacters(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	for _, tc := range []struct {
+		name    string
+		control byte
+	}{
+		{name: "null", control: 0x00},
+		{name: "start of heading", control: 0x01},
+		{name: "form feed", control: 0x0c},
+		{name: "unit separator", control: 0x1f},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+			artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+			manifest := fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "metadata": {"note": "beforeCONTROLafter"},
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			manifest = strings.Replace(manifest, "CONTROL", string([]byte{tc.control}), 1)
+			if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(manifest), 0644); err != nil {
+				t.Fatal(err)
+			}
+			script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			installDir := t.TempDir()
+			cmd := exec.Command("sh", "-s", "--",
+				"--version", version,
+				"--repo", "lookmanrays/codencer",
+				"--platform", platform,
+				"--download-dir", downloadDir,
+				"--no-download",
+				"--install-dir", installDir,
+				"--codencer-home", t.TempDir(),
+				"--json",
+			)
+			cmd.Stdin = strings.NewReader(string(script))
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("manifest with raw control 0x%02x should fail: %s", tc.control, out)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(out, &payload); err != nil {
+				t.Fatalf("install raw control failure output is not JSON: %v\n%s", err, out)
+			}
+			if payload["ok"] != false {
+				t.Fatalf("expected ok=false, got %+v", payload)
+			}
+			if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+				t.Fatalf("unexpected raw control manifest error: %+v", payload)
+			}
+			if _, err := os.Stat(filepath.Join(installDir, "codencer")); !os.IsNotExist(err) {
+				t.Fatalf("raw control manifest installed a binary: %v", err)
+			}
+		})
+	}
+}
+
+func TestInstallScriptManifestVerificationPreservesStringSpaces(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	for _, tc := range []struct {
+		name     string
+		manifest func(artifactName, sha string) string
+	}{
+		{
+			name: "version",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": "v 9.9.9",
+  "tag_name": "v 9.9.9",
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, artifactName, sha)
+			},
+		},
+		{
+			name: "sha",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha[:8]+" "+sha[8:])
+			},
+		},
+		{
+			name: "os",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "dar win", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+		{
+			name: "arch",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm 64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+			artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+			if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(tc.manifest(artifactName, sha)), 0644); err != nil {
+				t.Fatal(err)
+			}
+			script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command("sh", "-s", "--",
+				"--version", version,
+				"--repo", "lookmanrays/codencer",
+				"--platform", platform,
+				"--download-dir", downloadDir,
+				"--no-download",
+				"--install-dir", t.TempDir(),
+				"--codencer-home", t.TempDir(),
+				"--json",
+			)
+			cmd.Stdin = strings.NewReader(string(script))
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("manifest with spaced %s field should fail: %s", tc.name, out)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(out, &payload); err != nil {
+				t.Fatalf("install spaced %s manifest failure output is not JSON: %v\n%s", tc.name, err, out)
+			}
+			if payload["ok"] != false {
+				t.Fatalf("expected ok=false, got %+v", payload)
+			}
+			if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+				t.Fatalf("unexpected spaced %s manifest error: %+v", tc.name, payload)
+			}
+		})
+	}
+}
+
+func TestInstallScriptManifestVerificationRejectsDuplicateKeys(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	for _, tc := range []struct {
+		name     string
+		manifest func(artifactName, sha string) string
+	}{
+		{
+			name: "version",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "version": "v9.9.8",
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+		{
+			name: "tag_name",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "tag_name": "v9.9.8",
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+		{
+			name: "filename",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "filename": "different.tar.gz", "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+		{
+			name: "snapshot name",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "artifacts": [
+    {"name": %q, "name": "different.tar.gz", "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, artifactName, sha)
+			},
+		},
+		{
+			name: "sha256",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "sha256": "wrong", "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+		{
+			name: "os",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "os": "linux", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+		{
+			name: "arch",
+			manifest: func(artifactName, sha string) string {
+				return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64", "arch": "amd64"}
+  ]
+}
+`, version, version, artifactName, sha)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+			artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+			if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(tc.manifest(artifactName, sha)), 0644); err != nil {
+				t.Fatal(err)
+			}
+			script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			installDir := t.TempDir()
+			cmd := exec.Command("sh", "-s", "--",
+				"--version", version,
+				"--repo", "lookmanrays/codencer",
+				"--platform", platform,
+				"--download-dir", downloadDir,
+				"--no-download",
+				"--install-dir", installDir,
+				"--codencer-home", t.TempDir(),
+				"--json",
+			)
+			cmd.Stdin = strings.NewReader(string(script))
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("manifest with duplicate %s should fail: %s", tc.name, out)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(out, &payload); err != nil {
+				t.Fatalf("install duplicate %s failure output is not JSON: %v\n%s", tc.name, err, out)
+			}
+			if payload["ok"] != false {
+				t.Fatalf("expected ok=false, got %+v", payload)
+			}
+			if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+				t.Fatalf("unexpected duplicate %s manifest error: %+v", tc.name, payload)
+			}
+			if _, err := os.Stat(filepath.Join(installDir, "codencer")); !os.IsNotExist(err) {
+				t.Fatalf("duplicate %s manifest installed a binary: %v", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestInstallScriptManifestVerificationDoesNotNeedPython(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, _ := createInstallReleaseFixture(t, repo, version, platform)
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBin, "python3"), []byte("#!/bin/sh\necho python must not be called >&2\nexit 99\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	installDir := t.TempDir()
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", installDir,
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	cmd.Env = append(os.Environ(), "PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install should verify manifest without Python: %v\n%s", err, out)
+	}
+	if strings.Contains(string(out), "python must not be called") {
+		t.Fatalf("manifest verification invoked Python: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true, got %+v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "codencer")); err != nil {
+		t.Fatalf("installed codencer missing from install dir: %v", err)
+	}
+}
+
+func TestInstallScriptManifestVerificationRejectsStaleTag(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": "v9.9.8",
+  "tag_name": "v9.9.8",
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", t.TempDir(),
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("stale manifest tag should fail: %s", out)
+	}
+	if strings.Contains(string(out), "manifest version mismatch") || strings.Contains(string(out), "manifest tag_name mismatch") {
+		t.Fatalf("raw manifest verifier stderr leaked into JSON output: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install stale manifest failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected stale manifest error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationUsesTopLevelTagFields(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": "v9.9.8",
+  "tag_name": "v9.9.8",
+  "meta": {"version": %q, "tag_name": %q},
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", t.TempDir(),
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("nested matching tags should not override stale top-level tags: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install nested tag failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected nested tag manifest error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationAllowsSnapshotManifestWithoutTagName(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": %q,
+  "commit": "fixture",
+  "built_at": "2026-07-07T00:00:00Z",
+  "targets": ["darwin/arm64"],
+  "required_targets": ["darwin/arm64"],
+  "allow_partial": false,
+  "partial": false,
+  "artifacts": [
+    {"name": %q, "sha256": %q, "os": "darwin", "arch": "arm64", "status": "built", "required": true}
+  ]
+}
+`, version, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installDir := t.TempDir()
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", installDir,
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("snapshot manifest without tag_name should install: %v\n%s", err, out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install snapshot manifest output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true, got %+v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "codencer")); err != nil {
+		t.Fatalf("installed codencer missing from install dir: %v", err)
+	}
+}
+
+func TestInstallScriptManifestVerificationRejectsSubstringArtifact(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]
+}
+`, version, version, artifactName+".sig", sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", t.TempDir(),
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("substring manifest artifact should fail: %s", out)
+	}
+	if strings.Contains(string(out), "must reference") {
+		t.Fatalf("raw manifest verifier stderr leaked into JSON output: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install substring manifest failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected substring manifest error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationRequiresAssetEntry(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "metadata": {
+    "filename": %q,
+    "sha256": %q,
+    "os": "darwin",
+    "arch": "arm64"
+  },
+  "assets": []
+}
+`, version, version, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", t.TempDir(),
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("manifest metadata outside assets should not verify artifact: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install metadata artifact failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected metadata artifact manifest error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationIgnoresNestedAssetMetadata(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [
+    {
+      "metadata": {
+        "filename": %q,
+        "sha256": %q,
+        "os": "darwin",
+        "arch": "arm64"
+      }
+    }
+  ]
+}
+`, version, version, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", t.TempDir(),
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("nested asset metadata should not verify artifact: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install nested asset metadata failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected nested asset metadata manifest error: %+v", payload)
+	}
+}
+
+func TestInstallScriptManifestVerificationRejectsNestedAssetArrays(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+	downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+	artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "assets": [[
+    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
+  ]]
+}
+`, version, version, artifactName, sha)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installDir := t.TempDir()
+	cmd := exec.Command("sh", "-s", "--",
+		"--version", version,
+		"--repo", "lookmanrays/codencer",
+		"--platform", platform,
+		"--download-dir", downloadDir,
+		"--no-download",
+		"--install-dir", installDir,
+		"--codencer-home", t.TempDir(),
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(string(script))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("manifest nested asset array should fail: %s", out)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatalf("install nested asset array failure output is not JSON: %v\n%s", err, out)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %+v", payload)
+	}
+	if got := payload["error"]; got != "manifest verification failed for codencer_v9.9.9_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected nested asset array manifest error: %+v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, "codencer")); !os.IsNotExist(err) {
+		t.Fatalf("nested asset array manifest installed a binary: %v", err)
 	}
 }
 

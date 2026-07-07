@@ -62,6 +62,14 @@ _codencer_install_main() (
     printf ']'
   }
 
+  json_planned_assets() {
+    if [ -z "$ARTIFACT" ]; then
+      printf '[]'
+      return
+    fi
+    json_word_array "$ARTIFACT" "checksums.txt" "manifest.json"
+  }
+
   print_json_report() {
     ok=$1
     partial=$2
@@ -77,6 +85,8 @@ _codencer_install_main() (
     printf ',"platform":%s' "$(json_string "$PLATFORM")"
     printf ',"artifact":%s' "$(json_string "$ARTIFACT")"
     printf ',"artifact_sha256":%s' "$(json_string "$ARTIFACT_SHA256")"
+    printf ',"planned_assets":'
+    json_planned_assets
     printf ',"download_dir":%s' "$(json_string "$DOWNLOAD_DIR")"
     printf ',"install_dir":%s' "$(json_string "$INSTALL_DIR")"
     printf ',"codencer_home":%s' "$(json_string "$CODENCER_HOME_VALUE")"
@@ -120,7 +130,7 @@ package-local mode is available with --bin-dir or when this script is executed
 from an unpacked Codencer release package that contains bin/.
 
 Flags:
-  --version <tag>         Release tag, for example v0.3.1. Defaults to latest.
+  --version <tag>         Release tag, for example vX.Y.Z. Defaults to latest.
   --repo <owner/name>     GitHub repository. Defaults to lookmanrays/codencer.
   --platform <os_arch>    Override platform, for example linux_amd64.
   --install-dir <path>    Install directory. Defaults to $CODENCER_INSTALL_DIR or $HOME/.local/bin.
@@ -153,7 +163,7 @@ EOF
     esac
   done
 
-  if [ "$NO_DOWNLOAD" = "1" ] && [ -z "$DOWNLOAD_DIR" ]; then
+  if [ "$NO_DOWNLOAD" = "1" ] && [ "$DRY_RUN" != "1" ] && [ -z "$DOWNLOAD_DIR" ]; then
     fail "--no-download requires --download-dir"
   fi
 
@@ -363,53 +373,623 @@ EOF
     fail "sha256sum or shasum is required to verify release assets"
   }
 
+  json_syntax_valid() {
+    awk '
+      BEGIN {
+        data = ""
+      }
+      {
+        data = data $0 "\n"
+      }
+      END {
+        n = length(data)
+        pos = 1
+        skipws()
+        if (!parse_value()) {
+          exit 1
+        }
+        skipws()
+        if (pos <= n) {
+          exit 1
+        }
+      }
+      function ch() {
+        return substr(data, pos, 1)
+      }
+      function skipws() {
+        while (pos <= n && index(" \t\r\n", ch())) {
+          pos++
+        }
+      }
+      function parse_value(  c) {
+        skipws()
+        c = ch()
+        if (c == "{") {
+          return parse_object()
+        }
+        if (c == "[") {
+          return parse_array()
+        }
+        if (c == "\"") {
+          return parse_string()
+        }
+        if (c == "-" || c ~ /[0-9]/) {
+          return parse_number()
+        }
+        if (substr(data, pos, 4) == "true") {
+          pos += 4
+          return 1
+        }
+        if (substr(data, pos, 5) == "false") {
+          pos += 5
+          return 1
+        }
+        if (substr(data, pos, 4) == "null") {
+          pos += 4
+          return 1
+        }
+        return 0
+      }
+      function parse_string(  c, esc, i, hex) {
+        if (ch() != "\"") {
+          return 0
+        }
+        pos++
+        while (pos <= n) {
+          c = ch()
+          if (c == "\"") {
+            pos++
+            return 1
+          }
+          if (c == "\\") {
+            pos++
+            if (pos > n) {
+              return 0
+            }
+            esc = ch()
+            if (esc == "\"" || esc == "\\" || esc == "/" || esc == "b" || esc == "f" || esc == "n" || esc == "r" || esc == "t") {
+              pos++
+              continue
+            }
+            if (esc == "u") {
+              pos++
+              for (i = 0; i < 4; i++) {
+                if (pos > n) {
+                  return 0
+                }
+                hex = ch()
+                if (hex !~ /[0-9A-Fa-f]/) {
+                  return 0
+                }
+                pos++
+              }
+              continue
+            }
+            return 0
+          }
+          if (c == sprintf("%c", 0) || c ~ /[\001-\037]/) {
+            return 0
+          }
+          pos++
+        }
+        return 0
+      }
+      function parse_array(  c) {
+        if (ch() != "[") {
+          return 0
+        }
+        pos++
+        skipws()
+        if (ch() == "]") {
+          pos++
+          return 1
+        }
+        while (1) {
+          if (!parse_value()) {
+            return 0
+          }
+          skipws()
+          c = ch()
+          if (c == ",") {
+            pos++
+            continue
+          }
+          if (c == "]") {
+            pos++
+            return 1
+          }
+          return 0
+        }
+      }
+      function parse_object(  c) {
+        if (ch() != "{") {
+          return 0
+        }
+        pos++
+        skipws()
+        if (ch() == "}") {
+          pos++
+          return 1
+        }
+        while (1) {
+          skipws()
+          if (!parse_string()) {
+            return 0
+          }
+          skipws()
+          if (ch() != ":") {
+            return 0
+          }
+          pos++
+          if (!parse_value()) {
+            return 0
+          }
+          skipws()
+          c = ch()
+          if (c == ",") {
+            pos++
+            continue
+          }
+          if (c == "}") {
+            pos++
+            return 1
+          }
+          return 0
+        }
+      }
+      function parse_number(  c) {
+        if (ch() == "-") {
+          pos++
+        }
+        if (pos > n) {
+          return 0
+        }
+        c = ch()
+        if (c == "0") {
+          pos++
+          if (ch() ~ /[0-9]/) {
+            return 0
+          }
+        } else if (c ~ /[1-9]/) {
+          while (pos <= n && ch() ~ /[0-9]/) {
+            pos++
+          }
+        } else {
+          return 0
+        }
+        if (ch() == ".") {
+          pos++
+          if (!(ch() ~ /[0-9]/)) {
+            return 0
+          }
+          while (pos <= n && ch() ~ /[0-9]/) {
+            pos++
+          }
+        }
+        c = ch()
+        if (c == "e" || c == "E") {
+          pos++
+          c = ch()
+          if (c == "+" || c == "-") {
+            pos++
+          }
+          if (!(ch() ~ /[0-9]/)) {
+            return 0
+          }
+          while (pos <= n && ch() ~ /[0-9]/) {
+            pos++
+          }
+        }
+        return 1
+      }
+    ' "$1"
+  }
+
+  json_compact_preserve_strings() {
+    awk '
+      {
+        line = $0
+        for (i = 1; i <= length(line); i++) {
+          c = substr(line, i, 1)
+          if (in_string) {
+            printf "%s", c
+            if (escaped) {
+              escaped = 0
+            } else if (c == "\\") {
+              escaped = 1
+            } else if (c == "\"") {
+              in_string = 0
+            }
+            continue
+          }
+          if (c == "\"") {
+            in_string = 1
+            printf "%s", c
+            continue
+          }
+          if (c == " " || c == "\t" || c == "\r") {
+            continue
+          }
+          printf "%s", c
+        }
+      }
+      END {
+        printf "\n"
+      }
+    ' "$1"
+  }
+
+  json_top_level_string() {
+    key=$1
+    awk -v want="$key" '
+      {
+        data = data $0
+      }
+      END {
+        n = length(data)
+        obj = 0
+        arr = 0
+        for (i = 1; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (c == "\"") {
+            if (!scan_string(i)) {
+              exit 1
+            }
+            raw = string_raw
+            end = string_end
+            if (obj == 1 && arr == 0 && raw == "\"" want "\"" && substr(data, end + 1, 1) == ":") {
+              value_start = end + 2
+              if (substr(data, value_start, 1) != "\"") {
+                exit 1
+              }
+              if (!scan_string(value_start)) {
+                exit 1
+              }
+              matches++
+              if (matches == 1) {
+                found_raw = string_raw
+              }
+              i = string_end
+              continue
+            }
+            i = end
+            continue
+          }
+          if (c == "{") {
+            obj++
+          } else if (c == "}") {
+            obj--
+          } else if (c == "[") {
+            arr++
+          } else if (c == "]") {
+            arr--
+          }
+        }
+        if (matches == 1) {
+          print found_raw
+        } else if (matches > 1) {
+          exit 2
+        }
+      }
+      function scan_string(start,  i, c, escaped) {
+        escaped = 0
+        for (i = start + 1; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (escaped) {
+            escaped = 0
+            continue
+          }
+          if (c == "\\") {
+            escaped = 1
+            continue
+          }
+          if (c == "\"") {
+            string_end = i
+            string_raw = substr(data, start, i - start + 1)
+            return 1
+          }
+        }
+        return 0
+      }
+    '
+  }
+
+  json_top_level_key_count() {
+    key=$1
+    awk -v want="$key" '
+      {
+        data = data $0
+      }
+      END {
+        n = length(data)
+        obj = 0
+        arr = 0
+        matches = 0
+        for (i = 1; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (c == "\"") {
+            if (!scan_string(i)) {
+              exit 1
+            }
+            raw = string_raw
+            end = string_end
+            if (obj == 1 && arr == 0 && raw == "\"" want "\"" && substr(data, end + 1, 1) == ":") {
+              matches++
+            }
+            i = end
+            continue
+          }
+          if (c == "{") {
+            obj++
+          } else if (c == "}") {
+            obj--
+          } else if (c == "[") {
+            arr++
+          } else if (c == "]") {
+            arr--
+          }
+        }
+        print matches
+      }
+      function scan_string(start,  i, c, escaped) {
+        escaped = 0
+        for (i = start + 1; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (escaped) {
+            escaped = 0
+            continue
+          }
+          if (c == "\\") {
+            escaped = 1
+            continue
+          }
+          if (c == "\"") {
+            string_end = i
+            string_raw = substr(data, start, i - start + 1)
+            return 1
+          }
+        }
+        return 0
+      }
+    '
+  }
+
+  json_asset_records() {
+    awk '
+      {
+        data = data $0
+      }
+      END {
+        n = length(data)
+        obj = 0
+        arr = 0
+        for (i = 1; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (c == "\"") {
+            if (!scan_string(i)) {
+              exit 1
+            }
+            raw = string_raw
+            end = string_end
+            if (obj == 1 && arr == 0 && (raw == "\"assets\"" || raw == "\"artifacts\"") && substr(data, end + 1, 1) == ":") {
+              value_start = end + 2
+              if (substr(data, value_start, 1) == "[") {
+                array_end = find_array_end(value_start)
+                if (array_end == 0) {
+                  exit 1
+                }
+                emit_array_records(value_start + 1, array_end - 1)
+                i = array_end
+                continue
+              }
+            }
+            i = end
+            continue
+          }
+          if (c == "{") {
+            obj++
+          } else if (c == "}") {
+            obj--
+          } else if (c == "[") {
+            arr++
+          } else if (c == "]") {
+            arr--
+          }
+        }
+      }
+      function scan_string(start,  i, c, escaped) {
+        escaped = 0
+        for (i = start + 1; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (escaped) {
+            escaped = 0
+            continue
+          }
+          if (c == "\\") {
+            escaped = 1
+            continue
+          }
+          if (c == "\"") {
+            string_end = i
+            string_raw = substr(data, start, i - start + 1)
+            return 1
+          }
+        }
+        return 0
+      }
+      function find_array_end(start,  i, c, depth) {
+        depth = 0
+        for (i = start; i <= n; i++) {
+          c = substr(data, i, 1)
+          if (c == "\"") {
+            if (!scan_string(i)) {
+              return 0
+            }
+            i = string_end
+            continue
+          }
+          if (c == "[") {
+            depth++
+          } else if (c == "]") {
+            depth--
+            if (depth == 0) {
+              return i
+            }
+          }
+        }
+        return 0
+      }
+      function emit_array_records(start, end,  i, c, object_depth, array_depth, record_start, direct_record) {
+        object_depth = 0
+        array_depth = 0
+        direct_record = 0
+        for (i = start; i <= end; i++) {
+          c = substr(data, i, 1)
+          if (c == "\"") {
+            if (!scan_string(i)) {
+              exit 1
+            }
+            i = string_end
+            continue
+          }
+          if (c == "[") {
+            array_depth++
+          } else if (c == "]") {
+            array_depth--
+            if (array_depth < 0) {
+              exit 1
+            }
+          } else if (c == "{") {
+            if (object_depth == 0) {
+              direct_record = (array_depth == 0)
+            }
+            if (object_depth == 0 && direct_record) {
+              record_start = i
+            }
+            object_depth++
+          } else if (c == "}") {
+            object_depth--
+            if (object_depth == 0 && direct_record) {
+              print substr(data, record_start, i - record_start + 1)
+              direct_record = 0
+            } else if (object_depth < 0) {
+              exit 1
+            }
+          }
+        }
+        if (object_depth != 0 || array_depth != 0) {
+          exit 1
+        }
+      }
+    '
+  }
+
   verify_manifest() {
     manifest_file=$1
     artifact_name=$2
     expected_sha=$3
     version_value=$4
     platform_value=$5
-    command -v python3 >/dev/null 2>&1 || fail "python3 is required to verify manifest.json"
-    python3 - "$manifest_file" "$artifact_name" "$expected_sha" "$version_value" "$platform_value" <<'PY'
-import json
-import sys
-from pathlib import Path
 
-manifest_path, artifact_name, expected_sha, version, platform = sys.argv[1:]
-data = json.loads(Path(manifest_path).read_text())
-for key in ("version", "tag_name"):
-    value = data.get(key)
-    if value and value != version:
-        raise SystemExit(f"manifest {key} {value!r} does not match {version!r}")
+    if ! json_syntax_valid "$manifest_file"; then
+      echo "manifest JSON is invalid" >&2
+      return 1
+    fi
 
-os_name, arch = platform.split("_", 1)
-records = []
-for asset in data.get("assets", []):
-    records.append({
-        "filename": asset.get("filename") or asset.get("name"),
-        "sha256": asset.get("sha256"),
-        "os": asset.get("os"),
-        "arch": asset.get("arch"),
-    })
-for artifact in data.get("artifacts", []):
-    records.append({
-        "filename": artifact.get("filename") or artifact.get("name"),
-        "sha256": artifact.get("sha256"),
-        "os": artifact.get("os"),
-        "arch": artifact.get("arch"),
-    })
+    manifest_compact=$(json_compact_preserve_strings "$manifest_file")
+    manifest_version_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count version 2>/dev/null || true)
+    if [ "$manifest_version_count" != "1" ]; then
+      echo "manifest must contain version exactly once" >&2
+      return 1
+    fi
+    manifest_version=$(printf '%s\n' "$manifest_compact" | json_top_level_string version 2>/dev/null || true)
+    if [ "$manifest_version" != "\"$version_value\"" ]; then
+      echo "manifest version mismatch for $artifact_name" >&2
+      return 1
+    fi
+    manifest_tag_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count tag_name 2>/dev/null || true)
+    case "$manifest_tag_count" in
+      0) ;;
+      1)
+      # GitHub release manifests include tag_name; local release-snapshot manifests do not.
+      manifest_tag=$(printf '%s\n' "$manifest_compact" | json_top_level_string tag_name 2>/dev/null || true)
+      if [ "$manifest_tag" != "\"$version_value\"" ]; then
+        echo "manifest tag_name mismatch for $artifact_name" >&2
+        return 1
+      fi
+      ;;
+      *)
+        echo "manifest must contain tag_name at most once" >&2
+        return 1
+      ;;
+    esac
 
-matches = [item for item in records if item.get("filename") == artifact_name]
-if len(matches) != 1:
-    raise SystemExit(f"manifest must reference {artifact_name} exactly once, got {len(matches)}")
-item = matches[0]
-if item.get("sha256") != expected_sha:
-    raise SystemExit(f"manifest sha256 mismatch for {artifact_name}")
-if item.get("os") and item.get("os") != os_name:
-    raise SystemExit(f"manifest os mismatch for {artifact_name}")
-if item.get("arch") and item.get("arch") != arch:
-    raise SystemExit(f"manifest arch mismatch for {artifact_name}")
-PY
+    manifest_assets_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count assets 2>/dev/null || true)
+    manifest_artifacts_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count artifacts 2>/dev/null || true)
+    case "$manifest_assets_count:$manifest_artifacts_count" in
+      0:0) ;;
+      0:1|1:0|1:1) ;;
+      *)
+        echo "manifest contains duplicate asset collection keys" >&2
+        return 1
+      ;;
+    esac
+
+    records_file=$(mktemp "${TMPDIR:-/tmp}/codencer-manifest-records.XXXXXX") || {
+      echo "could not create temporary file for manifest verification" >&2
+      return 1
+    }
+    printf '%s\n' "$manifest_compact" | json_asset_records > "$records_file"
+    match_count=0
+    invalid_record=0
+    record=""
+    while IFS= read -r candidate_record; do
+      for candidate_key in filename name sha256 os arch; do
+        candidate_key_count=$(printf '%s\n' "$candidate_record" | json_top_level_key_count "$candidate_key" 2>/dev/null || true)
+        case "$candidate_key_count" in
+          0|1) ;;
+          *) invalid_record=1 ;;
+        esac
+      done
+      record_name=$(printf '%s\n' "$candidate_record" | json_top_level_string filename 2>/dev/null || true)
+      if [ -z "$record_name" ]; then
+        record_name=$(printf '%s\n' "$candidate_record" | json_top_level_string name 2>/dev/null || true)
+      fi
+      if [ "$record_name" = "\"$artifact_name\"" ]; then
+        match_count=$((match_count + 1))
+        record=$candidate_record
+      fi
+    done < "$records_file"
+    if [ "$invalid_record" != "0" ]; then
+      rm -f "$records_file"
+      echo "manifest asset record contains duplicate verification keys" >&2
+      return 1
+    fi
+    if [ "$match_count" != "1" ]; then
+      rm -f "$records_file"
+      echo "manifest must reference $artifact_name exactly once, got $match_count" >&2
+      return 1
+    fi
+    rm -f "$records_file"
+
+    record_sha=$(printf '%s\n' "$record" | json_top_level_string sha256 2>/dev/null || true)
+    if [ "$record_sha" != "\"$expected_sha\"" ]; then
+      echo "manifest sha256 mismatch for $artifact_name" >&2
+      return 1
+    fi
+
+    os_name=${platform_value%%_*}
+    arch=${platform_value#*_}
+    record_os=$(printf '%s\n' "$record" | json_top_level_string os 2>/dev/null || true)
+    if [ "$record_os" != "\"$os_name\"" ]; then
+      echo "manifest os mismatch for $artifact_name" >&2
+      return 1
+    fi
+    record_arch=$(printf '%s\n' "$record" | json_top_level_string arch 2>/dev/null || true)
+    if [ "$record_arch" != "\"$arch\"" ]; then
+      echo "manifest arch mismatch for $artifact_name" >&2
+      return 1
+    fi
   }
 
   find_unpacked_bin_dir() {
@@ -433,6 +1013,30 @@ PY
     if [ -z "$PLATFORM" ]; then
       detect_platform
       PLATFORM=$DETECTED_PLATFORM
+    fi
+    if [ "$DRY_RUN" = "1" ]; then
+      if [ -z "$VERSION" ]; then
+        VERSION="latest"
+      fi
+      ARTIFACT="codencer_${VERSION}_${PLATFORM}.tar.gz"
+      if [ "$JSON" = "1" ]; then
+        print_json_report 1 0 "[]" ""
+      else
+        echo "Codencer install plan"
+        echo "  mode:          $MODE"
+        echo "  dry_run:       $DRY_RUN"
+        echo "  repo:          $REPO"
+        echo "  version:       $VERSION"
+        echo "  platform:      $PLATFORM"
+        echo "  artifact:      $ARTIFACT"
+        echo "  assets:        $ARTIFACT, checksums.txt, manifest.json"
+        echo "  install_dir:   $INSTALL_DIR"
+        echo "  codencer_home: $CODENCER_HOME_VALUE"
+        if [ -n "$DOWNLOAD_DIR" ]; then
+          echo "  download_dir:  $DOWNLOAD_DIR"
+        fi
+      fi
+      return
     fi
     if [ -z "$VERSION" ]; then
       if [ "$NO_DOWNLOAD" = "1" ]; then

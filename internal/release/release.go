@@ -379,7 +379,7 @@ func writeBundleFiles(repo, stage string) error {
 		return err
 	}
 	quickstart := "Codencer local production release snapshot\n\n" +
-		"Run ./scripts/install.sh --dry-run first. Use --bin-dir ./bin only when explicitly overriding the package-local binary directory.\n\n" +
+		"Primary user installs use the GitHub raw installer, which downloads GitHub Release assets. This unpacked package uses package-local mode: run ./scripts/install.sh --dry-run first, then ./scripts/install.sh to install the binaries from this archive's own bin/ directory. Use --bin-dir only when explicitly overriding that package-local binary directory. GitHub source ZIP/TAR downloads are not binary release packages.\n\n" +
 		"Local setup: codencer setup local --json\n" +
 		"Self-host setup: codencer setup self-host --gateway-url http://127.0.0.1:19090 --relay-url http://127.0.0.1:8090 --relay-request-timeout-seconds 300 --token-env CODENCER_GATEWAY_MCP_TOKEN --enable-oauth-dev --json\n" +
 		"Gateway activation: codencer activation self-host --gateway http://127.0.0.1:19090 --relay http://127.0.0.1:8090 --project codencer --token-env CODENCER_GATEWAY_MCP_TOKEN --json\n"

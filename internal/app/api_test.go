@@ -204,6 +204,23 @@ func waitForChannel(t *testing.T, ch <-chan struct{}, name string) {
 	}
 }
 
+func waitForStepTerminal(t *testing.T, repo *sqlite.StepsRepo, stepID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		step, err := repo.Get(context.Background(), stepID)
+		if err == nil && step.State.IsTerminal() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	step, err := repo.Get(context.Background(), stepID)
+	if err != nil {
+		t.Fatalf("timed out waiting for step %s terminal state; last error: %v", stepID, err)
+	}
+	t.Fatalf("timed out waiting for step %s terminal state; last state: %s", stepID, step.State)
+}
+
 func createGitRepo(t *testing.T) string {
 	t.Helper()
 	repoRoot := t.TempDir()
@@ -372,7 +389,7 @@ func TestAPI_Endpoints(t *testing.T) {
 			"run_id":"api-test-run",
 			"title":"Autofill IDs",
 			"goal":"Verify the daemon fills missing IDs",
-			"adapter_profile":"codex"
+			"adapter_profile":"mock"
 		}`)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", payload)
@@ -393,6 +410,7 @@ func TestAPI_Endpoints(t *testing.T) {
 		if resp.PhaseID == "" {
 			t.Fatal("expected phase ID to be auto-filled")
 		}
+		waitForStepTerminal(t, stepsRepo, resp.ID)
 	})
 
 	t.Run("POST /api/v1/runs/{id}/steps rejects mismatched run_id", func(t *testing.T) {
@@ -402,7 +420,7 @@ func TestAPI_Endpoints(t *testing.T) {
 			"step_id":"step-mismatch",
 			"title":"Mismatch",
 			"goal":"Verify clean rejection",
-			"adapter_profile":"codex"
+			"adapter_profile":"mock"
 		}`)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", payload)
@@ -421,7 +439,7 @@ func TestAPI_Endpoints(t *testing.T) {
 			"step_id":"step-missing-run",
 			"title":"Missing run",
 			"goal":"Verify clean rejection",
-			"adapter_profile":"codex"
+			"adapter_profile":"mock"
 		}`)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/missing-run/steps", payload)
@@ -505,7 +523,7 @@ func TestAPI_Endpoints(t *testing.T) {
 			"step_id":"` + stepID + `",
 			"title":"Duplicate step",
 			"goal":"Create once",
-			"adapter_profile":"codex"
+			"adapter_profile":"mock"
 		}`
 
 		firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", strings.NewReader(payload))
@@ -514,6 +532,7 @@ func TestAPI_Endpoints(t *testing.T) {
 		if firstW.Code != http.StatusAccepted {
 			t.Fatalf("expected first request to succeed, got %d body=%s", firstW.Code, firstW.Body.String())
 		}
+		waitForStepTerminal(t, stepsRepo, stepID)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/"+runID+"/steps", strings.NewReader(payload))
 		w := httptest.NewRecorder()
