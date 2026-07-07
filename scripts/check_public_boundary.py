@@ -33,6 +33,7 @@ REQUIRED_FILES = [
     "docs/relay-profile-registry.md",
     "docs/acceptance/public-self-host-release.md",
     "docs/acceptance/public-repo-release.yaml",
+    ".github/workflows/release-assets.yml",
 ]
 
 TEXT_REQUIREMENTS = [
@@ -377,6 +378,47 @@ def check_self_host_default_files(failures: list[str]) -> None:
             fail(f"commercial endpoint must not be a public default in {rel}", failures)
 
 
+def check_release_workflows(failures: list[str]) -> None:
+    release_assets = read_text(ROOT / ".github/workflows/release-assets.yml") or ""
+    release_please = read_text(ROOT / ".github/workflows/release-please.yml") or ""
+    release_config = read_text(ROOT / "release-please-config.json") or ""
+
+    required_assets_needles = [
+        "workflow_call:",
+        "workflow_dispatch:",
+        "replace_existing:",
+        "gh release view \"$TAG_NAME\" --repo \"$GITHUB_REPOSITORY\"",
+        "gh release upload \"$TAG_NAME\"",
+        "codencer_${TAG_NAME}_linux_amd64.tar.gz",
+        "manifest.json",
+        "checksums.txt",
+        "built_at: ${{ steps.resolve.outputs.built_at }}",
+        "BUILT_AT: ${{ needs.preflight.outputs.built_at }}",
+    ]
+    for needle in required_assets_needles:
+        if needle not in release_assets:
+            fail(f"release-assets workflow missing required text: {needle}", failures)
+    if "--clobber" in release_assets:
+        fail("release-assets workflow must not silently clobber release assets", failures)
+    if "datetime.now" in release_assets:
+        fail("release-assets manifest generation must not use retry-variant wall-clock timestamps", failures)
+
+    if "uses: ./.github/workflows/release-assets.yml" not in release_please:
+        fail("release-please workflow must call the reusable release-assets workflow", failures)
+    if "release_created == 'true'" not in release_please:
+        fail("release-please workflow must gate release asset publishing on release_created", failures)
+    if "build-linux-amd64:" in release_please or "build-macos-host:" in release_please:
+        fail("release-please workflow should not duplicate release asset build jobs", failures)
+
+    try:
+        config = json.loads(release_config)
+    except json.JSONDecodeError as exc:
+        fail(f"release-please-config.json is not valid JSON: {exc}", failures)
+        return
+    if "release-as" in config:
+        fail("release-please-config.json must not keep one-time release-as after v0.3.0", failures)
+
+
 def archive_members(path: Path) -> list[tuple[str, bytes]]:
     members: list[tuple[str, bytes]] = []
     if path.suffix == ".zip":
@@ -456,6 +498,7 @@ def main() -> int:
     check_active_grove_docs(failures)
     check_hardening_final_report(failures)
     check_self_host_default_files(failures)
+    check_release_workflows(failures)
     scan_source_tree(failures)
     scan_release_artifacts(failures)
     if failures:

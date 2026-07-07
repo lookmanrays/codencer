@@ -414,6 +414,42 @@ func TestAPI_Endpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("POST /api/v1/runs/{id}/steps rejects missing run without orphan state", func(t *testing.T) {
+		payload := strings.NewReader(`{
+			"version":"1.1",
+			"run_id":"missing-run",
+			"step_id":"step-missing-run",
+			"title":"Missing run",
+			"goal":"Verify clean rejection",
+			"adapter_profile":"codex"
+		}`)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/missing-run/steps", payload)
+		w := httptest.NewRecorder()
+		handler.handleRunByID(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), "run missing-run not found") {
+			t.Fatalf("expected missing run error, got %q", w.Body.String())
+		}
+		phase, err := phasesRepo.Get(context.Background(), "phase-execution-missing-run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if phase != nil {
+			t.Fatalf("missing run request created orphan phase: %+v", phase)
+		}
+		step, err := stepsRepo.Get(context.Background(), "step-missing-run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if step != nil {
+			t.Fatalf("missing run request created orphan step: %+v", step)
+		}
+	})
+
 	t.Run("POST /api/v1/runs conflicts on duplicate run id", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", strings.NewReader(`{
 			"id":"`+runID+`",
@@ -424,6 +460,40 @@ func TestAPI_Endpoints(t *testing.T) {
 
 		if w.Code != http.StatusConflict {
 			t.Fatalf("expected 409, got %d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("POST /api/v1/runs auto-generates unique run ids", func(t *testing.T) {
+		firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/runs", strings.NewReader(`{
+			"project_id":"api-project"
+		}`))
+		firstW := httptest.NewRecorder()
+		handler.handleRuns(firstW, firstReq)
+		if firstW.Code != http.StatusCreated {
+			t.Fatalf("expected first run create to return 201, got %d body=%s", firstW.Code, firstW.Body.String())
+		}
+
+		secondReq := httptest.NewRequest(http.MethodPost, "/api/v1/runs", strings.NewReader(`{
+			"project_id":"api-project"
+		}`))
+		secondW := httptest.NewRecorder()
+		handler.handleRuns(secondW, secondReq)
+		if secondW.Code != http.StatusCreated {
+			t.Fatalf("expected second run create to return 201, got %d body=%s", secondW.Code, secondW.Body.String())
+		}
+
+		var first, second domain.Run
+		if err := json.NewDecoder(firstW.Body).Decode(&first); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.NewDecoder(secondW.Body).Decode(&second); err != nil {
+			t.Fatal(err)
+		}
+		if first.ID == "" || second.ID == "" {
+			t.Fatalf("expected generated run ids, got first=%q second=%q", first.ID, second.ID)
+		}
+		if first.ID == second.ID {
+			t.Fatalf("expected generated run ids to differ, got %q", first.ID)
 		}
 	})
 

@@ -12,24 +12,49 @@ only and are not the normal upload source.
    - `CHANGELOG.md`
    - `version.txt`
    - `.release-please-manifest.json`
-4. For the first public release, confirm the Release PR targets `v0.3.0` and
-   moves `version.txt` from `0.2.0` to `0.3.0`.
+4. Confirm the Release PR version matches the Conventional Commit delta. For
+   this patch branch, the expected next release is `v0.3.1`.
 5. Merge the Release PR.
-6. Confirm the same `Release Please` workflow creates the GitHub Release.
-7. Confirm the workflow uploads:
+6. Confirm the `Release Please` workflow creates the GitHub Release and calls
+   the reusable `Release Assets` workflow when `release_created == true`.
+7. Confirm the release has installable binary assets, not only GitHub source
+   archives:
    - `codencer_${TAG_NAME}_linux_amd64.tar.gz`
    - `codencer_${TAG_NAME}_darwin_<host_arch>.tar.gz`
    - `checksums.txt`
    - `manifest.json`
-8. Confirm release notes preserve the public self-host scope:
+8. Confirm `manifest.json` is deterministic for the same tag, release SHA, and
+   binary assets so a retry with `replace_existing=false` can skip identical
+   already-published assets.
+9. Confirm release notes preserve the public self-host scope:
    - Codex real executor proof: passed;
    - Claude Code real executor proof: passed;
    - Antigravity: optional/deferred, not release-proven;
    - Cloud/official connector: out of scope for this public self-host release.
 
-After `v0.3.0` is released, remove the one-time `release-as: 0.3.0` bootstrap
-setting from `release-please-config.json` so future versions are computed from
-Conventional Commits.
+The `v0.3.0` bootstrap is complete. `release-please-config.json` must not keep
+`release-as: 0.3.0`; future versions are computed from Conventional Commits.
+This patch should lead Release Please to open a `v0.3.1` Release PR because it
+is a `fix:` PR.
+
+## v0.3.0 Binary Asset Backfill
+
+Before merging the `v0.3.1` Release PR, backfill binary assets for the existing
+`v0.3.0` release:
+
+1. Open `Actions -> Release Assets -> Run workflow`.
+2. Use:
+   - `tag_name`: `v0.3.0`
+   - `ref`: `v0.3.0`
+   - `replace_existing`: `false`
+3. Verify the `v0.3.0` release has:
+   - `codencer_v0.3.0_linux_amd64.tar.gz`
+   - `codencer_v0.3.0_darwin_<host_arch>.tar.gz`
+   - `checksums.txt`
+   - `manifest.json`
+
+Do not upload local artifacts manually. GitHub source ZIP/TAR links are not
+installable Codencer binary release assets.
 
 ## Non-Live Verification
 

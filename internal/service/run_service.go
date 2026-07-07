@@ -456,6 +456,14 @@ func (s *RunService) initializeStep(ctx context.Context, runID string, step *dom
 		return err
 	}
 
+	run, err := s.runsRepo.Get(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return fmt.Errorf("%w: run %s not found", ErrInvalidTaskSpec, runID)
+	}
+
 	// Ensure the phase exists before creating the step to prevent orphan references
 	if err := s.ensurePhaseExists(ctx, runID, step.PhaseID); err != nil {
 		return fmt.Errorf("failed to ensure phase consistency: %w", err)

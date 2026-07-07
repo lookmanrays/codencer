@@ -116,7 +116,7 @@ func (h *APIHandler) handleRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.ID == "" {
-		req.ID = fmt.Sprintf("run-%d", time.Now().Unix())
+		req.ID = fmt.Sprintf("run-%d", time.Now().UTC().UnixNano())
 	}
 	if req.ProjectID == "" {
 		req.ProjectID = "default-project"
