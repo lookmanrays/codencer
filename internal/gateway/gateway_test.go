@@ -536,6 +536,47 @@ func TestGatewayAuthMetadataAndChallenge(t *testing.T) {
 	}
 }
 
+func TestGatewayDevNoAuthAllowsUnauthenticatedMCP(t *testing.T) {
+	t.Setenv("CODENCER_TEST_RELAY_TOKEN", "relay-secret")
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "http://127.0.0.1:19090"
+	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.Auth.Mode = "dev-noauth"
+	cfg.Auth.TokenEnv = "CODENCER_TEST_GATEWAY_TOKEN"
+	cfg.OAuthDev.Enabled = false
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate dev-noauth config: %v", err)
+	}
+	if !cfg.DevNoAuth.Enabled {
+		t.Fatal("auth.mode dev-noauth should auto-enable DevNoAuth")
+	}
+	if len(cfg.DevNoAuth.Scopes) == 0 {
+		t.Fatal("dev-noauth should default to non-empty scopes")
+	}
+	server, err := NewServer(cfg, ServerOptions{})
+	if err != nil {
+		t.Fatalf("new gateway server: %v", err)
+	}
+	ts := httptest.NewServer(server.Handler())
+	defer ts.Close()
+
+	data := []byte(`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"dev-noauth-test","version":"1"}}}`)
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for unauthenticated MCP in dev-noauth, got %d: %s", resp.StatusCode, readBody(t, resp))
+	}
+}
+
 func TestGatewayAmbiguityAndRelayUnavailableBlockers(t *testing.T) {
 	relayA := newFakeRelay(t, fakeRelayOptions{})
 	defer relayA.Close()

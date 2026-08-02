@@ -69,6 +69,13 @@ func Builtins() map[string]Profile {
 			OutputFormat:  "json",
 			Description:   "Non-interactive Claude CLI execution.",
 		},
+		"opencode-default": {
+			ID:            "opencode-default",
+			Adapter:       "opencode",
+			DaemonAdapter: "opencode",
+			OutputFormat:  "json",
+			Description:   "Non-interactive OpenCode CLI execution with auto-approved non-denied permissions.",
+		},
 		"antigravity-default": {
 			ID:            "antigravity-default",
 			Adapter:       "antigravity",
@@ -177,6 +184,8 @@ func defaultProfileForAdapter(adapter string) string {
 		return "codex-workspace"
 	case "claude":
 		return "claude-default"
+	case "opencode":
+		return "opencode-default"
 	case "antigravity":
 		return "antigravity-default"
 	case "fake", "fake-success", "fake-failure", "fake-blocker", "fake-timeout":

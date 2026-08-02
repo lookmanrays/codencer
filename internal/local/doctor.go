@@ -96,6 +96,7 @@ func BuildDoctorReport(opts DoctorOptions) DoctorReport {
 		lowLevelBinaryCheck("codencer-connectord", "cmd/codencer-connectord", "bin/codencer-connectord", opts.RepoRoot),
 		agentBinaryCheck(probe, "codex_cli", "CODEX_BINARY", "codex"),
 		agentBinaryCheck(probe, "claude_cli", "CLAUDE_BINARY", "claude"),
+		agentBinaryCheck(probe, "opencode_cli", "OPENCODE_BINARY", "opencode"),
 		relayConnectorPresenceCheck(opts.RepoRoot, opts.Config),
 		daemonHealthCheck(opts.Config.DefaultDaemonURL, opts.HTTPClient),
 	)

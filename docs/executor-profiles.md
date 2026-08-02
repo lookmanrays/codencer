@@ -20,6 +20,7 @@ Built-in profiles include:
   deterministic plumbing and CI smoke tests.
 - `codex-workspace`, `codex-full`, `codex-danger-bypass` for Codex CLI.
 - `claude-default` for Claude CLI.
+- `opencode-default` for OpenCode CLI.
 
 Use the CLI to inspect and select profiles:
 
@@ -39,6 +40,12 @@ For one run only:
 ```bash
 codencer submit --project codencer --profile codex-workspace --goal "Run the approved task" --wait --json
 ```
+
+OpenCode runs use the locally authenticated `opencode` CLI. Set `OPENCODE_BINARY`
+when it is not on `PATH`, or set `OPENCODE_SIMULATION_MODE=1` for deterministic
+adapter testing. Codencer invokes `opencode run` with structured JSON events and
+OpenCode's unattended permission flag; explicit deny rules in the local OpenCode
+configuration remain enforced.
 
 Gateway MCP tools accept the same override:
 

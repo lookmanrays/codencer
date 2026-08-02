@@ -232,9 +232,10 @@ Built-in profiles:
 - `codex-full`: full local access profile.
 - `codex-danger-bypass`: requires explicit profile and `CODENCER_ALLOW_DANGEROUS_BYPASS=1`; otherwise returns `unsafe_action`.
 - `claude-default`: default for `--adapter claude`.
+- `opencode-default`: default for `--adapter opencode`; uses the locally configured OpenCode CLI.
 - `fake-success`, `fake-failure`, `fake-blocker`, `fake-timeout`: deterministic daemon adapter profiles for tests.
 
-For Codex and Claude, the daemon-facing adapter remains `codex` or `claude`. Fake profiles send daemon-facing adapter IDs such as `fake-success`.
+For Codex, Claude, and OpenCode, the daemon-facing adapter remains `codex`, `claude`, or `opencode`. Fake profiles send daemon-facing adapter IDs such as `fake-success`.
 
 ## Blocker Protocol
 

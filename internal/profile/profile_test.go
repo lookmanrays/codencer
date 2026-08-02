@@ -12,6 +12,26 @@ func TestResolveDefaultsCodexToWorkspaceProfile(t *testing.T) {
 	}
 }
 
+func TestResolveDefaultsOpenCodeToProfile(t *testing.T) {
+	resolved, err := Resolve(ResolveOptions{Adapter: "opencode"})
+	if err != nil {
+		t.Fatalf("resolve opencode: %v", err)
+	}
+	if resolved.ProfileID != "opencode-default" || resolved.Adapter != "opencode" || resolved.DaemonAdapter != "opencode" {
+		t.Fatalf("unexpected resolution: %+v", resolved)
+	}
+}
+
+func TestResolveLegacyOpenCodeProjectProfile(t *testing.T) {
+	resolved, err := Resolve(ResolveOptions{ProjectDefaultAdapter: "opencode", ProjectProfile: "opencode"})
+	if err != nil {
+		t.Fatalf("resolve legacy opencode profile: %v", err)
+	}
+	if resolved.ProfileID != "opencode-default" || resolved.Source != "legacy_adapter_profile" {
+		t.Fatalf("unexpected legacy resolution: %+v", resolved)
+	}
+}
+
 func TestResolveLegacyProjectProfile(t *testing.T) {
 	resolved, err := Resolve(ResolveOptions{ProjectDefaultAdapter: "codex", ProjectProfile: "codex"})
 	if err != nil {

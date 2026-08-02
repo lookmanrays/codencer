@@ -17,6 +17,7 @@ import (
 	"agent-bridge/internal/adapters/fake"
 	"agent-bridge/internal/adapters/ide"
 	"agent-bridge/internal/adapters/openclaw_acpx"
+	"agent-bridge/internal/adapters/opencode"
 	"agent-bridge/internal/adapters/qwen"
 	"agent-bridge/internal/domain"
 	"agent-bridge/internal/service"
@@ -153,6 +154,7 @@ func Bootstrap(ctx context.Context, configPath, repoRootOverride string) (*AppCo
 		"qwen":               qwen.NewAdapter(),
 		"ide-chat":           ide.NewAdapter(),
 		"openclaw-acpx":      openclaw_acpx.NewAdapter(),
+		"opencode":           opencode.NewAdapter(),
 		"antigravity":        antigravity.NewAdapter(agSvc),
 		"antigravity-broker": antigravity.NewBrokerAdapter(cfg.AntigravityBrokerURL, repoRoot),
 		fake.Success:         fake.New(fake.Success),

@@ -459,6 +459,15 @@ func (s *Server) listTools() []map[string]any {
 }
 
 func (s *Server) authenticate(r *http.Request) (*authPrincipal, *apiError) {
+	if s.devNoAuthEnabled() {
+		return &authPrincipal{
+			Name:        "gateway-dev-noauth",
+			TokenHash:   tokenHash("gateway-dev-noauth"),
+			UserID:      s.devUserID,
+			WorkspaceID: s.devWorkspaceID,
+			Scopes:      append([]string(nil), s.cfg.DevNoAuth.Scopes...),
+		}, nil
+	}
 	token := bearerToken(r.Header.Get("Authorization"))
 	if token == "" {
 		return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "gateway bearer token required"}
@@ -484,6 +493,10 @@ func (s *Server) authenticate(r *http.Request) (*authPrincipal, *apiError) {
 		}
 	}
 	return nil, &apiError{Status: http.StatusUnauthorized, Code: "auth_failed", Message: "gateway authorization failed"}
+}
+
+func (s *Server) devNoAuthEnabled() bool {
+	return s.cfg != nil && s.cfg.DevNoAuth.Enabled
 }
 
 func principalAllows(principal *authPrincipal, required []string) bool {

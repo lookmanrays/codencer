@@ -23,6 +23,13 @@ const (
 
 var DefaultRelayURL = defaults.DefaultRelayURL()
 
+var defaultGatewayDevNoAuthScopes = []string{
+	"projects:read", "projects:write",
+	"runs:read", "runs:write",
+	"steps:read", "steps:write",
+	"artifacts:read", "reports:read",
+}
+
 type Config struct {
 	Version                    int            `json:"version"`
 	PublicBaseURL              string         `json:"public_base_url"`
@@ -33,6 +40,7 @@ type Config struct {
 	DefaultRelay               DefaultRelay   `json:"default_relay,omitempty"`
 	Auth                       AuthConfig     `json:"auth"`
 	OAuthDev                   OAuthDevConfig `json:"oauth_dev,omitempty"`
+	DevNoAuth                  DevNoAuthConfig `json:"dev_noauth,omitempty"`
 	RelayProfiles              []RelayProfile `json:"relay_profiles,omitempty"`
 }
 
@@ -50,6 +58,11 @@ type AuthConfig struct {
 	Mode      string `json:"mode"`
 	TokenEnv  string `json:"token_env,omitempty"`
 	TokenFile string `json:"token_file,omitempty"`
+}
+
+type DevNoAuthConfig struct {
+	Enabled bool     `json:"enabled,omitempty"`
+	Scopes  []string `json:"scopes,omitempty"`
 }
 
 type OAuthDevConfig struct {
@@ -180,8 +193,17 @@ func (c *Config) Validate() error {
 	if c.Auth.Mode == "" {
 		c.Auth.Mode = "bearer-dev"
 	}
-	if c.Auth.Mode != "bearer-dev" {
+	if c.Auth.Mode != "bearer-dev" && c.Auth.Mode != "dev-noauth" {
 		return fmt.Errorf("unsupported gateway auth.mode %q", c.Auth.Mode)
+	}
+	if c.Auth.Mode == "dev-noauth" {
+		c.DevNoAuth.Enabled = true
+	}
+	c.DevNoAuth.Scopes = cleanList(c.DevNoAuth.Scopes)
+	if c.DevNoAuth.Enabled {
+		if len(c.DevNoAuth.Scopes) == 0 {
+			c.DevNoAuth.Scopes = append([]string(nil), defaultGatewayDevNoAuthScopes...)
+		}
 	}
 	c.Auth.TokenEnv = strings.TrimSpace(c.Auth.TokenEnv)
 	c.Auth.TokenFile = strings.TrimSpace(c.Auth.TokenFile)

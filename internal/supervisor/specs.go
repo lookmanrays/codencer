@@ -150,12 +150,18 @@ func connectorSpec(ctx *runtimeContext, opts Options, _ string) ServiceSpec {
 }
 
 func baseSpec(ctx *runtimeContext, name string) ServiceSpec {
+	env := map[string]string{
+		local.HomeEnvName: ctx.paths.Home,
+	}
+	// launchd/systemd do not inherit the user's PATH; pass it through so
+	// adapters that resolve external binaries (e.g. OPENCODE_BINARY) work.
+	if currentPath := os.Getenv("PATH"); currentPath != "" {
+		env["PATH"] = currentPath
+	}
 	return ServiceSpec{
 		Name:       name,
 		Configured: true,
-		Env: map[string]string{
-			local.HomeEnvName: ctx.paths.Home,
-		},
+		Env:        env,
 		WorkingDir: ctx.paths.Home,
 		StdoutLog:  filepath.Join(ctx.paths.LogsDir, name+".stdout.log"),
 		StderrLog:  filepath.Join(ctx.paths.LogsDir, name+".stderr.log"),
