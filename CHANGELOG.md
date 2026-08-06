@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3](https://github.com/lookmanrays/codencer/compare/v0.3.2...v0.3.3) (2026-08-06)
+
+
+### Bug Fixes
+
+* polish one-command installer onboarding ([#9](https://github.com/lookmanrays/codencer/issues/9)) ([cff20eb](https://github.com/lookmanrays/codencer/commit/cff20eb10d230670c1fb723f1fc6996c3e4f3879))
+
 ## [0.3.2](https://github.com/lookmanrays/codencer/compare/v0.3.1...v0.3.2) (2026-07-07)
 
 
