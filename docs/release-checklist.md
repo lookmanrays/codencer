@@ -12,8 +12,9 @@ only and are not the normal upload source.
    - `CHANGELOG.md`
    - `version.txt`
    - `.release-please-manifest.json`
-4. Confirm the Release PR version matches the Conventional Commit delta. For
-   this patch branch, the expected next release is `v0.3.1`.
+4. Confirm the Release PR version matches the Conventional Commit delta. The
+   next version should be computed by Release Please from the merged
+   Conventional Commit history.
 5. Merge the Release PR.
 6. Confirm the `Release Please` workflow creates the GitHub Release and calls
    the reusable `Release Assets` workflow when `release_created == true`.
@@ -29,7 +30,7 @@ only and are not the normal upload source.
    already-published assets.
 9. Confirm the one-command installer uses GitHub Release assets by default:
    - `curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh`
-   - pinned: `curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version v0.3.1`
+   - pinned: `curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version "$TAG_NAME"`
    - piped install reports `mode=release-bootstrap`;
    - piped install never uses caller-cwd `./bin`.
 10. Confirm release notes preserve the public self-host scope:
@@ -40,13 +41,11 @@ only and are not the normal upload source.
 
 The `v0.3.0` bootstrap is complete. `release-please-config.json` must not keep
 `release-as: 0.3.0`; future versions are computed from Conventional Commits.
-This patch should lead Release Please to open a `v0.3.1` Release PR because it
-is a `fix:` PR.
 
-## v0.3.0 Binary Asset Backfill
+## Historical v0.3.0 Binary Asset Backfill
 
-Before merging the `v0.3.1` Release PR, backfill binary assets for the existing
-`v0.3.0` release:
+If historical `v0.3.0` binary assets ever need to be audited or backfilled,
+use the manual Release Assets workflow for the existing `v0.3.0` release:
 
 1. Open `Actions -> Release Assets -> Run workflow`.
 2. Use:
@@ -78,9 +77,30 @@ make verify-live-matrix
 make acceptance-local-production
 make verify-release
 make verify-local-prod
-make verify-release-artifact-selfhost VERSION=v0.3.0-local-prod-rc.1 TARGETS=host REQUIRE_TARGETS=host
+make verify-release-artifact-selfhost VERSION=v-local-debug TARGETS=host REQUIRE_TARGETS=host
 make verify-public-release
 ```
+
+## Installer Path Review
+
+The supported public install paths are:
+
+- GitHub raw one-command installer: primary user path, downloads GitHub Release
+  binary assets.
+- Unpacked `codencer_*.tar.gz` plus `scripts/install.sh`: package-local
+  fallback/debug path that uses the archive's own `bin/`.
+- Source checkout plus `make build-codencer`: developer path only.
+
+GitHub source ZIP/TAR links are source snapshots and are not installable
+Codencer binary release artifacts.
+
+`scripts/install.sh --dry-run --json` must be valid JSON and non-mutating: it
+must not resolve latest over the network, download assets, extract archives,
+create install directories, copy binaries, or initialize `CODENCER_HOME`.
+
+Python is not a one-command installer prerequisite and must not be used by the
+installer. Manifest verification uses `checksums.txt` plus a conservative
+generated-manifest text check for artifact, SHA256, OS, and architecture.
 
 ## Local Release Snapshot Debug Path
 
@@ -89,7 +109,7 @@ emergency/debug verification only; do not upload local artifacts for normal
 public releases.
 
 ```bash
-make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+make release-snapshot VERSION=v-local-debug
 ```
 
 The snapshot writes real `dist/codencer_*.tar.gz` archives, `dist/manifest.json`, and `dist/checksums.txt`. A GitHub source ZIP is not a release artifact.
@@ -105,7 +125,7 @@ darwin/arm64,darwin/amd64,linux/amd64
 Linux/WSL production requires a `linux/amd64` artifact or a source build on Linux/WSL. From macOS, the release helper uses Docker for Linux targets. If Docker or the Linux build is unavailable, the default release command must fail truthfully. Use partial mode only when intentionally producing a partial artifact set:
 
 ```bash
-make release-snapshot VERSION=v0.3.0-local-prod-rc.1 ALLOW_PARTIAL=1
+make release-snapshot VERSION=v-local-debug ALLOW_PARTIAL=1
 ```
 
 Partial mode is not a final multi-platform production release. Windows-native daemon binaries are not claimed in this RC; Windows operators should use WSL2/Linux. No signed/notarized claim is made.
@@ -113,8 +133,8 @@ Partial mode is not a final multi-platform production release. Windows-native da
 Useful target overrides:
 
 ```bash
-make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=host
-make release-snapshot VERSION=v0.3.0-local-prod-rc.1 TARGETS=darwin/arm64,linux/amd64 REQUIRE_TARGETS=darwin/arm64,linux/amd64
+make release-snapshot VERSION=v-local-debug TARGETS=host
+make release-snapshot VERSION=v-local-debug TARGETS=darwin/arm64,linux/amd64 REQUIRE_TARGETS=darwin/arm64,linux/amd64
 ```
 
 Every artifact with `status:"built"` in the manifest must exist on disk and match `checksums.txt`. `make verify-release` fails if this is not true.
@@ -122,7 +142,7 @@ Every artifact with `status:"built"` in the manifest must exist on disk and matc
 Binary release readiness also requires unpacked-artifact proof:
 
 ```bash
-make verify-release-artifact-selfhost VERSION=v0.3.0-local-prod-rc.1 TARGETS=host REQUIRE_TARGETS=host
+make verify-release-artifact-selfhost VERSION=v-local-debug TARGETS=host REQUIRE_TARGETS=host
 ```
 
 That gate selects the host artifact from `dist/manifest.json`, checks

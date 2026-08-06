@@ -131,6 +131,20 @@ func TestBundleIncludesDocsAndScripts(t *testing.T) {
 	if info.Mode().Perm()&0111 == 0 {
 		t.Fatalf("expected install script executable mode, got %v", info.Mode())
 	}
+	quickstart, err := os.ReadFile(filepath.Join(stage, "QUICKSTART.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"GitHub raw installer",
+		"package-local mode",
+		"archive's own bin/",
+		"GitHub source ZIP/TAR downloads are not binary release packages",
+	} {
+		if !strings.Contains(string(quickstart), want) {
+			t.Fatalf("quickstart missing install path guidance %q:\n%s", want, quickstart)
+		}
+	}
 }
 
 func TestValidateDistDetectsMissingBuiltArtifact(t *testing.T) {

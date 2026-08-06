@@ -34,6 +34,10 @@ jobs:
 
       - name: Install CGO build prerequisites
         run: |
+          if command -v gcc >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1 && command -v make >/dev/null 2>&1; then
+            echo "CGO build prerequisites already available; skipping apt."
+            exit 0
+          fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential
 

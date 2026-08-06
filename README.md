@@ -2,7 +2,8 @@
 
 Open-source local/self-host bridge between AI planners and coding executors.
 
-Status: `v0.3.0-local-prod-rc.1`
+Latest public self-host release: see
+[GitHub Releases](https://github.com/lookmanrays/codencer/releases/latest)
 License: Apache-2.0
 Primary path: local-first daemon, self-host Gateway MCP, self-host Relay backend
 
@@ -42,7 +43,7 @@ execution.
 
 ## What Exists Today
 
-The v0.3 local/self-host RC includes:
+The v0.3 public self-host release line includes:
 
 - local `codencer` CLI mode;
 - local daemon-first execution;
@@ -85,7 +86,7 @@ This repository does not claim:
 - live Claude Code MCP client proof unless Claude Code actually connects and
   calls a tool;
 - signed or notarized binaries;
-- Windows-native daemon binaries or production daemon support;
+- Windows-native binaries or `install.ps1` in this release;
 - hosted Codencer Cloud, commercial billing, or hosted UI availability from
   this repository;
 - production multi-user Gateway auth beyond bearer-dev and OAuth dev metadata.
@@ -96,16 +97,16 @@ build-time defaults to Codencer-operated domains, but public/self-built binaries
 default to self-host/local endpoints and must not silently call commercial
 services.
 
-## Quickstart: Local
+## Quickstart: Install from GitHub Release
 
 Prerequisites:
 
-- Go 1.25+
 - Git
 - SQLite-capable local environment
-- macOS, Linux, or WSL2
+- macOS arm64, macOS amd64, Linux amd64, or WSL2/Linux amd64
 
-Install the latest GitHub Release artifact:
+Install the latest GitHub Release artifact from the canonical GitHub raw
+installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh
@@ -114,7 +115,16 @@ curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/i
 Pin a release version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version v0.3.1
+TAG=<release-tag-from-github-releases>
+curl -fsSL https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh | sh -s -- --version "$TAG"
+```
+
+Review the installer first:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/lookmanrays/codencer/main/scripts/install.sh
+less install.sh
+sh install.sh --version "$TAG"
 ```
 
 The one-command installer always downloads installable GitHub Release assets,
@@ -122,7 +132,42 @@ verifies `checksums.txt` and `manifest.json`, extracts the archive in a temp
 directory, installs binaries into `${CODENCER_INSTALL_DIR:-$HOME/.local/bin}`,
 and initializes `${CODENCER_HOME:-$HOME/.codencer}`. It does not use caller-cwd
 `./bin`, does not require `gh`, does not use `sudo`, and does not edit shell
-profiles.
+profiles. GitHub source ZIP/TAR downloads are source snapshots, not binary
+release artifacts.
+
+Supported release artifacts today:
+
+- `codencer_${TAG_NAME}_darwin_arm64.tar.gz`
+- `codencer_${TAG_NAME}_darwin_amd64.tar.gz`
+- `codencer_${TAG_NAME}_linux_amd64.tar.gz`
+
+Windows-native binaries and `install.ps1` are not published in this release
+yet. Windows users should use WSL2/Linux for now.
+
+After install, put the install directory on `PATH` for the current shell and
+run the local setup checks:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+codencer version
+codencer paths --json
+codencer config show --json
+codencer doctor --json
+codencer setup local --json
+codencer readiness --json
+```
+
+## Developer Build from Source
+
+Use this path when working from a Git checkout rather than installing a GitHub
+Release artifact.
+
+Prerequisites:
+
+- Go 1.25+
+- Git
+- SQLite-capable local environment
+- macOS, Linux, or WSL2
 
 Build and initialize:
 
@@ -163,10 +208,11 @@ and proof bundles stay in `$CODENCER_HOME`, not in the committed project config.
 
 ## Quickstart: Self-Host Relay
 
-Build release artifacts:
+For normal installs, use the GitHub Release artifact installed above. For local
+release-package debugging from source, build a snapshot:
 
 ```bash
-make release-snapshot VERSION=v0.3.0-local-prod-rc.1
+make release-snapshot VERSION=v-local-debug
 ```
 
 Deploy the `linux/amd64` artifact to a Linux VPS or WSL2 host, then create a

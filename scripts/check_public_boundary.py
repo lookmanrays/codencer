@@ -428,13 +428,43 @@ def check_release_workflows(failures: list[str]) -> None:
 
 def check_install_script(failures: list[str]) -> None:
     install_script = read_text(ROOT / "scripts/install.sh") or ""
+    readme = read_text(ROOT / "README.md") or ""
+    release_automation = read_text(ROOT / "docs" / "release-automation.md") or ""
+    release_checklist = read_text(ROOT / "docs" / "release-checklist.md") or ""
+    version = (read_text(ROOT / "version.txt") or "").strip()
+    release_manifest_text = read_text(ROOT / ".release-please-manifest.json") or "{}"
+    expected_tag = f"v{version}" if version else ""
+    try:
+        release_manifest = json.loads(release_manifest_text)
+    except json.JSONDecodeError as exc:
+        fail(f".release-please-manifest.json is not valid JSON: {exc}", failures)
+        release_manifest = {}
+    manifest_version = str(release_manifest.get(".", "")).strip()
+    if not version:
+        fail("version.txt must contain the current release automation version", failures)
+    if manifest_version and manifest_version != version:
+        fail(f"version.txt ({version}) and .release-please-manifest.json ({manifest_version}) disagree", failures)
     required_needles = [
         "MODE=\"release-bootstrap\"",
         "https://github.com/$REPO/releases/download/$VERSION",
         "checksums.txt",
         "manifest.json",
         "verify_manifest",
+        "generated_ascii_file_valid",
+        "od -A n -t u1 -v",
+        "byte != 10 && (byte < 32 || byte > 126)",
+        "checksum_for_artifact",
+        "json_manifest_verify",
+        "escaped object member names",
+        'record_present[id, "runner"]',
+        'record_present[id, "required"]',
+        "github_asset_count != 3",
+        "local_artifact_count != target_count",
+        "manifest_name_seen[name]++",
+        "seen[$2]++",
         "sha256sum or shasum",
+        "planned_assets",
+        "VERSION=\"latest\"",
         "Windows-native Codencer artifacts are not published yet. Use WSL2/Linux artifact for now.",
     ]
     for needle in required_needles:
@@ -444,6 +474,38 @@ def check_install_script(failures: list[str]) -> None:
         fail("install.sh must not use caller-cwd bin as an implicit default", failures)
     if "gh release" in install_script:
         fail("install.sh must not require the gh CLI for one-command installs", failures)
+    if "python3" in install_script or "python " in install_script:
+        fail("install.sh must not use Python for one-command installer manifest verification", failures)
+    if "tr -d '\\n\\r\\t '" in install_script:
+        fail("install.sh must not delete whitespace inside manifest JSON string values", failures)
+    for legacy_scanner in (
+        "json_top_level_string",
+        "json_top_level_key_count",
+        "json_asset_records",
+    ):
+        if legacy_scanner in install_script:
+            fail(f"install.sh must not use raw-spelling manifest scanner {legacy_scanner}", failures)
+    for doc_name, text in {
+        "README.md": readme,
+        "docs/release-automation.md": release_automation,
+        "docs/release-checklist.md": release_checklist,
+    }.items():
+        if "https://codencer.dev/install.sh" in text:
+            fail(f"{doc_name} must not advertise codencer.dev/install.sh", failures)
+        if "v0.3.1" in text:
+            fail(f"{doc_name} still contains stale v0.3.1 installer wording", failures)
+    if "GitHub Releases](https://github.com/lookmanrays/codencer/releases/latest)" not in readme:
+        fail("README.md must direct users to GitHub Releases for the latest public release tag", failures)
+    if 'TAG=<release-tag-from-github-releases>' not in readme or '--version "$TAG"' not in readme:
+        fail("README.md must show tag-driven pinned install commands instead of a hardcoded release tag", failures)
+    if expected_tag:
+        for doc_name, text in {
+            "README.md": readme,
+            "docs/release-automation.md": release_automation,
+            "docs/release-checklist.md": release_checklist,
+        }.items():
+            if f"--version {expected_tag}" in text or f"codencer_{expected_tag}_" in text:
+                fail(f"{doc_name} must not hardcode the current release tag {expected_tag}; use TAG_NAME/TAG placeholders", failures)
 
 
 def archive_members(path: Path) -> list[tuple[str, bytes]]:
