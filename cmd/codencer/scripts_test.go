@@ -518,15 +518,13 @@ func TestInstallScriptManifestVerificationRejectsUnescapedControlCharacters(t *t
 		t.Run(tc.name, func(t *testing.T) {
 			downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
 			artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
-			manifest := fmt.Sprintf(`{
-  "version": %q,
-  "tag_name": %q,
-  "metadata": {"note": "beforeCONTROLafter"},
-  "assets": [
-    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
-  ]
-}
-`, version, version, artifactName, sha)
+			manifest := githubInstallManifest(version, artifactName, sha)
+			manifest = strings.Replace(
+				manifest,
+				`"note": "Artifacts were built by GitHub Actions from the Release Assets workflow."`,
+				`"note": "beforeCONTROLafter"`,
+				1,
+			)
 			manifest = strings.Replace(manifest, "CONTROL", string([]byte{tc.control}), 1)
 			if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(manifest), 0644); err != nil {
 				t.Fatal(err)
@@ -1214,6 +1212,364 @@ func TestInstallScriptManifestVerificationRejectsNestedAssetArrays(t *testing.T)
 	}
 }
 
+func TestInstallScriptManifestVerificationSchemas(t *testing.T) {
+	repo := filepath.Join("..", "..")
+	version := "v9.9.9"
+	platform := "darwin_arm64"
+
+	type manifestCase struct {
+		name      string
+		manifest  func(artifactName, sha string) string
+		checksums func(artifactName, sha string) string
+		wantOK    bool
+	}
+
+	withPrimitiveSibling := func(value string) func(string, string) string {
+		return func(artifactName, sha string) string {
+			assets := "[\n    " + value + ",\n    " + githubInstallAssetRecords(version, artifactName, sha) + "\n  ]"
+			return githubInstallManifestWithAssets(version, assets)
+		}
+	}
+
+	cases := []manifestCase{
+		{
+			name:     "valid GitHub release manifest",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			wantOK:   true,
+		},
+		{
+			name:     "valid local snapshot manifest without tag_name",
+			manifest: func(name, sha string) string { return localInstallManifest(version, name, sha) },
+			wantOK:   true,
+		},
+		{
+			name: "escaped duplicate top-level version",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(manifest, `  "version": "v9.9.9",`, `  "version": "v9.9.9",
+  "versi\u006fn": "v9.9.8",`, 1)
+			},
+		},
+		{
+			name: "escaped duplicate top-level tag_name",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(manifest, `  "tag_name": "v9.9.9",`, `  "tag_name": "v9.9.9",
+  "tag_na\u006de": "v9.9.8",`, 1)
+			},
+		},
+		{
+			name: "escaped duplicate assets collection",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(manifest, `  "assets": [`, `  "asse\u0074s": [],
+  "assets": [`, 1)
+			},
+		},
+		{
+			name: "escaped duplicate artifacts collection",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				return strings.Replace(manifest, `  "artifacts": [`, `  "artifac\u0074s": [],
+  "artifacts": [`, 1)
+			},
+		},
+		{
+			name: "escaped duplicate asset filename",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				needle := `"filename":"` + name + `"`
+				return strings.Replace(manifest, needle, needle+`,"filena\u006de":"different.tar.gz"`, 1)
+			},
+		},
+		{
+			name: "escaped duplicate artifact name",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				needle := `"name":"` + name + `"`
+				return strings.Replace(manifest, needle, needle+`,"na\u006de":"different.tar.gz"`, 1)
+			},
+		},
+		{
+			name: "escaped duplicate asset sha256",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				needle := `"sha256":"` + sha + `"`
+				return strings.Replace(manifest, needle, needle+`,"sha\u0032356":"`+strings.Repeat("d", 64)+`"`, 1)
+			},
+		},
+		{
+			name: "raw duplicate assets collection",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(manifest, `  "assets": [`, `  "assets": [],
+  "assets": [`, 1)
+			},
+		},
+		{
+			name: "raw duplicate artifacts collection",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				return strings.Replace(manifest, `  "artifacts": [`, `  "artifacts": [],
+  "artifacts": [`, 1)
+			},
+		},
+		{name: "null array element with valid siblings", manifest: withPrimitiveSibling("null")},
+		{name: "string array element with valid siblings", manifest: withPrimitiveSibling(`"invalid"`)},
+		{name: "number array element with valid siblings", manifest: withPrimitiveSibling("7")},
+		{name: "boolean array element with valid siblings", manifest: withPrimitiveSibling("true")},
+		{
+			name: "malformed record sibling with valid records",
+			manifest: func(name, sha string) string {
+				assets := "[\n    {\"filename\":\"broken.tar.gz\"},\n    " + githubInstallAssetRecords(version, name, sha) + "\n  ]"
+				return githubInstallManifestWithAssets(version, assets)
+			},
+		},
+		{
+			name: "nested asset array",
+			manifest: func(name, sha string) string {
+				records := strings.Split(githubInstallAssetRecords(version, name, sha), ",\n    ")
+				assets := "[\n    [" + records[2] + "],\n    " + records[0] + ",\n    " + records[1] + "\n  ]"
+				return githubInstallManifestWithAssets(version, assets)
+			},
+		},
+		{
+			name:     "assets has wrong type",
+			manifest: func(_, _ string) string { return githubInstallManifestWithAssets(version, "null") },
+		},
+		{
+			name:     "artifacts has wrong type",
+			manifest: func(_, _ string) string { return localInstallManifestWithArtifacts(version, `{}`) },
+		},
+		{
+			name: "missing top-level version",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `  "version": "v9.9.9",
+`, "", 1)
+			},
+		},
+		{
+			name: "wrongly typed top-level version",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `"version": "v9.9.9"`, `"version": 999`, 1)
+			},
+		},
+		{
+			name: "missing GitHub asset runner",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `,"runner":"ubuntu-latest"`, "", 1)
+			},
+		},
+		{
+			name: "wrongly typed GitHub asset sha256",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `"sha256":"`+strings.Repeat("a", 64)+`"`, `"sha256":false`, 1)
+			},
+		},
+		{
+			name: "missing local artifact required",
+			manifest: func(name, sha string) string {
+				return strings.Replace(localInstallManifest(version, name, sha), `,"required":true`, "", 1)
+			},
+		},
+		{
+			name: "wrongly typed local artifact required",
+			manifest: func(name, sha string) string {
+				return strings.Replace(localInstallManifest(version, name, sha), `"required":true`, `"required":"true"`, 1)
+			},
+		},
+		{
+			name: "conflicting filename and name in GitHub asset",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				needle := `"filename":"` + name + `"`
+				return strings.Replace(manifest, needle, needle+`,"name":"`+name+`"`, 1)
+			},
+		},
+		{
+			name: "conflicting name and filename in local artifact",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				needle := `"name":"` + name + `"`
+				return strings.Replace(manifest, needle, needle+`,"filename":"`+name+`"`, 1)
+			},
+		},
+		{
+			name: "duplicate artifact records",
+			manifest: func(name, sha string) string {
+				records := strings.Split(githubInstallAssetRecords(version, name, sha), ",\n    ")
+				assets := "[\n    " + records[0] + ",\n    " + records[0] + ",\n    " + records[2] + "\n  ]"
+				return githubInstallManifestWithAssets(version, assets)
+			},
+		},
+		{
+			name: "both manifest collection dialects",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `  "note":`, `  "artifacts": [],
+  "note":`, 1)
+			},
+		},
+		{
+			name: "tag_name on local snapshot dialect",
+			manifest: func(name, sha string) string {
+				return strings.Replace(localInstallManifest(version, name, sha), `  "commit":`, `  "tag_name": "v9.9.9",
+  "commit":`, 1)
+			},
+		},
+		{
+			name: "adversarial unknown top-level member",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `  "note":`, `  "metadata": {},
+  "note":`, 1)
+			},
+		},
+		{
+			name: "adversarial unknown asset member",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				needle := `"filename":"` + name + `"`
+				return strings.Replace(manifest, needle, needle+`,"size":123`, 1)
+			},
+		},
+		{
+			name: "adversarial runner platform mismatch",
+			manifest: func(name, sha string) string {
+				return strings.Replace(githubInstallManifest(version, name, sha), `"runner":"ubuntu-latest"`, `"runner":"macos-latest"`, 1)
+			},
+		},
+		{
+			name: "adversarial filename platform mismatch",
+			manifest: func(name, sha string) string {
+				wrongName := "codencer_" + version + "_linux_arm64.tar.gz"
+				return strings.Replace(githubInstallManifest(version, name, sha), "codencer_"+version+"_linux_amd64.tar.gz", wrongName, 1)
+			},
+		},
+		{
+			name: "adversarial local required flag mismatch",
+			manifest: func(name, sha string) string {
+				return strings.Replace(localInstallManifest(version, name, sha), `"required_targets": ["darwin/arm64"]`, `"required_targets": []`, 1)
+			},
+		},
+		{
+			name: "adversarial local partial flag mismatch",
+			manifest: func(name, sha string) string {
+				return strings.Replace(localInstallManifest(version, name, sha), `"partial": false`, `"partial": true`, 1)
+			},
+		},
+		{
+			name: "adversarial local target artifact mismatch",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				manifest = strings.Replace(manifest, `"targets": ["darwin/arm64"]`, `"targets": ["linux/amd64"]`, 1)
+				return strings.Replace(manifest, `"required_targets": ["darwin/arm64"]`, `"required_targets": ["linux/amd64"]`, 1)
+			},
+		},
+		{
+			name: "adversarial selected artifact not built",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				manifest = strings.Replace(manifest, `,"sha256":"`+sha+`","status":"built"`, `,"status":"skipped","message":"dry run"`, 1)
+				return strings.Replace(manifest, `"partial": false`, `"partial": true`, 1)
+			},
+		},
+		{
+			name: "adversarial top-level array",
+			manifest: func(name, sha string) string {
+				return "[" + githubInstallManifest(version, name, sha) + "]"
+			},
+		},
+		{
+			name:     "duplicate checksum record",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + "\n" + sha + "  " + name + "\n"
+			},
+		},
+		{
+			name:     "conflicting checksum record",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + "\n" + strings.Repeat("e", 64) + "  " + name + "\n"
+			},
+		},
+		{
+			name:     "malformed checksum sibling",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + "\nnot-a-digest  unrelated.tar.gz\n"
+			},
+		},
+		{
+			name:     "adversarial duplicate unrelated checksum record",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				other := strings.Repeat("f", 64) + "  unrelated.tar.gz\n"
+				return sha + "  " + name + "\n" + other + other
+			},
+		},
+		{
+			name:     "adversarial checksum extra field",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + " unexpected\n"
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			downloadDir, _, sha := createInstallReleaseFixture(t, repo, version, platform)
+			artifactName := "codencer_" + version + "_" + platform + ".tar.gz"
+			if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(tc.manifest(artifactName, sha)), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.checksums != nil {
+				if err := os.WriteFile(filepath.Join(downloadDir, "checksums.txt"), []byte(tc.checksums(artifactName, sha)), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			installDir := t.TempDir()
+			cmd := exec.Command("sh", "-s", "--",
+				"--version", version,
+				"--repo", "lookmanrays/codencer",
+				"--platform", platform,
+				"--download-dir", downloadDir,
+				"--no-download",
+				"--install-dir", installDir,
+				"--codencer-home", t.TempDir(),
+				"--json",
+			)
+			cmd.Stdin = strings.NewReader(string(script))
+			out, err := cmd.CombinedOutput()
+			if tc.wantOK {
+				if err != nil {
+					t.Fatalf("valid generated manifest should install: %v\n%s", err, out)
+				}
+			} else if err == nil {
+				t.Fatalf("invalid manifest/checksum mutation installed successfully: %s", out)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(out, &payload); err != nil {
+				t.Fatalf("installer output is not JSON: %v\n%s", err, out)
+			}
+			if got, _ := payload["ok"].(bool); got != tc.wantOK {
+				t.Fatalf("unexpected installer result: %+v", payload)
+			}
+			_, statErr := os.Stat(filepath.Join(installDir, "codencer"))
+			if tc.wantOK && statErr != nil {
+				t.Fatalf("valid manifest did not install codencer: %v", statErr)
+			}
+			if !tc.wantOK && !os.IsNotExist(statErr) {
+				t.Fatalf("invalid manifest/checksum mutation installed codencer: %v", statErr)
+			}
+		})
+	}
+}
+
 func TestInstallScriptDownloadFailureReturnsCleanJSON(t *testing.T) {
 	repo := filepath.Join("..", "..")
 	script, err := os.ReadFile(filepath.Join(repo, "scripts", "install.sh"))
@@ -1268,14 +1624,7 @@ func TestInstallScriptMalformedArchiveReturnsJSON(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(downloadDir, "checksums.txt"), []byte(sha+"  "+artifactName+"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	manifest := fmt.Sprintf(`{
-  "version": %q,
-  "tag_name": %q,
-  "assets": [
-    {"filename": %q, "sha256": %q, "os": "darwin", "arch": "arm64"}
-  ]
-}
-`, version, version, artifactName, sha)
+	manifest := githubInstallManifest(version, artifactName, sha)
 	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(manifest), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -1428,20 +1777,73 @@ func createInstallReleaseFixture(t *testing.T, repo, version, platform string) (
 		t.Fatal(err)
 	}
 	parts := strings.SplitN(platform, "_", 2)
-	manifest := fmt.Sprintf(`{
-  "version": %q,
-  "tag_name": %q,
-  "release_sha": "fixture",
-  "built_at": "2026-07-07T00:00:00Z",
-  "assets": [
-    {"filename": %q, "sha256": %q, "os": %q, "arch": %q, "runner": "fixture"}
-  ]
-}
-`, version, version, artifactName, sha, parts[0], parts[1])
+	if len(parts) != 2 {
+		t.Fatalf("invalid fixture platform %q", platform)
+	}
+	manifest := githubInstallManifest(version, artifactName, sha)
 	if err := os.WriteFile(filepath.Join(downloadDir, "manifest.json"), []byte(manifest), 0644); err != nil {
 		t.Fatal(err)
 	}
 	return downloadDir, packageDir, sha
+}
+
+func githubInstallManifest(version, selectedArtifact, selectedSHA string) string {
+	return githubInstallManifestWithAssets(version, "[\n    "+githubInstallAssetRecords(version, selectedArtifact, selectedSHA)+"\n  ]")
+}
+
+func githubInstallManifestWithAssets(version, assetsJSON string) string {
+	return fmt.Sprintf(`{
+  "version": %q,
+  "tag_name": %q,
+  "release_sha": "0123456789abcdef0123456789abcdef01234567",
+  "built_at": "2026-07-07T00:00:00Z",
+  "assets": %s,
+  "note": "Artifacts were built by GitHub Actions from the Release Assets workflow."
+}
+`, version, version, assetsJSON)
+}
+
+func githubInstallAssetRecords(version, selectedArtifact, selectedSHA string) string {
+	platforms := []struct {
+		os     string
+		arch   string
+		runner string
+		sha    string
+	}{
+		{os: "linux", arch: "amd64", runner: "ubuntu-latest", sha: strings.Repeat("a", 64)},
+		{os: "darwin", arch: "amd64", runner: "macos-latest", sha: strings.Repeat("b", 64)},
+		{os: "darwin", arch: "arm64", runner: "macos-latest", sha: strings.Repeat("c", 64)},
+	}
+	records := make([]string, 0, len(platforms))
+	for _, item := range platforms {
+		name := fmt.Sprintf("codencer_%s_%s_%s.tar.gz", version, item.os, item.arch)
+		sha := item.sha
+		if name == selectedArtifact {
+			sha = selectedSHA
+		}
+		records = append(records, fmt.Sprintf(`{"filename":%q,"sha256":%q,"os":%q,"arch":%q,"runner":%q}`, name, sha, item.os, item.arch, item.runner))
+	}
+	return strings.Join(records, ",\n    ")
+}
+
+func localInstallManifest(version, selectedArtifact, selectedSHA string) string {
+	return localInstallManifestWithArtifacts(version, fmt.Sprintf(`[
+    {"name":%q,"os":"darwin","arch":"arm64","sha256":%q,"status":"built","required":true,"mode":"host"}
+  ]`, selectedArtifact, selectedSHA))
+}
+
+func localInstallManifestWithArtifacts(version, artifactsJSON string) string {
+	return fmt.Sprintf(`{
+  "version": %q,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "built_at": "2026-07-07T00:00:00Z",
+  "targets": ["darwin/arm64"],
+  "required_targets": ["darwin/arm64"],
+  "allow_partial": false,
+  "partial": false,
+  "artifacts": %s
+}
+`, version, artifactsJSON)
 }
 
 func writeTarGz(srcDir, dst string) error {

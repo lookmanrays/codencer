@@ -450,11 +450,15 @@ def check_install_script(failures: list[str]) -> None:
         "checksums.txt",
         "manifest.json",
         "verify_manifest",
-        "json_syntax_valid",
-        "json_compact_preserve_strings",
-        "json_top_level_string",
-        "json_top_level_key_count",
-        "json_asset_records",
+        "checksum_for_artifact",
+        "json_manifest_verify",
+        "escaped object member names",
+        'record_present[id, "runner"]',
+        'record_present[id, "required"]',
+        "github_asset_count != 3",
+        "local_artifact_count != target_count",
+        "manifest_name_seen[name]++",
+        "seen[$2]++",
         "sha256sum or shasum",
         "planned_assets",
         "VERSION=\"latest\"",
@@ -471,6 +475,13 @@ def check_install_script(failures: list[str]) -> None:
         fail("install.sh must not use Python for one-command installer manifest verification", failures)
     if "tr -d '\\n\\r\\t '" in install_script:
         fail("install.sh must not delete whitespace inside manifest JSON string values", failures)
+    for legacy_scanner in (
+        "json_top_level_string",
+        "json_top_level_key_count",
+        "json_asset_records",
+    ):
+        if legacy_scanner in install_script:
+            fail(f"install.sh must not use raw-spelling manifest scanner {legacy_scanner}", failures)
     for doc_name, text in {
         "README.md": readme,
         "docs/release-automation.md": release_automation,

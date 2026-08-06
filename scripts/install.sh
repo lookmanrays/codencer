@@ -373,23 +373,57 @@ EOF
     fail "sha256sum or shasum is required to verify release assets"
   }
 
-  json_syntax_valid() {
-    awk '
-      BEGIN {
-        data = ""
+  checksum_for_artifact() {
+    checksums_file=$1
+    artifact_name=$2
+    LC_ALL=C awk -v want="$artifact_name" '
+      {
+        if (NF != 2 || length($1) != 64 || $1 ~ /[^0-9a-f]/ || $2 == "" || index($2, "/") != 0 || seen[$2]++) {
+          invalid = 1
+          next
+        }
+        if ($2 == want) {
+          matches++
+          digest = $1
+        }
       }
+      END {
+        if (invalid || matches != 1) {
+          exit 1
+        }
+        print digest
+      }
+    ' "$checksums_file"
+  }
+
+  json_manifest_verify() {
+    manifest_file=$1
+    artifact_name=$2
+    expected_sha=$3
+    version_value=$4
+    platform_value=$5
+    os_name=${platform_value%%_*}
+    arch=${platform_value#*_}
+
+    # Both manifest generators use fixed, unescaped ASCII member names. Rejecting
+    # escaped object member names avoids raw-spelling versus decoded-key ambiguity.
+    LC_ALL=C awk \
+      -v expected_artifact="$artifact_name" \
+      -v expected_sha="$expected_sha" \
+      -v expected_version="$version_value" \
+      -v expected_os="$os_name" \
+      -v expected_arch="$arch" '
       {
         data = data $0 "\n"
       }
       END {
         n = length(data)
         pos = 1
-        skipws()
-        if (!parse_value()) {
+        if (!parse_manifest()) {
           exit 1
         }
         skipws()
-        if (pos <= n) {
+        if (pos <= n || !validate_manifest() || matches != 1) {
           exit 1
         }
       }
@@ -401,40 +435,14 @@ EOF
           pos++
         }
       }
-      function parse_value(  c) {
-        skipws()
-        c = ch()
-        if (c == "{") {
-          return parse_object()
-        }
-        if (c == "[") {
-          return parse_array()
-        }
-        if (c == "\"") {
-          return parse_string()
-        }
-        if (c == "-" || c ~ /[0-9]/) {
-          return parse_number()
-        }
-        if (substr(data, pos, 4) == "true") {
-          pos += 4
-          return 1
-        }
-        if (substr(data, pos, 5) == "false") {
-          pos += 5
-          return 1
-        }
-        if (substr(data, pos, 4) == "null") {
-          pos += 4
-          return 1
-        }
-        return 0
-      }
-      function parse_string(  c, esc, i, hex) {
+      function parse_string(  c, esc, i, hex, hex_value) {
         if (ch() != "\"") {
           return 0
         }
         pos++
+        string_value = ""
+        string_escaped = 0
+        string_decode_ok = 1
         while (pos <= n) {
           c = ch()
           if (c == "\"") {
@@ -442,66 +450,85 @@ EOF
             return 1
           }
           if (c == "\\") {
+            string_escaped = 1
             pos++
             if (pos > n) {
               return 0
             }
             esc = ch()
             if (esc == "\"" || esc == "\\" || esc == "/" || esc == "b" || esc == "f" || esc == "n" || esc == "r" || esc == "t") {
+              if (esc == "\"") string_value = string_value "\""
+              else if (esc == "\\") string_value = string_value "\\"
+              else if (esc == "/") string_value = string_value "/"
+              else if (esc == "b") string_value = string_value sprintf("%c", 8)
+              else if (esc == "f") string_value = string_value sprintf("%c", 12)
+              else if (esc == "n") string_value = string_value "\n"
+              else if (esc == "r") string_value = string_value "\r"
+              else if (esc == "t") string_value = string_value "\t"
               pos++
               continue
             }
-            if (esc == "u") {
-              pos++
-              for (i = 0; i < 4; i++) {
-                if (pos > n) {
-                  return 0
-                }
-                hex = ch()
-                if (hex !~ /[0-9A-Fa-f]/) {
-                  return 0
-                }
-                pos++
+            if (esc != "u") {
+              return 0
+            }
+            pos++
+            for (i = 0; i < 4; i++) {
+              if (pos > n) {
+                return 0
               }
-              continue
+              hex = ch()
+              if (hex !~ /[0-9A-Fa-f]/) {
+                return 0
+              }
+              pos++
             }
-            return 0
+            hex_value = json_hex_value(substr(data, pos - 4, 4))
+            if (hex_value >= 0 && hex_value <= 127) {
+              string_value = string_value sprintf("%c", hex_value)
+            } else {
+              string_decode_ok = 0
+            }
+            continue
           }
           if (c == sprintf("%c", 0) || c ~ /[\001-\037]/) {
             return 0
           }
+          string_value = string_value c
           pos++
         }
         return 0
       }
-      function parse_array(  c) {
-        if (ch() != "[") {
+      function json_hex_value(value,  i, digit, result) {
+        result = 0
+        value = tolower(value)
+        for (i = 1; i <= 4; i++) {
+          digit = index("0123456789abcdef", substr(value, i, 1)) - 1
+          if (digit < 0) return -1
+          result = result * 16 + digit
+        }
+        return result
+      }
+      function parse_plain_string() {
+        if (!parse_string() || !string_decode_ok) {
           return 0
         }
-        pos++
-        skipws()
-        if (ch() == "]") {
-          pos++
+        return 1
+      }
+      function parse_bool() {
+        if (substr(data, pos, 4) == "true") {
+          bool_value = 1
+          pos += 4
           return 1
         }
-        while (1) {
-          if (!parse_value()) {
-            return 0
-          }
-          skipws()
-          c = ch()
-          if (c == ",") {
-            pos++
-            continue
-          }
-          if (c == "]") {
-            pos++
-            return 1
-          }
-          return 0
+        if (substr(data, pos, 5) == "false") {
+          bool_value = 0
+          pos += 5
+          return 1
         }
+        return 0
       }
-      function parse_object(  c) {
+      function parse_manifest(  key, c) {
+        skipws()
         if (ch() != "{") {
           return 0
         }
@@ -513,7 +540,11 @@ EOF
         }
         while (1) {
           skipws()
-          if (!parse_string()) {
+          if (!parse_string() || string_escaped) {
+            return 0
+          }
+          key = string_value
+          if (top_seen[key]++) {
             return 0
           }
           skipws()
@@ -521,7 +552,8 @@ EOF
             return 0
           }
           pos++
-          if (!parse_value()) {
+          skipws()
+          if (!parse_top_value(key)) {
             return 0
           }
           skipws()
@@ -537,457 +569,314 @@ EOF
           return 0
         }
       }
-      function parse_number(  c) {
-        if (ch() == "-") {
-          pos++
+      function parse_top_value(key) {
+        if (key == "version") {
+          if (!parse_plain_string()) return 0
+          top_version = string_value
+          return 1
         }
-        if (pos > n) {
+        if (key == "tag_name") {
+          if (!parse_plain_string()) return 0
+          top_tag_name = string_value
+          return 1
+        }
+        if (key == "release_sha") {
+          if (!parse_plain_string()) return 0
+          top_release_sha = string_value
+          return 1
+        }
+        if (key == "built_at") {
+          if (!parse_plain_string()) return 0
+          top_built_at = string_value
+          return 1
+        }
+        if (key == "note") {
+          return parse_string()
+        }
+        if (key == "assets") {
+          has_assets = 1
+          return parse_github_assets()
+        }
+        if (key == "commit") {
+          if (!parse_plain_string()) return 0
+          top_commit = string_value
+          return 1
+        }
+        if (key == "targets") {
+          return parse_string_array("targets")
+        }
+        if (key == "required_targets") {
+          return parse_string_array("required_targets")
+        }
+        if (key == "allow_partial") {
+          if (!parse_bool()) return 0
+          top_allow_partial = bool_value
+          return 1
+        }
+        if (key == "partial") {
+          if (!parse_bool()) return 0
+          top_partial = bool_value
+          return 1
+        }
+        if (key == "artifacts") {
+          has_artifacts = 1
+          return parse_local_artifacts()
+        }
+        return 0
+      }
+      function parse_string_array(kind,  c, value) {
+        if (ch() != "[") {
           return 0
         }
-        c = ch()
-        if (c == "0") {
+        pos++
+        skipws()
+        if (ch() == "]") {
           pos++
-          if (ch() ~ /[0-9]/) {
+          return 1
+        }
+        while (1) {
+          skipws()
+          if (!parse_plain_string() || string_value == "") {
             return 0
           }
-        } else if (c ~ /[1-9]/) {
-          while (pos <= n && ch() ~ /[0-9]/) {
-            pos++
+          value = string_value
+          if (kind == "targets") {
+            if (target_seen[value]++) return 0
+            targets[++target_count] = value
+          } else {
+            if (required_target_seen[value]++) return 0
+            required_targets[++required_target_count] = value
           }
-        } else {
-          return 0
-        }
-        if (ch() == ".") {
-          pos++
-          if (!(ch() ~ /[0-9]/)) {
-            return 0
-          }
-          while (pos <= n && ch() ~ /[0-9]/) {
-            pos++
-          }
-        }
-        c = ch()
-        if (c == "e" || c == "E") {
-          pos++
+          skipws()
           c = ch()
-          if (c == "+" || c == "-") {
+          if (c == ",") {
             pos++
+            continue
           }
-          if (!(ch() ~ /[0-9]/)) {
+          if (c == "]") {
+            pos++
+            return 1
+          }
+          return 0
+        }
+      }
+      function parse_github_assets(  c) {
+        if (ch() != "[") {
+          return 0
+        }
+        pos++
+        skipws()
+        if (ch() == "]") {
+          pos++
+          return 1
+        }
+        while (1) {
+          skipws()
+          if (ch() != "{" || !parse_github_asset()) {
             return 0
           }
-          while (pos <= n && ch() ~ /[0-9]/) {
+          skipws()
+          c = ch()
+          if (c == ",") {
             pos++
+            continue
           }
+          if (c == "]") {
+            pos++
+            return 1
+          }
+          return 0
+        }
+      }
+      function parse_github_asset(  id, key, c) {
+        id = ++record_id
+        pos++
+        skipws()
+        if (ch() == "}") {
+          pos++
+          return validate_github_asset(id)
+        }
+        while (1) {
+          skipws()
+          if (!parse_string() || string_escaped) return 0
+          key = string_value
+          if (record_seen[id, key]++) return 0
+          skipws()
+          if (ch() != ":") return 0
+          pos++
+          skipws()
+          if (key == "filename" || key == "sha256" || key == "os" || key == "arch" || key == "runner") {
+            if (!parse_plain_string()) return 0
+            record_value[id, key] = string_value
+            record_present[id, key] = 1
+          } else {
+            return 0
+          }
+          skipws()
+          c = ch()
+          if (c == ",") {
+            pos++
+            continue
+          }
+          if (c == "}") {
+            pos++
+            return validate_github_asset(id)
+          }
+          return 0
+        }
+      }
+      function validate_github_asset(id,  name, sha, os_value, arch_value, runner, pair, index_value) {
+        if (!record_present[id, "filename"] || !record_present[id, "sha256"] || !record_present[id, "os"] || !record_present[id, "arch"] || !record_present[id, "runner"]) return 0
+        name = record_value[id, "filename"]
+        sha = record_value[id, "sha256"]
+        os_value = record_value[id, "os"]
+        arch_value = record_value[id, "arch"]
+        runner = record_value[id, "runner"]
+        if (name == "" || index(name, "/") || length(sha) != 64 || sha ~ /[^0-9a-f]/ || os_value == "" || arch_value == "" || runner == "") return 0
+        pair = os_value "/" arch_value
+        if (manifest_name_seen[name]++ || platform_seen[pair]++) return 0
+        index_value = ++github_asset_count
+        github_name[index_value] = name
+        github_os[index_value] = os_value
+        github_arch[index_value] = arch_value
+        github_runner[index_value] = runner
+        if (name == expected_artifact) {
+          matches++
+          if (sha != expected_sha || os_value != expected_os || arch_value != expected_arch) return 0
         }
         return 1
       }
-    ' "$1"
-  }
-
-  json_compact_preserve_strings() {
-    awk '
-      {
-        line = $0
-        for (i = 1; i <= length(line); i++) {
-          c = substr(line, i, 1)
-          if (in_string) {
-            printf "%s", c
-            if (escaped) {
-              escaped = 0
-            } else if (c == "\\") {
-              escaped = 1
-            } else if (c == "\"") {
-              in_string = 0
-            }
-            continue
-          }
-          if (c == "\"") {
-            in_string = 1
-            printf "%s", c
-            continue
-          }
-          if (c == " " || c == "\t" || c == "\r") {
-            continue
-          }
-          printf "%s", c
+      function parse_local_artifacts(  c) {
+        if (ch() != "[") return 0
+        pos++
+        skipws()
+        if (ch() == "]") {
+          pos++
+          return 1
         }
-      }
-      END {
-        printf "\n"
-      }
-    ' "$1"
-  }
-
-  json_top_level_string() {
-    key=$1
-    awk -v want="$key" '
-      {
-        data = data $0
-      }
-      END {
-        n = length(data)
-        obj = 0
-        arr = 0
-        for (i = 1; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (c == "\"") {
-            if (!scan_string(i)) {
-              exit 1
-            }
-            raw = string_raw
-            end = string_end
-            if (obj == 1 && arr == 0 && raw == "\"" want "\"" && substr(data, end + 1, 1) == ":") {
-              value_start = end + 2
-              if (substr(data, value_start, 1) != "\"") {
-                exit 1
-              }
-              if (!scan_string(value_start)) {
-                exit 1
-              }
-              matches++
-              if (matches == 1) {
-                found_raw = string_raw
-              }
-              i = string_end
-              continue
-            }
-            i = end
+        while (1) {
+          skipws()
+          if (ch() != "{" || !parse_local_artifact()) return 0
+          skipws()
+          c = ch()
+          if (c == ",") {
+            pos++
             continue
           }
-          if (c == "{") {
-            obj++
-          } else if (c == "}") {
-            obj--
-          } else if (c == "[") {
-            arr++
-          } else if (c == "]") {
-            arr--
-          }
-        }
-        if (matches == 1) {
-          print found_raw
-        } else if (matches > 1) {
-          exit 2
-        }
-      }
-      function scan_string(start,  i, c, escaped) {
-        escaped = 0
-        for (i = start + 1; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (escaped) {
-            escaped = 0
-            continue
-          }
-          if (c == "\\") {
-            escaped = 1
-            continue
-          }
-          if (c == "\"") {
-            string_end = i
-            string_raw = substr(data, start, i - start + 1)
+          if (c == "]") {
+            pos++
             return 1
           }
-        }
-        return 0
-      }
-    '
-  }
-
-  json_top_level_key_count() {
-    key=$1
-    awk -v want="$key" '
-      {
-        data = data $0
-      }
-      END {
-        n = length(data)
-        obj = 0
-        arr = 0
-        matches = 0
-        for (i = 1; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (c == "\"") {
-            if (!scan_string(i)) {
-              exit 1
-            }
-            raw = string_raw
-            end = string_end
-            if (obj == 1 && arr == 0 && raw == "\"" want "\"" && substr(data, end + 1, 1) == ":") {
-              matches++
-            }
-            i = end
-            continue
-          }
-          if (c == "{") {
-            obj++
-          } else if (c == "}") {
-            obj--
-          } else if (c == "[") {
-            arr++
-          } else if (c == "]") {
-            arr--
-          }
-        }
-        print matches
-      }
-      function scan_string(start,  i, c, escaped) {
-        escaped = 0
-        for (i = start + 1; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (escaped) {
-            escaped = 0
-            continue
-          }
-          if (c == "\\") {
-            escaped = 1
-            continue
-          }
-          if (c == "\"") {
-            string_end = i
-            string_raw = substr(data, start, i - start + 1)
-            return 1
-          }
-        }
-        return 0
-      }
-    '
-  }
-
-  json_asset_records() {
-    awk '
-      {
-        data = data $0
-      }
-      END {
-        n = length(data)
-        obj = 0
-        arr = 0
-        for (i = 1; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (c == "\"") {
-            if (!scan_string(i)) {
-              exit 1
-            }
-            raw = string_raw
-            end = string_end
-            if (obj == 1 && arr == 0 && (raw == "\"assets\"" || raw == "\"artifacts\"") && substr(data, end + 1, 1) == ":") {
-              value_start = end + 2
-              if (substr(data, value_start, 1) == "[") {
-                array_end = find_array_end(value_start)
-                if (array_end == 0) {
-                  exit 1
-                }
-                emit_array_records(value_start + 1, array_end - 1)
-                i = array_end
-                continue
-              }
-            }
-            i = end
-            continue
-          }
-          if (c == "{") {
-            obj++
-          } else if (c == "}") {
-            obj--
-          } else if (c == "[") {
-            arr++
-          } else if (c == "]") {
-            arr--
-          }
+          return 0
         }
       }
-      function scan_string(start,  i, c, escaped) {
-        escaped = 0
-        for (i = start + 1; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (escaped) {
-            escaped = 0
-            continue
-          }
-          if (c == "\\") {
-            escaped = 1
-            continue
-          }
-          if (c == "\"") {
-            string_end = i
-            string_raw = substr(data, start, i - start + 1)
-            return 1
-          }
+      function parse_local_artifact(  id, key, c) {
+        id = ++record_id
+        pos++
+        skipws()
+        if (ch() == "}") {
+          pos++
+          return validate_local_artifact(id)
         }
-        return 0
-      }
-      function find_array_end(start,  i, c, depth) {
-        depth = 0
-        for (i = start; i <= n; i++) {
-          c = substr(data, i, 1)
-          if (c == "\"") {
-            if (!scan_string(i)) {
-              return 0
-            }
-            i = string_end
+        while (1) {
+          skipws()
+          if (!parse_string() || string_escaped) return 0
+          key = string_value
+          if (record_seen[id, key]++) return 0
+          skipws()
+          if (ch() != ":") return 0
+          pos++
+          skipws()
+          if (key == "name" || key == "os" || key == "arch" || key == "sha256" || key == "status" || key == "mode") {
+            if (!parse_plain_string()) return 0
+            record_value[id, key] = string_value
+            record_present[id, key] = 1
+          } else if (key == "message") {
+            if (!parse_string()) return 0
+            record_present[id, key] = 1
+          } else if (key == "required") {
+            if (!parse_bool()) return 0
+            record_bool[id, key] = bool_value
+            record_present[id, key] = 1
+          } else {
+            return 0
+          }
+          skipws()
+          c = ch()
+          if (c == ",") {
+            pos++
             continue
           }
-          if (c == "[") {
-            depth++
-          } else if (c == "]") {
-            depth--
-            if (depth == 0) {
-              return i
-            }
+          if (c == "}") {
+            pos++
+            return validate_local_artifact(id)
           }
-        }
-        return 0
-      }
-      function emit_array_records(start, end,  i, c, object_depth, array_depth, record_start, direct_record) {
-        object_depth = 0
-        array_depth = 0
-        direct_record = 0
-        for (i = start; i <= end; i++) {
-          c = substr(data, i, 1)
-          if (c == "\"") {
-            if (!scan_string(i)) {
-              exit 1
-            }
-            i = string_end
-            continue
-          }
-          if (c == "[") {
-            array_depth++
-          } else if (c == "]") {
-            array_depth--
-            if (array_depth < 0) {
-              exit 1
-            }
-          } else if (c == "{") {
-            if (object_depth == 0) {
-              direct_record = (array_depth == 0)
-            }
-            if (object_depth == 0 && direct_record) {
-              record_start = i
-            }
-            object_depth++
-          } else if (c == "}") {
-            object_depth--
-            if (object_depth == 0 && direct_record) {
-              print substr(data, record_start, i - record_start + 1)
-              direct_record = 0
-            } else if (object_depth < 0) {
-              exit 1
-            }
-          }
-        }
-        if (object_depth != 0 || array_depth != 0) {
-          exit 1
+          return 0
         }
       }
-    '
+      function validate_local_artifact(id,  name, sha, os_value, arch_value, status, mode, pair, index_value) {
+        if (!record_present[id, "name"] || !record_present[id, "os"] || !record_present[id, "arch"] || !record_present[id, "status"] || !record_present[id, "required"]) return 0
+        name = record_value[id, "name"]
+        sha = record_value[id, "sha256"]
+        os_value = record_value[id, "os"]
+        arch_value = record_value[id, "arch"]
+        status = record_value[id, "status"]
+        mode = record_value[id, "mode"]
+        if (name == "" || index(name, "/") || os_value == "" || arch_value == "" || (status != "built" && status != "not_built" && status != "skipped")) return 0
+        if (record_present[id, "mode"] && mode != "host" && mode != "docker") return 0
+        if (status == "built") {
+          if (!record_present[id, "sha256"] || length(sha) != 64 || sha ~ /[^0-9a-f]/) return 0
+        } else {
+          if (record_present[id, "sha256"]) return 0
+          local_nonbuilt++
+        }
+        pair = os_value "/" arch_value
+        if (manifest_name_seen[name]++ || platform_seen[pair]++) return 0
+        index_value = ++local_artifact_count
+        local_name[index_value] = name
+        local_pair[index_value] = pair
+        local_required[index_value] = record_bool[id, "required"]
+        if (name == expected_artifact) {
+          matches++
+          if (status != "built" || sha != expected_sha || os_value != expected_os || arch_value != expected_arch) return 0
+        }
+        return 1
+      }
+      function validate_manifest(  i, pair, expected_name, expected_runner, partial_value) {
+        if (!top_seen["version"] || top_version == "" || top_version != expected_version || !top_seen["built_at"] || top_built_at == "") return 0
+        if (has_assets) {
+          if (has_artifacts || !top_seen["tag_name"] || top_tag_name != expected_version || !top_seen["release_sha"] || top_release_sha == "" || !top_seen["note"] || top_seen["commit"] || top_seen["targets"] || top_seen["required_targets"] || top_seen["allow_partial"] || top_seen["partial"]) return 0
+          if (github_asset_count != 3 || !platform_seen["linux/amd64"] || !platform_seen["darwin/amd64"] || !platform_seen["darwin/arm64"]) return 0
+          for (i = 1; i <= github_asset_count; i++) {
+            pair = github_os[i] "/" github_arch[i]
+            expected_name = "codencer_" top_version "_" github_os[i] "_" github_arch[i] ".tar.gz"
+            expected_runner = (github_os[i] == "linux" ? "ubuntu-latest" : "macos-latest")
+            if (github_name[i] != expected_name || github_runner[i] != expected_runner) return 0
+          }
+          return 1
+        }
+        if (!has_artifacts || top_seen["tag_name"] || top_seen["release_sha"] || top_seen["note"] || !top_seen["commit"] || !top_seen["targets"] || !top_seen["required_targets"] || !top_seen["allow_partial"] || !top_seen["partial"]) return 0
+        if (target_count == 0 || local_artifact_count != target_count) return 0
+        for (i = 1; i <= required_target_count; i++) {
+          if (!target_seen[required_targets[i]]) return 0
+        }
+        for (i = 1; i <= local_artifact_count; i++) {
+          pair = local_pair[i]
+          if (!target_seen[pair] || local_required[i] != (required_target_seen[pair] ? 1 : 0)) return 0
+          split(pair, pair_parts, "/")
+          expected_name = "codencer_" top_version "_" pair_parts[1] "_" pair_parts[2] ".tar.gz"
+          if (local_name[i] != expected_name) return 0
+        }
+        partial_value = (local_nonbuilt > 0 ? 1 : 0)
+        if (top_partial != partial_value) return 0
+        return 1
+      }
+    ' "$manifest_file"
   }
 
   verify_manifest() {
-    manifest_file=$1
-    artifact_name=$2
-    expected_sha=$3
-    version_value=$4
-    platform_value=$5
-
-    if ! json_syntax_valid "$manifest_file"; then
-      echo "manifest JSON is invalid" >&2
-      return 1
-    fi
-
-    manifest_compact=$(json_compact_preserve_strings "$manifest_file")
-    manifest_version_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count version 2>/dev/null || true)
-    if [ "$manifest_version_count" != "1" ]; then
-      echo "manifest must contain version exactly once" >&2
-      return 1
-    fi
-    manifest_version=$(printf '%s\n' "$manifest_compact" | json_top_level_string version 2>/dev/null || true)
-    if [ "$manifest_version" != "\"$version_value\"" ]; then
-      echo "manifest version mismatch for $artifact_name" >&2
-      return 1
-    fi
-    manifest_tag_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count tag_name 2>/dev/null || true)
-    case "$manifest_tag_count" in
-      0) ;;
-      1)
-      # GitHub release manifests include tag_name; local release-snapshot manifests do not.
-      manifest_tag=$(printf '%s\n' "$manifest_compact" | json_top_level_string tag_name 2>/dev/null || true)
-      if [ "$manifest_tag" != "\"$version_value\"" ]; then
-        echo "manifest tag_name mismatch for $artifact_name" >&2
-        return 1
-      fi
-      ;;
-      *)
-        echo "manifest must contain tag_name at most once" >&2
-        return 1
-      ;;
-    esac
-
-    manifest_assets_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count assets 2>/dev/null || true)
-    manifest_artifacts_count=$(printf '%s\n' "$manifest_compact" | json_top_level_key_count artifacts 2>/dev/null || true)
-    case "$manifest_assets_count:$manifest_artifacts_count" in
-      0:0) ;;
-      0:1|1:0|1:1) ;;
-      *)
-        echo "manifest contains duplicate asset collection keys" >&2
-        return 1
-      ;;
-    esac
-
-    records_file=$(mktemp "${TMPDIR:-/tmp}/codencer-manifest-records.XXXXXX") || {
-      echo "could not create temporary file for manifest verification" >&2
-      return 1
-    }
-    printf '%s\n' "$manifest_compact" | json_asset_records > "$records_file"
-    match_count=0
-    invalid_record=0
-    record=""
-    while IFS= read -r candidate_record; do
-      for candidate_key in filename name sha256 os arch; do
-        candidate_key_count=$(printf '%s\n' "$candidate_record" | json_top_level_key_count "$candidate_key" 2>/dev/null || true)
-        case "$candidate_key_count" in
-          0|1) ;;
-          *) invalid_record=1 ;;
-        esac
-      done
-      record_name=$(printf '%s\n' "$candidate_record" | json_top_level_string filename 2>/dev/null || true)
-      if [ -z "$record_name" ]; then
-        record_name=$(printf '%s\n' "$candidate_record" | json_top_level_string name 2>/dev/null || true)
-      fi
-      if [ "$record_name" = "\"$artifact_name\"" ]; then
-        match_count=$((match_count + 1))
-        record=$candidate_record
-      fi
-    done < "$records_file"
-    if [ "$invalid_record" != "0" ]; then
-      rm -f "$records_file"
-      echo "manifest asset record contains duplicate verification keys" >&2
-      return 1
-    fi
-    if [ "$match_count" != "1" ]; then
-      rm -f "$records_file"
-      echo "manifest must reference $artifact_name exactly once, got $match_count" >&2
-      return 1
-    fi
-    rm -f "$records_file"
-
-    record_sha=$(printf '%s\n' "$record" | json_top_level_string sha256 2>/dev/null || true)
-    if [ "$record_sha" != "\"$expected_sha\"" ]; then
-      echo "manifest sha256 mismatch for $artifact_name" >&2
-      return 1
-    fi
-
-    os_name=${platform_value%%_*}
-    arch=${platform_value#*_}
-    record_os=$(printf '%s\n' "$record" | json_top_level_string os 2>/dev/null || true)
-    if [ "$record_os" != "\"$os_name\"" ]; then
-      echo "manifest os mismatch for $artifact_name" >&2
-      return 1
-    fi
-    record_arch=$(printf '%s\n' "$record" | json_top_level_string arch 2>/dev/null || true)
-    if [ "$record_arch" != "\"$arch\"" ]; then
-      echo "manifest arch mismatch for $artifact_name" >&2
+    if ! json_manifest_verify "$1" "$2" "$3" "$4" "$5"; then
+      echo "manifest does not match a generated Codencer release schema" >&2
       return 1
     fi
   }
@@ -1070,8 +959,9 @@ EOF
     [ -f "$checksums_path" ] || fail "checksums.txt missing: $checksums_path"
     [ -f "$manifest_path" ] || fail "manifest.json missing: $manifest_path"
 
-    expected_sha=$(awk -v name="$ARTIFACT" '($2 == name || $2 == "./" name || $2 == "*" name) {print $1; exit}' "$checksums_path")
-    [ -n "$expected_sha" ] || fail "$ARTIFACT is missing from checksums.txt"
+    if ! expected_sha=$(checksum_for_artifact "$checksums_path" "$ARTIFACT"); then
+      fail "checksums.txt is malformed, ambiguous, or missing $ARTIFACT"
+    fi
     actual_sha=$(sha256_file "$artifact_path")
     if [ "$actual_sha" != "$expected_sha" ]; then
       fail "sha256 mismatch for $ARTIFACT"
