@@ -1243,6 +1243,71 @@ func TestInstallScriptManifestVerificationSchemas(t *testing.T) {
 			wantOK:   true,
 		},
 		{
+			name: "manifest NUL suffix",
+			manifest: func(name, sha string) string {
+				return githubInstallManifest(version, name, sha) + string([]byte{0x00}) + "garbage"
+			},
+		},
+		{
+			name: "invalid UTF-8 byte in GitHub note",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(
+					manifest,
+					`Artifacts were built by GitHub Actions from the Release Assets workflow.`,
+					"before"+string([]byte{0xff})+"after",
+					1,
+				)
+			},
+		},
+		{
+			name: "invalid UTF-8 byte in local artifact message",
+			manifest: func(name, sha string) string {
+				manifest := localInstallManifest(version, name, sha)
+				return strings.Replace(
+					manifest,
+					`"mode":"host"`,
+					`"mode":"host","message":"before`+string([]byte{0xff})+`after"`,
+					1,
+				)
+			},
+		},
+		{
+			name: "adversarial non-ASCII UTF-8 in GitHub note",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(
+					manifest,
+					`Artifacts were built by GitHub Actions from the Release Assets workflow.`,
+					"before"+string([]byte{0xc3, 0xa9})+"after",
+					1,
+				)
+			},
+		},
+		{
+			name: "adversarial ASCII escape in GitHub note",
+			manifest: func(name, sha string) string {
+				manifest := githubInstallManifest(version, name, sha)
+				return strings.Replace(
+					manifest,
+					`Artifacts were built by GitHub Actions from the Release Assets workflow.`,
+					"before"+string([]byte{0x1b})+"after",
+					1,
+				)
+			},
+		},
+		{
+			name: "adversarial tab indentation in manifest",
+			manifest: func(name, sha string) string {
+				return strings.Replace(
+					githubInstallManifest(version, name, sha),
+					`  "version"`,
+					string([]byte{0x09})+`"version"`,
+					1,
+				)
+			},
+		},
+		{
 			name: "escaped duplicate top-level version",
 			manifest: func(name, sha string) string {
 				manifest := githubInstallManifest(version, name, sha)
@@ -1512,6 +1577,27 @@ func TestInstallScriptManifestVerificationSchemas(t *testing.T) {
 			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
 			checksums: func(name, sha string) string {
 				return sha + "  " + name + " unexpected\n"
+			},
+		},
+		{
+			name:     "checksum NUL suffix",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + string([]byte{0x00}) + " unexpected\n"
+			},
+		},
+		{
+			name:     "adversarial checksum DEL suffix",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + string([]byte{0x7f}) + "unexpected\n"
+			},
+		},
+		{
+			name:     "adversarial checksum CRLF",
+			manifest: func(name, sha string) string { return githubInstallManifest(version, name, sha) },
+			checksums: func(name, sha string) string {
+				return sha + "  " + name + string([]byte{0x0d, 0x0a})
 			},
 		},
 	}

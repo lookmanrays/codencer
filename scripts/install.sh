@@ -373,9 +373,34 @@ EOF
     fail "sha256sum or shasum is required to verify release assets"
   }
 
+  generated_ascii_file_valid() {
+    file=$1
+    # od observes the complete byte stream before awk sees only decimal text.
+    # Both generators emit LF plus printable ASCII and no other byte values.
+    if ! byte_dump=$(LC_ALL=C od -A n -t u1 -v "$file"); then
+      return 1
+    fi
+    printf '%s\n' "$byte_dump" | LC_ALL=C awk '
+      {
+        for (i = 1; i <= NF; i++) {
+          if ($i !~ /^[0-9]+$/) {
+            exit 1
+          }
+          byte = $i + 0
+          if (byte != 10 && (byte < 32 || byte > 126)) {
+            exit 1
+          }
+        }
+      }
+    '
+  }
+
   checksum_for_artifact() {
     checksums_file=$1
     artifact_name=$2
+    if ! generated_ascii_file_valid "$checksums_file"; then
+      return 1
+    fi
     LC_ALL=C awk -v want="$artifact_name" '
       {
         if (NF != 2 || length($1) != 64 || $1 ~ /[^0-9a-f]/ || $2 == "" || index($2, "/") != 0 || seen[$2]++) {
@@ -404,6 +429,10 @@ EOF
     platform_value=$5
     os_name=${platform_value%%_*}
     arch=${platform_value#*_}
+
+    if ! generated_ascii_file_valid "$manifest_file"; then
+      return 1
+    fi
 
     # Both manifest generators use fixed, unescaped ASCII member names. Rejecting
     # escaped object member names avoids raw-spelling versus decoded-key ambiguity.
