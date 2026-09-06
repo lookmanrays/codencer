@@ -24,24 +24,24 @@ const (
 var DefaultRelayURL = defaults.DefaultRelayURL()
 
 var defaultGatewayDevNoAuthScopes = []string{
-	"projects:read", "projects:write",
-	"runs:read", "runs:write",
-	"steps:read", "steps:write",
+	"projects:read",
+	"runs:read",
+	"steps:read",
 	"artifacts:read", "reports:read",
 }
 
 type Config struct {
-	Version                    int            `json:"version"`
-	PublicBaseURL              string         `json:"public_base_url"`
-	MCPURL                     string         `json:"mcp_url"`
-	ListenAddr                 string         `json:"listen_addr"`
-	RelayRequestTimeoutSeconds int            `json:"relay_request_timeout_seconds,omitempty"`
-	Store                      StoreConfig    `json:"store,omitempty"`
-	DefaultRelay               DefaultRelay   `json:"default_relay,omitempty"`
-	Auth                       AuthConfig     `json:"auth"`
-	OAuthDev                   OAuthDevConfig `json:"oauth_dev,omitempty"`
+	Version                    int             `json:"version"`
+	PublicBaseURL              string          `json:"public_base_url"`
+	MCPURL                     string          `json:"mcp_url"`
+	ListenAddr                 string          `json:"listen_addr"`
+	RelayRequestTimeoutSeconds int             `json:"relay_request_timeout_seconds,omitempty"`
+	Store                      StoreConfig     `json:"store,omitempty"`
+	DefaultRelay               DefaultRelay    `json:"default_relay,omitempty"`
+	Auth                       AuthConfig      `json:"auth"`
+	OAuthDev                   OAuthDevConfig  `json:"oauth_dev,omitempty"`
 	DevNoAuth                  DevNoAuthConfig `json:"dev_noauth,omitempty"`
-	RelayProfiles              []RelayProfile `json:"relay_profiles,omitempty"`
+	RelayProfiles              []RelayProfile  `json:"relay_profiles,omitempty"`
 }
 
 type StoreConfig struct {
@@ -74,6 +74,7 @@ type OAuthDevConfig struct {
 	Scopes               []string `json:"scopes,omitempty"`
 	TokenTTLSeconds      int      `json:"token_ttl_seconds,omitempty"`
 	AuthorizationCodeTTL int      `json:"authorization_code_ttl_seconds,omitempty"`
+	RequirePKCE          *bool    `json:"require_pkce,omitempty"`
 }
 
 type RelayProfile struct {
@@ -109,9 +110,10 @@ func DefaultConfig() *Config {
 			TokenEnv: DefaultGatewayToken,
 		},
 		OAuthDev: OAuthDevConfig{
-			Enabled:  true,
-			Issuer:   defaults.DefaultGatewayBaseURL(),
-			ClientID: "codencer-chatgpt-dev",
+			Enabled:     true,
+			Issuer:      defaults.DefaultGatewayBaseURL(),
+			ClientID:    "codencer-chatgpt-dev",
+			RequirePKCE: boolPtr(true),
 		},
 	}
 }
@@ -198,6 +200,10 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth.Mode == "dev-noauth" {
 		c.DevNoAuth.Enabled = true
+		host, _, err := net.SplitHostPort(c.ListenAddr)
+		if err == nil && !isLocalHost(host) {
+			return fmt.Errorf("auth.mode %q requires listen_addr to bind to a loopback address for safety; got %q", c.Auth.Mode, c.ListenAddr)
+		}
 	}
 	c.DevNoAuth.Scopes = cleanList(c.DevNoAuth.Scopes)
 	if c.DevNoAuth.Enabled {
@@ -213,6 +219,9 @@ func (c *Config) Validate() error {
 	if c.OAuthDev.Enabled {
 		c.OAuthDev.Issuer = strings.TrimRight(strings.TrimSpace(firstNonEmpty(c.OAuthDev.Issuer, c.PublicBaseURL)), "/")
 		c.OAuthDev.ClientID = strings.TrimSpace(firstNonEmpty(c.OAuthDev.ClientID, "codencer-chatgpt-dev"))
+		if c.OAuthDev.RequirePKCE == nil {
+			c.OAuthDev.RequirePKCE = boolPtr(true)
+		}
 		c.OAuthDev.Scopes = cleanList(c.OAuthDev.Scopes)
 		if len(c.OAuthDev.Scopes) == 0 {
 			c.OAuthDev.Scopes = []string{"projects:read", "projects:write", "runs:read", "runs:write", "steps:read", "steps:write", "artifacts:read", "reports:read"}
@@ -398,6 +407,10 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func redactedNonEmpty(value string) string {

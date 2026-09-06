@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -536,6 +537,102 @@ func TestGatewayAuthMetadataAndChallenge(t *testing.T) {
 	}
 }
 
+func TestGatewayOAuthDevOptionalPKCE(t *testing.T) {
+	t.Setenv("CODENCER_TEST_RELAY_TOKEN", "relay-secret")
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "http://127.0.0.1:19090"
+	cfg.MCPURL = "http://127.0.0.1:19090/mcp"
+	cfg.Auth.TokenEnv = "CODENCER_TEST_GATEWAY_TOKEN"
+	cfg.OAuthDev.Issuer = "http://127.0.0.1:19090"
+	cfg.OAuthDev.ClientSecretHash = sha256Hex("dev-secret")
+	cfg.OAuthDev.OperatorCodeHash = sha256Hex("operator-code")
+	cfg.OAuthDev.RequirePKCE = boolPtr(false)
+	server, err := NewServer(cfg, ServerOptions{})
+	if err != nil {
+		t.Fatalf("new gateway server: %v", err)
+	}
+	ts := httptest.NewServer(server.Handler())
+	defer ts.Close()
+
+	metadata, err := http.Get(ts.URL + "/.well-known/oauth-authorization-server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataBody := readBody(t, metadata)
+	metadata.Body.Close()
+	if strings.Contains(metadataBody, "code_challenge_methods_supported") {
+		t.Fatalf("metadata should not advertise PKCE when require_pkce=false: %s", metadataBody)
+	}
+
+	redirect := "http://127.0.0.1/callback"
+	authorizeURL := ts.URL + "/oauth/authorize?response_type=code&client_id=codencer-chatgpt-dev&redirect_uri=" + url.QueryEscape(redirect) + "&scope=projects%3Aread&state=state-1&resource=" + url.QueryEscape("http://127.0.0.1:19090/mcp")
+	form := url.Values{"operator_code": {"operator-code"}}
+	req, err := http.NewRequest(http.MethodPost, authorizeURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := readBody(t, resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("authorize without PKCE should redirect when require_pkce=false, status=%d body=%s", resp.StatusCode, body)
+	}
+	location := resp.Header.Get("Location")
+	parsed, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("invalid redirect location %q: %v", location, err)
+	}
+	code := parsed.Query().Get("code")
+	if code == "" {
+		t.Fatalf("authorize redirect missing code: %s", location)
+	}
+	if parsed.Query().Get("state") != "state-1" {
+		t.Fatalf("redirect state mismatch: %s", location)
+	}
+
+	tokenForm := url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {"codencer-chatgpt-dev"},
+		"client_secret": {"dev-secret"},
+		"code":          {code},
+		"redirect_uri":  {redirect},
+	}
+	tokenReq, err := http.NewRequest(http.MethodPost, ts.URL+"/oauth/token", strings.NewReader(tokenForm.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenRespRaw, err := http.DefaultClient.Do(tokenReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tokenRespRaw.Body.Close()
+	if tokenRespRaw.StatusCode >= 400 {
+		t.Fatalf("token exchange status=%d body=%s", tokenRespRaw.StatusCode, readBody(t, tokenRespRaw))
+	}
+	var tokenResp map[string]any
+	if err := json.NewDecoder(tokenRespRaw.Body).Decode(&tokenResp); err != nil {
+		t.Fatal(err)
+	}
+	tokenBody := mustJSON(t, tokenResp)
+	if !strings.Contains(tokenBody, `"access_token"`) || !strings.Contains(tokenBody, `"token_type":"Bearer"`) {
+		t.Fatalf("token exchange without verifier should succeed, got %s", tokenBody)
+	}
+	accessToken := tokenResp["access_token"].(string)
+	if accessToken == "" {
+		t.Fatalf("token exchange returned empty access token: %s", tokenBody)
+	}
+	who := apiGet[map[string]any](t, ts.URL+"/api/gateway/v1/whoami", accessToken)
+	if mustJSON(t, who) == "" {
+		t.Fatalf("whoami failed with PKCE-less token")
+	}
+}
+
 func TestGatewayDevNoAuthAllowsUnauthenticatedMCP(t *testing.T) {
 	t.Setenv("CODENCER_TEST_RELAY_TOKEN", "relay-secret")
 	cfg := DefaultConfig()
@@ -574,6 +671,19 @@ func TestGatewayDevNoAuthAllowsUnauthenticatedMCP(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 for unauthenticated MCP in dev-noauth, got %d: %s", resp.StatusCode, readBody(t, resp))
+	}
+}
+
+func TestGatewayDevNoAuthRejectsNonLoopbackListenAddr(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.PublicBaseURL = "http://10.0.0.1:19090"
+	cfg.MCPURL = "http://10.0.0.1:19090/mcp"
+	cfg.ListenAddr = "0.0.0.0:19090"
+	cfg.Auth.Mode = "dev-noauth"
+	cfg.Auth.TokenEnv = "CODENCER_TEST_GATEWAY_TOKEN"
+	cfg.OAuthDev.Enabled = false
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("dev-noauth with non-loopback listen_addr should fail validation")
 	}
 }
 

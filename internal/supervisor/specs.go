@@ -158,6 +158,13 @@ func baseSpec(ctx *runtimeContext, name string) ServiceSpec {
 	if currentPath := os.Getenv("PATH"); currentPath != "" {
 		env["PATH"] = currentPath
 	}
+	// Propagate executor-specific binary and simulation overrides so that
+	// adapters work correctly under launchd/systemd.
+	for _, key := range []string{"OPENCODE_BINARY", "OPENCODE_SIMULATION_MODE"} {
+		if v := os.Getenv(key); v != "" {
+			env[key] = v
+		}
+	}
 	return ServiceSpec{
 		Name:       name,
 		Configured: true,

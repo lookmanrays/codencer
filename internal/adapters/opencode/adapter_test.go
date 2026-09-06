@@ -12,8 +12,8 @@ import (
 )
 
 func TestCommandArgsUsesNonInteractiveStructuredAutoApprovedRun(t *testing.T) {
-	args := commandArgs(&domain.Step{Title: "Fix tests"}, "do the work")
-	want := []string{"run", "--format", "json", "--dangerously-skip-permissions", "--title", "Fix tests", "do the work"}
+	args := commandArgs(&domain.Step{Title: "Fix tests"})
+	want := []string{"run", "--format", "json", "--auto", "--title", "Fix tests"}
 	if len(args) != len(want) {
 		t.Fatalf("unexpected args: %#v", args)
 	}
@@ -168,6 +168,54 @@ func TestStartFailsFastWhenBinaryIsMissing(t *testing.T) {
 	err := NewAdapter().Start(context.Background(), &domain.Step{}, &domain.Attempt{ID: "missing", Adapter: AdapterID}, t.TempDir(), t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "not found or not executable") {
 		t.Fatalf("expected missing-binary error, got %v", err)
+	}
+}
+
+func TestPromptIsPassedViaStdin(t *testing.T) {
+	t.Setenv("OPENCODE_SIMULATION_MODE", "0")
+	t.Setenv("ALL_ADAPTERS_SIMULATION_MODE", "0")
+	script := `#!/bin/sh
+stdin=""
+while IFS= read -r line; do
+  stdin="$stdin$line"
+done
+if [ -n "$stdin" ]; then
+  printf '%s\n' "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"read: $stdin\",\"time\":{\"end\":1}}}"
+else
+  printf '%s\n' "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"no stdin\",\"time\":{\"end\":1}}}"
+fi
+`
+	binary := writeExecutable(t, script)
+	t.Setenv(binaryEnvVar, binary)
+	adapter := NewAdapter()
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	artifactsRoot := filepath.Join(t.TempDir(), "artifacts")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	attempt := &domain.Attempt{ID: "stdin-test", Adapter: AdapterID}
+	step := &domain.Step{Title: "Stdin test", Goal: "test stdin transport"}
+	if err := adapter.Start(context.Background(), step, attempt, workspace, artifactsRoot); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitForStop(t, adapter, attempt.ID)
+	artifacts, err := adapter.CollectArtifacts(context.Background(), attempt.ID, artifactsRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.NormalizeResult(context.Background(), attempt.ID, artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != domain.StepStateCompleted {
+		t.Fatalf("expected completed, got %+v", result)
+	}
+	promptData, err := os.ReadFile(filepath.Join(artifactsRoot, "prompt.txt"))
+	if err != nil {
+		t.Fatalf("read prompt.txt: %v", err)
+	}
+	if len(promptData) == 0 {
+		t.Fatal("prompt.txt should not be empty")
 	}
 }
 

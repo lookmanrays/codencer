@@ -131,12 +131,12 @@ func resolveBinary() (string, error) {
 	return path, nil
 }
 
-func commandArgs(step *domain.Step, prompt string) []string {
+func commandArgs(step *domain.Step) []string {
 	title := "Codencer task"
 	if step != nil && strings.TrimSpace(step.Title) != "" {
 		title = strings.TrimSpace(step.Title)
 	}
-	return []string{"run", "--format", "json", "--dangerously-skip-permissions", "--title", title, prompt}
+	return []string{"run", "--format", "json", "--auto", "--title", title}
 }
 
 func runAttempt(ctx context.Context, step *domain.Step, attempt *domain.Attempt, workspaceRoot, artifactRoot string) error {
@@ -163,8 +163,9 @@ func runAttempt(ctx context.Context, step *domain.Step, attempt *domain.Attempt,
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, binary, commandArgs(step, prompt)...)
+	cmd := exec.CommandContext(ctx, binary, commandArgs(step)...)
 	cmd.Dir = workspaceRoot
+	cmd.Stdin = strings.NewReader(prompt)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	runErr := cmd.Run()

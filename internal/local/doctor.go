@@ -51,14 +51,15 @@ type ProbeResult struct {
 type ProbeFunc func(command string, args ...string) ProbeResult
 
 type DoctorOptions struct {
-	Paths         Paths
-	Config        Config
-	RepoRoot      string
-	ProjectID     string
-	ToolchainOnly bool
-	Strict        bool
-	Probe         ProbeFunc
-	HTTPClient    *http.Client
+	Paths          Paths
+	Config         Config
+	RepoRoot       string
+	ProjectID      string
+	ToolchainOnly  bool
+	Strict         bool
+	Probe          ProbeFunc
+	HTTPClient     *http.Client
+	ActiveAdapters []string
 }
 
 func BuildDoctorReport(opts DoctorOptions) DoctorReport {
@@ -96,7 +97,13 @@ func BuildDoctorReport(opts DoctorOptions) DoctorReport {
 		lowLevelBinaryCheck("codencer-connectord", "cmd/codencer-connectord", "bin/codencer-connectord", opts.RepoRoot),
 		agentBinaryCheck(probe, "codex_cli", "CODEX_BINARY", "codex"),
 		agentBinaryCheck(probe, "claude_cli", "CLAUDE_BINARY", "claude"),
-		agentBinaryCheck(probe, "opencode_cli", "OPENCODE_BINARY", "opencode"),
+	)
+	if adapterActive(opts.ActiveAdapters, "opencode") || os.Getenv("OPENCODE_BINARY") != "" {
+		checks = append(checks, agentBinaryCheck(probe, "opencode_cli", "OPENCODE_BINARY", "opencode"))
+	} else {
+		checks = append(checks, Check{Name: "opencode_cli", Status: CheckSkipped, Detail: "not in active adapter profile"})
+	}
+	checks = append(checks,
 		relayConnectorPresenceCheck(opts.RepoRoot, opts.Config),
 		daemonHealthCheck(opts.Config.DefaultDaemonURL, opts.HTTPClient),
 	)
@@ -348,4 +355,13 @@ func firstLine(output, fallback string) string {
 		line = line[:200]
 	}
 	return line
+}
+
+func adapterActive(adapters []string, name string) bool {
+	for _, a := range adapters {
+		if strings.EqualFold(strings.TrimSpace(a), name) {
+			return true
+		}
+	}
+	return false
 }
