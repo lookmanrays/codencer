@@ -146,18 +146,28 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 
 func (o *oauthDevService) Metadata(baseURL string) map[string]any {
 	issuer := o.issuer(baseURL)
-	return map[string]any{
+	metadata := map[string]any{
 		"issuer":                                issuer,
 		"authorization_endpoint":                issuer + "/oauth/authorize",
 		"token_endpoint":                        issuer + "/oauth/token",
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code"},
-		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_post", "client_secret_basic"},
 		"scopes_supported":                      o.cfg.Scopes,
 		"resource_documentation":                issuer + "/mcp",
 		"refresh_token_supported":               false,
 	}
+	if o.requirePKCE() {
+		metadata["code_challenge_methods_supported"] = []string{"S256"}
+	}
+	return metadata
+}
+
+func (o *oauthDevService) requirePKCE() bool {
+	if o == nil || o.cfg.RequirePKCE == nil {
+		return true
+	}
+	return *o.cfg.RequirePKCE
 }
 
 func (o *oauthDevService) AuthorizeForm(values url.Values) string {
@@ -187,7 +197,7 @@ func (o *oauthDevService) CreateAuthorizationCode(values url.Values, baseURL str
 	if _, err := url.ParseRequestURI(redirectURI); err != nil {
 		return "", "", "", &apiError{Status: http.StatusBadRequest, Code: "invalid_redirect_uri", Message: err.Error()}
 	}
-	if values.Get("code_challenge_method") != "S256" || strings.TrimSpace(values.Get("code_challenge")) == "" {
+	if o.requirePKCE() && (values.Get("code_challenge_method") != "S256" || strings.TrimSpace(values.Get("code_challenge")) == "") {
 		return "", "", "", &apiError{Status: http.StatusBadRequest, Code: "invalid_request", Message: "PKCE S256 code_challenge is required"}
 	}
 	if !constantTimeHashEqual(values.Get("operator_code"), o.cfg.OperatorCodeHash) {
@@ -235,8 +245,8 @@ func (o *oauthDevService) ExchangeCode(values url.Values, authorizationHeader, b
 	}
 	code := strings.TrimSpace(values.Get("code"))
 	codeVerifier := strings.TrimSpace(values.Get("code_verifier"))
-	if code == "" || codeVerifier == "" {
-		return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_request", Message: "code and code_verifier are required"}
+	if code == "" {
+		return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_request", Message: "code is required"}
 	}
 
 	o.mu.Lock()
@@ -254,8 +264,13 @@ func (o *oauthDevService) ExchangeCode(values url.Values, authorizationHeader, b
 	if authCode.RedirectURI != strings.TrimSpace(values.Get("redirect_uri")) {
 		return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_grant", Message: "redirect_uri does not match authorization request"}
 	}
-	if !pkceS256Matches(codeVerifier, authCode.CodeChallenge) {
-		return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_grant", Message: "PKCE verifier does not match"}
+	if authCode.CodeChallenge != "" {
+		if codeVerifier == "" {
+			return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_request", Message: "code_verifier is required"}
+		}
+		if !pkceS256Matches(codeVerifier, authCode.CodeChallenge) {
+			return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_grant", Message: "PKCE verifier does not match"}
+		}
 	}
 	if requestedResource := strings.TrimRight(strings.TrimSpace(values.Get("resource")), "/"); requestedResource != "" && requestedResource != authCode.Resource {
 		return nil, &apiError{Status: http.StatusBadRequest, Code: "invalid_resource", Message: "resource does not match authorization request"}

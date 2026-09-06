@@ -34,6 +34,7 @@ func Matrix(ctx context.Context, opts Options) (Report, error) {
 	}
 	report.Add(binaryCapabilityCheck("codex_cli", "executor", "CODEX_BINARY", "codex"))
 	report.Add(binaryCapabilityCheck("claude_cli", "executor", "CLAUDE_BINARY", "claude"))
+	report.Add(binaryCapabilityCheck("opencode_cli", "executor", "OPENCODE_BINARY", "opencode"))
 	report.Add(toolBinaryCheck(opts, "orchestratord", "runtime"))
 	report.Add(toolBinaryCheck(opts, "codencer-relayd", "relay"))
 	report.Add(toolBinaryCheck(opts, "codencer-connectord", "relay"))

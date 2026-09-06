@@ -1434,7 +1434,11 @@ func objectSchema(required []string, properties map[string]any) map[string]any {
 	if properties == nil {
 		properties = map[string]any{}
 	}
-	return map[string]any{"type": "object", "required": required, "properties": properties}
+	schema := map[string]any{"type": "object", "properties": properties}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
 }
 
 func withSelectorSchema(schema map[string]any) map[string]any {

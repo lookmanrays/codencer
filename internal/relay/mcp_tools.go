@@ -634,11 +634,14 @@ func objectSchema(required []string, properties map[string]any) map[string]any {
 	if properties == nil {
 		properties = map[string]any{}
 	}
-	return map[string]any{
+	schema := map[string]any{
 		"type":       "object",
-		"required":   required,
 		"properties": properties,
 	}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
 }
 
 func withProjectSelectorSchema(schema map[string]any) map[string]any {

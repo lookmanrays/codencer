@@ -216,6 +216,8 @@ func (s *InstanceService) adapterRuntimeState(ctx context.Context, id string, en
 		return binaryRuntimeState("CODEX_BINARY", "codex")
 	case "claude":
 		return binaryRuntimeState("CLAUDE_BINARY", "claude")
+	case "opencode":
+		return binaryRuntimeState("OPENCODE_BINARY", "opencode")
 	case "qwen":
 		return binaryRuntimeState("QWEN_BINARY", "qwen-local")
 	case "openclaw-acpx":

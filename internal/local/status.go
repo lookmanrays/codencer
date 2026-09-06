@@ -69,6 +69,7 @@ func BuildStatusReport(opts StatusOptions) StatusReport {
 		Executors: []ExecutorStatus{
 			executorStatus(probe, "codex", "CODEX_BINARY", "codex"),
 			executorStatus(probe, "claude", "CLAUDE_BINARY", "claude"),
+			executorStatus(probe, "opencode", "OPENCODE_BINARY", "opencode"),
 		},
 	}
 	if opts.Paths.MachineFile != "" {

@@ -9,6 +9,7 @@ import (
 
 	"agent-bridge/internal/adapters/claude"
 	"agent-bridge/internal/adapters/codex"
+	"agent-bridge/internal/adapters/opencode"
 	"agent-bridge/internal/adapters/qwen"
 	"agent-bridge/internal/domain"
 )
@@ -18,16 +19,19 @@ func TestAdapters_SimulationConformance(t *testing.T) {
 	os.Setenv("CODEX_SIMULATION_MODE", "1")
 	os.Setenv("CLAUDE_SIMULATION_MODE", "1")
 	os.Setenv("QWEN_SIMULATION_MODE", "1")
+	os.Setenv("OPENCODE_SIMULATION_MODE", "1")
 	defer func() {
 		os.Unsetenv("CODEX_SIMULATION_MODE")
 		os.Unsetenv("CLAUDE_SIMULATION_MODE")
 		os.Unsetenv("QWEN_SIMULATION_MODE")
+		os.Unsetenv("OPENCODE_SIMULATION_MODE")
 	}()
 
 	conformanceAdapters := []domain.Adapter{
 		codex.NewAdapter(),
 		claude.NewAdapter(),
 		qwen.NewAdapter(),
+		opencode.NewAdapter(),
 	}
 
 	for _, a := range conformanceAdapters {

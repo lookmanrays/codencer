@@ -1048,6 +1048,7 @@ func runDoctor() {
 	}{
 		{"Codex", "codex", "CODEX_BINARY"},
 		{"Claude", "claude", "CLAUDE_BINARY"},
+		{"OpenCode", "opencode", "OPENCODE_BINARY"},
 		{"Qwen", "qwen-local", "QWEN_BINARY"},
 		{"OpenClaw", "acpx", "OPENCLAW_ACPX_BINARY"},
 	}
